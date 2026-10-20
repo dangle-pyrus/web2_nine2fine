@@ -1,0 +1,10 @@
+node_modules
+dist
+.angular
+asset
+svg
+public
+package-lock.json
+test-results
+playwright-report
+

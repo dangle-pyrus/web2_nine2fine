@@ -1,0 +1,117 @@
+:host {
+  display: block;
+}
+.mega-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(200px, 17vw, 260px);
+  gap: clamp(32px, 5vw, 96px);
+  padding-block: 32px 40px;
+}
+.groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px clamp(40px, 5vw, 96px);
+}
+/* Columns rise in one after another, like Nike's panel, after the panel wipe has started. */
+.group,
+.feature {
+  animation: mega-rise 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(60ms + var(--i, 0) * 45ms);
+}
+.group {
+  min-width: 150px;
+}
+.group-title {
+  margin: 0 0 14px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ul a {
+  display: inline-block;
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+ul a:hover,
+ul a:focus-visible {
+  color: var(--ink);
+}
+.feature {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  color: var(--ink);
+}
+.feature-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 4/5;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.feature-media n2f-media-image {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.04);
+  transition:
+    opacity 0.35s ease,
+    transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.feature-media n2f-media-image.active {
+  opacity: 1;
+  transform: none;
+}
+.feature-eyebrow {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.feature-title {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 700;
+}
+.feature-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.feature:hover {
+  color: var(--ink);
+}
+.feature:hover .feature-cta {
+  color: var(--brand);
+}
+@keyframes mega-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .group,
+  .feature,
+  .feature-media n2f-media-image {
+    animation: none;
+    transition: none;
+  }
+}

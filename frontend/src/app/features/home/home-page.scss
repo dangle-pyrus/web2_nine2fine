@@ -1,0 +1,129 @@
+:host {
+  display: block;
+  background: #fff;
+  color: #222;
+}
+.campaign-block {
+  position: relative;
+  margin-top: 16px;
+}
+.hero-block {
+  margin-top: 0;
+}
+.audience-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  height: 56px;
+  background: linear-gradient(transparent, #0005);
+}
+.audience-nav a {
+  display: flex;
+  align-items: center;
+  color: white;
+  padding: 0 12px;
+  border-bottom: 3px solid transparent;
+  font-size: 15px;
+  text-transform: uppercase;
+}
+.audience-nav a[aria-current] {
+  border-bottom-color: white;
+}
+.reference-categories {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 48px var(--page-gutter);
+}
+h2 {
+  margin: 0 0 24px;
+  font-size: 22px;
+  font-weight: 500;
+}
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.category-grid a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  font-size: 13px;
+  text-align: center;
+}
+.category-grid n2f-media-image {
+  width: 64px;
+  height: 64px;
+}
+.all-categories {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  max-width: 590px;
+  min-height: 44px;
+  margin: 32px auto 0;
+  padding: 10px 20px;
+  border: 1px solid #333;
+  border-radius: 24px;
+  color: inherit;
+  font-size: 14px;
+  text-transform: uppercase;
+}
+@media (max-width: 959px) {
+  .reference-categories {
+    padding: 32px var(--page-gutter);
+  }
+  .category-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px 12px;
+  }
+  .category-grid a {
+    font-size: 11px;
+  }
+  .category-grid n2f-media-image {
+    width: 56px;
+    height: 56px;
+  }
+  .audience-nav {
+    gap: 4px;
+  }
+  .audience-nav a {
+    font-size: 13px;
+    padding: 0 16px;
+  }
+}
+.service-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 32px;
+  margin: 0;
+  padding: 14px var(--page-gutter);
+  list-style: none;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.service-strip a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 959px) {
+  .service-strip {
+    gap: 4px 16px;
+    padding: 10px var(--page-gutter);
+    font-size: 12px;
+  }
+}

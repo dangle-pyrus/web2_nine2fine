@@ -1,0 +1,37 @@
+@for (block of blocks(); track block.id; let first = $first) { @switch (block.kind) { @case
+('campaign') {
+<div class="campaign-block" [class.hero-block]="first">
+  <n2f-home-campaign [content]="block" [hero]="first" />
+  @if (first) {
+  <nav class="audience-nav" aria-label="Khoảnh khắc">
+    @for (moment of content.moments; track moment.href) {
+    <a [routerLink]="moment.href">{{ moment.label }}</a>
+    }
+  </nav>
+  }
+</div>
+@if (first) {
+<ul class="service-strip" aria-label="Dịch vụ">
+  <li>Miễn phí giao hàng từ {{ policy.freeShippingFrom | vnd }}</li>
+  <li>Giao trong {{ policy.deliveryWindow }}</li>
+  <li><a routerLink="/policies/returns">Trả hàng trong {{ policy.returnDays }} ngày</a></li>
+</ul>
+} } @case ('categories') {
+<section class="reference-categories" id="categories" aria-labelledby="reference-categories-title">
+  <h2 id="reference-categories-title">Bạn đang tìm gì?</h2>
+  <ul class="category-grid">
+    @for (category of content.categories; track category.mediaId) {
+    <li>
+      <a [routerLink]="category.href">
+        <n2f-media-image [mediaId]="category.mediaId" sizes="64px" [decorative]="true" />
+        <span>{{ category.label }}</span>
+      </a>
+    </li>
+    }
+  </ul>
+  <a class="all-categories" routerLink="/shop"
+    >Xem tất cả <n2f-icon name="reiconArrowRight" size="18px"
+  /></a>
+</section>
+} @case ('products') { <n2f-home-product-rail [content]="block" /> } @case ('shop') {
+<n2f-home-shop-rail [content]="block" /> } } }

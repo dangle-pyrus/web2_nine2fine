@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.angular/
+out-tsc/
+test-results/
+playwright-report/
+.env
+.env.*
+!.env.example
+*.log
+
+
+# Thư viện minh hoạ gốc và trang tham khảo lưu offline (chỉ dùng cục bộ)
+svg/
+reference/
+.claude

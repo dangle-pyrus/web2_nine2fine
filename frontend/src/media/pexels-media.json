@@ -1,0 +1,299 @@
+{
+  "home-hero": {
+    "alt": "Người phụ nữ mặc blazer trắng bước đi trên phố buổi sáng",
+    "ratio": "16:9",
+    "focal": "50% 40%",
+    "files": [
+      {
+        "src": "/assets/editorial/home-hero-960.webp",
+        "width": 960,
+        "height": 540
+      },
+      {
+        "src": "/assets/editorial/home-hero-1600.webp",
+        "width": 1600,
+        "height": 900
+      },
+      {
+        "src": "/assets/editorial/home-hero-2400.webp",
+        "width": 2400,
+        "height": 1350
+      }
+    ],
+    "pexelsId": 3933697,
+    "pageUrl": "https://www.pexels.com/photo/woman-in-black-tank-top-and-white-pants-holding-luggage-3933697/",
+    "photographer": "Andrea Piacquadio",
+    "photographerUrl": "https://www.pexels.com/@olly",
+    "retrieved": "2026-10-02"
+  },
+  "home-hero-mobile": {
+    "alt": "Người phụ nữ mặc blazer trắng bước đi trên phố buổi sáng",
+    "ratio": "4:5",
+    "focal": "47% 40%",
+    "files": [
+      {
+        "src": "/assets/editorial/home-hero-mobile-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/home-hero-mobile-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/home-hero-mobile-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 3933697,
+    "pageUrl": "https://www.pexels.com/photo/woman-in-black-tank-top-and-white-pants-holding-luggage-3933697/",
+    "photographer": "Andrea Piacquadio",
+    "photographerUrl": "https://www.pexels.com/@olly",
+    "retrieved": "2026-10-02"
+  },
+  "story-0900": {
+    "alt": "Cô gái mặc blazer xám làm việc bên laptop lúc 9 giờ sáng",
+    "ratio": "4:5",
+    "focal": "50% 35%",
+    "files": [
+      {
+        "src": "/assets/editorial/story-0900-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/story-0900-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/story-0900-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 39105080,
+    "pageUrl": "https://www.pexels.com/photo/confident-businesswoman-at-work-desk-in-studio-39105080/",
+    "photographer": "Esase",
+    "photographerUrl": "https://www.pexels.com/@esase-2151653112",
+    "retrieved": "2026-10-02"
+  },
+  "story-1730": {
+    "alt": "Cô gái trong bộ blazer xám chuẩn bị rời văn phòng cuối ngày",
+    "ratio": "4:5",
+    "focal": "50% 30%",
+    "files": [
+      {
+        "src": "/assets/editorial/story-1730-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/story-1730-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/story-1730-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 39105072,
+    "pageUrl": "https://www.pexels.com/photo/confident-businesswoman-in-professional-setting-39105072/",
+    "photographer": "Esase",
+    "photographerUrl": "https://www.pexels.com/@esase-2151653112",
+    "retrieved": "2026-10-02"
+  },
+  "story-2000": {
+    "alt": "Người phụ nữ mặc blazer tối dùng bữa tối tại nhà hàng",
+    "ratio": "4:5",
+    "focal": "50% 30%",
+    "files": [
+      {
+        "src": "/assets/editorial/story-2000-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/story-2000-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/story-2000-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 36128556,
+    "pageUrl": "https://www.pexels.com/photo/elegant-woman-dining-in-a-modern-restaurant-36128556/",
+    "photographer": "Nadin Sh",
+    "photographerUrl": "https://www.pexels.com/@nadin-sh-78971847",
+    "retrieved": "2026-10-02"
+  },
+  "moment-work": {
+    "alt": "Chàng trai mặc suit xanh cài hai hàng khuy",
+    "ratio": "4:5",
+    "focal": "50% 25%",
+    "files": [
+      {
+        "src": "/assets/editorial/moment-work-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/moment-work-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/moment-work-1200.webp",
+        "width": 1200,
+        "height": 1499
+      }
+    ],
+    "pexelsId": 33201347,
+    "pageUrl": "https://www.pexels.com/photo/portrait-of-confident-businessman-in-suit-33201347/",
+    "photographer": "Нұржас Тұрарбек",
+    "photographerUrl": "https://www.pexels.com/@2154397424",
+    "retrieved": "2026-10-02"
+  },
+  "moment-dinner": {
+    "alt": "Hai người bạn trò chuyện trong bữa tối",
+    "ratio": "4:5",
+    "focal": "45% 40%",
+    "files": [
+      {
+        "src": "/assets/editorial/moment-dinner-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/moment-dinner-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/moment-dinner-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 6699446,
+    "pageUrl": "https://www.pexels.com/photo/a-woman-in-floral-print-long-sleeves-and-a-man-in-black-blazer-6699446/",
+    "photographer": "Gustavo Fring",
+    "photographerUrl": "https://www.pexels.com/@gustavo-fring",
+    "retrieved": "2026-10-02"
+  },
+  "moment-event": {
+    "alt": "Cô gái mặc đầm họa tiết dự tiệc tối",
+    "ratio": "4:5",
+    "focal": "50% 40%",
+    "files": [
+      {
+        "src": "/assets/editorial/moment-event-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/moment-event-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/moment-event-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 8775434,
+    "pageUrl": "https://www.pexels.com/photo/woman-wearing-elegant-dress-and-drinking-red-wine-8775434/",
+    "photographer": "Pavel Danilyuk",
+    "photographerUrl": "https://www.pexels.com/@pavel-danilyuk",
+    "retrieved": "2026-10-02"
+  },
+  "moment-weekend": {
+    "alt": "Cô gái mặc áo khoác da dạo phố cuối tuần",
+    "ratio": "4:5",
+    "focal": "50% 30%",
+    "files": [
+      {
+        "src": "/assets/editorial/moment-weekend-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/moment-weekend-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/moment-weekend-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 38131638,
+    "pageUrl": "https://www.pexels.com/photo/young-woman-dancing-outdoors-by-obelisk-38131638/",
+    "photographer": "Jaya Santoso",
+    "photographerUrl": "https://www.pexels.com/@jpro",
+    "retrieved": "2026-10-02"
+  },
+  "new-drop": {
+    "alt": "Người mẫu sải bước trong bộ suit tối màu trên nền studio sáng",
+    "ratio": "4:5",
+    "focal": "50% 40%",
+    "files": [
+      {
+        "src": "/assets/editorial/new-drop-480.webp",
+        "width": 480,
+        "height": 600
+      },
+      {
+        "src": "/assets/editorial/new-drop-800.webp",
+        "width": 800,
+        "height": 1000
+      },
+      {
+        "src": "/assets/editorial/new-drop-1200.webp",
+        "width": 1200,
+        "height": 1500
+      }
+    ],
+    "pexelsId": 8661807,
+    "pageUrl": "https://www.pexels.com/photo/long-legged-woman-walking-8661807/",
+    "photographer": "Abd Elrahman Elokby",
+    "photographerUrl": "https://www.pexels.com/@abd-elrahman-elokby-3774320",
+    "retrieved": "2026-10-02"
+  },
+  "campaign": {
+    "alt": "Hai người mẫu đứng dưới cây cầu sáng đèn về đêm",
+    "ratio": "16:9",
+    "focal": "50% 50%",
+    "files": [
+      {
+        "src": "/assets/editorial/campaign-960.webp",
+        "width": 960,
+        "height": 540
+      },
+      {
+        "src": "/assets/editorial/campaign-1600.webp",
+        "width": 1600,
+        "height": 900
+      },
+      {
+        "src": "/assets/editorial/campaign-2400.webp",
+        "width": 2400,
+        "height": 1350
+      }
+    ],
+    "pexelsId": 10378666,
+    "pageUrl": "https://www.pexels.com/photo/couple-standing-on-bridge-at-night-10378666/",
+    "photographer": "cottonbro studio",
+    "photographerUrl": "https://www.pexels.com/@cottonbro",
+    "retrieved": "2026-10-02"
+  }
+}

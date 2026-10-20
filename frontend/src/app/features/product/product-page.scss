@@ -1,0 +1,411 @@
+:host {
+  display: block;
+}
+.product-page {
+  padding-block: 20px 96px;
+}
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.breadcrumb a:hover {
+  color: var(--ink);
+}
+.breadcrumb [aria-current] {
+  color: var(--ink);
+}
+.product-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 1fr);
+  gap: 56px;
+  align-items: start;
+}
+.gallery-skeleton {
+  aspect-ratio: 4/5;
+}
+.info-skeleton {
+  height: 520px;
+}
+/*
+ * The info column is the long one, so the gallery stays in view while it scrolls; this keeps
+ * the area under the photo from going blank (user feedback 2026-10-17).
+ */
+.product-layout > n2f-product-gallery {
+  position: sticky;
+  top: calc(max(64px, calc(90 * var(--u, 1px))) + 16px);
+}
+.product-info {
+  max-width: 460px;
+}
+.title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.highlight {
+  margin: 0 0 6px;
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: 600;
+}
+h1 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.type {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 16px;
+}
+.price {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+.price strong {
+  font-size: 20px;
+  font-weight: 700;
+}
+.price del {
+  color: var(--muted);
+  font-size: 15px;
+}
+.tax-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+fieldset {
+  margin: 24px 0 0;
+  padding: 0;
+  border: 0;
+}
+legend {
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.colors {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.color-option {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+}
+.color-option span {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #0002;
+  border-radius: 50%;
+}
+.color-option.active {
+  border: 2px solid var(--ink);
+}
+.sizes-field {
+  outline: none;
+}
+/* Legend and size-guide link share one row (legend must stay the fieldset's first child). */
+.sizes-field legend {
+  float: left;
+  line-height: 32px;
+}
+.size-guide {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sizes {
+  clear: both;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.sizes button {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 15px;
+}
+.sizes button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.sizes button.active {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  font-weight: 700;
+}
+.sizes button:disabled {
+  background: var(--surface);
+  color: #aaa;
+  text-decoration: line-through;
+}
+/* Nike-style error: the whole size group is outlined and the label turns red. */
+.sizes-field.invalid legend {
+  color: var(--required);
+}
+.sizes-field.invalid .sizes {
+  border-color: var(--required);
+}
+.field-error {
+  margin: 8px 0 0;
+  color: var(--required);
+  font-size: 14px;
+}
+.purchase {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+.add,
+.buy-now {
+  min-height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+}
+.add {
+  border: 0;
+  background: var(--brand);
+  color: #fff;
+}
+.add:hover {
+  background: var(--brand-hover);
+}
+.buy-now {
+  border: 1px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+}
+.buy-now:hover {
+  background: var(--ink);
+  color: #fff;
+}
+.favorite {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin: -4px -10px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+}
+.favorite:hover {
+  color: var(--brand);
+}
+.favorite.saved {
+  color: var(--brand);
+}
+.stock {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.stock:empty {
+  display: none;
+}
+.stock.low {
+  color: #b45309;
+  font-weight: 600;
+}
+.trust {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  font-size: 14px;
+}
+.trust li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.trust a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.accordions {
+  margin-top: 20px;
+}
+details {
+  border-top: 1px solid var(--line);
+}
+details:last-child {
+  border-bottom: 1px solid var(--line);
+}
+summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 60px;
+  font-size: 17px;
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary n2f-icon {
+  transition: transform 0.2s ease;
+}
+details[open] summary n2f-icon {
+  transform: rotate(180deg);
+}
+details p,
+details ul {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+details ul {
+  padding-left: 18px;
+}
+section.reviews,
+section.related {
+  margin-top: 96px;
+}
+section > h2 {
+  margin: 0 0 24px;
+  color: var(--heading);
+  font-size: 28px;
+  font-weight: 600;
+}
+.eyebrow {
+  margin: 0 0 6px;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.reviews {
+  max-width: 860px;
+  outline: none;
+}
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+/* Mobile purchase bar (Nike keeps "Add to Bag" pinned on small screens). */
+.sticky-bar {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .product-layout {
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr);
+    gap: 32px;
+  }
+  .related-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 900px) {
+  .product-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .product-layout > n2f-product-gallery {
+    position: static;
+  }
+  .product-info {
+    max-width: none;
+  }
+  h1 {
+    font-size: 26px;
+  }
+  .related-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  section.reviews,
+  section.related {
+    margin-top: 64px;
+  }
+  .sticky-bar {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: #fff;
+    box-shadow: 0 -6px 20px #0001;
+  }
+  .sticky-bar div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 13px;
+  }
+  .sticky-bar strong {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .sticky-bar span {
+    color: var(--muted);
+  }
+  .sticky-bar button {
+    flex-shrink: 0;
+    min-height: 48px;
+    padding: 0 22px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--brand);
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+}

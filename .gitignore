@@ -1,6 +1,0 @@
-node_modules/
-.env
-.agents/
-.claude/
-.cursor/
-.devin/

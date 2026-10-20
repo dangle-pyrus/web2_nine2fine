@@ -1,0 +1,744 @@
+{
+  "uniqlo-category-01": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-01.png",
+    "alt": "Outerwear",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resde08c71ab483489af0e110c06536f0f5fr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-02": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-02.png",
+    "alt": "Jeans, Trousers & Shorts",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/department/women/navi-icon-w-bottoms.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-03": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-03.png",
+    "alt": "T-Shirts, Sweats & Fleece",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/department/women/navi-icon-w-tops.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-04": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-04.png",
+    "alt": "Sweats",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res47381088cd61452f1831104b238776c4fr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-05": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-05.png",
+    "alt": "Shirts, Blouses & Polo Shirts",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resb271fb776247e946b48518a7c201585dfr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-06": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-06.png",
+    "alt": "Knitwear",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/department/women/navi-icon-w-knit.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-07": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-07.png",
+    "alt": "Dresses, Skirts & Jumpsuits",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/department/women/navi-icon-w-dress.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-08": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-08.png",
+    "alt": "Innerwear, Underwear & Socks",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resf95440a8c26fb66e959b81924d1fe10cfr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-09": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-09.png",
+    "alt": "Accessories",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/department/women/navi-icon-w-accessories.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-11": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-11.png",
+    "alt": "HEATTECH",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/navi-heattech.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-10": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-10.png",
+    "alt": "Loungewear & Pyjamas",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res73dd0f5669424a99d472fec7e02cfc44fr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-12": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-12.png",
+    "alt": "Sport Utility Wear",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/navi-suw.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-13": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-13.png",
+    "alt": "AIRism",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res20edc4d2e02e312e5f4cfeb68ea007d8fr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-15": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-15.png",
+    "alt": "Special Collaborations",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/collabs/navi-collab-en.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-14": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-14.png",
+    "alt": "Lounge & Underwear Collection",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res184b0638d2bafbc4e11f33dbdd76ee38fr.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-16": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-16.png",
+    "alt": "New Arrivals",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/new/navi-new-en.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-17": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-17.png",
+    "alt": "Limited-Time Offers",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/limited-offer/navi-limited-offer-en.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-category-18": {
+    "src": "/assets/uniqlo-reference/uniqlo-category-18.png",
+    "alt": "Sale",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/navigation/categories/sale/navi-sale-en.png",
+    "width": 160,
+    "height": 160
+  },
+  "uniqlo-campaign-01-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-01-logo-1.png",
+    "alt": "lfm",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res658f09822eef58f0d59ac58a0d828131fr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-02": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-02.jpg",
+    "alt": "model wearing off white puffertech jacket over a pink top and off white trousers while walking in a city",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res57676c44b5089a6f1742c209a33be3e2fr.jpg",
+    "width": 2000,
+    "height": 1000
+  },
+  "uniqlo-campaign-01": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-01.jpg",
+    "alt": "models wearing uniqlo fleece and sweats while at a café",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/rescc9bc0f4e308f7ced010557185fdda0afr.jpg",
+    "videoSrc": "/assets/uniqlo-reference/uniqlo-campaign-01.mp4",
+    "width": 2000,
+    "height": 1000
+  },
+  "uniqlo-campaign-03": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-03.jpeg",
+    "alt": "model wearing blue and white checked shirt with a grey sweatshirt over the shoulders, blue distressed jeans and brown boots",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res42975303528019c343f81172f3c2a986fr.jpeg",
+    "width": 1920,
+    "height": 960
+  },
+  "uniqlo-campaign-02-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-02-logo-1.png",
+    "alt": "member only offers",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resaa19c1c7e169bdefe4cc740cea6316a4fr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-02-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-02-mobile.jpg",
+    "alt": "model wearing off white puffertech jacket over a pink top and off white trousers while walking in a city",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res24be789e31ee76b9e565c1266de8f5fffr.jpg",
+    "width": 1110,
+    "height": 1110
+  },
+  "uniqlo-campaign-03-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-03-logo-1.png",
+    "alt": "member only offers",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resaa19c1c7e169bdefe4cc740cea6316a4fr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-03-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-03-mobile.jpeg",
+    "alt": "model wearing blue and white checked shirt with a grey sweatshirt over the shoulders, blue distressed jeans and brown boots",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res154db710ec343a87e769f5cc575d041efr.jpeg",
+    "width": 1110,
+    "height": 1110
+  },
+  "uniqlo-product-1-1-71": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-71.jpg",
+    "alt": "PUFFERTECH Parka",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/469871/item/gbgoods_71_469871_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-1-chip-71": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-chip-71.jpg",
+    "alt": "71",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-1-chip-09": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-chip-09.jpg",
+    "alt": "09",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-1-09": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-09.jpg",
+    "alt": "PUFFERTECH Parka",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-1-chip-30": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-chip-30.jpg",
+    "alt": "30",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-1-60": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-60.jpg",
+    "alt": "PUFFERTECH Parka",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/469871/item/gbgoods_60_469871_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-1-30": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-30.jpg",
+    "alt": "PUFFERTECH Parka",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/469871/item/gbgoods_30_469871_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-1-chip-60": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-1-chip-60.jpg",
+    "alt": "60",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-2-chip-65": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-2-chip-65.jpg",
+    "alt": "65",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-2-65": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-2-65.jpg",
+    "alt": "Straight Jeans",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/476209001/item/gbgoods_65_476209001_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-2-chip-67": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-2-chip-67.jpg",
+    "alt": "67",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-2-69": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-2-69.jpg",
+    "alt": "Straight Jeans",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/476209001/item/gbgoods_69_476209001_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-2-67": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-2-67.jpg",
+    "alt": "Straight Jeans",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/WesternCommon/imagesgoods/476209001/item/goods_67_476209001_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-2-chip-69": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-2-chip-69.jpg",
+    "alt": "69",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-3-chip-63": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-chip-63.jpg",
+    "alt": "63",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-3-63": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-63.jpg",
+    "alt": "Oxford Boxy Shirt",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/488520/item/gbgoods_63_488520_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-3-chip-00": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-chip-00.jpg",
+    "alt": "00",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-3-00": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-00.jpg",
+    "alt": "Oxford Boxy Shirt",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/488520/item/gbgoods_00_488520_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-3-11": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-11.jpg",
+    "alt": "Oxford Boxy Shirt",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/488520/item/gbgoods_11_488520_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-3-chip-11": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-chip-11.jpg",
+    "alt": "11",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-3-chip-55": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-chip-55.jpg",
+    "alt": "55",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-3-55": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-3-55.jpg",
+    "alt": "Oxford Boxy Shirt",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/488520/item/gbgoods_55_488520_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-4-55": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-55.jpg",
+    "alt": "3D Knit Seamless Cotton Crew Neck Volume Sleeve Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/487003/item/gbgoods_55_487003_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-4-chip-19": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-chip-19.jpg",
+    "alt": "19",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-4-19": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-19.jpg",
+    "alt": "3D Knit Seamless Cotton Crew Neck Volume Sleeve Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/487003/item/gbgoods_19_487003_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-4-chip-55": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-chip-55.jpg",
+    "alt": "55",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-4-chip-01": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-chip-01.jpg",
+    "alt": "01",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-4-01": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-01.jpg",
+    "alt": "3D Knit Seamless Cotton Crew Neck Volume Sleeve Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/WesternCommon/imagesgoods/487003/item/goods_01_487003_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-1-4-chip-09": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-chip-09.jpg",
+    "alt": "09",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 36,
+    "height": 36
+  },
+  "uniqlo-product-1-4-09": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-1-4-09.jpg",
+    "alt": "3D Knit Seamless Cotton Crew Neck Volume Sleeve Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/487003/item/gbgoods_09_487003_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-campaign-04": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-04.jpg",
+    "alt": "models wearing the UNIQLO : C autumn/winter 2026 collection while walking up and down tiled stairs",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res8d72dad5eda3145106b6d601b427bfaafr.jpg",
+    "videoSrc": "/assets/uniqlo-reference/uniqlo-campaign-04.mp4",
+    "width": 1920,
+    "height": 960
+  },
+  "uniqlo-campaign-04-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-04-logo-1.png",
+    "alt": "UNIQLO : C logo",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res77592138b01b21250385d518e8c9cca4fr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-05-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-05-logo-1.png",
+    "alt": "New colour-",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resf88dc15b40fbfcb0c67f6001faecd870fr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-05": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-05.jpg",
+    "alt": "Knitwear",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res68203f9e7af1a87482aee53dd1a3190efr.jpg",
+    "videoSrc": "/assets/uniqlo-reference/uniqlo-campaign-05.mp4",
+    "width": 1920,
+    "height": 960
+  },
+  "uniqlo-product-2-1-41": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-2-1-41.jpg",
+    "alt": "Fluffy 100% Cashmere Relaxed V Neck Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-2-2-10": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-2-2-10.jpg",
+    "alt": "100% Cashmere Crew Neck Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/465734/item/gbgoods_10_465734_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-2-3-37": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-2-3-37.jpg",
+    "alt": "Fluffy 100% Cashmere Vest",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/488691/item/gbgoods_37_488691_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-campaign-06-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-06-logo-1.png",
+    "alt": "best seller flag",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res35fda4a67ed736b61191712ca96b4da0fr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-06": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-06.jpg",
+    "alt": "models wearing different styles of barrel leg trousers in an apartment setting",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/rese6e5c28fd5d82e4d3fd5a93aa9ee5d41fr.jpg",
+    "videoSrc": "/assets/uniqlo-reference/uniqlo-campaign-06.mp4",
+    "width": 1920,
+    "height": 960
+  },
+  "uniqlo-product-2-4-57": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-2-4-57.jpg",
+    "alt": "100% Cashmere V Neck Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/465736/item/gbgoods_57_465736_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-campaign-07": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-07.jpg",
+    "alt": "models wearing sweats styled as part of casual looks while walking outside",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res157f0537ada5fd049be0b391a64ba84cfr.jpg",
+    "width": 1920,
+    "height": 960
+  },
+  "uniqlo-product-3-1-19": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-3-1-19.jpg",
+    "alt": "Smooth Cotton Crew Neck Jumper",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://www.uniqlo.com/uk/en/",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-campaign-07-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-07-mobile.jpg",
+    "alt": "models wearing sweats styled as part of casual looks while walking outside",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/rese166cc64aa5a72b364a23b92766786d3fr.jpg",
+    "width": 1112,
+    "height": 1112
+  },
+  "uniqlo-product-3-4-39": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-3-4-39.jpg",
+    "alt": "Wide Sweat Trousers",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/479620/item/gbgoods_39_479620_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-3-2-30": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-3-2-30.jpg",
+    "alt": "Sweat Half-Zip Pullover",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/491119/item/gbgoods_30_491119_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-product-3-3-03": {
+    "src": "/assets/uniqlo-reference/uniqlo-product-3-3-03.jpg",
+    "alt": "Sweat Straight Trousers",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/gb/imagesgoods/483285001/item/gbgoods_03_483285001_3x4.jpg?width=300",
+    "width": 300,
+    "height": 400
+  },
+  "uniqlo-campaign-08": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-08.jpg",
+    "alt": "model wearing non-quilted short down coat in brown with a beige skirt and black knee high boots",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resf8e83a4eca1c281501dc72f7755e86c6fr.jpg",
+    "width": 1920,
+    "height": 768
+  },
+  "uniqlo-campaign-08-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-08-logo-1.png",
+    "alt": "New in-",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resb502fb08cc6cbe904355dad127770e5bfr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-08-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-08-mobile.jpg",
+    "alt": "model wearing non-quilted short down coat in brown with a beige skirt and black knee high boots",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resbf11e4902d0ebf1359ceaa6e72d62f56fr.jpg",
+    "width": 1112,
+    "height": 1112
+  },
+  "uniqlo-campaign-09": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-09.jpg",
+    "alt": "global Brand Ambassador Cate Blanchett wearing a black heattech turtleneck with off white trousers and trainers and a black belt while sat on the floor next to an off white bouclé sofa",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res07e260d2719ac285de85fc861e660561fr.jpg",
+    "width": 1920,
+    "height": 960
+  },
+  "uniqlo-campaign-09-logo-1": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-09-logo-1.png",
+    "alt": "HEATTECH logo",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/res101bfb56512da84535e2ea62c5285ddafr.png",
+    "width": 180,
+    "height": 60
+  },
+  "uniqlo-campaign-09-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-09-mobile.jpg",
+    "alt": "global Brand Ambassador Cate Blanchett wearing a black heattech turtleneck with off white trousers and trainers and a black belt while sat on the floor next to an off white bouclé sofa",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resf586d8a13fbf5c7c373b7c25024d307ffr.jpg",
+    "width": 1112,
+    "height": 1112
+  },
+  "uniqlo-campaign-10": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-10.jpg",
+    "alt": "Professional Tennis Player Emma Raducanu wearing a beige fleece jacket over a white henley, beige trousers and a belt",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/homepage/10-oct/chirashi/pc-w-chirashi-october-en.jpg",
+    "width": 2000,
+    "height": 1000
+  },
+  "uniqlo-campaign-11": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-11.jpg",
+    "alt": "UNIQLO Cambridge Grand Arcade storefront",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resa63773700b23b5fe7349963bee8c591cfr.jpg",
+    "width": 2000,
+    "height": 1000
+  },
+  "uniqlo-campaign-10-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-10-mobile.jpg",
+    "alt": "Professional Tennis Player Emma Raducanu wearing a beige fleece jacket over a white henley, beige trousers and a belt",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://image.uniqlo.com/UQ/ST3/eu/imagesother/2026/homepage/10-oct/chirashi/mb-w-chirashi-october-en.jpg",
+    "width": 1110,
+    "height": 1110
+  },
+  "uniqlo-campaign-11-mobile": {
+    "src": "/assets/uniqlo-reference/uniqlo-campaign-11-mobile.jpg",
+    "alt": "UNIQLO Cambridge Grand Arcade storefront",
+    "temporary": true,
+    "source": "reference",
+    "sourceUrl": "https://im.uniqlo.com/global-cms/spa/resa2ffc5a00a0db104c285abc1499426a9fr.jpg",
+    "width": 1110,
+    "height": 1110
+  }
+}

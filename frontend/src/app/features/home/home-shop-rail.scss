@@ -1,0 +1,55 @@
+:host {
+  display: block;
+}
+.rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 40px var(--page-gutter) 0;
+}
+h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+.rail-head a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #666;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.shop-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 24px var(--page-gutter) 48px;
+}
+@media (max-width: 959px) {
+  .rail-head {
+    padding-top: 28px;
+  }
+  h2 {
+    font-size: 16px;
+  }
+  .shop-rail {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 46%;
+    gap: 12px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x mandatory;
+    padding: 20px var(--page-gutter) 32px;
+    scroll-padding-inline: var(--page-gutter);
+  }
+  n2f-product-card {
+    scroll-snap-align: start;
+  }
+}

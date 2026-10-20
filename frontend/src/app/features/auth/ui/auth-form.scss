@@ -1,0 +1,220 @@
+// Shared auth form styles. Measurements come from the 1920px Figma onboarding frames
+// (12:41, 43:1134, 47:1197, 43:1058, 50:53) and scale with --u, set by AuthLayout.
+:host {
+  display: block;
+}
+h1 {
+  margin: calc(29 * var(--u)) 0 calc(14 * var(--u));
+  color: var(--heading);
+  font-size: calc(48 * var(--u));
+  font-weight: 600;
+  line-height: calc(57 * var(--u));
+  outline: none;
+}
+.lead,
+.email-row {
+  margin: 0 0 calc(8 * var(--u));
+  font-size: max(14px, calc(20 * var(--u)));
+  line-height: 1.5;
+}
+.email-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px calc(14 * var(--u));
+  margin-bottom: calc(22 * var(--u));
+}
+.email-row strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link:hover {
+  color: var(--ink);
+}
+.field {
+  position: relative;
+  margin-top: calc(24 * var(--u));
+}
+.field input {
+  width: 100%;
+  height: max(56px, calc(86 * var(--u)));
+  padding: calc(28 * var(--u)) calc(22 * var(--u)) 0;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-card);
+  background: #fff;
+  color: var(--ink);
+  font-size: max(16px, calc(24 * var(--u)));
+}
+.field.has-action input {
+  padding-right: max(56px, calc(80 * var(--u)));
+}
+.field.has-action label {
+  right: max(56px, calc(80 * var(--u)));
+}
+// PasswordField renders its own visibility toggle.
+.field input::-ms-reveal {
+  display: none;
+}
+.field label {
+  position: absolute;
+  top: 50%;
+  left: calc(22 * var(--u) + 1px);
+  right: calc(22 * var(--u));
+  overflow: hidden;
+  color: var(--muted);
+  font-size: max(16px, calc(24 * var(--u)));
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    top 0.15s ease,
+    font-size 0.15s ease;
+}
+.field input:focus + label,
+.field input:not(:placeholder-shown) + label {
+  top: calc(12 * var(--u));
+  font-size: max(12px, calc(17 * var(--u)));
+  transform: none;
+}
+.field input:focus {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.field input[aria-invalid='true'] {
+  border-color: var(--required);
+  box-shadow: 0 0 0 1px var(--required);
+}
+.req {
+  color: var(--required);
+}
+.field-action {
+  position: absolute;
+  top: 0;
+  right: calc(12 * var(--u));
+  width: max(44px, calc(56 * var(--u)));
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+}
+.field-action:hover:not(:disabled) {
+  color: var(--ink);
+}
+.hint,
+.field-error {
+  margin: 6px 0 0;
+  font-size: max(12px, calc(16 * var(--u)));
+  line-height: 1.5;
+}
+.hint {
+  color: var(--muted);
+}
+.hint.end {
+  text-align: right;
+}
+.field-error {
+  color: var(--required);
+}
+.form-error {
+  margin: calc(20 * var(--u)) 0 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-button);
+  background: #fdecec;
+  color: var(--required);
+  font-size: max(14px, calc(18 * var(--u)));
+}
+.notice {
+  margin: calc(20 * var(--u)) 0 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-button);
+  background: var(--surface);
+  font-size: max(13px, calc(17 * var(--u)));
+  line-height: 1.5;
+}
+.legal {
+  margin: calc(24 * var(--u)) 0 0;
+  color: var(--muted);
+  font-size: max(14px, calc(24 * var(--u)));
+  line-height: 1.66;
+}
+.legal a {
+  color: var(--muted);
+  font-weight: 700;
+  text-decoration: underline;
+}
+.pill {
+  min-width: max(120px, calc(200 * var(--u)));
+  height: max(48px, calc(82 * var(--u)));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 calc(48 * var(--u));
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: max(16px, calc(24 * var(--u)));
+  font-weight: 500;
+}
+.pill:hover:not(:disabled) {
+  background: #333;
+}
+.pill:disabled {
+  border-color: #a6a6a6;
+  background: #a6a6a6;
+  opacity: 1;
+}
+.pill.outline {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+.pill.outline:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: #fff;
+}
+.pill.wide {
+  width: 100%;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: calc(16 * var(--u));
+  margin-top: calc(40 * var(--u));
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--u));
+  margin-top: calc(40 * var(--u));
+}
+.divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: max(14px, calc(20 * var(--u)));
+}
+.divider::before,
+.divider::after {
+  content: '';
+  width: min(150px, 25%);
+  border-top: 1px solid var(--line);
+}

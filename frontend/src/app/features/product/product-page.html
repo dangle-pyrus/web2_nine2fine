@@ -1,0 +1,172 @@
+<div class="container product-page">
+  @if (loading()) {
+  <div class="product-layout" aria-label="Đang tải sản phẩm">
+    <div class="skeleton gallery-skeleton"></div>
+    <div class="skeleton info-skeleton"></div>
+  </div>
+  } @else if (product(); as item) {
+  <nav class="breadcrumb" aria-label="Đường dẫn">
+    <a routerLink="/shop">Cửa hàng</a>
+    <span aria-hidden="true">/</span>
+    <a [routerLink]="['/shop', item.category]">{{ categoryLabel() }}</a>
+    <span aria-hidden="true">/</span>
+    <span aria-current="page">{{ item.name }}</span>
+  </nav>
+
+  <div class="product-layout">
+    <n2f-product-gallery [images]="gallery()" [productName]="item.name" />
+
+    <section class="product-info" aria-labelledby="product-title">
+      @if (item.badge || discount()) {
+      <p class="highlight">
+        {{ item.badge === 'NEW' ? 'Mới về' : item.badge === 'BESTSELLER' ? 'Bán chạy' : '' }} @if
+        (discount()) { Giảm {{ discount() }}% }
+      </p>
+      }
+      <div class="title-row">
+        <h1 id="product-title">{{ item.name }}</h1>
+        <button
+          type="button"
+          class="favorite"
+          [class.saved]="saved()"
+          [attr.aria-pressed]="saved()"
+          [attr.aria-label]="(saved() ? 'Bỏ yêu thích ' : 'Yêu thích ') + item.name"
+          [title]="saved() ? 'Bỏ yêu thích' : 'Lưu yêu thích'"
+          (click)="wishlist.toggle(item.id)"
+        >
+          <n2f-icon [name]="saved() ? 'reiconHeartFill' : 'reiconHeart'" size="22px" />
+        </button>
+      </div>
+      <p class="type">{{ item.type }}</p>
+      <p class="price">
+        <strong>{{ item.price | vnd }}</strong>
+        @if (item.compareAtPrice) {
+        <del><span class="sr-only">Giá gốc </span>{{ item.compareAtPrice | vnd }}</del>
+        }
+      </p>
+      <p class="tax-note">Giá đã bao gồm VAT</p>
+
+      <fieldset class="colors-field">
+        <legend>Màu sắc: <strong>{{ color() }}</strong></legend>
+        <div class="colors">
+          @for (option of colors(); track option.name) {
+          <button
+            type="button"
+            class="color-option"
+            [class.active]="color() === option.name"
+            [attr.aria-label]="option.name"
+            [attr.aria-pressed]="color() === option.name"
+            [title]="option.name"
+            (click)="chooseColor(option.name)"
+          >
+            <span [style.background]="option.hex"></span>
+          </button>
+          }
+        </div>
+      </fieldset>
+
+      <fieldset
+        #sizes
+        class="sizes-field"
+        tabindex="-1"
+        [class.invalid]="!!error()"
+        [attr.aria-describedby]="error() ? 'size-error' : null"
+      >
+        <legend>Chọn kích cỡ</legend>
+        <button type="button" class="size-guide" (click)="openSizeGuide()">
+          <n2f-icon name="reiconRuler" size="18px" /> Hướng dẫn chọn size
+        </button>
+        <div class="sizes">
+          @for (variant of variants(); track variant.id) {
+          <button
+            type="button"
+            [class.active]="size() === variant.size"
+            [disabled]="!variant.inventory"
+            [attr.aria-pressed]="size() === variant.size"
+            [attr.aria-label]="variant.size + (!variant.inventory ? ' - hết hàng' : '')"
+            (click)="chooseSize(variant.size)"
+          >
+            {{ variant.size }}
+          </button>
+          }
+        </div>
+      </fieldset>
+      @if (error()) {
+      <p class="field-error" id="size-error" role="alert">{{ error() }}</p>
+      } @if (soldOut().length) {
+      <n2f-stock-alert [soldOut]="soldOut()" />
+      }
+
+      <div class="purchase">
+        <button #addButton type="button" class="add" (click)="add()">Thêm vào giỏ</button>
+        <button type="button" class="buy-now" (click)="buyNow()">Mua ngay</button>
+      </div>
+      <!-- Only stock worth reading is shown; the size prompt lives in the error message. -->
+      <p class="stock low" aria-live="polite">
+        @if (lowStock()) { Chỉ còn {{ selected()!.inventory }} sản phẩm size {{ size() }} }
+      </p>
+
+      <ul class="trust">
+        <li>
+          <n2f-icon name="reiconTruckFast" size="20px" />
+          <a routerLink="/policies/shipping">Giao dự kiến {{ policy.deliveryWindow }}</a>
+        </li>
+        <li>
+          <n2f-icon name="reiconBox" size="20px" /> Miễn phí vận chuyển cho đơn từ {{
+          policy.freeShippingFrom | vnd }}
+        </li>
+        <li>
+          <n2f-icon name="reiconRefresh" size="20px" />
+          <a routerLink="/policies/returns">Trả hàng trong {{ policy.returnDays }} ngày</a>
+        </li>
+      </ul>
+
+      <div class="accordions">
+        <details>
+          <summary>Chất liệu & chăm sóc <n2f-icon name="reiconChevronDown" size="18px" /></summary>
+          <p>{{ item.material }}</p>
+          <ul>
+            @for (line of item.care; track line) {
+            <li>{{ line }}</li>
+            }
+          </ul>
+        </details>
+      </div>
+    </section>
+  </div>
+
+  <!-- "Mặc theo cách của bạn" (looks) is hidden until real outfit photos exist (user, 2026-10-17). -->
+
+  <section class="reviews" id="reviews" aria-labelledby="reviews-title" tabindex="-1">
+    <h2 id="reviews-title">Đánh giá ({{ reviews().length }})</h2>
+    <n2f-review-form [productId]="item.id" (reviewed)="addReview($event)" />
+    <n2f-product-reviews [reviews]="reviews()" />
+  </section>
+
+  @if (related().length) {
+  <section class="related" aria-labelledby="related-title">
+    <h2 id="related-title">Có thể bạn cũng thích</h2>
+    <div class="related-grid">
+      @for (other of related(); track other.id) {
+      <n2f-product-card [product]="other" />
+      }
+    </div>
+  </section>
+  } @if (showStickyBar()) {
+  <div class="sticky-bar" role="region" aria-label="Mua nhanh">
+    <div>
+      <strong>{{ item.name }}</strong>
+      <span>{{ item.price | vnd }}{{ size() ? ' · Size ' + size() : '' }}</span>
+    </div>
+    <button type="button" (click)="add()">
+      {{ size() ? 'Thêm vào giỏ ngay' : 'Chọn kích cỡ' }}
+    </button>
+  </div>
+  } } @else {
+  <n2f-empty-state
+    [heading]="failed() ? 'Chưa thể tải sản phẩm' : 'Không tìm thấy sản phẩm'"
+    description="Khám phá những lựa chọn khác trong bộ sưu tập."
+    ><a class="button dark" routerLink="/shop">Khám phá sản phẩm</a></n2f-empty-state
+  >
+  }
+</div>

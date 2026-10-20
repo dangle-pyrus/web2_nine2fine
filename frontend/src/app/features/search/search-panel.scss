@@ -1,0 +1,329 @@
+/*
+ * Fixed layer above the store header. Open/close motion is scripted (search-panel.ts: FLIP morph
+ * from the header pill, bar fade, results unfold) so it reads as one continuous surface.
+ */
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: block;
+  /* The utility bar above the sheet stays clickable, like with an open mega menu. */
+  pointer-events: none;
+}
+.scrim,
+.sheet {
+  pointer-events: auto;
+}
+button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+/* Dims the page only from the main bar down, so the utility bar stays readable (as with mega menus). */
+.scrim {
+  position: absolute;
+  inset: var(--bar-top, 0px) 0 0;
+  width: 100%;
+  background: #1111115c;
+  cursor: default;
+}
+/* Starts at the header's main bar (below the utility bar when it is showing). */
+.sheet {
+  position: absolute;
+  inset: var(--bar-top, 0px) 0 auto;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100svh - var(--bar-top, 0px));
+  color: var(--ink);
+}
+.bar-bg {
+  position: absolute;
+  inset: 0 0 auto;
+  height: max(64px, calc(90 * var(--u, 1px)));
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+/* Same height and pill as the store header so the swap reads as one surface. */
+.bar {
+  position: relative;
+  flex-shrink: 0;
+  height: max(64px, calc(90 * var(--u, 1px)));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 680px) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+}
+.wordmark {
+  justify-self: start;
+  display: inline-flex;
+}
+.wordmark img {
+  width: max(140px, calc(230 * var(--u, 1px)));
+  height: auto;
+}
+/* Mirrors the header .search-trigger exactly (size, padding, type, border, shadow). */
+.field {
+  height: max(44px, calc(60 * var(--u, 1px)));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  padding: 0 calc(20 * var(--u, 1px) + 6px);
+  padding-right: calc(20 * var(--u, 1px) - 2px);
+  border: 1px solid #e6e6e6;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px #0000000d;
+  color: #9a9a9a;
+  transition: border-color 0.2s ease;
+}
+.field:focus-within {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: max(14px, calc(22 * var(--u, 1px)));
+  font-weight: 500;
+}
+.field input::placeholder {
+  color: #9a9a9a;
+}
+.field input::-webkit-search-cancel-button {
+  display: none;
+}
+.clear {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+}
+.submit {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: inherit;
+}
+.cancel {
+  justify-self: end;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.cancel:hover {
+  color: var(--brand);
+}
+
+.results {
+  min-height: 0;
+  background: #fff;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.results .container {
+  padding-block: 28px 44px;
+}
+.block {
+  animation: search-rise 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(90ms + var(--i, 0) * 50ms);
+}
+.block + .block {
+  margin-top: 28px;
+}
+.block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.eyebrow span {
+  font-weight: 500;
+}
+.muted,
+.message p {
+  margin: 0 0 14px;
+  color: var(--muted);
+}
+.message p:first-child {
+  color: var(--ink);
+  font-size: 16px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  transition: border-color 0.2s ease;
+}
+.chip:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Results: suggestions column + product cards (Nike "Top Suggestions" layout). */
+.found {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 64px);
+}
+.found .block + .block {
+  margin-top: 0;
+}
+.suggestion {
+  display: block;
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 19px;
+  font-weight: 500;
+}
+.suggestion .match {
+  color: var(--ink);
+  font-weight: 700;
+}
+.suggestion:hover,
+.suggestion.active {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+.search-result {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-card);
+  color: var(--ink);
+}
+.search-result.active {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+.result-image {
+  aspect-ratio: 4/5;
+  margin-bottom: 10px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.result-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+.result-type {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.result-price {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.result-skeleton {
+  aspect-ratio: 4/6;
+  border-radius: var(--radius-card);
+}
+.search-result:hover .result-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 1100px) {
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .product-grid > :nth-child(n + 4) {
+    display: none;
+  }
+}
+/* Mobile: full-screen sheet; field + Hủy only, results stack under the suggestions. */
+@media (max-width: 800px) {
+  .sheet {
+    bottom: 0;
+  }
+  .results {
+    flex: 1;
+  }
+  .field input {
+    font-size: 16px;
+  }
+  .bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+  .wordmark {
+    display: none;
+  }
+  .found {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px 10px;
+  }
+  .product-grid > :nth-child(n + 4) {
+    display: flex;
+  }
+  .product-grid > :nth-child(n + 5) {
+    display: none;
+  }
+  .suggestion {
+    font-size: 18px;
+  }
+}
+@keyframes search-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .block {
+    animation: none;
+  }
+}

@@ -1,0 +1,186 @@
+<button
+  type="button"
+  class="scrim"
+  tabindex="-1"
+  aria-label="Đóng tìm kiếm"
+  (click)="close(false)"
+></button>
+<section
+  #sheet
+  class="sheet"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Tìm kiếm sản phẩm"
+  cdkTrapFocus
+  [cdkTrapFocusAutoCapture]="true"
+>
+  <div class="bar-bg" #barBg aria-hidden="true"></div>
+  <div class="bar container">
+    <a routerLink="/" class="wordmark" aria-label="nine2fine - trang chính" (click)="close(true)"
+      ><img src="/assets/brand/logo.svg" alt="nine2fine" width="230" height="46"
+    /></a>
+    <!-- Same pill as the header trigger (text left, icon right) so it can morph from it. -->
+    <form #field class="field" role="search" (submit)="$event.preventDefault(); submit()">
+      <label for="product-search" class="sr-only">Tìm sản phẩm</label>
+      <input
+        #input
+        id="product-search"
+        type="search"
+        placeholder="Bạn đang tìm gì đó?"
+        autocomplete="off"
+        enterkeyhint="search"
+        spellcheck="false"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-controls="search-listbox"
+        [attr.aria-expanded]="options().length > 0"
+        [attr.aria-activedescendant]="activeId()"
+        [formControl]="search"
+        (keydown)="onKeydown($event)"
+        cdkFocusInitial
+      />
+      @if (query()) {
+      <button
+        type="button"
+        class="clear"
+        aria-label="Xóa nội dung tìm kiếm"
+        title="Xóa"
+        (click)="clear(input)"
+      >
+        <n2f-icon name="reiconX" size="18px" />
+      </button>
+      }
+      <button type="submit" class="submit" aria-label="Tìm kiếm" tabindex="-1">
+        <n2f-icon name="reiconSearch" size="24px" />
+      </button>
+    </form>
+    <button type="button" class="cancel" (click)="close(false)">Hủy</button>
+  </div>
+
+  <div class="results" #results>
+    <div class="container" aria-live="polite">
+      @if (!query()) { @if (history.terms().length) {
+      <div class="block" style="--i: 0">
+        <div class="block-head">
+          <p class="eyebrow">Tìm kiếm gần đây</p>
+          <button type="button" class="text-link" (click)="history.clear()">Xóa lịch sử</button>
+        </div>
+        <div class="chips">
+          @for (term of history.terms(); track term) {
+          <a class="chip" routerLink="/search" [queryParams]="{ q: term }" (click)="chose(term)">
+            <n2f-icon name="reiconHistory" size="16px" />{{ term }}
+          </a>
+          }
+        </div>
+      </div>
+      }
+      <div class="block" style="--i: 1">
+        <p class="eyebrow">Tìm kiếm phổ biến</p>
+        <div class="chips">
+          @for (term of popular; track term) {
+          <a class="chip" routerLink="/search" [queryParams]="{ q: term }" (click)="chose(term)"
+            >{{ term }}</a
+          >
+          }
+        </div>
+      </div>
+      } @else if (state().failed) {
+      <div class="block message" role="alert">
+        <p>Chưa thể tìm kiếm. Vui lòng thử lại.</p>
+        <button type="button" class="chip" (click)="retry()">Thử lại</button>
+      </div>
+      } @else if (!state().loading && !state().items.length) {
+      <div class="block message">
+        <p>Chưa tìm thấy sản phẩm cho “{{ query() }}”.</p>
+        <p class="eyebrow">Thử tìm</p>
+        <div class="chips">
+          @for (term of popular; track term) {
+          <a class="chip" routerLink="/search" [queryParams]="{ q: term }" (click)="chose(term)"
+            >{{ term }}</a
+          >
+          }
+        </div>
+      </div>
+      } @else {
+      <div class="found" id="search-listbox" role="listbox" aria-label="Kết quả tìm kiếm">
+        <div
+          class="suggestions block"
+          role="group"
+          aria-labelledby="search-suggestions-title"
+          style="--i: 0"
+        >
+          <p class="eyebrow" id="search-suggestions-title">Gợi ý hàng đầu</p>
+          @for (suggestion of suggestions(); track suggestion.label; let index = $index) {
+          <a
+            class="suggestion"
+            role="option"
+            [id]="'search-suggestion-' + index"
+            [class.active]="isActive('search-suggestion-' + index)"
+            [attr.aria-selected]="isActive('search-suggestion-' + index)"
+            [routerLink]="suggestion.path"
+            [queryParams]="suggestion.queryParams"
+            (click)="chose(suggestion.label)"
+          >
+            @for (part of highlight(suggestion.label, query()); track $index) {
+            <span [class.match]="part.match">{{ part.text }}</span>
+            }
+          </a>
+          } @empty {
+          <p class="muted">Không có gợi ý cho “{{ query() }}”.</p>
+          }
+        </div>
+        <div
+          class="products block"
+          role="group"
+          aria-labelledby="search-products-title"
+          style="--i: 1"
+        >
+          <div class="block-head">
+            <p class="eyebrow" id="search-products-title">
+              Sản phẩm @if (state().total) {<span>({{ state().total }})</span>}
+            </p>
+            @if (state().items.length) {
+            <a
+              class="text-link"
+              id="search-all"
+              role="option"
+              [class.active]="isActive('search-all')"
+              [attr.aria-selected]="isActive('search-all')"
+              routerLink="/search"
+              [queryParams]="{ q: query() }"
+              (click)="chose(query())"
+              >Xem tất cả kết quả <n2f-icon name="reiconArrowRight" size="16px"
+            /></a>
+            }
+          </div>
+          <div class="product-grid" [attr.aria-busy]="state().loading">
+            @if (state().loading && !products().length) { @for (index of skeletons; track index) {
+            <div class="skeleton result-skeleton"></div>
+            } } @else { @for (product of products(); track product.id) {
+            <a
+              class="search-result"
+              role="option"
+              [id]="'search-product-' + product.id"
+              [class.active]="isActive('search-product-' + product.id)"
+              [attr.aria-selected]="isActive('search-product-' + product.id)"
+              [routerLink]="['/product', product.slug]"
+              (click)="chose(query())"
+            >
+              <n2f-media-image
+                class="result-image"
+                [mediaId]="product.mediaId"
+                sizes="(max-width: 800px) 45vw, 200px"
+                [decorative]="true"
+              />
+              <span class="result-name">{{ product.name }}</span>
+              <span class="result-type">{{ product.type }}</span>
+              <span class="result-price">{{ product.price | vnd }}</span>
+            </a>
+            } }
+          </div>
+        </div>
+      </div>
+      }
+    </div>
+  </div>
+</section>

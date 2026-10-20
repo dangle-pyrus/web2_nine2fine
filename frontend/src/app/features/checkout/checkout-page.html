@@ -1,0 +1,321 @@
+<div class="container checkout">
+  @if (!cart.checkoutLines().length) {
+  <n2f-empty-state
+    image="/assets/illustrations/empty_cart.svg"
+    heading="Một khởi đầu mới"
+    description="Giỏ hàng của bạn còn trống. Cùng tìm một món đồ cho cuộc hẹn tiếp theo."
+    ><a routerLink="/shop" class="button dark">Khám phá bộ sưu tập</a></n2f-empty-state
+  >
+  } @else {
+  <a routerLink="/cart" class="back">← Quay lại giỏ hàng</a>
+  <h1>Thanh toán</h1>
+  @if (isMock) {
+  <p class="demo-notice">Chế độ trải nghiệm: không phát sinh thanh toán hoặc giao hàng thật.</p>
+  }
+
+  <div class="checkout-layout">
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <section aria-labelledby="contact-title">
+        <div class="section-head">
+          <h2 id="contact-title"><span class="step">1</span>Thông tin liên hệ</h2>
+          @if (!session.signedIn()) {
+          <a class="link" routerLink="/auth/login" [queryParams]="{ returnUrl: '/checkout' }"
+            >Đăng nhập để dùng địa chỉ đã lưu</a
+          >
+          }
+        </div>
+        <div class="grid">
+          @for (field of contactFields; track field.key) {
+          <div class="field" [class.wide]="field.key === 'email'">
+            <label [for]="'checkout-' + field.key"
+              >{{ field.label }}@if (field.required) {<span class="req" aria-hidden="true">*</span
+              >}</label
+            >
+            <input
+              [id]="'checkout-' + field.key"
+              [type]="field.type"
+              [attr.autocomplete]="field.autocomplete"
+              [formControlName]="field.key"
+              [attr.aria-required]="field.required"
+              [attr.aria-invalid]="invalid(field.key)"
+              [attr.aria-describedby]="invalid(field.key) ? 'checkout-' + field.key + '-error' : null"
+            />
+            @if (invalid(field.key)) {
+            <p class="field-error" [id]="'checkout-' + field.key + '-error'">{{ field.error }}</p>
+            } @else if (field.hint) {
+            <p class="hint">{{ field.hint }}</p>
+            }
+          </div>
+          }
+        </div>
+      </section>
+
+      <section aria-labelledby="shipping-title">
+        <h2 id="shipping-title"><span class="step">2</span>Địa chỉ giao hàng</h2>
+        @if (savedAddresses().length) {
+        <fieldset class="options">
+          <legend class="sr-only">Chọn địa chỉ đã lưu</legend>
+          @for (address of savedAddresses(); track address.id) {
+          <label class="option">
+            <input type="radio" formControlName="savedAddress" [value]="address.id" />
+            <span>
+              <strong>{{ address.recipient }}</strong> · {{ address.phone }} @if (address.isDefault)
+              {
+              <em class="tag">Mặc định</em>
+              }
+              <small
+                >{{ address.street }}, {{ address.ward.name }}, {{ address.province.name }}</small
+              >
+            </span>
+          </label>
+          }
+          <label class="option">
+            <input type="radio" formControlName="savedAddress" [value]="newAddress" />
+            <span><strong>Giao đến địa chỉ khác</strong></span>
+          </label>
+        </fieldset>
+        }
+        <div class="grid" [hidden]="usingSavedAddress()">
+          <div class="field">
+            <label for="checkout-province"
+              >Tỉnh / Thành phố<span class="req" aria-hidden="true">*</span></label
+            >
+            <select
+              id="checkout-province"
+              formControlName="provinceCode"
+              autocomplete="address-level1"
+              aria-required="true"
+              [attr.aria-invalid]="invalid('provinceCode')"
+            >
+              <option value="" disabled>Chọn Tỉnh/Thành phố</option>
+              @for (province of provinces(); track province.code) {
+              <option [value]="province.code">{{ province.name }}</option>
+              }
+            </select>
+            @if (invalid('provinceCode')) {
+            <p class="field-error">Chọn Tỉnh/Thành phố.</p>
+            }
+          </div>
+          <div class="field">
+            <label for="checkout-ward"
+              >Phường / Xã<span class="req" aria-hidden="true">*</span></label
+            >
+            <select
+              id="checkout-ward"
+              formControlName="wardCode"
+              autocomplete="address-level2"
+              aria-required="true"
+              [attr.aria-invalid]="invalid('wardCode')"
+            >
+              <option value="" disabled>
+                {{ form.controls.provinceCode.value ? 'Chọn Phường/Xã' : 'Chọn Tỉnh/Thành trước' }}
+              </option>
+              @for (ward of wards(); track ward.code) {
+              <option [value]="ward.code">{{ ward.name }}</option>
+              }
+            </select>
+            @if (invalid('wardCode')) {
+            <p class="field-error">Chọn Phường/Xã.</p>
+            }
+          </div>
+          <div class="field wide">
+            <label for="checkout-street"
+              >Địa chỉ nhận hàng<span class="req" aria-hidden="true">*</span></label
+            >
+            <input
+              id="checkout-street"
+              formControlName="street"
+              autocomplete="street-address"
+              placeholder="Số nhà, tên đường, tòa nhà"
+              aria-required="true"
+              [attr.aria-invalid]="invalid('street')"
+            />
+            @if (invalid('street')) {
+            <p class="field-error">Nhập địa chỉ cụ thể (ít nhất 5 ký tự).</p>
+            }
+          </div>
+        </div>
+        <div class="field">
+          <label for="checkout-note">Ghi chú (không bắt buộc)</label>
+          <textarea id="checkout-note" formControlName="note" rows="2"></textarea>
+        </div>
+      </section>
+
+      <section aria-labelledby="payment-title">
+        <h2 id="payment-title"><span class="step">3</span>Phương thức thanh toán</h2>
+        <fieldset class="options">
+          <legend class="sr-only">Chọn phương thức thanh toán</legend>
+          @for (option of paymentOptions; track option.value) {
+          <label class="option">
+            <input type="radio" formControlName="paymentMethod" [value]="option.value" />
+            <span><strong>{{ option.label }}</strong><small>{{ option.hint }}</small></span>
+          </label>
+          }
+        </fieldset>
+        <label class="check">
+          <input type="checkbox" formControlName="wantsInvoice" />
+          <span>Xuất hóa đơn công ty (VAT)</span>
+        </label>
+        @if (form.controls.wantsInvoice.value) {
+        <div class="grid invoice">
+          @for (field of invoiceFields; track field.key) {
+          <div class="field" [class.wide]="field.wide">
+            <label [for]="'invoice-' + field.key"
+              >{{ field.label }}<span class="req" aria-hidden="true">*</span></label
+            >
+            <input
+              [id]="'invoice-' + field.key"
+              [type]="field.key === 'invoiceEmail' ? 'email' : 'text'"
+              [attr.inputmode]="field.key === 'taxCode' ? 'numeric' : null"
+              [formControlName]="field.key"
+              aria-required="true"
+              [attr.aria-invalid]="invalid(field.key)"
+              [attr.aria-describedby]="invalid(field.key) ? 'invoice-' + field.key + '-error' : null"
+            />
+            @if (invalid(field.key)) {
+            <p class="field-error" [id]="'invoice-' + field.key + '-error'">{{ field.error }}</p>
+            }
+          </div>
+          }
+          <p class="hint wide">
+            Hóa đơn điện tử được gửi qua email sau khi đơn hoàn tất. Không thể đổi thông tin sau khi
+            hóa đơn đã xuất.
+          </p>
+        </div>
+        } @else {
+        <p class="hint">Không chọn: hóa đơn điện tử được xuất theo thông tin người mua.</p>
+        }
+      </section>
+
+      <label class="check terms">
+        <input
+          type="checkbox"
+          formControlName="acceptedTerms"
+          [attr.aria-invalid]="invalid('acceptedTerms')"
+          [attr.aria-describedby]="invalid('acceptedTerms') ? 'terms-error' : null"
+        />
+        <span
+          >Tôi đã đọc và đồng ý với
+          <a routerLink="/policies/terms" target="_blank">Điều khoản mua hàng</a>,
+          <a routerLink="/policies/returns" target="_blank">Chính sách trả hàng</a> và
+          <a routerLink="/policies/privacy" target="_blank">Chính sách bảo vệ dữ liệu cá nhân</a>
+          của nine2fine.</span
+        >
+      </label>
+      @if (invalid('acceptedTerms')) {
+      <p class="field-error" id="terms-error">Vui lòng đồng ý để đặt hàng.</p>
+      } @if (error()) {
+      <p class="form-error" role="alert">{{ error() }}</p>
+      }
+      <button class="pill submit" type="submit" [disabled]="submitting()">
+        {{ submitting() ? 'Đang xử lý…' : isMock ? 'Đặt đơn trải nghiệm' : 'Đặt hàng' }} @if
+        (quote(); as current) { · {{ current.pricing.total | vnd }} }
+      </button>
+    </form>
+
+    <aside aria-labelledby="summary-title">
+      <details class="summary" [open]="summaryOpen">
+        <summary>
+          <h2 id="summary-title">Đơn hàng ({{ summaryCount() }})</h2>
+          @if (quote(); as current) {
+          <strong class="summary-total">{{ current.pricing.total | vnd }}</strong>
+          }
+        </summary>
+        @for (line of cart.checkoutLines(); track line.variantId) {
+        <div class="line">
+          <img [src]="media(line.mediaId).src" alt="" width="56" height="70" />
+          <div>
+            {{ line.name }}<small>{{ line.color }} / {{ line.size }} × {{ line.quantity }}</small>
+            @if (stockIssue(line.variantId); as issue) {
+            <small class="stock-issue" role="alert">{{ issue }}</small>
+            }
+          </div>
+          <span>{{ line.price * line.quantity | vnd }}</span>
+        </div>
+        } @if (stockIssues().length) {
+        <button type="button" class="pill outline fix-stock" (click)="fixStock()">
+          Cập nhật đơn theo số lượng còn lại
+        </button>
+        }
+
+        <div class="voucher">
+          @if (quote()?.voucher; as voucher) {
+          <p class="voucher-applied">
+            <span><strong>{{ voucher.code }}</strong> · {{ voucher.label }}</span
+            ><button type="button" class="link" (click)="removeVoucher()">Gỡ mã</button>
+          </p>
+          } @else {
+          <label for="voucher-code">Mã giảm giá</label>
+          <div class="voucher-row">
+            <input
+              id="voucher-code"
+              [formControl]="voucherInput"
+              autocomplete="off"
+              (keydown.enter)="$event.preventDefault(); applyVoucher()"
+              [attr.aria-describedby]="quote()?.voucherError ? 'voucher-error' : null"
+            />
+            <button type="button" class="pill outline" (click)="applyVoucher()">Áp dụng</button>
+          </div>
+          @if (quote()?.voucherError) {
+          <p class="field-error" id="voucher-error" role="alert">{{ quote()?.voucherError }}</p>
+          } @if (memberVouchers().length) {
+          <div class="chips" aria-label="Phiếu giảm giá của bạn">
+            @for (voucher of memberVouchers(); track voucher.id) {
+            <button type="button" class="chip" (click)="applyVoucher(voucher.code)">
+              {{ voucher.headline }} · {{ voucher.code }}
+            </button>
+            }
+          </div>
+          } }
+        </div>
+
+        @if (quote(); as current) {
+        <dl class="totals">
+          <div>
+            <dt>Tạm tính</dt>
+            <dd>{{ current.pricing.subtotal | vnd }}</dd>
+          </div>
+          @if (current.pricing.discount) {
+          <div>
+            <dt>Giảm giá</dt>
+            <dd class="minus">−{{ current.pricing.discount | vnd }}</dd>
+          </div>
+          }
+          <div>
+            <dt>Phí vận chuyển</dt>
+            <dd>{{ current.pricing.shippingFee | vnd }}</dd>
+          </div>
+          @if (current.pricing.shippingDiscount) {
+          <div>
+            <dt>Giảm phí vận chuyển</dt>
+            <dd class="minus">−{{ current.pricing.shippingDiscount | vnd }}</dd>
+          </div>
+          }
+          <div class="grand">
+            <dt>Tổng thanh toán</dt>
+            <dd>{{ current.pricing.total | vnd }}</dd>
+          </div>
+        </dl>
+        <p class="eta">Giá đã bao gồm VAT.</p>
+        <p class="eta">
+          Dự kiến giao: {{ date(current.estimatedDelivery.from) }} – {{
+          date(current.estimatedDelivery.to) }}
+        </p>
+        } @else if (quoteFailed()) {
+        <p class="field-error" role="alert">
+          {{ stockIssues().length ? 'Một số sản phẩm không còn đủ số lượng, vui lòng cập nhật đơn.'
+          : 'Chưa tính được tổng tiền. Vui lòng kiểm tra lại giỏ hàng.' }}
+        </p>
+        } @else {
+        <p class="eta" role="status">Đang tính tổng tiền…</p>
+        } @if (isMock) {
+        <p class="eta">
+          Miễn phí vận chuyển cho đơn từ {{ policy.freeShippingFrom | vnd }}.
+          <a routerLink="/policies/shipping">Chính sách giao hàng</a>
+        </p>
+        }
+      </details>
+    </aside>
+  </div>
+  }
+</div>

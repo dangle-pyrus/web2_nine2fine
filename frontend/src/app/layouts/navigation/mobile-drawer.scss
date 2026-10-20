@@ -1,0 +1,252 @@
+/* Fixed layer above the header; the drawer slides in from the left, the side of the menu trigger. */
+:host {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: block;
+}
+/* Angular waits for this host animation before removing the drawer, so the slide-out can play. */
+:host(.leaving) {
+  animation: drawer-hold 0.28s linear both;
+}
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: #11111166;
+  animation: drawer-fade 0.28s ease both;
+}
+.drawer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: min(86vw, 400px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  color: var(--ink);
+  animation: drawer-slide 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+:host(.leaving) .scrim {
+  animation: drawer-fade 0.28s ease reverse both;
+}
+:host(.leaving) .drawer {
+  animation: drawer-slide 0.28s cubic-bezier(0.4, 0, 1, 1) reverse both;
+}
+button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.drawer-top {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 8px 12px;
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.close {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--surface);
+}
+/* On the root panel the close button takes the hamburger's place, so open and close share a spot. */
+.close:first-child {
+  margin-left: 0;
+}
+.panels {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.panel {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 8px 28px 40px;
+  transition: transform 0.32s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.panel.sub {
+  background: #fff;
+  transform: translateX(100%);
+}
+.panels.sub-open .panel:not(.sub) {
+  transform: translateX(-30%);
+}
+.panels.sub-open .panel.sub {
+  transform: none;
+}
+.top-list,
+.aux,
+.links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.top-list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 24px;
+  font-weight: 700;
+  text-align: left;
+}
+.member {
+  margin-top: 40px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.member p {
+  margin: 0;
+}
+.member-actions {
+  display: flex;
+  gap: 10px;
+}
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  margin-top: 18px;
+  padding: 0 20px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+.pill.dark {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.aux {
+  margin-top: 40px;
+}
+.aux a,
+.aux button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.panel h2 {
+  margin: 0 0 18px;
+  font-size: 24px;
+  font-weight: 700;
+  outline: none;
+}
+.feature {
+  position: relative;
+  display: block;
+  aspect-ratio: 16/10;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  color: #fff;
+}
+.feature n2f-media-image {
+  position: absolute;
+  inset: 0;
+}
+.feature::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, #00000099 0%, #0000 60%);
+}
+.feature-copy {
+  position: absolute;
+  inset: auto 16px 14px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.feature-copy strong {
+  font-size: 18px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.group-title {
+  margin: 28px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.links a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  padding: 6px 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.thumb {
+  width: 44px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: var(--surface);
+}
+.link-copy {
+  display: flex;
+  flex-direction: column;
+}
+.link-copy small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+@keyframes drawer-slide {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes drawer-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes drawer-hold {
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :host(.leaving),
+  .scrim,
+  .drawer,
+  :host(.leaving) .scrim,
+  :host(.leaving) .drawer {
+    animation: none;
+  }
+  .panel {
+    transition: none;
+  }
+}

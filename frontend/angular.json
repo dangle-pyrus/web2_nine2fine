@@ -1,0 +1,62 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": { "analytics": false },
+  "projects": {
+    "nine2fine": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "index": "src/index.html",
+            "styles": ["src/styles.scss"],
+            "assets": [
+              { "glob": "logo*.svg", "input": "asset", "output": "assets/brand" },
+              {
+                "glob": "{add_to_cart 1,delivery_address 1,discount 1}.svg",
+                "input": "asset",
+                "output": "assets/account"
+              },
+              {
+                "glob": "*.svg",
+                "input": "asset/illustrations",
+                "output": "assets/illustrations"
+              },
+              { "glob": "**/*", "input": "public", "output": "/" }
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                { "type": "initial", "maximumWarning": "600kB", "maximumError": "800kB" },
+                { "type": "anyComponentStyle", "maximumWarning": "10kB", "maximumError": "15kB" }
+              ],
+              "outputHashing": "all"
+            },
+            "development": { "optimization": false, "sourceMap": true }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": { "buildTarget": "nine2fine:build:production" },
+            "development": { "buildTarget": "nine2fine:build:development" },
+            "share": {
+              "buildTarget": "nine2fine:build:production",
+              "allowedHosts": [".ngrok-free.app", ".ngrok-free.dev", ".ngrok.app", ".ngrok.dev"],
+              "hmr": false,
+              "liveReload": false
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,124 @@
+<section class="catalog-body container" aria-labelledby="catalog-title">
+  <!-- Nike-style sticky header: title + count on the left, "Ẩn bộ lọc" and sort on the right. -->
+  <header class="catalog-header">
+    <h1 id="catalog-title">
+      {{ heading() }} @if (result().status === 'success') {
+      <span class="count">({{ visibleProducts().length }})</span>
+      }
+    </h1>
+    <div class="header-actions">
+      <button
+        class="filter-desktop-toggle"
+        type="button"
+        aria-controls="catalog-filters"
+        [attr.aria-expanded]="!filtersHidden()"
+        (click)="toggleFilters()"
+      >
+        {{ filtersHidden() ? 'Hiện bộ lọc' : 'Ẩn bộ lọc' }}
+        <n2f-icon name="reiconFilter" size="20px" />
+        @if (filtersHidden() && filterCount()) {
+        <span class="filter-count">{{ filterCount() }}</span>
+        }
+      </button>
+      <button class="filter-toggle" type="button" (click)="openFilters()" aria-haspopup="dialog">
+        Bộ lọc <n2f-icon name="reiconFilter" size="20px" /> @if (filterCount()) {
+        <span class="filter-count">{{ filterCount() }}</span> }
+      </button>
+      <label class="sort-label"
+        ><span>Sắp xếp theo</span>
+        <select
+          aria-label="Sắp xếp sản phẩm"
+          [ngModel]="query().sort"
+          (ngModelChange)="update('sort', $event)"
+        >
+          @for (sort of sorts; track sort.value) {
+          <option [value]="sort.value">{{ sort.label }}</option>
+          }
+        </select>
+        <n2f-icon name="reiconChevronDown" size="18px" />
+      </label>
+    </div>
+    <span class="sr-only" aria-live="polite"
+      >{{ result().status === 'loading' ? 'Đang tải sản phẩm' : visibleProducts().length + ' sản
+      phẩm' }}</span
+    >
+  </header>
+  <div class="catalog-layout" [class.filters-hidden]="filtersHidden()">
+    <aside id="catalog-filters" aria-label="Bộ lọc sản phẩm" [hidden]="filtersHidden()">
+      @if (!isWishlist()) {
+      <nav class="category-links" aria-label="Danh mục sản phẩm">
+        <button
+          type="button"
+          [class.active]="!query().category"
+          [attr.aria-current]="!query().category ? 'page' : null"
+          (click)="update('category', '')"
+        >
+          Tất cả sản phẩm
+        </button>
+        @for (category of categories; track category.value) {
+        <button
+          type="button"
+          [class.active]="query().category === category.value"
+          [attr.aria-current]="query().category === category.value ? 'page' : null"
+          (click)="update('category', category.value)"
+        >
+          {{ category.label }}
+        </button>
+        }
+      </nav>
+      }
+      <n2f-catalog-filters
+        [query]="query()"
+        (filtersChanged)="update($event.key, $event.value)"
+        (filtersCleared)="clear()"
+      />
+      <div class="sidebar-note">
+        <span>09:00 — 21:00</span>
+        <p>One wardrobe.<br />More possibilities.</p>
+        <span>FROM NINE TO FINE.</span>
+      </div>
+    </aside>
+    <div class="catalog-results" [attr.aria-busy]="result().status === 'loading'">
+      @if (query().search) {
+      <p class="search-summary">
+        Kết quả cho “{{ query().search }}”
+        <button type="button" class="text-button" (click)="update('q', '')">Xóa</button>
+      </p>
+      } @if (result().status === 'loading') {
+      <div class="product-grid" aria-label="Đang tải sản phẩm">
+        @for (index of [0,1,2,3,4,5]; track index) {
+        <div class="skeleton-product">
+          <div class="skeleton"></div>
+          <span class="skeleton"></span><span class="skeleton short"></span>
+        </div>
+        }
+      </div>
+      } @else if (result().status === 'error') {
+      <n2f-empty-state
+        heading="Chưa thể tải sản phẩm"
+        description="Bạn vui lòng thử lại sau một chút."
+        ><button class="button dark" type="button" (click)="retry()">
+          Thử lại
+        </button></n2f-empty-state
+      >
+      } @else if (!visibleProducts().length) {
+      <n2f-empty-state
+        [heading]="isWishlist() ? 'Chưa có món đồ yêu thích' : 'Chưa tìm thấy lựa chọn phù hợp'"
+        [description]="isWishlist() ? 'Lưu những thiết kế bạn thích để quay lại bất cứ lúc nào.' : 'Thử thay đổi hoặc xóa bộ lọc để khám phá thêm.'"
+      >
+        @if (!isWishlist()) {
+        <button class="button dark" type="button" (click)="clear()">Xóa bộ lọc</button> }
+      </n2f-empty-state>
+      } @else {
+      <div class="product-grid">
+        @for (product of visibleProducts(); track product.id) {
+        <n2f-product-card [product]="product" /> }
+      </div>
+      <div class="collection-end">
+        <span>Đã xem {{ visibleProducts().length }} sản phẩm</span><span class="end-line"></span>
+        <p>Find your next everyday favorite.</p>
+      </div>
+      }
+    </div>
+  </div>
+</section>

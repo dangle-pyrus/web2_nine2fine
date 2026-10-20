@@ -1,0 +1,484 @@
+/* Header measurements from Figma "header (1)" (61:341), scaled from the 1920px frame. */
+:host {
+  --u: clamp(0.66px, calc(100vw / 1920), 1px);
+}
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease,
+    transform 0.15s ease;
+}
+/* Landing: keep the overlay treatment throughout scrolling; menu panel stays solid. */
+.site-header.overlay-route {
+  position: fixed;
+  inset: 0 0 auto;
+}
+.site-header.transparent {
+  border-color: transparent;
+  background: linear-gradient(180deg, #00000066 0%, #0000 100%) border-box no-repeat;
+  color: #fff;
+}
+.site-header.transparent .desktop-nav a,
+.site-header.transparent .nav-label,
+.site-header.transparent .icon-button,
+.site-header.transparent .account-link {
+  color: #fff;
+}
+.site-header.transparent .desktop-nav .active,
+.site-header.transparent .nav-item.open > a,
+.site-header.transparent .nav-item.open > .nav-label {
+  border-color: #fff;
+}
+.site-header.transparent .utility-bar {
+  background: transparent;
+  color: #ffffffd9;
+}
+.site-header.transparent .account-link {
+  border-color: #ffffff80;
+}
+
+/* Nike-style utility bar: slides away once the page scrolls; the main bar stays sticky. */
+.utility-bar {
+  height: 36px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+.utility-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.utility-tagline {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-style: italic;
+}
+.utility-bar nav {
+  display: flex;
+  align-items: center;
+}
+.utility-bar nav a {
+  padding: 4px 0;
+}
+.utility-bar nav a + a::before {
+  content: '|';
+  margin: 0 12px;
+  opacity: 0.5;
+}
+.utility-bar nav a:hover {
+  color: var(--ink);
+}
+.site-header.transparent .utility-bar nav a:hover {
+  color: #fff;
+}
+@media (min-width: 801px) {
+  .site-header.compact {
+    transform: translateY(-36px);
+  }
+}
+
+/* Mega menu: panel wipes down under the bar (Nike ~250ms) while the page dims behind it. */
+.mega-shell {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: calc(100svh - 100%);
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  clip-path: inset(0 0 100% 0);
+  visibility: hidden;
+  transition:
+    clip-path 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    visibility 0s linear 0.25s;
+}
+.mega-shell.open {
+  clip-path: inset(0 0 0 0);
+  visibility: visible;
+  transition:
+    clip-path 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    visibility 0s;
+}
+.mega-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: #1111115c;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.mega-scrim.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.promo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 16px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+.promo-strip a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.promo-short {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-header,
+  .mega-shell,
+  .mega-shell.open,
+  .mega-scrim {
+    transition: none;
+  }
+}
+.header-inner {
+  height: max(64px, calc(90 * var(--u)));
+  display: flex;
+  align-items: center;
+  gap: max(24px, calc(80 * var(--u)));
+}
+.wordmark {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.header-inner .wordmark img {
+  width: max(140px, calc(230 * var(--u)));
+  height: auto;
+}
+.desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: max(20px, calc(34 * var(--u)));
+  height: 100%;
+}
+.nav-item {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+/* Hidden until keyboard focus (or always shown on touch screens without hover). */
+.nav-toggle {
+  position: absolute;
+  right: -20px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+.nav-toggle:focus-visible,
+.nav-item.open .nav-toggle:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.nav-item.open .nav-toggle {
+  transform: rotate(180deg);
+}
+@media (hover: none) {
+  .nav-toggle {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.desktop-nav a,
+.nav-label {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  border-bottom: 2px solid transparent;
+  font-size: max(14px, calc(24 * var(--u)));
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* Same look as the links next to it. */
+.nav-label {
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: inherit;
+}
+.nav-label:hover {
+  color: var(--brand);
+}
+.desktop-nav .active,
+.nav-item.open > a,
+.nav-item.open > .nav-label {
+  border-color: var(--ink);
+}
+.header-actions {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: max(8px, calc(40 * var(--u)));
+  margin-left: auto;
+}
+.search-trigger {
+  width: clamp(220px, calc(500 * var(--u)), 500px);
+  height: max(44px, calc(60 * var(--u)));
+  /* Figma width when there is room; gives way to the fourth nav item on tighter rows. */
+  flex-shrink: 1;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-right: max(8px, calc(120 * var(--u)));
+  padding: 0 calc(20 * var(--u) + 6px);
+  border: 1px solid #e6e6e6;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px #0000000d;
+  color: #9a9a9a;
+  font-size: max(14px, calc(22 * var(--u)));
+  font-weight: 500;
+}
+/* While searching, the panel field (morphed from this pill) is the only visible copy. */
+.site-header.searching .search-trigger {
+  visibility: hidden;
+}
+.search-trigger:hover {
+  border-color: var(--ink);
+}
+.bag-button {
+  position: relative;
+}
+.bag-count {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+}
+.bag-count.empty {
+  display: none;
+}
+.wishlist-link {
+  color: inherit;
+}
+.wishlist-link:hover {
+  color: var(--brand);
+}
+.account-link {
+  width: max(44px, calc(62 * var(--u)));
+  height: max(44px, calc(62 * var(--u)));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d9d9d9;
+  border-radius: 50%;
+}
+.account-link:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.mobile-menu {
+  display: none;
+}
+.site-footer .wordmark img {
+  width: 174px;
+  height: auto;
+}
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: #f7f7f6;
+}
+.footer-main {
+  padding-block: 50px;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr auto;
+  gap: 30px;
+}
+/* Seller identity required on Vietnamese e-commerce sites (name, registration, address, contact). */
+.footer-legal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-block: 0 24px;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.footer-legal strong {
+  color: var(--ink);
+}
+.footer-legal a {
+  text-decoration: underline;
+}
+.footer-main p {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin-top: 22px;
+}
+.footer-main nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.footer-main h2 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin: 2px 0 9px;
+  font-weight: 700;
+}
+.footer-main nav a {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* "09:00 → FINE." reads as one line; stacking split the arrow from the words (audit G3/D5). */
+.footer-signature {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: start;
+  gap: 10px;
+  font-size: 32px;
+  line-height: 1;
+  color: var(--brand);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.footer-signature n2f-icon {
+  transform: translateY(-3px);
+}
+.footer-bottom a {
+  text-decoration: underline;
+}
+.footer-bottom {
+  border-top: 1px solid var(--line);
+  padding-block: 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+@media (max-width: 1100px) {
+  .footer-main {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  }
+  .footer-signature {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .site-header.transparent .search-trigger {
+    background: transparent;
+    color: #fff;
+  }
+  .search-trigger {
+    width: 44px;
+    min-width: 0;
+    margin-right: 0;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    box-shadow: none;
+    color: var(--ink);
+  }
+  .search-placeholder {
+    display: none;
+  }
+}
+@media (max-width: 800px) {
+  .header-inner {
+    gap: 8px;
+  }
+  .desktop-nav,
+  .utility-bar,
+  .mega-shell,
+  .mega-scrim {
+    display: none;
+  }
+  .mobile-menu {
+    display: flex;
+    margin-left: -10px;
+  }
+  .header-actions {
+    gap: 0;
+  }
+  .account-link {
+    border-color: transparent;
+  }
+  /* One line on mobile so the strip does not push content down (UI/UX audit G2). */
+  .promo-strip {
+    flex-wrap: nowrap;
+    padding: 8px 16px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .promo-long,
+  .promo-strip a {
+    display: none;
+  }
+  .promo-short {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .footer-main {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px 24px;
+    padding-block: 40px 32px;
+  }
+  .footer-main > div:first-child {
+    grid-column: 1 / -1;
+  }
+  .footer-main nav {
+    gap: 0;
+  }
+  .footer-main nav a {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .footer-signature {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    font-size: 28px;
+  }
+  .footer-bottom {
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
+  .footer-bottom span:nth-child(2) {
+    display: none;
+  }
+}
