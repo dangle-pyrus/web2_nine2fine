@@ -6,9 +6,12 @@ import { Order, OrderEvent, OrderStatus } from './order-models';
  */
 export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string }> = {
   'pending-payment': { label: 'Chờ thanh toán', color: '#b45309' },
+  'pending-confirmation': { label: 'Chờ xác nhận', color: '#b45309' },
   processing: { label: 'Đang chuẩn bị hàng', color: '#1d4ed8' },
   shipping: { label: 'Đang vận chuyển', color: '#1d4ed8' },
   delivering: { label: 'Đang giao hàng', color: '#1d4ed8' },
+  'delivery-failed': { label: 'Giao không thành công', color: '#b91c1c' },
+  'returned-to-sender': { label: 'Đã hoàn về shop', color: '#b91c1c' },
   completed: { label: 'Hoàn thành', color: '#15803d' },
   cancelled: { label: 'Đã hủy', color: '#b91c1c' },
   'return-requested': { label: 'Đang xử lý trả hàng', color: '#6d28d9' },
@@ -21,11 +24,26 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string }>
  */
 export const ORDER_TABS = [
   { id: 'pending-payment', label: 'Chờ thanh toán', statuses: ['pending-payment'], active: true },
-  { id: 'processing', label: 'Đang chuẩn bị', statuses: ['processing'], active: true },
+  {
+    id: 'processing',
+    label: 'Đang chuẩn bị',
+    statuses: ['pending-confirmation', 'processing'],
+    active: true,
+  },
   { id: 'shipping', label: 'Đang vận chuyển', statuses: ['shipping'], active: true },
-  { id: 'delivering', label: 'Đang giao hàng', statuses: ['delivering'], active: true },
+  {
+    id: 'delivering',
+    label: 'Đang giao hàng',
+    statuses: ['delivering', 'delivery-failed'],
+    active: true,
+  },
   { id: 'completed', label: 'Hoàn thành', statuses: ['completed'], active: false },
-  { id: 'cancelled', label: 'Đã hủy', statuses: ['cancelled'], active: false },
+  {
+    id: 'cancelled',
+    label: 'Đã hủy',
+    statuses: ['cancelled', 'returned-to-sender'],
+    active: false,
+  },
   {
     id: 'returned',
     label: 'Trả hàng/Hoàn tiền',
@@ -163,11 +181,23 @@ export function orderNote(
   now = Date.now(),
 ): { text: string; tone: OrderNoteTone } | null {
   switch (order.status) {
+    case 'pending-confirmation':
+      return {
+        text: 'nine2fine sẽ gọi cho bạn để xác nhận đơn trước khi đóng gói.',
+        tone: 'transit',
+      };
     case 'processing':
       return {
         text: 'Đơn hàng đã được xác nhận, nine2fine đang đóng gói.',
         tone: 'transit',
       };
+    case 'delivery-failed':
+      return {
+        text: 'Shipper chưa giao được hàng. nine2fine sẽ liên hệ để hẹn giao lại.',
+        tone: 'alert',
+      };
+    case 'returned-to-sender':
+      return { text: 'Đơn không giao được và đã hoàn về nine2fine.', tone: 'muted' };
     case 'pending-payment': {
       if (!order.paymentDueAt) return null;
       const left = formatRemaining(order.paymentDueAt, now);
@@ -193,6 +223,12 @@ export function orderNote(
           }
         : null;
     case 'completed':
+      if (order.returnRequest?.decision?.status === 'rejected') {
+        return {
+          text: `Yêu cầu trả hàng bị từ chối: ${order.returnRequest.decision.note}`,
+          tone: 'alert',
+        };
+      }
       return order.delivery?.deliveredAt
         ? {
             text: `Đã giao thành công lúc ${formatDateTime(order.delivery.deliveredAt)}`,
@@ -241,9 +277,11 @@ const STEPS = [
 
 const CURRENT_STEP: Partial<Record<OrderStatus, number>> = {
   'pending-payment': 1,
+  'pending-confirmation': 1,
   processing: 2,
   shipping: 2,
   delivering: 3,
+  'delivery-failed': 3,
   completed: 5,
 };
 
@@ -285,10 +323,28 @@ export function orderHeadline(order: Order): { eyebrow: string; title: string; d
             : 'Vui lòng hoàn tất thanh toán để giữ đơn hàng.',
       };
     }
+    case 'pending-confirmation':
+      return {
+        eyebrow: 'Đơn hàng của bạn',
+        title: 'Chờ xác nhận',
+        detail: orderNote(order)?.text ?? '',
+      };
     case 'processing':
       return {
         eyebrow: 'Đơn hàng của bạn',
         title: 'Đang chuẩn bị hàng',
+        detail: orderNote(order)?.text ?? '',
+      };
+    case 'delivery-failed':
+      return {
+        eyebrow: 'Cập nhật đơn hàng',
+        title: 'Giao hàng không thành công',
+        detail: orderNote(order)?.text ?? '',
+      };
+    case 'returned-to-sender':
+      return {
+        eyebrow: 'Cập nhật đơn hàng',
+        title: 'Đơn đã hoàn về shop',
         detail: orderNote(order)?.text ?? '',
       };
     case 'shipping':
@@ -310,6 +366,13 @@ export function orderHeadline(order: Order): { eyebrow: string; title: string; d
           : 'Vui lòng để ý điện thoại.',
       };
     case 'completed':
+      if (order.returnRequest?.decision?.status === 'rejected') {
+        return {
+          eyebrow: 'Cập nhật đơn hàng',
+          title: 'Yêu cầu trả hàng bị từ chối',
+          detail: `Lý do: ${order.returnRequest.decision.note}`,
+        };
+      }
       return {
         eyebrow: 'Đơn hàng của bạn',
         title: 'Đã giao thành công',

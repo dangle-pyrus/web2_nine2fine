@@ -9,13 +9,13 @@ import {
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { finalize, map, startWith, switchMap } from 'rxjs';
+import { finalize, map, startWith, Subscription, switchMap } from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { PricePipe } from '../../../shared/commerce/price.pipe';
 import { ToastService } from '../../../shared/ui/toast';
 import { getMedia } from '../../../../media/media-manifest';
-import { STORE_POLICY } from '../../../core/store-policy';
-import { ACCOUNT_API } from '../data-access/account-api';
+import { storeSettings } from '../../../core/store-settings';
+import { ACCOUNT_API, MAX_RETURN_PHOTO_BYTES, MAX_RETURN_PHOTOS } from '../data-access/account-api';
 import { accountErrorMessage } from '../account-messages';
 import { Order, ReturnLine, ReturnReason } from '../../orders/order-models';
 import { formatDate } from '../../orders/order-status';
@@ -27,12 +27,19 @@ import {
   returnReason,
 } from '../../orders/order-returns';
 
-const MAX_PHOTOS = 5;
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_PHOTOS = MAX_RETURN_PHOTOS;
+const MAX_PHOTO_BYTES = MAX_RETURN_PHOTO_BYTES;
 
+/** A picked photo; it uploads right away and the request only sends finished IDs. */
 interface Photo {
+  key: number;
   name: string;
+  /** Local preview (object URL). */
   url: string;
+  status: 'uploading' | 'done' | 'error';
+  progress: number;
+  id?: string;
+  error?: string;
 }
 
 /** `/account/orders/:orderId/return`: pick items, reason, photos and where the refund goes. */
@@ -152,9 +159,18 @@ interface Photo {
             </label>
             @if (photos().length) {
               <ul class="photos">
-                @for (photo of photos(); track photo.url; let i = $index) {
-                  <li>
+                @for (photo of photos(); track photo.key; let i = $index) {
+                  <li [class.failed]="photo.status === 'error'">
                     <img [src]="photo.url" [alt]="photo.name" width="72" height="72" />
+                    @if (photo.status === 'uploading') {
+                      <progress
+                        max="100"
+                        [value]="photo.progress"
+                        [attr.aria-label]="'Đang tải ' + photo.name"
+                      ></progress>
+                    } @else if (photo.status === 'error') {
+                      <span class="photo-error" role="alert">{{ photo.error }}</span>
+                    }
                     <button
                       type="button"
                       [attr.aria-label]="'Xóa ảnh ' + photo.name"
@@ -265,8 +281,8 @@ interface Photo {
             <p class="form-error" role="alert">{{ error() }}</p>
           }
           <div class="actions">
-            <button class="pill" type="submit" [disabled]="busy()">
-              {{ busy() ? 'Đang gửi…' : 'Gửi yêu cầu trả hàng' }}
+            <button class="pill" type="submit" [disabled]="busy() || uploading()">
+              {{ busy() ? 'Đang gửi…' : uploading() ? 'Đang tải ảnh…' : 'Gửi yêu cầu trả hàng' }}
             </button>
             <a class="pill outline" [routerLink]="['/account/orders', orderId]">Hủy</a>
           </div>
@@ -419,6 +435,21 @@ interface Photo {
     }
     .photos li {
       position: relative;
+      display: grid;
+      gap: 4px;
+      width: 72px;
+    }
+    .photos li.failed img {
+      opacity: 0.4;
+    }
+    .photos progress {
+      width: 72px;
+      height: 6px;
+    }
+    .photo-error {
+      color: var(--brand);
+      font-size: 11px;
+      line-height: 1.3;
     }
     .photos img {
       border-radius: 8px;
@@ -507,7 +538,9 @@ export class ReturnRequestPage {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
-  readonly policy = STORE_POLICY;
+  get policy() {
+    return storeSettings().policy;
+  }
   readonly reasons = RETURN_REASONS;
   readonly maxPhotos = MAX_PHOTOS;
   readonly media = getMedia;
@@ -521,6 +554,10 @@ export class ReturnRequestPage {
   readonly picked = signal<ReadonlyMap<number, number>>(new Map());
   readonly photos = signal<Photo[]>([]);
   readonly photoError = signal('');
+  /** The request waits for photos still uploading. */
+  readonly uploading = computed(() => this.photos().some((photo) => photo.status === 'uploading'));
+  private readonly uploads = new Map<number, Subscription>();
+  private photoKey = 0;
 
   readonly form = inject(FormBuilder).nonNullable.group({
     reason: ['' as ReturnReason | '', Validators.required],
@@ -572,9 +609,10 @@ export class ReturnRequestPage {
       this.form.controls.detail.updateValueAndValidity();
       this.form.controls.condition.updateValueAndValidity();
     });
-    this.destroyRef.onDestroy(() =>
-      this.photos().forEach((photo) => URL.revokeObjectURL(photo.url)),
-    );
+    this.destroyRef.onDestroy(() => {
+      this.uploads.forEach((upload) => upload.unsubscribe());
+      this.photos().forEach((photo) => URL.revokeObjectURL(photo.url));
+    });
   }
 
   eligible(order: Order): boolean {
@@ -623,25 +661,49 @@ export class ReturnRequestPage {
     );
     if (accepted.length < files.length) this.photoError.set('Chỉ nhận ảnh dưới 5 MB.');
     if (accepted.length > room) this.photoError.set(`Tối đa ${MAX_PHOTOS} ảnh.`);
-    this.photos.update((photos) => [
-      ...photos,
-      ...accepted
-        .slice(0, room)
-        .map((file) => ({ name: file.name, url: URL.createObjectURL(file) })),
-    ]);
+    for (const file of accepted.slice(0, room)) this.upload(file);
   }
 
   removePhoto(index: number): void {
     const photo = this.photos()[index];
-    if (photo) URL.revokeObjectURL(photo.url);
+    if (!photo) return;
+    this.uploads.get(photo.key)?.unsubscribe();
+    this.uploads.delete(photo.key);
+    URL.revokeObjectURL(photo.url);
     this.photos.update((photos) => photos.filter((_, i) => i !== index));
   }
 
+  /** Uploads one photo now; a failure stays on that photo and does not block the others. */
+  private upload(file: File): void {
+    const key = ++this.photoKey;
+    const patch = (change: Partial<Photo>) =>
+      this.photos.update((photos) =>
+        photos.map((photo) => (photo.key === key ? { ...photo, ...change } : photo)),
+      );
+    this.photos.update((photos) => [
+      ...photos,
+      { key, name: file.name, url: URL.createObjectURL(file), status: 'uploading', progress: 0 },
+    ]);
+    const upload = this.api.uploadReturnPhoto(file).subscribe({
+      next: (event) =>
+        event.kind === 'progress'
+          ? patch({ progress: event.percent })
+          : patch({ status: 'done', progress: 100, id: event.photo.id }),
+      error: (error: unknown) => {
+        patch({ status: 'error', error: accountErrorMessage(error) });
+        this.uploads.delete(key);
+      },
+      complete: () => this.uploads.delete(key),
+    });
+    this.uploads.set(key, upload);
+  }
+
   submit(order: Order): void {
-    if (this.busy()) return;
+    if (this.busy() || this.uploading()) return;
     this.submitted.set(true);
     this.form.markAllAsTouched();
-    const needsPhoto = this.sellerFault() && !this.photos().length;
+    const uploaded = this.photos().filter((photo) => photo.status === 'done' && photo.id);
+    const needsPhoto = this.sellerFault() && !uploaded.length;
     if (needsPhoto) this.photoError.set('Vui lòng thêm ít nhất 1 ảnh sản phẩm.');
     if (this.form.invalid || !this.picked().size || needsPhoto) {
       this.error.set('Vui lòng kiểm tra các thông tin được đánh dấu.');
@@ -655,7 +717,8 @@ export class ReturnRequestPage {
         lines: this.lines(),
         reason: value.reason as ReturnReason,
         detail: value.detail,
-        photoCount: this.photos().length,
+        photoCount: uploaded.length,
+        photoIds: uploaded.map((photo) => photo.id!),
         refundAccount: this.needsAccount(order)
           ? {
               bank: value.bank.trim(),

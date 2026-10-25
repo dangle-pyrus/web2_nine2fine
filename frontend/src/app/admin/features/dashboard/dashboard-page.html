@@ -1,0 +1,181 @@
+<adm-page-header [heading]="greeting()">
+  <p subtitle class="secondary">
+    @if (summary(); as data) { Cập nhật {{ data.generatedAt | admRelative }} } @else { Đang tải số
+    liệu hôm nay… }
+  </p>
+  <ng-container actions>
+    @if (session.can('dashboard.revenue')) {
+    <div class="segmented" role="group" aria-label="Kỳ của số liệu">
+      @for (item of ranges; track item.value) {
+      <button
+        type="button"
+        [class.is-active]="range() === item.value"
+        [attr.aria-pressed]="range() === item.value"
+        (click)="setRange(item.value)"
+      >
+        {{ item.label }}
+      </button>
+      }
+    </div>
+    }
+    <button
+      type="button"
+      class="adm-btn"
+      (click)="reload()"
+      [class.is-busy]="view.state().refreshing"
+    >
+      <adm-icon name="reiconRefresh" [size]="16" /> Làm mới
+    </button>
+  </ng-container>
+</adm-page-header>
+
+<div class="page-body page-body--wide">
+  @if (view.state().error && !summary()) {
+  <adm-empty kind="error" heading="Không tải được số liệu" [description]="view.state().error ?? ''">
+    <button type="button" class="adm-btn" (click)="reload()">Thử lại</button>
+  </adm-empty>
+  } @else { @if (session.can('dashboard.revenue')) {
+  <div class="kpis">
+    @if (summary(); as data) {
+    <a class="kpi-main" routerLink="/admin/orders" [queryParams]="{ range: rangeInfo().preset }">
+      <p class="kpi-label">Doanh thu · {{ rangeInfo().label | lowercase }}</p>
+      <p class="kpi-value">{{ data.kpis.revenue.value | admMoney }}</p>
+      <p
+        class="kpi-delta"
+        [class]="delta(data.kpis.revenue).dir"
+        [title]="delta(data.kpis.revenue).title"
+      >
+        {{ delta(data.kpis.revenue).text }}
+      </p>
+    </a>
+    <a routerLink="/admin/orders" [queryParams]="{ range: rangeInfo().preset }">
+      <p class="kpi-label">Đơn hàng · {{ rangeInfo().label | lowercase }}</p>
+      <p class="kpi-value">{{ data.kpis.orders.value | admNum }}</p>
+      <p
+        class="kpi-delta"
+        [class]="delta(data.kpis.orders).dir"
+        [title]="delta(data.kpis.orders).title"
+      >
+        {{ delta(data.kpis.orders).text }}
+      </p>
+    </a>
+    <a routerLink="/admin/orders" [queryParams]="{ range: rangeInfo().preset }">
+      <p class="kpi-label">Giá trị đơn trung bình · {{ rangeInfo().label | lowercase }}</p>
+      <p class="kpi-value">{{ data.kpis.averageOrderValue.value | admMoney }}</p>
+      <p
+        class="kpi-delta"
+        [class]="delta(data.kpis.averageOrderValue).dir"
+        [title]="delta(data.kpis.averageOrderValue).title"
+      >
+        {{ delta(data.kpis.averageOrderValue).text }}
+      </p>
+    </a>
+    <a routerLink="/admin/returns">
+      <p class="kpi-label">Tỷ lệ trả hàng (7 ngày)</p>
+      <p class="kpi-value">{{ percent(data.kpis.returnRate.value) }}</p>
+      <p class="kpi-delta">Trên các đơn đã xử lý</p>
+    </a>
+    } @else { @for (i of [0, 1, 2, 3]; track i) {
+    <div>
+      <span class="sk" style="width: 50%"></span
+      ><span class="sk sk--title" style="margin-top: 14px; width: 70%"></span>
+    </div>
+    } }
+  </div>
+  }
+
+  <div class="grid">
+    <section class="section todo" aria-labelledby="todo-title">
+      <header>
+        <h2 id="todo-title">Cần xử lý</h2>
+      </header>
+      <ul>
+        @for (item of todo(); track item.label) {
+        <li>
+          <a [routerLink]="item.link" [queryParams]="item.params" [class.zero]="!item.count">
+            <span class="count num">{{ item.count | admNum }}</span>
+            <span class="text">
+              <span class="label">{{ item.label }}</span>
+              <span class="hint">{{ item.hint }}</span>
+            </span>
+            <adm-icon name="reiconChevronRight" [size]="16" />
+          </a>
+        </li>
+        } @empty { @if (summary()) {
+        <li class="all-done">
+          <adm-icon name="reiconCheckCircle" [size]="20" />
+          <span class="text">
+            <span class="label">Đã xử lý hết việc cần làm</span>
+            <span class="hint">Đơn mới và yêu cầu trả hàng sẽ hiện ở đây.</span>
+          </span>
+        </li>
+        } @else { @for (i of [0, 1, 2, 3]; track i) {
+        <li class="sk-row"><span class="sk" style="width: 60%"></span></li>
+        } } }
+      </ul>
+    </section>
+
+    @if (session.can('dashboard.revenue')) {
+    <section class="section chart" aria-labelledby="chart-title">
+      <header>
+        <div>
+          <h2 id="chart-title">Doanh thu 30 ngày</h2>
+          @if (summary()) {
+          <p class="small secondary">{{ chart().total | admMoney }} · {{ rangeChange() }}</p>
+          }
+        </div>
+        <div class="legend small secondary">
+          <span><i class="line"></i>30 ngày qua</span>
+          <span><i class="line dashed"></i>30 ngày trước đó</span>
+        </div>
+      </header>
+      @if (summary()) {
+      <adm-chart
+        type="line"
+        label="Doanh thu theo ngày trong 30 ngày"
+        [labels]="chart().labels"
+        [series]="chart().series"
+        [format]="shortMoney"
+      />
+      } @else {
+      <div class="sk chart-sk"></div>
+      }
+    </section>
+
+    <section class="section top" aria-labelledby="top-title">
+      <header>
+        <h2 id="top-title">Bán chạy 30 ngày</h2>
+        <a class="adm-btn adm-btn--ghost adm-btn--sm" routerLink="/admin/products">Xem sản phẩm</a>
+      </header>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Sản phẩm</th>
+            <th class="num">Đã bán</th>
+            <th class="num">Doanh thu</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (product of summary()?.topProducts ?? []; track product.productId) {
+          <tr class="clickable" [routerLink]="['/admin/products', product.productId]">
+            <td>
+              <div class="cell-media">
+                <img class="thumb" [src]="product.image" alt="" />
+                <span class="cell-title">{{ product.name }}</span>
+              </div>
+            </td>
+            <td class="num">{{ product.units | admNum }}</td>
+            <td class="num">{{ product.revenue | admMoney }}</td>
+          </tr>
+          } @empty {
+          <tr>
+            <td colspan="3" class="tertiary">Chưa có đơn hàng trong 30 ngày.</td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+    }
+  </div>
+  }
+</div>

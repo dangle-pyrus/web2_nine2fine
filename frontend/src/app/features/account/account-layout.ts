@@ -11,7 +11,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, filter, map, of } from 'rxjs';
 import { AuthSession } from '../auth/auth-session';
 import { IconComponent } from '../../shared/ui/icon.component';
-import { ACCOUNT_API } from './data-access/account-api';
+import { ACCOUNT_API, AccountError } from './data-access/account-api';
 import { TIER_LABEL } from './data-access/account-models';
 import { centerActive } from '../../shared/ui/center-active';
 
@@ -149,7 +149,16 @@ export class AccountLayout {
       .getMembership()
       .pipe(
         map((membership) => TIER_LABEL[membership.tier]),
-        catchError(() => of(null)),
+        catchError((error: unknown) => {
+          // The session ended on the server.
+          if (error instanceof AccountError && error.code === 'unauthorized') {
+            this.session.signOut();
+            void this.router.navigate(['/auth/login'], {
+              queryParams: { returnUrl: this.router.url },
+            });
+          }
+          return of(null);
+        }),
       ),
     { initialValue: null },
   );

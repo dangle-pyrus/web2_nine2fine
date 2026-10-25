@@ -26,8 +26,7 @@ import { OverlayService } from '../shared/ui/overlay.service';
 import { ToastHost } from '../shared/ui/toast';
 import { IconComponent } from '../shared/ui/icon.component';
 import { PricePipe } from '../shared/commerce/price.pipe';
-import { STORE_POLICY } from '../core/store-policy';
-import { STORE_INFO } from '../core/store-info';
+import { storeSettings } from '../core/store-settings';
 import { formatDate } from '../features/orders/order-status';
 import { MegaMenu } from './navigation/mega-menu';
 import { MobileDrawer } from './navigation/mobile-drawer';
@@ -327,9 +326,16 @@ export class StoreLayout {
   readonly cart = inject(CartState);
   readonly wishlist = inject(WishlistState);
   readonly session = inject(AuthSession);
-  readonly policy = STORE_POLICY;
-  readonly info = STORE_INFO;
-  readonly registrationDate = formatDate(STORE_INFO.registrationDate);
+  /** Live store settings (a change shows up without reload). */
+  get policy() {
+    return storeSettings().policy;
+  }
+  get info() {
+    return storeSettings().info;
+  }
+  get registrationDate(): string {
+    return formatDate(storeSettings().info.registrationDate);
+  }
   readonly menus = TOP_NAVIGATION;
   readonly utilityLinks = UTILITY_LINKS;
   readonly menuOpen = signal(false);

@@ -33,8 +33,20 @@ export interface LandingShop {
   queryParams?: Record<string, string>;
 }
 
+export interface LandingCategories {
+  kind: 'categories';
+  id: string;
+}
+
+/**
+ * One home page block. `enabled: false` hides it without deleting it; missing means shown.
+ */
+export type LandingBlock = (LandingCampaign | LandingEdit | LandingShop | LandingCategories) & {
+  enabled?: boolean;
+};
+
 export interface LandingContent {
   categories: { label: string; href: string; mediaId: string }[];
   moments: { label: string; href: string }[];
-  blocks: (LandingCampaign | LandingEdit | LandingShop | { kind: 'categories'; id: string })[];
+  blocks: LandingBlock[];
 }

@@ -8,6 +8,11 @@ const addressForm = () =>
 const catalog = () => import('./features/catalog/catalog-page').then((m) => m.CatalogPage);
 
 export const routes: Routes = [
+  // Back office: separate layout, styles and providers (src/app/admin).
+  {
+    path: 'admin',
+    loadChildren: () => import('./admin/admin.routes').then((m) => m.ADMIN_ROUTES),
+  },
   {
     path: 'auth',
     component: AuthLayout,

@@ -14,7 +14,10 @@
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "index": "src/index.html",
-            "styles": ["src/styles.scss"],
+            "styles": [
+              "src/styles.scss",
+              { "input": "src/app/admin/styles/admin.scss", "bundleName": "admin", "inject": false }
+            ],
             "assets": [
               { "glob": "logo*.svg", "input": "asset", "output": "assets/brand" },
               {

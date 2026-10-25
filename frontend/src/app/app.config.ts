@@ -23,7 +23,6 @@ import {
   reiconCopy,
   reiconCopySuccess,
   reiconDollarSquare,
-  reiconDownload,
   reiconEye,
   reiconEyeOff,
   reiconFilter,
@@ -61,8 +60,12 @@ import { AUTH_API, HttpAuthApi } from './features/auth/data-access/auth-api';
 import { MockAuthApi } from '../mocks/mock-auth-api';
 import { ACCOUNT_API, HttpAccountApi } from './features/account/data-access/account-api';
 import { MockAccountApi } from '../mocks/mock-account-api';
-import { HOME_CONTENT } from './features/home/home-content';
-import { HOME_CONTENT_FIXTURE } from '../mocks/home-content';
+import {
+  applyStoreSettings,
+  HttpStoreSettingsApi,
+  STORE_SETTINGS_API,
+} from './core/store-settings';
+import { MockStoreSettingsApi } from '../mocks/mock-store-settings-api';
 import { HttpNewsletterApi, NEWSLETTER_API } from './features/home/newsletter-api';
 import { MockNewsletterApi } from '../mocks/mock-newsletter-api';
 import { MockPersistence } from '../mocks/mock-persistence';
@@ -96,7 +99,6 @@ export const appConfig: ApplicationConfig = {
       reiconCopy,
       reiconCopySuccess,
       reiconDollarSquare,
-      reiconDownload,
       reiconEye,
       reiconEyeOff,
       reiconFilter,
@@ -156,8 +158,21 @@ export const appConfig: ApplicationConfig = {
       useFactory: () =>
         inject(API_CONFIG).mode === 'mock' ? inject(MockAuthApi) : inject(HttpAuthApi),
     },
-    // Editorial content is a typed fixture until a CMS endpoint exists.
-    { provide: HOME_CONTENT, useValue: HOME_CONTENT_FIXTURE },
+    // Home page content is provided by the lazy home page (`HOME_CONTENT_API`).
+    {
+      provide: STORE_SETTINGS_API,
+      useFactory: () =>
+        inject(API_CONFIG).mode === 'mock'
+          ? inject(MockStoreSettingsApi)
+          : inject(HttpStoreSettingsApi),
+    },
+    // Store settings (fees, policies, business info): the built-in values show at once
+    // and are replaced when the request answers; a failed request keeps them.
+    provideAppInitializer(() => {
+      inject(STORE_SETTINGS_API)
+        .getStoreSettings()
+        .subscribe({ next: applyStoreSettings, error: () => undefined });
+    }),
     {
       provide: NEWSLETTER_API,
       useFactory: () =>

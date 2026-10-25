@@ -8,6 +8,8 @@ const MESSAGES: Record<AccountErrorCode, string> = {
     'Đơn hàng đã được giao cho đơn vị vận chuyển nên không thể hủy trực tuyến. Vui lòng gọi hotline để được hỗ trợ.',
   'not-returnable': 'Đơn hàng này không còn trong thời hạn hoặc điều kiện trả hàng.',
   'invalid-address': 'Địa chỉ chưa hợp lệ. Vui lòng kiểm tra Tỉnh/Thành phố và Phường/Xã.',
+  'file-too-large': 'Ảnh lớn hơn 5 MB.',
+  'unsupported-type': 'Chỉ nhận tệp ảnh.',
   unavailable: 'Không thể kết nối. Vui lòng thử lại.',
 };
 

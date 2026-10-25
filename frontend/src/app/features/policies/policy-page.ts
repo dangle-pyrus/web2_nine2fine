@@ -3,10 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 import { map, tap } from 'rxjs';
-import { STORE_INFO } from '../../core/store-info';
+import { storeSettings } from '../../core/store-settings';
 import { formatDate } from '../orders/order-status';
 import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
-import { findPolicy, POLICIES, POLICIES_UPDATED_AT } from './policy-content';
+import { findPolicy, policies, POLICIES_UPDATED_AT } from './policy-content';
 
 /** `/policies/:slug`: one policy with the list of all policies beside it. */
 @Component({
@@ -233,8 +233,12 @@ import { findPolicy, POLICIES, POLICIES_UPDATED_AT } from './policy-content';
 })
 export class PolicyPage {
   private readonly title = inject(Title);
-  readonly policies = POLICIES;
-  readonly info = STORE_INFO;
+  get policies() {
+    return policies();
+  }
+  get info() {
+    return storeSettings().info;
+  }
   readonly updated = formatDate(POLICIES_UPDATED_AT);
   private readonly slug = toSignal(
     inject(ActivatedRoute).paramMap.pipe(

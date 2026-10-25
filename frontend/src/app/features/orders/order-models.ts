@@ -1,9 +1,15 @@
 /** Order domain shared by account history, checkout receipts and guest tracking. */
 export type OrderStatus =
   | 'pending-payment'
+  /** COD order waiting for the shop to call and confirm it before packing. */
+  | 'pending-confirmation'
   | 'processing'
   | 'shipping'
   | 'delivering'
+  /** The carrier could not deliver; the shop retries or has it sent back. */
+  | 'delivery-failed'
+  /** Undelivered parcel back in the shop's warehouse. */
+  | 'returned-to-sender'
   | 'completed'
   | 'cancelled'
   /** The shopper asked to return items; nine2fine is collecting and inspecting them. */
@@ -80,12 +86,34 @@ export interface ReturnRequest {
   lines: ReturnLine[];
   reason: ReturnReason;
   detail: string;
+  /** Kept for older requests; equals `photos.length` once photos are uploaded. */
   photoCount: number;
+  /** Uploaded photos (time-limited URLs from the backend). Missing on older requests. */
+  photos?: ReturnPhoto[];
   /** Null when the refund goes back to the account that paid (bank transfer). */
   refundAccount: RefundAccount | null;
   /** Estimated refund after allocated discounts and any return shipping fee. */
   amount: number;
   returnShippingFee: number;
+  /** The shop's decision; a rejected request keeps the order `completed` (one request per order). */
+  decision?: ReturnDecision;
+}
+
+/** A photo the shopper attached to a return request (`POST /api/uploads/return-photos`). */
+export interface ReturnPhoto {
+  id: string;
+  url: string;
+  thumbUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface ReturnDecision {
+  status: 'approved' | 'rejected';
+  /** ISO datetime. */
+  decidedAt: string;
+  /** Shown to the shopper when the request is rejected. */
+  note: string;
 }
 
 /** Who cancelled an order: the shopper, the shop (e.g. out of stock) or the system (payment expired). */
@@ -126,8 +154,15 @@ export interface Order {
   cancelledAt?: string;
   /** Delivery note written by the shopper at checkout. */
   note?: string;
+  /** Voucher code applied at checkout, when any. */
+  voucherCode?: string;
   invoice?: OrderInvoice;
   returnRequest?: ReturnRequest;
+  /**
+   * Return window in days, fixed when the order is delivered; missing on older
+   * orders, which use today's policy.
+   */
+  returnDays?: number;
   /** Status and carrier events from the backend; the UI derives a basic history when absent. */
   timeline?: OrderEvent[];
 }

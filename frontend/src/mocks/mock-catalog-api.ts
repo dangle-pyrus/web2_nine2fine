@@ -11,7 +11,8 @@ import {
 } from '../app/features/catalog/models/product';
 import { AuthSession } from '../app/features/auth/auth-session';
 import { PRODUCTS } from './products';
-import { SAMPLE_REVIEWS, SIZE_CHARTS } from './reviews';
+import { MockStorefrontContent } from './mock-storefront-content';
+import { SAMPLE_REVIEWS } from './reviews';
 import { MockAccountStore } from './mock-account-store';
 import { MockInventory } from './mock-inventory';
 import { MockPersistence } from './mock-persistence';
@@ -54,6 +55,7 @@ export class MockCatalogApi implements CatalogApi {
   /** `accountId:productId` pairs that already left a review. */
   private readonly reviewed = new Set<string>();
   private readonly alerts: CatalogSnapshot['alerts'] = [];
+  private readonly content = inject(MockStorefrontContent);
 
   constructor() {
     const saved = inject(MockPersistence).register<CatalogSnapshot>('catalog', () => ({
@@ -97,11 +99,12 @@ export class MockCatalogApi implements CatalogApi {
   }
 
   reviews(productId: string) {
-    const samples = (SAMPLE_REVIEWS[productId] ?? []).map((review) => ({
-      ...review,
-      sample: true,
-    }));
-    return of([...(this.written.get(productId) ?? []), ...samples]).pipe(delay(220));
+    return defer(() => of(this.content.moderate(this.allReviews(productId)))).pipe(delay(220));
+  }
+
+  /** Every review of a product, hidden ones included (the admin moderates them). */
+  allReviews(productId: string): ProductReview[] {
+    return [...(this.written.get(productId) ?? []), ...this.content.baseReviews(productId)];
   }
 
   reviewEligibility(productId: string): Observable<ReviewEligibility> {
@@ -152,6 +155,6 @@ export class MockCatalogApi implements CatalogApi {
   }
 
   sizeChart(category: Category) {
-    return of(SIZE_CHARTS[category]).pipe(delay(120));
+    return defer(() => of(this.content.sizeChart(category))).pipe(delay(120));
   }
 }

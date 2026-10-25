@@ -1,0 +1,272 @@
+<adm-page-header heading="Đơn hàng">
+  <ng-container actions>
+    @if (session.can('orders.export')) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--lg"
+      [disabled]="!page()?.items?.length"
+      (click)="openExport()"
+    >
+      <adm-icon name="reiconDownload" [size]="16" /> Xuất file
+    </button>
+    }
+  </ng-container>
+</adm-page-header>
+
+<div class="page-body page-body--wide">
+  <nav class="tabs" aria-label="Chế độ xem đơn hàng">
+    @for (item of views; track item.value) {
+    <button
+      type="button"
+      [class.is-active]="query().view === item.value"
+      [attr.aria-current]="query().view === item.value ? 'page' : null"
+      (click)="setView(item.value)"
+    >
+      {{ item.label }} @if (item.value !== 'all' && item.value !== 'completed' && item.value !==
+      'cancelled' && counts()[item.value]) {
+      <span class="count">{{ counts()[item.value] }}</span>
+      }
+    </button>
+    }
+  </nav>
+
+  @if (selection.count()) {
+  <div class="bulkbar" role="region" aria-label="Thao tác hàng loạt">
+    <span>Đã chọn {{ selection.count() }} đơn</span>
+    <span class="spacer"></span>
+    @if (session.can('orders.process') && canBulkConfirm()) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--sm"
+      [class.is-busy]="busy()"
+      (click)="bulkConfirm()"
+    >
+      <adm-icon name="reiconCheckCircle" [size]="16" /> Xác nhận đơn
+    </button>
+    } @if (session.can('orders.process') && canBulkShip()) {
+    <button type="button" class="adm-btn adm-btn--sm" [class.is-busy]="busy()" (click)="bulkShip()">
+      <adm-icon name="reiconTruck" [size]="16" /> Bàn giao vận chuyển
+    </button>
+    }
+    <button
+      type="button"
+      class="adm-btn adm-btn--sm"
+      aria-label="In phiếu"
+      [cdkMenuTriggerFor]="printMenu"
+    >
+      <adm-icon name="reiconPrinter" [size]="16" /> <span class="bulk-label">In</span>
+    </button>
+    <ng-template #printMenu>
+      <div class="adm">
+        <div class="menu" cdkMenu>
+          <button cdkMenuItem type="button" (click)="printSelected('delivery')">
+            <adm-icon name="reiconPrinter" [size]="16" /> Phiếu giao hàng (A5)
+          </button>
+          <button cdkMenuItem type="button" (click)="printSelected('pick')">
+            <adm-icon name="reiconBox" [size]="16" /> Phiếu nhặt hàng
+          </button>
+        </div>
+      </div>
+    </ng-template>
+    @if (session.can('orders.process')) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--sm"
+      aria-label="Gắn tag"
+      [class.is-busy]="busy()"
+      (click)="bulkTag()"
+    >
+      <adm-icon name="reiconTag" [size]="16" /> <span class="bulk-label">Gắn tag</span>
+    </button>
+    } @if (session.can('orders.export')) {
+    <button type="button" class="adm-btn adm-btn--sm" (click)="exportCsv(selectedOrders())">
+      <adm-icon name="reiconDownload" [size]="16" /> Xuất file
+    </button>
+    }
+    <button
+      type="button"
+      class="adm-btn adm-btn--sm adm-btn--icon"
+      aria-label="Bỏ chọn"
+      (click)="selection.clear()"
+    >
+      <adm-icon name="reiconX" [size]="16" />
+    </button>
+  </div>
+  } @else {
+  <form class="toolbar" role="search" (ngSubmit)="submitSearch()">
+    <div class="affix search">
+      <span class="prefix-icon"><adm-icon name="reiconSearch" [size]="16" /></span>
+      <input
+        class="input input--sm"
+        type="search"
+        name="search"
+        placeholder="Mã đơn, tên khách, SĐT, mã vận đơn"
+        aria-label="Tìm đơn hàng"
+        [ngModel]="search()"
+        (ngModelChange)="search.set($event)"
+        (search)="submitSearch()"
+      />
+    </div>
+    <select
+      class="select select--sm"
+      aria-label="Lọc theo ngày đặt"
+      [ngModel]="query().range"
+      name="range"
+      (ngModelChange)="list.update({ range: $event })"
+    >
+      @for (preset of presets; track preset.value) {
+      <option [value]="preset.value">{{ preset.value ? preset.label : 'Ngày đặt: tất cả' }}</option>
+      }
+    </select>
+    <select
+      class="select select--sm"
+      aria-label="Lọc theo phương thức thanh toán"
+      [ngModel]="query().payment"
+      name="payment"
+      (ngModelChange)="list.update({ payment: $event })"
+    >
+      <option value="">Thanh toán: tất cả</option>
+      @for (method of methods; track method[0]) {
+      <option [value]="method[0]">{{ method[1] }}</option>
+      }
+    </select>
+  </form>
+  @if (chips().length) {
+  <div class="chips filter-chips">
+    @for (chip of chips(); track chip.key) {
+    <span class="chip"
+      >{{ chip.label }}<button
+        type="button"
+        [attr.aria-label]="'Bỏ lọc ' + chip.label"
+        (click)="removeChip(chip.key)"
+      >
+        <adm-icon name="reiconX" [size]="12" /></button
+    ></span>
+    }
+    <button type="button" class="link small" (click)="clearFilters()">Xóa tất cả</button>
+  </div>
+  } } @if (view.state().error && !page()) {
+  <adm-empty
+    kind="error"
+    heading="Không tải được danh sách đơn hàng"
+    [description]="view.state().error ?? ''"
+  >
+    <button type="button" class="adm-btn" (click)="view.reload()">Thử lại</button>
+  </adm-empty>
+  } @else if (page() && !page()!.total) { @if (chips().length || query().view !== 'all') {
+  <adm-empty
+    heading="Không tìm thấy đơn hàng phù hợp"
+    description="Thử đổi từ khóa hoặc bỏ bớt bộ lọc."
+  >
+    <button type="button" class="adm-btn" (click)="clearFilters(); setView('all')">
+      Xóa bộ lọc
+    </button>
+  </adm-empty>
+  } @else {
+  <adm-empty
+    kind="first"
+    image="/assets/illustrations/empty_cart.svg"
+    heading="Chưa có đơn hàng nào"
+    description="Đơn khách đặt trên cửa hàng sẽ hiện ở đây để bạn xác nhận và giao hàng."
+  />
+  } } @else {
+  <div class="table-wrap" [class.is-refreshing]="view.state().refreshing">
+    <table class="table table--cards">
+      <thead>
+        <tr>
+          <th class="w-check">
+            <label class="check">
+              <input
+                type="checkbox"
+                aria-label="Chọn tất cả đơn trên trang"
+                [checked]="selection.allOf(ids())"
+                [indeterminate]="selection.someOf(ids())"
+                (change)="selection.setAll(ids(), $any($event.target).checked)"
+              />
+            </label>
+          </th>
+          <th>
+            <button
+              type="button"
+              class="sort-btn"
+              [class.is-active]="query().sort === 'id'"
+              (click)="sortBy('id')"
+            >
+              Mã đơn <adm-icon name="reiconSortV" [size]="14" />
+            </button>
+          </th>
+          <th>
+            <button
+              type="button"
+              class="sort-btn"
+              [class.is-active]="query().sort === 'placedAt'"
+              (click)="sortBy('placedAt')"
+            >
+              Ngày đặt <adm-icon name="reiconSortV" [size]="14" />
+            </button>
+          </th>
+          <th>Khách hàng</th>
+          <th>Thanh toán</th>
+          <th>Trạng thái</th>
+          <th class="num">Số SP</th>
+          <th class="num">
+            <button
+              type="button"
+              class="sort-btn"
+              [class.is-active]="query().sort === 'total'"
+              (click)="sortBy('total')"
+            >
+              Tổng tiền <adm-icon name="reiconSortV" [size]="14" />
+            </button>
+          </th>
+        </tr>
+      </thead>
+      @if (view.state().loading) {
+      <tbody [admSkeleton]="8" [columns]="8"></tbody>
+      } @else {
+      <tbody>
+        @for (order of page()?.items ?? []; track order.id) {
+        <tr
+          class="clickable"
+          [class.is-selected]="selection.has(order.id)"
+          (click)="open(order, $event)"
+        >
+          <td class="w-check">
+            <label class="check"
+              ><input
+                type="checkbox"
+                [attr.aria-label]="'Chọn đơn ' + order.id"
+                [checked]="selection.has(order.id)"
+                (change)="selection.toggle(order.id)"
+            /></label>
+          </td>
+          <td>
+            <a class="cell-title mono" [routerLink]="['/admin/orders', order.id]"
+              >#{{ order.id }}</a
+            >
+            @if (order.returnPending) {
+            <div class="cell-sub">Có yêu cầu trả hàng</div>
+            }
+          </td>
+          <td data-label="Ngày đặt" class="secondary">{{ order.placedAt | admDateTime }}</td>
+          <td data-label="Khách">{{ order.customerName }}</td>
+          <td><adm-badge [spec]="paymentBadge(order.paymentState)" /></td>
+          <td><adm-badge [spec]="orderBadge(order.status)" /></td>
+          <td class="num hide-sm">{{ order.itemCount | admNum }}</td>
+          <td class="num" data-label="Tổng">{{ order.total | admMoney }}</td>
+        </tr>
+        }
+      </tbody>
+      }
+    </table>
+  </div>
+  @if (page(); as data) {
+  <adm-pager
+    [total]="data.total"
+    [page]="data.page"
+    [pageSize]="data.pageSize"
+    (pageChange)="list.update({ page: $event })"
+    (sizeChange)="list.update({ pageSize: $event })"
+  />
+  } }
+</div>

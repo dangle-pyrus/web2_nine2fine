@@ -1,0 +1,744 @@
+@if (loading()) {
+<adm-page-header heading="Đang tải sản phẩm…" back="/admin/products" />
+<div class="columns">
+  <div class="col-main stack">
+    <div class="sk sk--title"></div>
+    <div class="sk"></div>
+    <div class="sk"></div>
+    <div class="sk"></div>
+  </div>
+</div>
+} @else if (loadError()) {
+<adm-page-header heading="Sản phẩm" back="/admin/products" />
+<adm-empty kind="error" heading="Không tải được sản phẩm" [description]="loadError()">
+  <button type="button" class="adm-btn" (click)="load(id()!)">Thử lại</button>
+</adm-empty>
+} @else {
+<adm-page-header
+  [heading]="isNew() ? 'Thêm sản phẩm' : draft().name || 'Sản phẩm'"
+  back="/admin/products"
+>
+  <ng-container badges>
+    @if (product(); as saved) {
+    <adm-badge [spec]="badge(saved.status)" />
+    }
+  </ng-container>
+  <ng-container actions>
+    @if (product(); as saved) { @if (saved.status === 'active') {
+    <a class="adm-btn adm-btn--lg" [href]="'/product/' + saved.slug" target="_blank" rel="noopener"
+      >Xem trên cửa hàng</a
+    >
+    } } @if (isNew()) {
+    <a class="adm-btn adm-btn--lg" routerLink="/admin/products">Hủy</a>
+    <button
+      type="button"
+      class="adm-btn adm-btn--primary adm-btn--lg"
+      [class.is-busy]="saving()"
+      (click)="save()"
+    >
+      Lưu sản phẩm
+    </button>
+    }
+  </ng-container>
+</adm-page-header>
+
+@if (!isNew()) {
+<adm-save-bar
+  [visible]="canEdit && dirty()"
+  [saving]="saving()"
+  label="Sản phẩm chưa được lưu"
+  saveLabel="Lưu"
+  (save)="save()"
+  (discard)="discard()"
+/>
+} @if (!canEdit) {
+<div class="readonly-note">
+  <adm-icon name="reiconInfoCircle" [size]="16" /> Bạn chỉ có quyền xem sản phẩm. Liên hệ quản trị
+  viên nếu cần chỉnh sửa.
+</div>
+}
+
+<fieldset class="columns form" [disabled]="!canEdit">
+  <div class="col-main">
+    <!-- Basic info -->
+    <section class="section stack" aria-labelledby="basic-title">
+      <header><h2 id="basic-title">Thông tin cơ bản</h2></header>
+      <div class="field">
+        <label class="req" for="p-name">Tên sản phẩm</label>
+        <input
+          id="p-name"
+          class="input"
+          [value]="draft().name"
+          (input)="patch({ name: $any($event.target).value })"
+          (blur)="touch('name')"
+          [attr.aria-invalid]="!!showError('name')"
+          placeholder="Ví dụ: Áo blazer linen dáng suông"
+        />
+        @if (showError('name'); as error) {
+        <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+        }
+      </div>
+      <div class="field">
+        <label for="p-type">Dòng mô tả ngắn</label>
+        <input
+          id="p-type"
+          class="input"
+          [value]="draft().type"
+          (input)="patch({ type: $any($event.target).value })"
+          placeholder="Áo blazer · Dáng suông"
+        />
+        <p class="hint">Hiện dưới tên sản phẩm trên trang chi tiết.</p>
+      </div>
+      <div class="field">
+        <label for="p-desc">Mô tả</label>
+        <textarea
+          id="p-desc"
+          class="textarea"
+          rows="5"
+          [value]="draft().description"
+          (input)="patch({ description: $any($event.target).value })"
+        ></textarea>
+      </div>
+    </section>
+
+    <!-- Images -->
+    <section class="section" aria-labelledby="media-title">
+      <header>
+        <h2 id="media-title">Hình ảnh</h2>
+        <span class="small tertiary">Kéo để sắp xếp · ảnh đầu tiên là ảnh đại diện</span>
+      </header>
+      @if (showError('images'); as error) {
+      <p class="error field-error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+      }
+      <ul class="media" role="list">
+        @for (image of draft().images; track image.id; let i = $index; let first = $first) {
+        <li
+          class="media-item"
+          [class.is-cover]="first"
+          [class.is-dragging]="dragIndex() === i"
+          [attr.draggable]="canEdit"
+          (dragstart)="dragIndex.set(i)"
+          (dragend)="dragIndex.set(null)"
+          (dragover)="$event.preventDefault()"
+          (drop)="$event.preventDefault(); dropImage(i)"
+        >
+          <img [src]="image.url" [alt]="image.alt || draft().name" />
+          @if (first) {<span class="cover-tag">Ảnh đại diện</span>} @if (canEdit) {
+          <div class="media-tools">
+            <button
+              type="button"
+              class="tool"
+              aria-label="Lên trước"
+              [disabled]="first"
+              (click)="moveImage(i, i - 1)"
+            >
+              <adm-icon name="reiconChevronLeft" [size]="14" />
+            </button>
+            <button
+              type="button"
+              class="tool"
+              aria-label="Ra sau"
+              [disabled]="i === draft().images.length - 1"
+              (click)="moveImage(i, i + 1)"
+            >
+              <adm-icon name="reiconChevronRight" [size]="14" />
+            </button>
+            <button type="button" class="tool" aria-label="Xóa ảnh" (click)="removeImage(image)">
+              <adm-icon name="reiconTrash" [size]="14" />
+            </button>
+          </div>
+          }
+          <select
+            class="media-color"
+            [attr.aria-label]="'Màu của ảnh ' + (i + 1)"
+            [value]="image.color"
+            (change)="setImageColor(image, $any($event.target).value)"
+          >
+            <option value="">Mọi màu</option>
+            @for (color of draft().colors; track color.name) {
+            <option [value]="color.name" [selected]="image.color === color.name">
+              {{ color.name }}
+            </option>
+            }
+          </select>
+        </li>
+        } @for (pending of uploadSlots(); track $index) {
+        <li class="media-item"><div class="sk media-sk"></div></li>
+        } @if (canEdit) {
+        <li class="media-item">
+          <label class="upload">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              (change)="upload($any($event.target).files); $any($event.target).value = ''"
+            />
+            <adm-icon name="reiconGalleryAdd" [size]="22" />
+            <span>Thêm ảnh</span>
+            <span class="small tertiary">JPG, PNG, WEBP · tối đa 5 MB</span>
+          </label>
+        </li>
+        }
+      </ul>
+    </section>
+
+    <!-- Pricing -->
+    <section class="section" aria-labelledby="price-title">
+      <header><h2 id="price-title">Giá</h2></header>
+      <div class="form-grid">
+        <div class="field">
+          <label class="req" for="p-price">Giá bán</label>
+          <div class="affix">
+            <input
+              id="p-price"
+              class="input num-input"
+              type="number"
+              min="0"
+              step="1000"
+              inputmode="numeric"
+              [value]="draft().price || ''"
+              (input)="patch({ price: numberOrNull($any($event.target).value) ?? 0 })"
+              (blur)="touch('price')"
+              [attr.aria-invalid]="!!showError('price')"
+            />
+            <span class="suffix">₫</span>
+          </div>
+          @if (showError('price'); as error) {
+          <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+          }
+        </div>
+        <div class="field">
+          <label for="p-compare">Giá gốc (trước giảm)</label>
+          <div class="affix">
+            <input
+              id="p-compare"
+              class="input num-input"
+              type="number"
+              min="0"
+              step="1000"
+              inputmode="numeric"
+              [value]="draft().compareAtPrice ?? ''"
+              (input)="patch({ compareAtPrice: numberOrNull($any($event.target).value) })"
+              (blur)="touch('compareAtPrice')"
+              [attr.aria-invalid]="!!showError('compareAtPrice')"
+            />
+            <span class="suffix">₫</span>
+          </div>
+          @if (showError('compareAtPrice'); as error) {
+          <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+          } @else if (discount(); as value) {
+          <p class="hint">Khách thấy giá gạch ngang, giảm {{ percent(value) }}.</p>
+          } @else {
+          <p class="hint">Để trống nếu không giảm giá.</p>
+          }
+        </div>
+        @if (canSeeCost) {
+        <div class="field">
+          <label for="p-cost">Giá vốn</label>
+          <div class="affix">
+            <input
+              id="p-cost"
+              class="input num-input"
+              type="number"
+              min="0"
+              step="1000"
+              inputmode="numeric"
+              [value]="draft().cost ?? ''"
+              (input)="patch({ cost: numberOrNull($any($event.target).value) })"
+            />
+            <span class="suffix">₫</span>
+          </div>
+          <p class="hint">Khách không thấy giá vốn.</p>
+        </div>
+        <div class="field">
+          <span class="field-label">Biên lợi nhuận</span>
+          <p class="metric">{{ margin() !== null ? percent(margin()!) : '—' }}</p>
+          @if (margin() !== null) {
+          <p class="hint">Lãi {{ money(draft().price - (draft().cost ?? 0)) }} mỗi sản phẩm</p>
+          }
+        </div>
+        }
+      </div>
+    </section>
+
+    <!-- Options and variants -->
+    <section class="section" aria-labelledby="variant-title">
+      <header>
+        <h2 id="variant-title">Màu, size và tồn kho</h2>
+        <span class="small secondary"
+          >{{ draft().variants.length }} biến thể · tồn {{ totalStock() | admNum }}</span
+        >
+      </header>
+      @if (showError('variants'); as error) {
+      <p class="error field-error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+      }
+
+      <div class="option">
+        <span class="field-label">Màu</span>
+        <div class="chips">
+          @for (color of draft().colors; track color.name) {
+          <span class="chip" [class.chip--static]="!canEdit"
+            ><span class="swatch" [style.background]="color.hex"></span>{{ color.name }} @if
+            (canEdit) {<button
+              type="button"
+              [attr.aria-label]="'Bỏ màu ' + color.name"
+              (click)="removeColor(color.name)"
+            >
+              <adm-icon name="reiconX" [size]="12" /></button
+            >}
+          </span>
+          }
+        </div>
+        @if (canEdit) {
+        <div class="add-color">
+          <div class="chips">
+            @for (color of presetColors; track color.name) { @if (!hasColor(color.name)) {
+            <button type="button" class="chip chip--static chip--add" (click)="addColor(color)">
+              <adm-icon name="reiconPlus" [size]="12" /><span
+                class="swatch"
+                [style.background]="color.hex"
+              ></span
+              >{{ color.name }}
+            </button>
+            } }
+          </div>
+          <form class="row" (submit)="$event.preventDefault(); addColor(newColor())">
+            <input
+              type="color"
+              class="color-input"
+              aria-label="Mã màu"
+              [value]="newColor().hex"
+              (input)="newColor.set({ name: newColor().name, hex: $any($event.target).value })"
+            />
+            <input
+              class="input input--sm"
+              aria-label="Tên màu mới"
+              placeholder="Màu khác, ví dụ Xanh rêu"
+              [value]="newColor().name"
+              (input)="newColor.set({ name: $any($event.target).value, hex: newColor().hex })"
+            />
+            <button type="submit" class="adm-btn adm-btn--sm" [disabled]="!newColor().name.trim()">
+              Thêm màu
+            </button>
+          </form>
+        </div>
+        }
+      </div>
+
+      <div class="option">
+        <span class="field-label">Size</span>
+        <div class="sizes" role="group" aria-label="Size">
+          @for (size of allSizes; track size) {
+          <button
+            type="button"
+            class="size"
+            [class.is-on]="draft().sizes.includes(size)"
+            [attr.aria-pressed]="draft().sizes.includes(size)"
+            (click)="toggleSize(size, !draft().sizes.includes(size))"
+          >
+            {{ size }}
+          </button>
+          }
+        </div>
+      </div>
+
+      @if (draft().variants.length) {
+      <div class="variant-head row">
+        <span class="small secondary">Nhóm theo</span>
+        <div class="segmented" role="group" aria-label="Nhóm biến thể theo">
+          <button
+            type="button"
+            [class.is-active]="groupBy() === 'color'"
+            (click)="groupBy.set('color')"
+          >
+            Màu
+          </button>
+          <button
+            type="button"
+            [class.is-active]="groupBy() === 'size'"
+            (click)="groupBy.set('size')"
+          >
+            Size
+          </button>
+        </div>
+      </div>
+
+      @if (selectedVariants().size && canEdit) {
+      <div class="bulkbar" role="region" aria-label="Sửa hàng loạt biến thể">
+        <span>Đã chọn {{ selectedVariants().size }}</span>
+        <span class="spacer"></span>
+        <input
+          class="input input--sm bulk-input"
+          type="number"
+          min="0"
+          placeholder="Giá ₫"
+          aria-label="Giá cho biến thể đã chọn"
+          [value]="bulkPrice() ?? ''"
+          (input)="bulkPrice.set(numberOrNull($any($event.target).value))"
+        />
+        @if (bulkStockAllowed()) {
+        <input
+          class="input input--sm bulk-input"
+          type="number"
+          min="0"
+          placeholder="Tồn kho"
+          aria-label="Tồn kho cho biến thể đã chọn"
+          [value]="bulkStock() ?? ''"
+          (input)="bulkStock.set(numberOrNull($any($event.target).value))"
+        />
+        }
+        <button
+          type="button"
+          class="adm-btn adm-btn--sm"
+          [disabled]="bulkPrice() === null && bulkStock() === null"
+          (click)="applyBulk()"
+        >
+          Áp dụng
+        </button>
+        <button
+          type="button"
+          class="adm-btn adm-btn--sm adm-btn--icon"
+          aria-label="Bỏ chọn"
+          (click)="clearSelection()"
+        >
+          <adm-icon name="reiconX" [size]="16" />
+        </button>
+      </div>
+      }
+
+      <div class="table-wrap">
+        <table class="table variants">
+          <thead>
+            <tr>
+              @if (canEdit) {
+              <th class="w-check"></th>
+              }
+              <th>Biến thể</th>
+              <th>SKU</th>
+              <th class="num">Giá</th>
+              <th class="num">Tồn kho</th>
+            </tr>
+          </thead>
+          @for (group of groups(); track group.key) {
+          <tbody>
+            <tr class="group-row">
+              @if (canEdit) {
+              <td class="w-check">
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    [attr.aria-label]="'Chọn nhóm ' + group.label"
+                    [checked]="groupChecked(group.rows)"
+                    (change)="toggleGroup(group.rows, $any($event.target).checked)"
+                /></label>
+              </td>
+              }
+              <td colspan="3">
+                @if (group.hex) {<span class="swatch" [style.background]="group.hex"></span>}
+                <strong>{{ group.label }}</strong>
+                <span class="small tertiary">· {{ group.rows.length }} biến thể</span>
+              </td>
+              <td class="num secondary">{{ group.stock | admNum }}</td>
+            </tr>
+            @for (variant of group.rows; track variant.id) {
+            <tr [class.is-selected]="selectedVariants().has(variant.id)">
+              @if (canEdit) {
+              <td class="w-check">
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    [attr.aria-label]="'Chọn ' + variant.color.name + ' ' + variant.size"
+                    [checked]="selectedVariants().has(variant.id)"
+                    (change)="toggleVariant(variant.id, $any($event.target).checked)"
+                /></label>
+              </td>
+              }
+              <td class="variant-name">
+                {{ groupBy() === 'color' ? 'Size ' + variant.size : variant.color.name }}
+              </td>
+              <td>
+                <input
+                  class="input input--sm mono cell-input"
+                  [attr.aria-label]="'SKU ' + variant.color.name + ' ' + variant.size"
+                  [value]="variant.sku"
+                  (change)="updateVariant(variant.id, { sku: $any($event.target).value.trim() })"
+                />
+              </td>
+              <td class="num">
+                <input
+                  class="input input--sm num-input cell-input price-input"
+                  type="number"
+                  min="0"
+                  step="1000"
+                  [placeholder]="money(draft().price)"
+                  [attr.aria-label]="'Giá ' + variant.color.name + ' ' + variant.size"
+                  [value]="variant.price ?? ''"
+                  (change)="updateVariant(variant.id, { price: numberOrNull($any($event.target).value) })"
+                />
+              </td>
+              <td class="num">
+                @if (stockLocked(variant)) {
+                <button
+                  type="button"
+                  class="stock-link"
+                  [class.is-zero]="variant.inventory <= 0"
+                  [attr.aria-label]="'Tồn kho ' + variant.color.name + ' ' + variant.size + ': ' + variant.inventory + (canAdjustStock ? '. Điều chỉnh' : '. Xem lịch sử')"
+                  [title]="canAdjustStock ? 'Điều chỉnh tồn kho có lý do' : 'Xem lịch sử tồn kho'"
+                  (click)="adjustStock(variant)"
+                >
+                  {{ variant.inventory | admNum }}
+                  <adm-icon name="reiconPen" [size]="14" />
+                </button>
+                } @else {
+                <input
+                  class="input input--sm num-input cell-input stock-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  [class.is-zero]="variant.inventory <= 0"
+                  [attr.aria-label]="'Tồn kho ' + variant.color.name + ' ' + variant.size"
+                  [value]="variant.inventory"
+                  (change)="updateVariant(variant.id, { inventory: stockValue($any($event.target).value) })"
+                />
+                }
+              </td>
+            </tr>
+            }
+          </tbody>
+          }
+        </table>
+      </div>
+      <p class="hint table-hint">
+        Để trống giá biến thể để dùng giá sản phẩm. Tồn kho của biến thể đã lưu chỉ đổi qua "Điều
+        chỉnh" (có lý do, có lịch sử): bấm vào số tồn để mở.
+      </p>
+      }
+    </section>
+
+    <!-- Fashion attributes -->
+    <section class="section stack" aria-labelledby="attr-title">
+      <header><h2 id="attr-title">Chất liệu và form dáng</h2></header>
+      <div class="form-grid">
+        <div class="field">
+          <label for="p-material">Chất liệu</label>
+          <input
+            id="p-material"
+            class="input"
+            [value]="draft().material"
+            (input)="patch({ material: $any($event.target).value })"
+            placeholder="70% linen, 30% cotton"
+          />
+        </div>
+        <div class="field">
+          <label for="p-fit">Form dáng</label>
+          <input
+            id="p-fit"
+            class="input"
+            [value]="draft().fitSummary"
+            (input)="patch({ fitSummary: $any($event.target).value })"
+            placeholder="Dáng suông, vừa size"
+          />
+        </div>
+        <div class="field span-2">
+          <label for="p-care">Hướng dẫn bảo quản</label>
+          <adm-chip-input
+            inputId="p-care"
+            placeholder="Giặt tay nước lạnh, nhấn Enter"
+            [disabled]="!canEdit"
+            [values]="draft().care"
+            (valuesChange)="patch({ care: $event })"
+          />
+        </div>
+      </div>
+    </section>
+
+    <!-- SEO -->
+    <section class="section stack" aria-labelledby="seo-title">
+      <header><h2 id="seo-title">Hiển thị trên Google</h2></header>
+      <div class="seo-preview" aria-label="Xem trước kết quả tìm kiếm">
+        <p class="seo-url">{{ seoPreview().url }}</p>
+        <p class="seo-title">{{ seoPreview().title }}</p>
+        <p class="seo-desc">{{ seoPreview().description }}</p>
+      </div>
+      <div class="field">
+        <label for="p-seo-title">Tiêu đề trang</label>
+        <input
+          id="p-seo-title"
+          class="input"
+          maxlength="70"
+          [value]="draft().seoTitle"
+          (input)="patch({ seoTitle: $any($event.target).value })"
+          [placeholder]="seoPreview().title"
+        />
+        <p class="hint">{{ draft().seoTitle.length }}/70 ký tự</p>
+      </div>
+      <div class="field">
+        <label for="p-seo-desc">Mô tả trang</label>
+        <textarea
+          id="p-seo-desc"
+          class="textarea"
+          rows="3"
+          maxlength="160"
+          [value]="draft().seoDescription"
+          (input)="patch({ seoDescription: $any($event.target).value })"
+        ></textarea>
+        <p class="hint">{{ draft().seoDescription.length }}/160 ký tự</p>
+      </div>
+      <div class="field">
+        <label for="p-slug">Đường dẫn</label>
+        <div class="affix prefix-text">
+          <span class="prefix">/product/</span>
+          <input
+            id="p-slug"
+            class="input"
+            [value]="draft().slug"
+            (input)="patch({ slug: $any($event.target).value })"
+            [placeholder]="seoPreview().url.split('/').pop()"
+          />
+        </div>
+        @if (showError('slug'); as error) {
+        <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+        } @else if (!isNew()) {
+        <p class="hint">Đổi đường dẫn sẽ làm hỏng các liên kết đã chia sẻ trước đó.</p>
+        }
+      </div>
+    </section>
+
+    @if (!isNew() && canDelete) {
+    <div class="danger-zone">
+      <button type="button" class="adm-btn adm-btn--danger" (click)="remove()">
+        <adm-icon name="reiconTrash" [size]="16" /> Xóa sản phẩm
+      </button>
+    </div>
+    }
+  </div>
+
+  <div class="col-side">
+    <section class="section stack" aria-labelledby="status-title">
+      <header><h2 id="status-title">Trạng thái</h2></header>
+      <div class="field">
+        <select
+          class="select"
+          aria-labelledby="status-title"
+          [value]="draft().status"
+          (change)="patch({ status: $any($event.target).value })"
+        >
+          @for (option of statusOptions; track option.value) {
+          <option [value]="option.value" [selected]="draft().status === option.value">
+            {{ option.label }}
+          </option>
+          }
+        </select>
+        <p class="hint">{{ statusHelp() }}</p>
+      </div>
+    </section>
+
+    <section class="section stack" aria-labelledby="class-title">
+      <header><h2 id="class-title">Phân loại</h2></header>
+      <div class="field">
+        <label for="p-category">Danh mục</label>
+        <select
+          id="p-category"
+          class="select"
+          [value]="draft().category"
+          (change)="patch({ category: $any($event.target).value })"
+        >
+          @for (item of categories; track item.value) {
+          <option [value]="item.value" [selected]="draft().category === item.value">
+            {{ item.label }}
+          </option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <span class="field-label">Dành cho</span>
+        <div class="checks">
+          @for (item of genders; track item.value) {
+          <label class="check"
+            ><input
+              type="checkbox"
+              [checked]="draft().genders.includes(item.value)"
+              (change)="toggleIn('genders', item.value, $any($event.target).checked)"
+            />{{ item.label }}</label
+          >
+          }
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">Dịp mặc</span>
+        <div class="checks">
+          @for (item of moments; track item.value) {
+          <label class="check"
+            ><input
+              type="checkbox"
+              [checked]="draft().moments.includes(item.value)"
+              (change)="toggleIn('moments', item.value, $any($event.target).checked)"
+            />{{ item.label }}</label
+          >
+          }
+        </div>
+      </div>
+      <div class="field">
+        <label for="p-tags">Tag</label>
+        <adm-chip-input
+          inputId="p-tags"
+          placeholder="Ví dụ: linen, new-in"
+          [disabled]="!canEdit"
+          [values]="draft().tags"
+          (valuesChange)="patch({ tags: $event })"
+        />
+      </div>
+    </section>
+
+    @if (!isNew()) {
+    <section class="section stack" aria-labelledby="coll-title">
+      <header>
+        <h2 id="coll-title">Bộ sưu tập</h2>
+        <a class="adm-btn adm-btn--ghost adm-btn--sm" routerLink="/admin/collections">Quản lý</a>
+      </header>
+      @if (collections(); as list) { @if (list.length) {
+      <div class="checks">
+        @for (item of list; track item.id) {
+        <label class="check"
+          ><input
+            type="checkbox"
+            [checked]="item.productIds.includes(id()!)"
+            [disabled]="!canEdit"
+            (change)="toggleCollection(item.id, $any($event.target).checked)"
+          />{{ item.name }}@if (item.status === 'draft') {<span class="tertiary">
+            · nháp</span
+          >}</label
+        >
+        }
+      </div>
+      <p class="hint">Lưu ngay khi tích, không cần bấm Lưu sản phẩm.</p>
+      } @else {
+      <p class="secondary small">Chưa có bộ sưu tập nào.</p>
+      } }
+      <div class="field">
+        <span class="field-label">Bảng size</span>
+        <p class="small">
+          Dùng bảng size của danh mục {{ categoryLabel() }}.
+          <a class="link" routerLink="/admin/size-charts">Sửa bảng size</a>
+        </p>
+      </div>
+    </section>
+    }
+
+    @if (product(); as saved) {
+    <section class="section">
+      <dl class="dl">
+        <div>
+          <dt>Tạo lúc</dt>
+          <dd>{{ saved.createdAt | admDateTime }}</dd>
+        </div>
+        <div>
+          <dt>Cập nhật lần cuối</dt>
+          <dd>{{ saved.updatedAt | admDateTime }}</dd>
+        </div>
+      </dl>
+    </section>
+    }
+  </div>
+</fieldset>
+}

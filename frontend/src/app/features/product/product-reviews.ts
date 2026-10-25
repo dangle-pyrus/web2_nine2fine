@@ -76,6 +76,12 @@ import { formatDate } from '../orders/order-status';
               · Mua size {{ review.sizeBought }} ·
               <strong>{{ fitWords[review.fit] }}</strong>
             </p>
+            @if (review.reply; as reply) {
+              <div class="reply">
+                <strong>Phản hồi từ nine2fine · {{ date(reply.at) }}</strong>
+                <p>{{ reply.body }}</p>
+              </div>
+            }
           </li>
         }
       </ul>
@@ -207,6 +213,16 @@ import { formatDate } from '../orders/order-status';
     li p {
       margin: 8px 0 0;
       line-height: 1.6;
+    }
+    .reply {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-left: 3px solid var(--ink);
+      background: var(--surface);
+      font-size: 14px;
+    }
+    .reply p {
+      margin: 4px 0 0;
     }
     .sample {
       margin: 14px 0 0;

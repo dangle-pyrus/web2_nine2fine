@@ -1,9 +1,12 @@
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { concat, map, Observable, timer } from 'rxjs';
 import {
   AccountApi,
   AccountError,
   AccountErrorCode,
+  MAX_RETURN_PHOTO_BYTES,
+  MAX_RETURN_PHOTOS,
+  ReturnPhotoUpload,
   ReturnRequestInput,
 } from '../app/features/account/data-access/account-api';
 import {
@@ -15,7 +18,7 @@ import {
   ProfileUpdate,
   Voucher,
 } from '../app/features/account/data-access/account-models';
-import { Order } from '../app/features/orders/order-models';
+import { Order, ReturnPhoto } from '../app/features/orders/order-models';
 import { estimateRefund } from '../app/features/orders/order-returns';
 import { AuthSession } from '../app/features/auth/auth-session';
 import { MockAccount } from './accounts';
@@ -27,6 +30,8 @@ import { fail, respond } from './mock-latency';
 export class MockAccountApi implements AccountApi {
   private readonly store = inject(MockAccountStore);
   private readonly session = inject(AuthSession);
+  /** Uploaded return photos, kept as object URLs in this tab only. */
+  private readonly photos = new Map<string, ReturnPhoto>();
 
   getProfile(): Observable<AccountProfile> {
     return this.withAccount((account) => respond(toProfile(account)));
@@ -134,8 +139,14 @@ export class MockAccountApi implements AccountApi {
       );
       if (!lines.length || lines.length !== input.lines.length) return failWith('not-returnable');
       const refund = estimateRefund(order, lines, input.reason);
+      const photos = input.photoIds
+        .slice(0, MAX_RETURN_PHOTOS)
+        .map((photoId) => this.photos.get(photoId))
+        .filter((photo): photo is ReturnPhoto => !!photo);
       const result = this.store.requestReturn(id, {
-        ...input,
+        reason: input.reason,
+        photoCount: photos.length || input.photoCount,
+        photos: photos.length ? photos : undefined,
         lines,
         detail: input.detail.trim(),
         refundAccount:
@@ -144,6 +155,33 @@ export class MockAccountApi implements AccountApi {
       });
       return typeof result === 'string' ? failWith(result) : respond(result);
     });
+  }
+
+  /** Simulated upload: a few progress steps, then the stored photo. */
+  uploadReturnPhoto(file: File): Observable<ReturnPhotoUpload> {
+    if (!file.type.startsWith('image/')) return failWith('unsupported-type');
+    if (file.size > MAX_RETURN_PHOTO_BYTES) return failWith('file-too-large');
+    const steps = [30, 70, 100];
+    return concat(
+      ...steps.map((percent) =>
+        timer(250).pipe(map((): ReturnPhotoUpload => ({ kind: 'progress', percent }))),
+      ),
+      timer(50).pipe(
+        map((): ReturnPhotoUpload => {
+          const url = URL.createObjectURL(file);
+          const photo: ReturnPhoto = {
+            id: `photo-${Date.now().toString(36)}-${this.photos.size + 1}`,
+            url,
+            thumbUrl: url,
+            // Unknown without decoding the image; the viewer then uses the natural size.
+            width: 0,
+            height: 0,
+          };
+          this.photos.set(photo.id, photo);
+          return { kind: 'done', photo };
+        }),
+      ),
+    );
   }
 
   private withAccount<T>(run: (account: MockAccount) => Observable<T>): Observable<T> {

@@ -1,4 +1,4 @@
-import { STORE_POLICY } from '../../core/store-policy';
+import { storeSettings } from '../../core/store-settings';
 import { Order, ReturnLine, ReturnReason } from './order-models';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -17,12 +17,14 @@ export function returnReason(value: ReturnReason) {
   return RETURN_REASONS.find((reason) => reason.value === value)!;
 }
 
-/** ISO datetime the return window closes, counted from delivery; null if never delivered. */
+/**
+ * ISO datetime the return window closes, counted from delivery; null if never delivered. Uses the
+ * return days in force when the order was delivered, today's for older orders.
+ */
 export function returnDeadline(order: Order): string | null {
   const delivered = order.delivery?.deliveredAt;
-  return delivered
-    ? new Date(Date.parse(delivered) + STORE_POLICY.returnDays * DAY).toISOString()
-    : null;
+  const days = order.returnDays ?? storeSettings().policy.returnDays;
+  return delivered ? new Date(Date.parse(delivered) + days * DAY).toISOString() : null;
 }
 
 export function canRequestReturn(order: Order, now = Date.now()): boolean {
@@ -50,7 +52,7 @@ export function estimateRefund(
   if (!value) return { amount: 0, returnShippingFee: 0 };
   const share = subtotal ? Math.round((discount * value) / subtotal) : 0;
   const fault = returnReason(reason).sellerFault;
-  const returnShippingFee = fault ? 0 : STORE_POLICY.returnShippingFee;
+  const returnShippingFee = fault ? 0 : storeSettings().policy.returnShippingFee;
   const all = order.items.every((item, index) =>
     lines.some((line) => line.index === index && line.quantity === item.quantity),
   );

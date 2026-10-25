@@ -4,7 +4,7 @@
   <n2f-home-campaign [content]="block" [hero]="first" />
   @if (first) {
   <nav class="audience-nav" aria-label="Khoảnh khắc">
-    @for (moment of content.moments; track moment.href) {
+    @for (moment of content().moments; track moment.href) {
     <a [routerLink]="moment.href">{{ moment.label }}</a>
     }
   </nav>
@@ -20,7 +20,7 @@
 <section class="reference-categories" id="categories" aria-labelledby="reference-categories-title">
   <h2 id="reference-categories-title">Bạn đang tìm gì?</h2>
   <ul class="category-grid">
-    @for (category of content.categories; track category.mediaId) {
+    @for (category of content().categories; track category.mediaId) {
     <li>
       <a [routerLink]="category.href">
         <n2f-media-image [mediaId]="category.mediaId" sizes="64px" [decorative]="true" />

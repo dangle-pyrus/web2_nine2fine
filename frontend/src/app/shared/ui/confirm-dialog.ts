@@ -5,6 +5,8 @@ export interface ConfirmDialogData {
   title: string;
   message: string;
   confirmLabel: string;
+  /** Destructive action (cancel, delete, hide): the confirm button turns brand red. */
+  danger?: boolean;
 }
 
 /** Closes with `true` when confirmed. Open through OverlayService with the 'modal' panel. */
@@ -16,7 +18,12 @@ export interface ConfirmDialogData {
       <p>{{ data.message }}</p>
       <div class="actions">
         <button type="button" class="pill outline" (click)="dialog.close(false)">Quay lại</button>
-        <button type="button" class="pill" (click)="dialog.close(true)">
+        <button
+          type="button"
+          class="pill"
+          [class.danger]="data.danger"
+          (click)="dialog.close(true)"
+        >
           {{ data.confirmLabel }}
         </button>
       </div>
@@ -52,6 +59,13 @@ export interface ConfirmDialogData {
       color: #fff;
       font: inherit;
       font-weight: 500;
+    }
+    .pill.danger {
+      border-color: var(--brand);
+      background: var(--brand);
+    }
+    p {
+      white-space: pre-line;
     }
     .pill.outline {
       border-color: var(--line);

@@ -17,7 +17,7 @@ import { PricePipe } from '../../shared/commerce/price.pipe';
 import { ProductCardComponent } from '../../shared/commerce/product-card.component';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
 import { DEFAULT_QUERY, Product, ProductVariant } from '../catalog/models/product';
-import { STORE_POLICY } from '../../core/store-policy';
+import { storeSettings } from '../../core/store-settings';
 import { getMedia } from '../../../media/media-manifest';
 
 /**
@@ -865,7 +865,7 @@ export class CartView {
     this.summaryLines().reduce((sum, line) => sum + line.quantity * line.price, 0),
   );
   readonly remainingForFreeShipping = computed(() =>
-    Math.max(0, STORE_POLICY.freeShippingFrom - this.summarySubtotal()),
+    Math.max(0, storeSettings().policy.freeShippingFrom - this.summarySubtotal()),
   );
   /** Line being edited (variant id) and the colour/size picked in its editor. */
   readonly editing = signal<string | null>(null);

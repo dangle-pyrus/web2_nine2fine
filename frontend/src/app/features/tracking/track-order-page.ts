@@ -17,8 +17,7 @@ import { CHECKOUT_API, CheckoutError, TrackOrderRequest } from '../checkout/chec
 import { Order } from '../orders/order-models';
 import { canCancel, canPay, formatDate } from '../orders/order-status';
 import { canRequestReturn } from '../orders/order-returns';
-import { STORE_INFO } from '../../core/store-info';
-import { STORE_POLICY } from '../../core/store-policy';
+import { storeSettings } from '../../core/store-settings';
 import { OverlayService } from '../../shared/ui/overlay.service';
 import { ConfirmDialog, ConfirmDialogData } from '../../shared/ui/confirm-dialog';
 import { OrderStatusBadge } from '../orders/order-status-badge';
@@ -284,7 +283,9 @@ export class TrackOrderPage {
   readonly error = signal('');
   readonly notice = signal('');
   readonly cancelling = signal(false);
-  readonly info = STORE_INFO;
+  get info() {
+    return storeSettings().info;
+  }
   /** Order ID + contact that found the current result; reused to prove a cancellation. */
   private verified: TrackOrderRequest | null = null;
 
@@ -325,7 +326,7 @@ export class TrackOrderPage {
     const data: ConfirmDialogData = {
       title: 'Hủy đơn hàng?',
       message: order.payment.paid
-        ? `Đơn #${order.id} sẽ được hủy và số tiền đã thanh toán được hoàn lại trong ${STORE_POLICY.refundWorkingDays} ngày làm việc.`
+        ? `Đơn #${order.id} sẽ được hủy và số tiền đã thanh toán được hoàn lại trong ${storeSettings().policy.refundWorkingDays} ngày làm việc.`
         : `Đơn #${order.id} sẽ được hủy và không thể khôi phục.`,
       confirmLabel: 'Hủy đơn',
     };
@@ -348,7 +349,7 @@ export class TrackOrderPage {
         error: (error: unknown) =>
           this.error.set(
             error instanceof CheckoutError && error.code === 'not-cancellable'
-              ? `Đơn hàng đã được giao cho đơn vị vận chuyển nên không thể hủy trực tuyến. Vui lòng gọi ${STORE_INFO.hotline}.`
+              ? `Đơn hàng đã được giao cho đơn vị vận chuyển nên không thể hủy trực tuyến. Vui lòng gọi ${storeSettings().info.hotline}.`
               : 'Chưa hủy được đơn hàng. Vui lòng thử lại.',
           ),
       });

@@ -4,7 +4,24 @@
  * value with the registered company's details before launch, and add the Ministry of Industry and
  * Trade (online.gov.vn) notification link once the website has been notified.
  */
-export const STORE_INFO = {
+export interface StoreInfo {
+  legalName: string;
+  registrationNumber: string;
+  registrationIssuer: string;
+  /** ISO date. */
+  registrationDate: string;
+  address: string;
+  hotline: string;
+  /** `tel:` link, derived from the hotline. */
+  hotlineHref: string;
+  email: string;
+  privacyEmail: string;
+  hours: string;
+  notificationUrl: string | null;
+}
+
+/** Built-in values; the live ones are `storeSettings().info`. */
+export const STORE_INFO: Readonly<StoreInfo> = {
   legalName: 'Công ty TNHH Thời trang Nine2Fine',
   registrationNumber: '0319245768',
   registrationIssuer: 'Sở Tài chính TP. Hồ Chí Minh',
@@ -16,5 +33,5 @@ export const STORE_INFO = {
   privacyEmail: 'dulieu@nine2fine.vn',
   hours: '9:00 – 21:00, tất cả các ngày trong tuần',
   /** Ministry notification link (online.gov.vn); null until the website has been notified. */
-  notificationUrl: null as string | null,
-} as const;
+  notificationUrl: null,
+};

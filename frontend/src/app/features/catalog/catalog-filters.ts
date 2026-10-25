@@ -1,13 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { CatalogQuery, GENDERS, MOMENTS } from './models/product';
+import { CatalogQuery, GENDERS, MOMENTS, PRODUCT_COLORS } from './models/product';
 import { IconComponent } from '../../shared/ui/icon.component';
 
-const COLORS = [
-  { name: 'Đen', hex: '#242323' },
-  { name: 'Trắng', hex: '#f5f4f0' },
-  { name: 'Xám', hex: '#96958f' },
-  { name: 'Đỏ', hex: '#a91e2c' },
-];
+const COLORS = PRODUCT_COLORS;
 
 const PRICES = [
   { value: 500000, label: 'Đến 500.000 ₫' },

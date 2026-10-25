@@ -1,11 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { catchError, of } from 'rxjs';
 import { MediaImageComponent } from '../../shared/ui/media-image.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { PricePipe } from '../../shared/commerce/price.pipe';
-import { STORE_POLICY } from '../../core/store-policy';
+import { storeSettings } from '../../core/store-settings';
 import { AuthSession } from '../auth/auth-session';
-import { NINE2FINE_LANDING } from '../../../mocks/nine2fine-landing';
+import { HOME_CONTENT_API, HOME_CONTENT_PROVIDERS } from './data-access/home-content-api';
+import { LandingContent } from './landing-content';
 import { HomeCampaign } from './home-campaign';
 import { HomeProductRail } from './home-product-rail';
 import { HomeShopRail } from './home-shop-rail';
@@ -21,19 +24,35 @@ import { HomeShopRail } from './home-shop-rail';
     HomeProductRail,
     HomeShopRail,
   ],
+  providers: HOME_CONTENT_PROVIDERS,
   templateUrl: './home-page.html',
   styleUrl: './home-page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HomePage {
-  readonly content = NINE2FINE_LANDING;
-  readonly policy = STORE_POLICY;
   private readonly session = inject(AuthSession);
-  /** Signed-in shoppers see member copy instead of a sign-up invitation. */
+  /** Home page blocks; empty until the content arrives. */
+  private readonly loaded = toSignal(
+    inject(HOME_CONTENT_API)
+      .getHomeContent()
+      .pipe(catchError(() => of(null))),
+    { initialValue: null },
+  );
+  readonly content = computed<LandingContent>(
+    () => this.loaded() ?? { categories: [], moments: [], blocks: [] },
+  );
+  get policy() {
+    return storeSettings().policy;
+  }
+  /** Signed-in shoppers see member copy instead of a sign-up invitation; switched-off blocks hide. */
   readonly blocks = computed(() => {
     const signedIn = this.session.signedIn();
-    return this.content.blocks.map((block) =>
-      signedIn && block.kind === 'campaign' && block.member ? { ...block, ...block.member } : block,
-    );
+    return this.content()
+      .blocks.filter((block) => block.enabled !== false)
+      .map((block) =>
+        signedIn && block.kind === 'campaign' && block.member
+          ? { ...block, ...block.member }
+          : block,
+      );
   });
 }

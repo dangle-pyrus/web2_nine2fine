@@ -1,10 +1,7 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { STORE_INFO } from '../../core/store-info';
-import { STORE_POLICY } from '../../core/store-policy';
-import { POLICIES } from './policy-content';
-
-const P = STORE_POLICY;
+import { storeSettings } from '../../core/store-settings';
+import { policies } from './policy-content';
 
 /** `/help`: contact channels, seller identity and the questions shoppers ask most. */
 @Component({
@@ -38,7 +35,7 @@ const P = STORE_POLICY;
 
       <section aria-labelledby="faq-title">
         <h2 id="faq-title">Câu hỏi thường gặp</h2>
-        @for (item of faq; track item.q) {
+        @for (item of faq(); track item.q) {
           <details>
             <summary>{{ item.q }}</summary>
             <p>
@@ -198,32 +195,42 @@ const P = STORE_POLICY;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HelpPage {
-  readonly info = STORE_INFO;
-  readonly policies = POLICIES;
-  readonly faq: { q: string; a: string; link?: { label: string; path: string } }[] = [
-    {
-      q: 'Bao lâu tôi nhận được hàng?',
-      a: `Đơn được giao trong ${P.deliveryWindow} kể từ khi xác nhận. Ngày giao dự kiến hiển thị ở bước thanh toán và trong chi tiết đơn.`,
-      link: { label: 'Chính sách giao hàng', path: '/policies/shipping' },
+  get info() {
+    return storeSettings().info;
+  }
+  get policies() {
+    return policies();
+  }
+  /** Rebuilt from the live settings, like the policies. */
+  readonly faq = computed(
+    (): { q: string; a: string; link?: { label: string; path: string } }[] => {
+      const P = storeSettings().policy;
+      return [
+        {
+          q: 'Bao lâu tôi nhận được hàng?',
+          a: `Đơn được giao trong ${P.deliveryWindow} kể từ khi xác nhận. Ngày giao dự kiến hiển thị ở bước thanh toán và trong chi tiết đơn.`,
+          link: { label: 'Chính sách giao hàng', path: '/policies/shipping' },
+        },
+        {
+          q: 'Tôi muốn hủy đơn đã đặt?',
+          a: 'Bạn tự hủy được khi đơn còn "Chờ thanh toán" hoặc "Đang chuẩn bị hàng": thành viên vào Lịch sử mua hàng, khách không đăng nhập dùng trang Tra cứu đơn hàng. Đơn đã giao cho đơn vị vận chuyển vui lòng gọi hotline.',
+          link: { label: 'Tra cứu đơn hàng', path: '/track-order' },
+        },
+        {
+          q: 'Nhận hàng sai size, sai màu thì làm sao?',
+          a: `Gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận. nine2fine chịu toàn bộ phí gửi trả và hoàn tiền sau khi nhận lại hàng.`,
+          link: { label: 'Chính sách trả hàng', path: '/policies/returns' },
+        },
+        {
+          q: 'Tôi đã chuyển khoản nhưng đơn bị hủy?',
+          a: `Đơn chuyển khoản được giữ ${P.paymentHoldMinutes} phút. Nếu tiền đến sau khi đơn đã hủy, nine2fine hoàn lại toàn bộ trong ${P.refundWorkingDays} ngày làm việc.`,
+        },
+        {
+          q: 'Làm sao để lấy hóa đơn công ty?',
+          a: 'Chọn "Xuất hóa đơn công ty" ở bước thanh toán và nhập thông tin công ty. Hóa đơn điện tử được gửi qua email bạn cung cấp.',
+          link: { label: 'Chính sách thanh toán', path: '/policies/payment' },
+        },
+      ];
     },
-    {
-      q: 'Tôi muốn hủy đơn đã đặt?',
-      a: 'Bạn tự hủy được khi đơn còn "Chờ thanh toán" hoặc "Đang chuẩn bị hàng": thành viên vào Lịch sử mua hàng, khách không đăng nhập dùng trang Tra cứu đơn hàng. Đơn đã giao cho đơn vị vận chuyển vui lòng gọi hotline.',
-      link: { label: 'Tra cứu đơn hàng', path: '/track-order' },
-    },
-    {
-      q: 'Nhận hàng sai size, sai màu thì làm sao?',
-      a: `Gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận. nine2fine chịu toàn bộ phí gửi trả và hoàn tiền sau khi nhận lại hàng.`,
-      link: { label: 'Chính sách trả hàng', path: '/policies/returns' },
-    },
-    {
-      q: 'Tôi đã chuyển khoản nhưng đơn bị hủy?',
-      a: `Đơn chuyển khoản được giữ ${P.paymentHoldMinutes} phút. Nếu tiền đến sau khi đơn đã hủy, nine2fine hoàn lại toàn bộ trong ${P.refundWorkingDays} ngày làm việc.`,
-    },
-    {
-      q: 'Làm sao để lấy hóa đơn công ty?',
-      a: 'Chọn "Xuất hóa đơn công ty" ở bước thanh toán và nhập thông tin công ty. Hóa đơn điện tử được gửi qua email bạn cung cấp.',
-      link: { label: 'Chính sách thanh toán', path: '/policies/payment' },
-    },
-  ];
+  );
 }

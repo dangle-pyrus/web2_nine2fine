@@ -1,0 +1,209 @@
+.adm-print {
+  display: block;
+  min-height: 100vh;
+  background: var(--adm-muted);
+  color: #111;
+
+  .print-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--adm-bg);
+    border-bottom: 1px solid var(--adm-divider);
+  }
+  .print-bar-title {
+    flex: 1;
+    font-weight: 500;
+  }
+  .print-msg {
+    padding: 48px 16px;
+    text-align: center;
+  }
+  .small {
+    font-size: 11px;
+    line-height: 15px;
+  }
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A5 portrait, 148 × 210 mm, one per order. */
+  .slip {
+    box-sizing: border-box;
+    width: 148mm;
+    min-height: 210mm;
+    margin: 24px auto;
+    padding: 10mm;
+    background: #fff;
+    box-shadow: var(--adm-shadow-md);
+    display: flex;
+    flex-direction: column;
+    gap: 5mm;
+    font-size: 12px;
+    line-height: 17px;
+  }
+  .slip-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8mm;
+    padding-bottom: 4mm;
+    border-bottom: 1px solid #111;
+  }
+  .slip-brand {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .slip-id {
+    text-align: right;
+  }
+  .slip-code {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 24px;
+  }
+  .slip-to {
+    border: 1px solid #111;
+    border-radius: 6px;
+    padding: 3mm 4mm;
+    .label {
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+  }
+  .slip-name {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 22px;
+  }
+  .slip-items,
+  .pick-table {
+    width: 100%;
+    border-collapse: collapse;
+    th,
+    td {
+      text-align: left;
+      padding: 1.5mm 2mm;
+      border-bottom: 1px solid #ccc;
+      vertical-align: top;
+    }
+    th {
+      font-size: 11px;
+      font-weight: 500;
+      color: #555;
+      border-bottom-color: #111;
+    }
+    .num {
+      text-align: right;
+    }
+  }
+  .slip-note {
+    padding: 2mm 3mm;
+    background: #f4f4f4;
+  }
+  .slip-cod {
+    margin-top: auto;
+    padding: 3mm 4mm;
+    border: 2px solid #111;
+    border-radius: 6px;
+    text-align: center;
+    &.is-paid {
+      border-style: dashed;
+    }
+  }
+  .slip-amount {
+    font-variant-numeric: tabular-nums;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+  }
+  .slip-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 6mm;
+  }
+  .slip-sign {
+    width: 45mm;
+    height: 20mm;
+    border-top: 1px dashed #111;
+    text-align: center;
+    padding-top: 1mm;
+  }
+
+  .pick {
+    box-sizing: border-box;
+    max-width: 210mm;
+    margin: 24px auto;
+    padding: 12mm;
+    background: #fff;
+    box-shadow: var(--adm-shadow-md);
+    font-size: 12px;
+    line-height: 17px;
+  }
+  .pick-head {
+    margin-bottom: 6mm;
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+  }
+  .tick {
+    width: 8mm;
+  }
+  .box {
+    display: inline-block;
+    width: 4mm;
+    height: 4mm;
+    border: 1px solid #111;
+  }
+  .strong {
+    font-weight: 600;
+  }
+
+  @media (max-width: 640px) {
+    .slip,
+    .pick {
+      width: auto;
+      margin: 12px;
+      min-height: 0;
+    }
+  }
+}
+
+@media print {
+  .adm-print {
+    background: #fff;
+    .print-bar {
+      display: none;
+    }
+    .slip,
+    .pick {
+      margin: 0;
+      box-shadow: none;
+    }
+    .slip {
+      width: auto;
+      min-height: calc(210mm - 1px);
+      padding: 8mm;
+      break-after: page;
+    }
+    .pick {
+      max-width: none;
+      padding: 0;
+    }
+  }
+  .adm-print[data-kind='delivery'] {
+    page: slip;
+  }
+}
+
+@page slip {
+  size: A5 portrait;
+  margin: 0;
+}

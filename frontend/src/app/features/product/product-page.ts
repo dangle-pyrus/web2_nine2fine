@@ -23,7 +23,7 @@ import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
 import { PricePipe } from '../../shared/commerce/price.pipe';
 import { ProductCardComponent } from '../../shared/commerce/product-card.component';
 import { getMedia } from '../../../media/media-manifest';
-import { STORE_POLICY } from '../../core/store-policy';
+import { storeSettings } from '../../core/store-settings';
 import { ProductGallery } from './product-gallery';
 import { ProductReviews } from './product-reviews';
 import { ReviewForm } from './review-form';
@@ -60,7 +60,9 @@ export class ProductPage {
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   readonly wishlist = inject(WishlistState);
-  readonly policy = STORE_POLICY;
+  get policy() {
+    return storeSettings().policy;
+  }
 
   readonly product = signal<Product | undefined>(undefined);
   readonly reviews = signal<ProductReview[]>([]);
@@ -115,6 +117,11 @@ export class ProductPage {
         ),
         tap((state) => {
           this.product.set(state.product);
+          // An old link (the slug was renamed) lands on the current address without a history entry.
+          const slug = this.route.snapshot.paramMap.get('slug');
+          if (state.product && slug !== state.product.slug) {
+            void this.router.navigate(['/product', state.product.slug], { replaceUrl: true });
+          }
           this.loading.set(state.loading);
           this.failed.set(state.failed);
           this.color.set(state.product?.variants[0]?.color.name ?? '');

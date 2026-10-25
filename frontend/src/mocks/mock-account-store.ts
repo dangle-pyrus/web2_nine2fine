@@ -154,6 +154,11 @@ export class MockAccountStore {
     for (const [key, value] of saved.contacts ?? []) this.contacts.set(key, value);
     this.reserved.clear();
     for (const id of saved.reserved ?? []) this.reserved.add(id);
+    // Return photos are object URLs of the tab that uploaded them; after F5 only the count is left.
+    for (const entry of this.data.values()) {
+      entry.orders = entry.orders.map(withoutTabPhotos);
+    }
+    this.guestOrders.splice(0, this.guestOrders.length, ...this.guestOrders.map(withoutTabPhotos));
   }
 
   /** Takes a newly placed order's pieces out of stock. */
@@ -206,4 +211,11 @@ export class MockAccountStore {
     }
     return entry;
   }
+}
+
+function withoutTabPhotos(order: Order): Order {
+  const request = order.returnRequest;
+  if (!request?.photos?.some((photo) => photo.url.startsWith('blob:'))) return order;
+  const photos = request.photos.filter((photo) => !photo.url.startsWith('blob:'));
+  return { ...order, returnRequest: { ...request, photos: photos.length ? photos : undefined } };
 }

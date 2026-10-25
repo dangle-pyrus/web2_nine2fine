@@ -50,7 +50,7 @@ Rules the mock implements and the backend should own: one default and one return
 
 ## Homepage Content and Newsletter (Proposed)
 
-- `HomeContent` (`src/app/features/home/home-content.ts`) is currently provided as a typed fixture (`HOME_CONTENT`). A CMS endpoint such as `GET /api/content/home` should return the same shape, referencing media IDs and product slugs rather than URLs.
+- The home page reads `LandingContent` (`src/app/features/home/landing-content.ts`, blocks with `enabled`) through `HOME_CONTENT_API` (`GET /api/content/home`). Content references media IDs and storefront paths, never image URLs. The older `HomeContent` shape (`home-content.ts`) is no longer provided.
 - `POST /api/newsletter` with `{ email, list: 'after-five-club' }` (`NEWSLETTER_API`). Needs double opt-in, consent logging and rate limiting server-side; the client never logs the email.
 
 ## Checkout Requirements Before Going Live
@@ -75,6 +75,12 @@ Never trust client totals or interpret a payment redirect as proof of payment. D
 - `GET /api/products/:id/reviews/eligibility` returns `sign-in | not-purchased | reviewed | eligible` (+ `sizeBought`); `POST /api/products/:id/reviews` only for shoppers with a delivered order containing the product, once per product; reviews carry `verified`.
 - `POST /api/stock-alerts` with `{ productId, variantId, email }`; email used once when the variant is restocked.
 - Seller identity shown in the footer/help/policies lives in `src/app/core/store-info.ts` and policy text in `src/app/features/policies/policy-content.ts`; both are placeholders to be replaced by real registered details (and a CMS) before launch.
+
+## Store Settings, Return Photos and Order Fields (Proposed)
+
+- `GET /api/store/settings` (`STORE_SETTINGS_API`, public, read once at start-up) returns `StoreSettingsValue` (`src/app/core/store-settings.ts`: `policy`, `info`, `membership`). The built-in values show at once and stay when the request fails; footer, policies, PDP, cart and checkout read `storeSettings()`.
+- `POST /api/uploads/return-photos` (multipart `file`, `AccountApi.uploadReturnPhoto`) returns a `ReturnPhoto` `{ id, url, thumbUrl, width, height }`; 413 `file-too-large`, 415 `unsupported-type`. The return request body adds `photoIds[]` (at most 5).
+- Fields the client reads when present: `Order.voucherCode`, `Order.returnDays` (return window fixed at delivery), `ReturnRequest.photos`, `ReturnRequest.decision { status, decidedAt, note }` (a rejected request keeps the order `completed` and shows the note), `ProductReview.reply { body, at }`.
 
 ## Other Contracts Still Needed
 

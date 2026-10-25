@@ -22,7 +22,7 @@ import {
 } from 'rxjs';
 import { CartState } from '../cart/cart-state';
 import { API_CONFIG } from '../../core/api-config';
-import { STORE_POLICY } from '../../core/store-policy';
+import { storeSettings } from '../../core/store-settings';
 import { AuthSession } from '../auth/auth-session';
 import { ACCOUNT_API } from '../account/data-access/account-api';
 import { Address, Location, Voucher } from '../account/data-access/account-models';
@@ -67,7 +67,9 @@ export class CheckoutPage {
   readonly cart = inject(CartState);
   readonly session = inject(AuthSession);
   readonly isMock = inject(API_CONFIG).mode === 'mock';
-  readonly policy = STORE_POLICY;
+  get policy() {
+    return storeSettings().policy;
+  }
   readonly media = getMedia;
   readonly newAddress = NEW_ADDRESS;
 
@@ -130,7 +132,7 @@ export class CheckoutPage {
     {
       value: 'bank-transfer',
       label: 'Chuyển khoản qua mã QR',
-      hint: `Quét mã QR sau khi đặt đơn, hệ thống tự xác nhận khi nhận tiền. Đơn được giữ ${STORE_POLICY.paymentHoldMinutes} phút.`,
+      hint: `Quét mã QR sau khi đặt đơn, hệ thống tự xác nhận khi nhận tiền. Đơn được giữ ${storeSettings().policy.paymentHoldMinutes} phút.`,
     },
   ] as const;
 

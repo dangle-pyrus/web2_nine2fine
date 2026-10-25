@@ -4,7 +4,7 @@ import { OverlayService } from '../../../shared/ui/overlay.service';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
 import { ACCOUNT_API } from '../data-access/account-api';
 import { Order } from '../../orders/order-models';
-import { STORE_POLICY } from '../../../core/store-policy';
+import { storeSettings } from '../../../core/store-settings';
 
 /** Confirm-then-cancel flow shared by the order list and the order detail page. */
 @Injectable({ providedIn: 'root' })
@@ -17,7 +17,7 @@ export class OrderCancellation {
     const data: ConfirmDialogData = {
       title: 'Hủy đơn hàng?',
       message: order.payment.paid
-        ? `Đơn #${order.id} sẽ được hủy và số tiền đã thanh toán được hoàn lại trong ${STORE_POLICY.refundWorkingDays} ngày làm việc.`
+        ? `Đơn #${order.id} sẽ được hủy và số tiền đã thanh toán được hoàn lại trong ${storeSettings().policy.refundWorkingDays} ngày làm việc.`
         : `Đơn #${order.id} sẽ được hủy và không thể khôi phục.`,
       confirmLabel: 'Hủy đơn',
     };

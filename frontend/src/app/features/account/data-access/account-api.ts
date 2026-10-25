@@ -1,6 +1,6 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpEventType } from '@angular/common/http';
+import { catchError, filter, map, Observable, throwError } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
 import {
   AccountProfile,
@@ -11,13 +11,23 @@ import {
   ProfileUpdate,
   Voucher,
 } from './account-models';
-import { Order, ReturnRequest } from '../../orders/order-models';
+import { Order, ReturnPhoto, ReturnRequest } from '../../orders/order-models';
 
 /** What the shopper submits; the server computes the refund amount and fees. */
 export type ReturnRequestInput = Pick<
   ReturnRequest,
   'lines' | 'reason' | 'detail' | 'photoCount' | 'refundAccount'
->;
+> & {
+  /** IDs from `uploadReturnPhoto` (at most `MAX_RETURN_PHOTOS`). */
+  photoIds: string[];
+};
+
+/** Upload progress, then the stored photo. */
+export type ReturnPhotoUpload =
+  { kind: 'progress'; percent: number } | { kind: 'done'; photo: ReturnPhoto };
+
+export const MAX_RETURN_PHOTOS = 5;
+export const MAX_RETURN_PHOTO_BYTES = 5 * 1024 * 1024;
 
 export type AccountErrorCode =
   | 'unauthorized'
@@ -26,6 +36,8 @@ export type AccountErrorCode =
   | 'not-cancellable'
   | 'not-returnable'
   | 'invalid-address'
+  | 'file-too-large'
+  | 'unsupported-type'
   | 'unavailable';
 
 export class AccountError extends Error {
@@ -54,7 +66,8 @@ export interface AccountApi {
   listOrders(): Observable<Order[]>;
   getOrder(id: string): Observable<Order>;
   cancelOrder(id: string): Observable<Order>;
-  /** Photos are uploaded separately once a storage endpoint exists; only their count is sent. */
+  /** Each photo is uploaded as soon as it is picked; the request then sends the photo IDs. */
+  uploadReturnPhoto(file: File): Observable<ReturnPhotoUpload>;
   requestReturn(id: string, input: ReturnRequestInput): Observable<Order>;
 }
 
@@ -118,5 +131,34 @@ export class HttpAccountApi implements AccountApi {
   }
   requestReturn(id: string, input: ReturnRequestInput): Observable<Order> {
     return this.http.post<Order>(`${this.base}/orders/${id}/returns`, input, this.options);
+  }
+  /** Proposed contract only: `POST /api/uploads/return-photos` (multipart `file`), 413 / 415. */
+  uploadReturnPhoto(file: File): Observable<ReturnPhotoUpload> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.http
+      .post<ReturnPhoto>(`${this.apiBase}/uploads/return-photos`, body, {
+        ...this.options,
+        reportProgress: true,
+        observe: 'events',
+      })
+      .pipe(
+        filter(
+          (event) =>
+            event.type === HttpEventType.UploadProgress || event.type === HttpEventType.Response,
+        ),
+        map((event): ReturnPhotoUpload => {
+          if (event.type === HttpEventType.Response) return { kind: 'done', photo: event.body! };
+          const total = event.type === HttpEventType.UploadProgress ? (event.total ?? 0) : 0;
+          const loaded = event.type === HttpEventType.UploadProgress ? event.loaded : 0;
+          return { kind: 'progress', percent: total ? Math.round((100 * loaded) / total) : 0 };
+        }),
+        catchError((error: unknown) => {
+          const status = error instanceof HttpErrorResponse ? error.status : 0;
+          const code: AccountErrorCode =
+            status === 413 ? 'file-too-large' : status === 415 ? 'unsupported-type' : 'unavailable';
+          return throwError(() => new AccountError(code));
+        }),
+      );
   }
 }

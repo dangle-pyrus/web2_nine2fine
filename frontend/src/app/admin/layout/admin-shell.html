@@ -1,0 +1,157 @@
+<a class="skip" href="#adm-main">Bỏ qua menu</a>
+
+@if (compact()) {
+<header class="mobile-bar">
+  <button
+    type="button"
+    class="adm-btn adm-btn--icon adm-btn--ghost"
+    aria-label="Mở menu"
+    (click)="drawerOpen.set(true)"
+  >
+    <adm-icon name="reiconSidebar" />
+  </button>
+  <img src="/assets/brand/logo-typho.svg" alt="nine2fine" height="18" />
+  <span class="spacer"></span>
+  <button
+    type="button"
+    class="adm-btn adm-btn--icon adm-btn--ghost"
+    aria-label="Tìm kiếm"
+    (click)="openSearch()"
+  >
+    <adm-icon name="reiconSearch" />
+  </button>
+</header>
+} @if (compact() && drawerOpen()) {
+<div class="scrim" (click)="drawerOpen.set(false)" aria-hidden="true"></div>
+}
+
+<nav class="sidebar" [class.open]="drawerOpen()" aria-label="Menu quản trị">
+  <div class="brand">
+    @if (!collapsed() || compact()) {
+    <a routerLink="/admin" class="logo"
+      ><img src="/assets/brand/logo-typho.svg" alt="nine2fine" height="20" /><span>Admin</span></a
+    >
+    } @if (compact()) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--icon adm-btn--ghost adm-btn--sm"
+      aria-label="Đóng menu"
+      (click)="drawerOpen.set(false)"
+    >
+      <adm-icon name="reiconX" [size]="16" />
+    </button>
+    } @else {
+    <button
+      type="button"
+      class="collapse adm-btn adm-btn--icon adm-btn--ghost adm-btn--sm"
+      [attr.aria-label]="collapsed() ? 'Mở rộng menu' : 'Thu gọn menu'"
+      [attr.aria-expanded]="!collapsed()"
+      (click)="toggleCollapsed()"
+    >
+      <adm-icon [name]="collapsed() ? 'reiconChevronRight' : 'reiconChevronLeft'" [size]="16" />
+    </button>
+    }
+  </div>
+
+  <a
+    class="store-pill"
+    href="/"
+    target="_blank"
+    rel="noopener"
+    title="Mở cửa hàng nine2fine trong tab mới"
+  >
+    <adm-icon name="reiconShop" [size]="16" />
+    <span class="label">nine2fine.vn</span>
+    <adm-icon name="reiconExport" [size]="14" class="trail" />
+  </a>
+
+  <button
+    type="button"
+    class="search-pill"
+    (click)="openSearch()"
+    aria-keyshortcuts="Control+K Meta+K"
+  >
+    <adm-icon name="reiconSearch" [size]="16" />
+    <span class="label">Tìm kiếm</span>
+    <kbd class="trail">Ctrl K</kbd>
+  </button>
+
+  <p class="group">Menu</p>
+  <ul class="menu-list">
+    @for (item of items(); track item.link) {
+    <li>
+      <a
+        class="item"
+        [routerLink]="item.link"
+        [class.active]="item.exact ? url().split('?')[0] === item.link : isSection(item.link) && !item.children"
+        [class.parent-active]="!!item.children && isSection(item.link)"
+        [attr.aria-current]="(item.exact ? url().split('?')[0] === item.link : isSection(item.link)) ? 'page' : null"
+        [attr.title]="collapsed() && !compact() ? item.label : null"
+      >
+        <adm-icon [name]="item.icon" />
+        <span class="label">{{ item.label }}</span>
+        @if (item.count && counts()[item.count]) {
+        <span class="count">{{ counts()[item.count] }}</span>
+        }
+      </a>
+      @if (item.children && isSection(item.link) && (!collapsed() || compact())) {
+      <ul class="sub">
+        @for (child of item.children; track child.link) {
+        <li>
+          <a
+            class="item"
+            [routerLink]="child.link"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: false }"
+          >
+            <span class="label">{{ child.label }}</span>
+            @if (child.count && counts()[child.count]) {
+            <span class="count">{{ counts()[child.count] }}</span>
+            }
+          </a>
+        </li>
+        }
+      </ul>
+      }
+    </li>
+    }
+  </ul>
+
+  <div class="bottom">
+    @if (session.user(); as user) {
+    <div class="user" [attr.title]="user.email">
+      <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+      <span class="who">
+        <span class="name">{{ user.name }}</span>
+        <span class="role">{{ roleLabels[user.role] }}</span>
+      </span>
+    </div>
+    } @if (session.can('settings.store') || session.can('settings.staff') ||
+    session.can('settings.audit')) {
+    <a
+      class="item"
+      routerLink="/admin/settings"
+      routerLinkActive="active"
+      [attr.title]="collapsed() && !compact() ? 'Cài đặt' : null"
+    >
+      <adm-icon name="reiconSettings" />
+      <span class="label">Cài đặt</span>
+    </a>
+    }
+    <button
+      type="button"
+      class="item"
+      (click)="logout()"
+      [attr.title]="collapsed() && !compact() ? 'Đăng xuất' : null"
+    >
+      <adm-icon name="reiconLogout" />
+      <span class="label">Đăng xuất</span>
+    </button>
+  </div>
+</nav>
+
+<main id="adm-main" class="main" tabindex="-1">
+  <router-outlet />
+</main>
+
+<adm-toast-host />

@@ -70,6 +70,8 @@ export interface ProductReview {
   verified?: boolean;
   /** Demo fixture, not a real customer's words; labelled as such on the page. */
   sample?: boolean;
+  /** The shop's public answer, shown as "Phản hồi từ nine2fine". */
+  reply?: { body: string; at: string };
 }
 
 /** What a shopper writes; author, date and verification come from the server. */
@@ -126,6 +128,14 @@ export const DEFAULT_QUERY: CatalogQuery = {
   search: '',
   sort: 'featured',
 };
+
+/** Colours the catalog filter offers. */
+export const PRODUCT_COLORS = [
+  { name: 'Đen', hex: '#242323' },
+  { name: 'Trắng', hex: '#f5f4f0' },
+  { name: 'Xám', hex: '#96958f' },
+  { name: 'Đỏ', hex: '#a91e2c' },
+] as const;
 
 export const CATEGORIES = [
   { value: 'tops', label: 'Áo' },
