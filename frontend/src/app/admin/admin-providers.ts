@@ -2,6 +2,7 @@ import { inject, InjectionToken, Provider, Type } from '@angular/core';
 import { API_CONFIG } from '../core/api-config';
 import * as ports from './data-access/admin-apis';
 import * as mocks from '../../mocks/admin/mock-admin-apis';
+import { MockAdminReportsApi } from '../../mocks/admin/mock-admin-reports';
 import * as storefrontMocks from '../../mocks/admin/mock-admin-storefront';
 import { AdminDialogs } from './ui/dialogs';
 import { provideAdminIcons } from './ui/icons';
@@ -40,10 +41,6 @@ export function provideAdmin(): Provider[] {
       storefrontMocks.MockAdminStorefrontApi,
       ports.HttpAdminStorefrontApi,
     ),
-    ...bind(
-      ports.ADMIN_REPORTS_API,
-      storefrontMocks.MockAdminReportsApi,
-      ports.HttpAdminReportsApi,
-    ),
+    ...bind(ports.ADMIN_REPORTS_API, MockAdminReportsApi, ports.HttpAdminReportsApi),
   ];
 }

@@ -208,6 +208,7 @@
 /* ---------- Forms (3.10 Input và Select) ---------- */
 .adm .field {
   display: grid;
+  align-content: start;
   gap: 8px;
   min-width: 0;
   > label,
@@ -691,6 +692,13 @@
   gap: 12px;
   min-width: 0;
 }
+.adm .sort-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  white-space: nowrap;
+}
 .adm .sort-btn {
   display: inline-flex;
   align-items: center;
@@ -982,6 +990,26 @@
     padding: 16px 24px;
     border-top: 1px solid var(--adm-divider);
   }
+}
+/* Values the system derives (links, slugs): shown, copyable, never typed. */
+.adm .input[readonly] {
+  background: var(--adm-muted);
+  border-color: transparent;
+  color: var(--adm-text-secondary);
+  cursor: default;
+}
+/* Several facts on one line: spacing separates them, never a dot character. */
+.adm .meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 16px;
+}
+/* Menus and popovers wrap their content in .adm for the tokens; the wrapper must not take the
+   page's full-height white background with it, or it hides the page behind the menu. */
+.cdk-overlay-pane > .adm {
+  min-height: 0;
+  background: none;
 }
 .adm .menu {
   min-width: 200px;

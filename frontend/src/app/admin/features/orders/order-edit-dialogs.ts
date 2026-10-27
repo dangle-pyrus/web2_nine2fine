@@ -142,7 +142,7 @@ interface VariantOption {
     <form class="dialog" (ngSubmit)="submit()">
       <h2>Đổi màu hoặc size</h2>
       <p class="dialog-desc">
-        {{ data.item.name }} · đang là {{ data.item.color }} / {{ data.item.size }}, số lượng
+        {{ data.item.name }}, đang là {{ data.item.color }} / {{ data.item.size }}, số lượng
         {{ data.item.quantity }}.
       </p>
       <div class="dialog-body">
@@ -167,7 +167,8 @@ interface VariantOption {
                   >{{ option.label }}
                   @if (option.delta) {
                     <span class="num secondary">
-                      · {{ option.delta > 0 ? '+' : '−' }}{{ abs(option.delta) | admMoney }}</span
+                      ({{ option.delta > 0 ? 'thêm ' : 'bớt '
+                      }}{{ abs(option.delta) | admMoney }})</span
                     >
                   }
                   <span class="check-desc">{{

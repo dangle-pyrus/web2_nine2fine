@@ -48,7 +48,7 @@ const CARRIERS = ['GHN', 'GHTK', 'Viettel Post'];
         @for (id of data.ids; track id) {
           <div class="field">
             <label class="req" [for]="'code-' + id"
-              >Mã vận đơn{{ data.ids.length > 1 ? ' · #' + id : '' }}</label
+              >Mã vận đơn{{ data.ids.length > 1 ? ' cho đơn #' + id : '' }}</label
             >
             <input
               [id]="'code-' + id"

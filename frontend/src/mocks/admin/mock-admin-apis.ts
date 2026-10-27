@@ -41,6 +41,7 @@ import {
   InventoryItem,
   InventoryMovement,
   InventoryQuery,
+  StockStatus,
   OrderQuery,
   OrderView,
   ProductInput,
@@ -68,7 +69,9 @@ import {
   notFound,
   paginate,
   transition,
+  uniqueSlug,
 } from './admin-mock-db';
+import { CATEGORIES } from '../../app/features/catalog/models/product';
 import { promotionState } from '../../app/admin/core/status';
 
 const SESSION_KEY = 'n2f.admin.session';
@@ -132,7 +135,7 @@ export class MockAdminDashboardApi implements AdminDashboardApi {
   private readonly db = inject(AdminMockDb);
 
   summary(range: DashboardRange = 'today'): Observable<DashboardSummary> {
-    const { orders, products, thresholds } = this.db.data;
+    const { orders, products } = this.db.data;
     const now = Date.now();
     const dayKey = (time: number) =>
       new Date(time).toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
@@ -220,7 +223,7 @@ export class MockAdminDashboardApi implements AdminDashboardApi {
       .flatMap((product) => product.variants)
       .filter(
         (variant) =>
-          variant.inventory - reservedFor(orders, variant.id) <= (thresholds[variant.id] ?? 5),
+          variant.inventory - reservedFor(orders, variant.id) <= thresholdOf(this.db, variant.id),
       ).length;
 
     return respond({
@@ -439,7 +442,7 @@ export class MockAdminOrdersApi implements AdminOrdersApi {
       this.event(
         order,
         `Đổi ${item.name}`,
-        `${before} → ${variant.color.name} / ${variant.size}${delta ? ` · ${delta > 0 ? '+' : '−'}${money(Math.abs(delta))}` : ''}`,
+        `${before} → ${variant.color.name} / ${variant.size}${delta ? ` (${delta > 0 ? 'thêm' : 'bớt'} ${money(Math.abs(delta))})` : ''}`,
       );
       return 'Đổi biến thể trong đơn';
     });
@@ -524,7 +527,7 @@ export class MockAdminOrdersApi implements AdminOrdersApi {
       this.event(
         order,
         'Đơn đã hoàn về shop',
-        `${input.restock ? 'Nhập lại kho bán' : 'Chuyển kho hàng lỗi'}${order.payment.method === 'cod' ? ' · Không thu được tiền COD' : ''}`,
+        `${input.restock ? 'Nhập lại kho bán' : 'Chuyển kho hàng lỗi'}${order.payment.method === 'cod' ? '. Không thu được tiền COD' : ''}`,
       );
       return 'Hoàn về kho';
     });
@@ -554,7 +557,7 @@ export class MockAdminOrdersApi implements AdminOrdersApi {
       this.event(
         order,
         'Shop hủy đơn',
-        `Lý do: ${input.reason}${order.refund ? ` · Hoàn ${money(order.refund.amount)}` : ''}`,
+        `Lý do: ${input.reason}${order.refund ? `. Hoàn ${money(order.refund.amount)}` : ''}`,
       );
       return 'Hủy đơn hàng';
     });
@@ -610,7 +613,7 @@ export class MockAdminOrdersApi implements AdminOrdersApi {
       this.event(
         order,
         'Đã nhận hàng trả và hoàn tiền',
-        `${money(input.refundAmount)} · ${input.restock ? 'Nhập lại kho bán' : 'Chuyển kho hàng lỗi'}`,
+        `Hoàn ${money(input.refundAmount)}. ${input.restock ? 'Nhập lại kho bán' : 'Chuyển kho hàng lỗi'}`,
       );
       return 'Hoàn tất trả hàng';
     });
@@ -836,6 +839,13 @@ export class MockAdminProductsApi implements AdminProductsApi {
   }
 
   create(input: ProductInput) {
+    // The slug is derived from the name, so a clash gets a number instead of an error.
+    input = {
+      ...input,
+      slug: uniqueSlug(input.slug, (slug) =>
+        this.db.data.products.some((item) => item.slug === slug),
+      ),
+    };
     const error = this.validate(input);
     if (error) return fail(error);
     const now = new Date().toISOString();
@@ -967,7 +977,6 @@ export class MockAdminProductsApi implements AdminProductsApi {
 
   private trackStock(product: AdminProduct, before?: AdminProduct) {
     for (const variant of product.variants) {
-      this.db.data.thresholds[variant.id] ??= 5;
       const old = before?.variants.find((item) => item.id === variant.id);
       const list = (this.db.data.movements[variant.id] ??= []);
       const change = variant.inventory - (old?.inventory ?? 0);
@@ -987,22 +996,24 @@ export class MockAdminProductsApi implements AdminProductsApi {
 
 // ---------- Inventory ----------
 
+const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+
+function thresholdOf(db: AdminMockDb, variantId: string): number {
+  return db.data.thresholds[variantId] ?? db.data.defaultThreshold ?? 5;
+}
+
+function stockStatus(available: number, threshold: number): StockStatus {
+  return available <= 0 ? 'out' : available <= threshold ? 'low' : 'in';
+}
+
 @Injectable({ providedIn: 'root' })
 export class MockAdminInventoryApi implements AdminInventoryApi {
   private readonly db = inject(AdminMockDb);
 
   list(query: InventoryQuery) {
-    const items = this.all()
-      .filter((item) =>
-        query.view === 'low'
-          ? item.available > 0 && item.available <= item.lowStockThreshold
-          : query.view === 'out'
-            ? item.available <= 0
-            : true,
-      )
-      .filter((item) =>
-        matches(query.search, item.productName, item.sku, item.color.name, item.size),
-      );
+    const items = this.filtered(query).filter(
+      (item) => !query.view || query.view === 'all' || item.status === query.view,
+    );
     return respond(
       paginate(
         items,
@@ -1011,10 +1022,72 @@ export class MockAdminInventoryApi implements AdminInventoryApi {
           available: (i) => i.available,
           name: (i) => `${i.productName} ${i.color.name} ${i.size}`,
           onHand: (i) => i.onHand,
+          sku: (i) => i.sku,
         },
         'name',
       ),
     );
+  }
+
+  facets() {
+    const all = this.all();
+    const scoped = this.filtered({ search: '', category: '', color: '', size: '' });
+    const colors = new Map(all.map((item) => [item.color.name, item.color]));
+    const sizes = [...new Set(all.map((item) => item.size))].sort(
+      (a, b) => SIZE_ORDER.indexOf(a) - SIZE_ORDER.indexOf(b) || a.localeCompare(b),
+    );
+    const count = (status?: string) =>
+      scoped.filter((item) => !status || item.status === status).length;
+    return respond({
+      categories: CATEGORIES.filter((category) =>
+        all.some((item) => item.category === category.value),
+      ).map(({ value, label }) => ({ value, label })),
+      colors: [...colors.values()],
+      sizes,
+      counts: { all: count(), in: count('in'), low: count('low'), out: count('out') },
+      defaultThreshold: this.db.data.defaultThreshold ?? 5,
+      customCount: all.filter((item) => item.thresholdCustom).length,
+    });
+  }
+
+  setThreshold(variantIds: string[], value: number | null) {
+    if (value !== null && (!Number.isInteger(value) || value < 0))
+      return fail(invalid('Ngưỡng phải là số nguyên từ 0 trở lên.', { value: 'Nhập số từ 0.' }));
+    for (const id of variantIds) {
+      if (value === null) delete this.db.data.thresholds[id];
+      else this.db.data.thresholds[id] = value;
+    }
+    this.db.log({
+      action: 'Đổi ngưỡng sắp hết',
+      target: { type: 'inventory', id: variantIds[0] ?? '', label: `${variantIds.length} SKU` },
+      after: value === null ? 'Theo mặc định' : String(value),
+    });
+    return respond(undefined);
+  }
+
+  setDefaultThreshold(value: number, resetCustom: boolean) {
+    if (!Number.isInteger(value) || value < 0)
+      return fail(invalid('Ngưỡng phải là số nguyên từ 0 trở lên.', { value: 'Nhập số từ 0.' }));
+    const before = this.db.data.defaultThreshold ?? 5;
+    this.db.data.defaultThreshold = value;
+    if (resetCustom) this.db.data.thresholds = {};
+    this.db.log({
+      action: 'Đổi ngưỡng sắp hết mặc định',
+      target: { type: 'inventory', id: 'default', label: 'Mọi SKU' },
+      before: String(before),
+      after: String(value),
+    });
+    return respond(undefined);
+  }
+
+  private filtered(query: Pick<InventoryQuery, 'search' | 'category' | 'color' | 'size'>) {
+    return this.all()
+      .filter((item) => !query.category || item.category === query.category)
+      .filter((item) => !query.color || item.color.name === query.color)
+      .filter((item) => !query.size || item.size === query.size)
+      .filter((item) =>
+        matches(query.search, item.productName, item.sku, item.color.name, item.size),
+      );
   }
 
   adjust(variantId: string, input: InventoryAdjustment) {
@@ -1066,7 +1139,7 @@ export class MockAdminInventoryApi implements AdminInventoryApi {
   }
 
   private all(): InventoryItem[] {
-    const { products, orders, thresholds } = this.db.data;
+    const { products, orders } = this.db.data;
     return products
       .filter((product) => product.status !== 'draft')
       .flatMap((product) =>
@@ -1086,7 +1159,10 @@ export class MockAdminInventoryApi implements AdminInventoryApi {
             onHand: variant.inventory,
             reserved,
             available: variant.inventory - reserved,
-            lowStockThreshold: thresholds[variant.id] ?? 5,
+            lowStockThreshold: thresholdOf(this.db, variant.id),
+            thresholdCustom: variant.id in this.db.data.thresholds,
+            category: product.category,
+            status: stockStatus(variant.inventory - reserved, thresholdOf(this.db, variant.id)),
           };
         }),
       );
@@ -1249,6 +1325,10 @@ export class MockAdminPromotionsApi implements AdminPromotionsApi {
     if (input.type === 'fixed' && !(input.value > 0)) fields['value'] = 'Nhập số tiền giảm.';
     if (input.endsAt && input.endsAt <= input.startsAt)
       fields['endsAt'] = 'Ngày kết thúc phải sau ngày bắt đầu.';
+    if (input.audience === 'tiers' && !input.tiers.length)
+      fields['audience'] = 'Chọn ít nhất một hạng thành viên.';
+    if (input.audience === 'customers' && !input.customerIds.length)
+      fields['audience'] = 'Chọn ít nhất một khách hàng.';
     return Object.keys(fields).length ? invalid(Object.values(fields)[0], fields) : null;
   }
 }

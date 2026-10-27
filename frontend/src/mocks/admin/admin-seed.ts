@@ -55,7 +55,9 @@ export interface AdminSeed {
   staff: (StaffMember & { password: string })[];
   audit: AuditEntry[];
   movements: Record<string, InventoryMovement[]>;
+  /** Per-SKU low-stock thresholds that differ from `defaultThreshold`. */
   thresholds: Record<string, number>;
+  defaultThreshold: number;
   sequence: number;
 }
 
@@ -231,7 +233,7 @@ function slugify(text: string): string {
 }
 
 function customersSeed(now: number, random: ReturnType<typeof rng>): AdminCustomer[] {
-  return Array.from({ length: 28 }, (_, index) => {
+  return Array.from({ length: 110 }, (_, index) => {
     const family = FAMILY[index % FAMILY.length];
     const given = GIVEN[index % GIVEN.length];
     const middle = random.pick(MIDDLE);
@@ -248,7 +250,8 @@ function customersSeed(now: number, random: ReturnType<typeof rng>): AdminCustom
       totalSpent: 0,
       lastOrderAt: null,
       status: index === 17 ? 'blocked' : 'active',
-      createdAt: iso(now - (200 - index * 5) * DAY),
+      // Sign-ups spread over the last ~14 months; the newest joined a few days ago.
+      createdAt: iso(now - Math.round(420 - index * 3.8) * DAY),
       birthDate: index % 3 === 0 ? `199${index % 10}-0${(index % 9) + 1}-1${index % 9}` : null,
       marketingOptIn: index % 2 === 0,
       tags: index % 6 === 0 ? ['VIP'] : index === 17 ? ['Bom hàng'] : [],
@@ -316,6 +319,28 @@ function ordersSeed(
   const orders: AdminOrder[] = [];
   let sequence = 0;
 
+  // Who buys: about a third of orders come from someone's first purchase, the rest lean towards
+  // people who already bought (the more they bought, the likelier), like a real customer base.
+  const bought = new Map<string, number>();
+  const pickBuyer = (placed: number): AdminCustomer | null => {
+    const joined = customers.filter(
+      (item) => item.status === 'active' && Date.parse(item.createdAt) <= placed,
+    );
+    if (!joined.length) return null;
+    const fresh = joined.filter((item) => !bought.has(item.id));
+    let pick: AdminCustomer;
+    if (fresh.length && (random.next() < 0.35 || fresh.length === joined.length)) {
+      pick = random.pick(fresh);
+    } else {
+      const pool = joined.filter((item) => bought.has(item.id));
+      const weights = pool.map((item) => (bought.get(item.id) ?? 0) + 1);
+      let roll = random.next() * weights.reduce((sum, value) => sum + value, 0);
+      pick = pool.find((_, index) => (roll -= weights[index]) < 0) ?? pool[pool.length - 1];
+    }
+    bought.set(pick.id, (bought.get(pick.id) ?? 0) + 1);
+    return pick;
+  };
+
   // [ageInHours, status] pairs: recent orders still move, older ones are settled.
   const plan: [number, OrderStatus][] = [];
   for (let i = 0; i < 4; i++) plan.push([random.int(1, 20), 'pending-payment']);
@@ -329,6 +354,12 @@ function ordersSeed(
   for (let i = 0; i < 2; i++) plan.push([random.int(24 * 15, 24 * 40), 'returned']);
   for (let i = 0; i < 7; i++) plan.push([random.int(3, 24 * 50), 'cancelled']);
   for (let i = 0; i < 70; i++) plan.push([random.int(24 * 4, 24 * 60), 'completed']);
+  // A year of settled history for the reports, thinning out further back.
+  for (let i = 0; i < 170; i++) {
+    const age = 24 * (61 + Math.floor(304 * random.next() ** 1.4));
+    const roll = random.next();
+    plan.push([age, roll < 0.06 ? 'cancelled' : roll < 0.11 ? 'returned' : 'completed']);
+  }
   // A steady trickle of today's orders for the dashboard.
   for (let i = 0; i < 6; i++)
     plan.push([
@@ -339,11 +370,11 @@ function ordersSeed(
   plan.sort((a, b) => b[0] - a[0]);
 
   for (const [age, status] of plan) {
-    const placed = now - age * HOUR - random.int(0, 59) * MINUTE;
-    const customer =
-      random.next() < 0.12
-        ? null
-        : random.pick(customers.filter((item) => item.status === 'active'));
+    let placed = now - age * HOUR - random.int(0, 59) * MINUTE;
+    // Few people shop between midnight and 7am (GMT+7): move most of those into the day.
+    const localHour = new Date(placed + 7 * HOUR).getUTCHours();
+    if (localHour < 7 && age > 24 && random.next() < 0.8) placed += random.int(9, 14) * HOUR;
+    const customer = random.next() < 0.12 ? null : pickBuyer(placed);
     const lineCount = random.int(1, 3);
     const items: AdminOrderItem[] = [];
     for (let i = 0; i < lineCount; i++) {
@@ -367,7 +398,18 @@ function ordersSeed(
       });
     }
     const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-    const discount = random.next() < 0.2 ? Math.round((subtotal * 0.1) / 1000) * 1000 : 0;
+    // Each code gives what it says: a percentage, or a fixed amount.
+    const voucherCode =
+      random.next() < 0.2
+        ? random.pick(['WELCOME10', 'WELCOME10', 'BACVANG15', 'FLASH50K', 'XINLOI100K'])
+        : undefined;
+    const discount = !voucherCode
+      ? 0
+      : voucherCode === 'FLASH50K'
+        ? 50_000
+        : voucherCode === 'XINLOI100K'
+          ? 100_000
+          : Math.round((subtotal * (voucherCode === 'BACVANG15' ? 0.15 : 0.1)) / 1000) * 1000;
     const shippingFee = STORE_POLICY.shippingFee;
     const shippingDiscount = subtotal >= STORE_POLICY.freeShippingFrom ? shippingFee : 0;
     const total = subtotal - discount + shippingFee - shippingDiscount;
@@ -396,7 +438,7 @@ function ordersSeed(
 
     const id = orderIdFor(placed, ++sequence);
     const events: AdminOrderEvent[] = [
-      event(placed, 'Khách đặt hàng', `${items.length} sản phẩm · ${labels[method]}`),
+      event(placed, 'Khách đặt hàng', `${items.length} sản phẩm, ${labels[method]}`),
     ];
     const order: AdminOrder = {
       id,
@@ -407,7 +449,7 @@ function ordersSeed(
       pricing: { subtotal, discount, shippingFee, shippingDiscount, total },
       shippingAddress: { recipient, phone, street, ward, province },
       payment: { method, label: labels[method], paid },
-      voucherCode: discount ? 'WELCOME10' : undefined,
+      voucherCode,
       note: random.next() < 0.15 ? 'Giao giờ hành chính giúp mình nhé.' : undefined,
       customer: {
         id: customer?.id ?? null,
@@ -454,7 +496,7 @@ function ordersSeed(
         'returned',
       ].includes(status)
     ) {
-      const shippedAt = Math.min(placed + 20 * HOUR, now - 2 * HOUR);
+      const shippedAt = Math.min(placed + random.int(6, 40) * HOUR, now - 2 * HOUR);
       const carrier = random.pick(CARRIERS);
       order.delivery = {
         carrier,
@@ -483,7 +525,7 @@ function ordersSeed(
               event(
                 backAt,
                 'Đã hoàn về shop',
-                'Hàng đã nhập lại kho · Không thu được tiền COD',
+                'Hàng đã nhập lại kho. Không thu được tiền COD',
                 'Trần Thu Hà',
               ),
             );
@@ -675,7 +717,15 @@ export function refreshCustomerStats(customers: AdminCustomer[], orders: AdminOr
 // ---------- Promotions, staff, audit ----------
 
 function promotionsSeed(now: number): Promotion[] {
-  const base = { maxDiscount: null, categories: [], perCustomerLimit: 1, enabled: true };
+  const base = {
+    maxDiscount: null,
+    categories: [],
+    perCustomerLimit: 1,
+    enabled: true,
+    audience: 'everyone' as const,
+    tiers: [],
+    customerIds: [],
+  };
   return [
     {
       ...base,
@@ -742,6 +792,8 @@ function promotionsSeed(now: number): Promotion[] {
       id: 'promo5',
       code: 'VIP150',
       title: 'Tri ân khách hàng Vàng',
+      audience: 'tiers',
+      tiers: ['gold'],
       type: 'fixed',
       value: 150000,
       minSubtotal: 1500000,
@@ -751,6 +803,39 @@ function promotionsSeed(now: number): Promotion[] {
       endsAt: iso(now + 60 * DAY),
       enabled: false,
       createdAt: iso(now - 61 * DAY),
+    },
+    {
+      ...base,
+      id: 'promo6',
+      code: 'XINLOI100K',
+      title: 'Xin lỗi khách giao chậm',
+      audience: 'private',
+      type: 'fixed',
+      value: 100000,
+      minSubtotal: 0,
+      usageLimit: 50,
+      used: 6,
+      startsAt: iso(now - 30 * DAY),
+      endsAt: null,
+      createdAt: iso(now - 30 * DAY),
+    },
+    {
+      ...base,
+      id: 'promo7',
+      code: 'BACVANG15',
+      title: 'Ưu đãi hạng Bạc và Vàng',
+      audience: 'tiers',
+      tiers: ['silver', 'gold'],
+      type: 'percent',
+      value: 15,
+      maxDiscount: 300000,
+      minSubtotal: 1000000,
+      usageLimit: null,
+      used: 58,
+      perCustomerLimit: 2,
+      startsAt: iso(now - 10 * DAY),
+      endsAt: iso(now + 20 * DAY),
+      createdAt: iso(now - 11 * DAY),
     },
   ];
 }
@@ -867,10 +952,8 @@ export function createSeed(now = Date.now()): AdminSeed {
   const { orders, sequence } = ordersSeed(now, products, customers, random);
   refreshCustomerStats(customers, orders);
   const movements: Record<string, InventoryMovement[]> = {};
-  const thresholds: Record<string, number> = {};
   for (const product of products) {
     for (const variant of product.variants) {
-      thresholds[variant.id] = 5;
       movements[variant.id] = [
         {
           id: `m-${variant.id}`,
@@ -892,7 +975,20 @@ export function createSeed(now = Date.now()): AdminSeed {
     staff: staffSeed(now),
     audit: auditSeed(now, orders, products),
     movements,
-    thresholds,
+    thresholds: customThresholds(products),
+    defaultThreshold: 5,
     sequence,
   };
+}
+
+/**
+ * Best sellers sell out faster, so the seed gives their sizes a higher own threshold; the knit
+ * cardigan is reordered from far away, so its whole stock counts as running low.
+ */
+function customThresholds(products: AdminProduct[]): Record<string, number> {
+  const own: Record<string, number> = { p01: 10, p03: 10, p23: 8 };
+  const thresholds: Record<string, number> = {};
+  for (const product of products.filter((item) => item.id in own))
+    for (const variant of product.variants) thresholds[variant.id] = own[product.id];
+  return thresholds;
 }

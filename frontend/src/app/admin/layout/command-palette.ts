@@ -371,7 +371,7 @@ export class CommandPalette {
         hits.push({
           group: 'Đơn hàng',
           label: `#${order.id}`,
-          sub: `${order.customerName} · ${this.money.transform(order.total)}`,
+          sub: `${order.customerName}, ${this.money.transform(order.total)}`,
           link: `/admin/orders/${order.id}`,
           badge: orderBadge(order.status),
         });
@@ -394,7 +394,7 @@ export class CommandPalette {
           group: 'Khách hàng',
           label: customer.name,
           sub: this.session.can('customers.contact')
-            ? `${customer.phone} · ${customer.email}`
+            ? `${customer.phone}, ${customer.email}`
             : 'Khách hàng',
           link: `/admin/customers/${customer.id}`,
         });

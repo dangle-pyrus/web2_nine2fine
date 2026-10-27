@@ -111,7 +111,7 @@ export class AdminShell {
       permission: 'orders.view',
       count: 'toFulfil',
       children: [
-        { label: 'Tất cả đơn hàng', link: '/admin/orders' },
+        { label: 'Đơn hàng', link: '/admin/orders' },
         { label: 'Trả hàng', link: '/admin/returns', count: 'returns' },
       ],
     },

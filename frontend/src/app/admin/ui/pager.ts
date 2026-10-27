@@ -14,13 +14,9 @@ import { AdmIcon } from './icon';
       <div class="row">
         <label class="row small">
           <span class="secondary">Số dòng</span>
-          <select
-            class="select select--sm"
-            [value]="pageSize()"
-            (change)="sizeChange.emit(+$any($event.target).value)"
-          >
+          <select class="select select--sm" (change)="sizeChange.emit(+$any($event.target).value)">
             @for (size of sizes; track size) {
-              <option [value]="size">{{ size }}</option>
+              <option [value]="size" [selected]="size === pageSize()">{{ size }}</option>
             }
           </select>
         </label>

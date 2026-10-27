@@ -16,7 +16,7 @@ import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import { orderBadge, paymentBadge, PAYMENT_METHODS } from '../../core/status';
 import { ADMIN_ORDERS_API } from '../../data-access/admin-apis';
 import { errorMessage } from '../../data-access/http-support';
-import type { AdminOrderSummary, OrderQuery, OrderView } from '../../data-access/models';
+import type { AdminOrderSummary, OrderQuery, OrderView, SortDir } from '../../data-access/models';
 import { AdmBadge } from '../../ui/badge';
 import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
@@ -41,6 +41,16 @@ import { TagDialog } from './order-edit-dialogs';
 import { OrderListContext } from './order-list-context';
 
 type ListQuery = OrderQuery & { range: string };
+
+/** Every sort spelled out, so the toolbar always says what order the list is in. */
+const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'placedAt:desc', label: 'Ngày đặt: mới nhất trước' },
+  { value: 'placedAt:asc', label: 'Ngày đặt: cũ nhất trước' },
+  { value: 'total:desc', label: 'Tổng tiền: cao đến thấp' },
+  { value: 'total:asc', label: 'Tổng tiền: thấp đến cao' },
+  { value: 'id:desc', label: 'Mã đơn: lớn đến nhỏ' },
+  { value: 'id:asc', label: 'Mã đơn: nhỏ đến lớn' },
+];
 
 const VIEWS: { value: OrderView; label: string }[] = [
   { value: 'all', label: 'Tất cả' },
@@ -174,6 +184,36 @@ export class OrderListPage {
   clearFilters(): void {
     this.search.set('');
     this.list.reset(['view']);
+  }
+
+  protected readonly sortOptions = SORT_OPTIONS;
+  protected readonly sortKey = computed(() => {
+    const { sort, dir } = this.query();
+    return `${sort || 'placedAt'}:${dir}`;
+  });
+
+  setSort(value: string): void {
+    const [sort, dir] = value.split(':');
+    this.list.update({ sort, dir: dir as SortDir }, { keepPage: true });
+  }
+
+  sortIcon(key: string): string {
+    const { sort, dir } = this.query();
+    if ((sort || 'placedAt') !== key) return 'reiconSortV';
+    return dir === 'asc' ? 'reiconArrowUp' : 'reiconArrowDown';
+  }
+
+  ariaSort(key: string): 'ascending' | 'descending' | null {
+    const { sort, dir } = this.query();
+    if ((sort || 'placedAt') !== key) return null;
+    return dir === 'asc' ? 'ascending' : 'descending';
+  }
+
+  sortTitle(key: string): string {
+    const current = SORT_OPTIONS.find((option) => option.value === this.sortKey());
+    return (this.query().sort || 'placedAt') === key && current
+      ? `Đang sắp xếp: ${current.label}. Bấm để đảo chiều.`
+      : 'Bấm để sắp xếp theo cột này';
   }
 
   sortBy(sort: string): void {

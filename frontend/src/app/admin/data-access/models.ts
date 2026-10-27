@@ -360,12 +360,32 @@ export interface InventoryItem {
   reserved: number;
   available: number;
   lowStockThreshold: number;
+  /** True when this SKU has its own threshold instead of the shop default. */
+  thresholdCustom: boolean;
+  category: string;
+  status: StockStatus;
 }
 
-export type InventoryView = 'all' | 'low' | 'out';
+/** Còn hàng / Sắp hết (available at or under the threshold) / Hết hàng (nothing to sell). */
+export type StockStatus = 'in' | 'low' | 'out';
+
+export type InventoryView = 'all' | StockStatus;
 
 export interface InventoryQuery extends PageQuery {
   view: InventoryView;
+  category: string;
+  color: string;
+  size: string;
+}
+
+/** Filter options and tab counts for the inventory list, plus the shop-wide threshold. */
+export interface InventoryFacets {
+  categories: { value: string; label: string }[];
+  colors: { name: string; hex: string }[];
+  sizes: string[];
+  counts: Record<InventoryView, number>;
+  defaultThreshold: number;
+  customCount: number;
 }
 
 export type AdjustmentReason = 'count' | 'received' | 'damaged' | 'return' | 'correction';
@@ -438,6 +458,13 @@ export interface CustomerUpdate {
 export type PromotionType = 'percent' | 'fixed' | 'free-shipping';
 export type PromotionState = 'running' | 'scheduled' | 'expired' | 'disabled';
 
+/**
+ * everyone: any shopper, guests included. tiers: signed-in members of the chosen tiers.
+ * customers: only the listed accounts. private: shown to no one; staff hand the code out
+ * themselves (influencers, apologies) and whoever has it can use it.
+ */
+export type PromotionAudience = 'everyone' | 'tiers' | 'customers' | 'private';
+
 export interface Promotion {
   id: string;
   code: string;
@@ -452,6 +479,12 @@ export interface Promotion {
   categories: string[];
   usageLimit: number | null;
   perCustomerLimit: number;
+  /** Who can use the code; see PromotionAudience. */
+  audience: PromotionAudience;
+  /** Tiers that can use it when audience is 'tiers'. */
+  tiers: CustomerTier[];
+  /** Customers that can use it when audience is 'customers'. */
+  customerIds: string[];
   used: number;
   startsAt: string;
   endsAt: string | null;
@@ -567,12 +600,133 @@ export interface AdminSizeChart {
   customised: boolean;
 }
 
-export type ReportRange = '30d' | '90d' | '365d';
+export type ReportRange = '7d' | '30d' | '90d' | '365d';
 
+/** A figure for the chosen period and the same-length period before it (null = no data then). */
+export interface ReportFigure {
+  value: number;
+  previous: number | null;
+}
+
+export type AbcClass = 'A' | 'B' | 'C';
+
+/**
+ * Báo cáo kinh doanh: everything is computed over orders that were confirmed and not cancelled,
+ * at the prices actually paid. "Doanh thu thuần" = paid totals minus shipping and refunds.
+ */
 export interface SalesReport {
   range: ReportRange;
+  /** ISO bounds of the period and of the comparison period. */
+  from: string;
+  to: string;
+  previousFrom: string;
+  kpis: {
+    netRevenue: ReportFigure;
+    grossProfit: ReportFigure;
+    /** 0..1 */
+    grossMargin: ReportFigure;
+    orders: ReportFigure;
+    averageOrder: ReportFigure;
+    unitsPerOrder: ReportFigure;
+    /** Share of revenue given away as discounts, 0..1. */
+    discountRate: ReportFigure;
+    /** Refunded value over revenue, 0..1. */
+    refundRate: ReportFigure;
+    /** Cancelled orders over all orders placed, 0..1. */
+    cancelRate: ReportFigure;
+    customers: ReportFigure;
+  };
+  trend: {
+    bucket: 'day' | 'week' | 'month';
+    points: { label: string; revenue: number; previous: number; orders: number; profit: number }[];
+  };
+  categories: {
+    category: string;
+    label: string;
+    revenue: number;
+    units: number;
+    profit: number;
+    /** Share of revenue, 0..1. */
+    share: number;
+  }[];
+  products: {
+    productId: string;
+    name: string;
+    image: string;
+    category: string;
+    units: number;
+    revenue: number;
+    profit: number;
+    /** 0..1 */
+    margin: number;
+    /** Units returned over units sold, 0..1. */
+    returnRate: number;
+    onHand: number;
+    /** Days the current stock lasts at this period's pace; null = nothing sold. */
+    daysOfCover: number | null;
+    /** Sold over sold + still on hand, 0..1. */
+    sellThrough: number;
+    /** A = the products making the first 80% of revenue, B the next 15%, C the rest. */
+    abc: AbcClass;
+  }[];
   bySize: { size: string; units: number; revenue: number; returned: number }[];
   byColor: { color: string; hex: string; units: number; revenue: number }[];
+  customers: {
+    newCustomers: number;
+    returningCustomers: number;
+    newRevenue: number;
+    returningRevenue: number;
+    guestOrders: number;
+    guestRevenue: number;
+    /** Customers with 2+ orders ever over customers who ordered in the period, 0..1. */
+    repeatRate: number;
+    /** Average lifetime spend of customers who ordered in the period. */
+    lifetimeValue: number;
+    byTier: {
+      tier: CustomerTier;
+      label: string;
+      customers: number;
+      orders: number;
+      revenue: number;
+      averageOrder: number;
+    }[];
+    top: {
+      id: string;
+      name: string;
+      tier: CustomerTier;
+      orders: number;
+      revenue: number;
+      lastOrderAt: string;
+    }[];
+  };
+  regions: { province: string; orders: number; revenue: number; share: number }[];
+  /** Orders per weekday (0 = Monday) and 4-hour block (0 = 00:00–04:00), GMT+7. */
+  heatmap: number[][];
+  payments: {
+    method: string;
+    label: string;
+    orders: number;
+    revenue: number;
+    share: number;
+    /** Orders that failed delivery or were sent back, over shipped orders, 0..1. */
+    failureRate: number;
+  }[];
+  operations: {
+    /** Hours from order to hand-over to the carrier, median. */
+    hoursToShip: number | null;
+    /** Share of shipped orders handed over within 24 hours, 0..1. */
+    shippedWithinDay: number;
+    deliveryFailures: number;
+    returnedToSender: number;
+    cancelled: number;
+    cancelReasons: { reason: string; count: number }[];
+  };
+  returns: {
+    orders: number;
+    units: number;
+    value: number;
+    reasons: { reason: string; count: number }[];
+  };
   returnsByProduct: {
     productId: string;
     name: string;
@@ -580,6 +734,23 @@ export interface SalesReport {
     returned: number;
     reasons: { reason: string; count: number }[];
   }[];
+  inventory: {
+    units: number;
+    /** At cost. */
+    value: number;
+    /** At selling price. */
+    retailValue: number;
+    outOfStockSkus: number;
+    /** Best sellers of the period with at least one size out of stock. */
+    stockoutRisks: {
+      productId: string;
+      name: string;
+      variant: string;
+      sku: string;
+      available: number;
+      unitsSold: number;
+    }[];
+  };
   agingStock: {
     variantId: string;
     productId: string;
@@ -598,5 +769,9 @@ export interface SalesReport {
     discount: number;
     revenue: number;
     averageOrder: number;
+    /** Discount over revenue for this code, 0..1. */
+    cost: number;
   }[];
+  /** Average order with and without a code, to judge whether codes lift basket size. */
+  promotionLift: { withCode: number; withoutCode: number; ordersWithCode: number };
 }

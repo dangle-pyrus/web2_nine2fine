@@ -36,9 +36,9 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
       <header>
         <div>
           <h2>{{ data.item.productName }}</h2>
-          <p class="small secondary">
-            {{ data.item.color.name }} / {{ data.item.size }} ·
-            <span class="mono">{{ data.item.sku }}</span>
+          <p class="small secondary meta-list">
+            <span>{{ data.item.color.name }} / {{ data.item.size }}</span>
+            <span class="mono">SKU {{ data.item.sku }}</span>
           </p>
         </div>
         <button
@@ -153,10 +153,10 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
                     <p>
                       {{ labels[move.reason] }}
                       @if (move.note) {
-                        <span class="secondary"> · {{ move.note }}</span>
+                        <span class="secondary">({{ move.note }})</span>
                       }
                     </p>
-                    <p class="small tertiary">{{ move.at | admDateTime }} · {{ move.author }}</p>
+                    <p class="small tertiary">{{ move.at | admDateTime }} bởi {{ move.author }}</p>
                   </div>
                   <p class="num change" [class.minus]="move.change < 0">
                     {{ move.change > 0 ? '+' : '' }}{{ move.change }}

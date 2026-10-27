@@ -85,7 +85,7 @@
           class="input"
           [value]="draft().type"
           (input)="patch({ type: $any($event.target).value })"
-          placeholder="Áo blazer · Dáng suông"
+          placeholder="Ví dụ: Áo blazer dáng suông"
         />
         <p class="hint">Hiện dưới tên sản phẩm trên trang chi tiết.</p>
       </div>
@@ -105,7 +105,7 @@
     <section class="section" aria-labelledby="media-title">
       <header>
         <h2 id="media-title">Hình ảnh</h2>
-        <span class="small tertiary">Kéo để sắp xếp · ảnh đầu tiên là ảnh đại diện</span>
+        <span class="small tertiary">Kéo để sắp xếp. Ảnh đầu tiên là ảnh đại diện.</span>
       </header>
       @if (showError('images'); as error) {
       <p class="error field-error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
@@ -175,7 +175,7 @@
             />
             <adm-icon name="reiconGalleryAdd" [size]="22" />
             <span>Thêm ảnh</span>
-            <span class="small tertiary">JPG, PNG, WEBP · tối đa 5 MB</span>
+            <span class="small tertiary">JPG, PNG, WEBP, tối đa 5 MB</span>
           </label>
         </li>
         }
@@ -266,7 +266,7 @@
       <header>
         <h2 id="variant-title">Màu, size và tồn kho</h2>
         <span class="small secondary"
-          >{{ draft().variants.length }} biến thể · tồn {{ totalStock() | admNum }}</span
+          >{{ draft().variants.length }} biến thể, tổng tồn {{ totalStock() | admNum }}</span
         >
       </header>
       @if (showError('variants'); as error) {
@@ -436,7 +436,7 @@
               <td colspan="3">
                 @if (group.hex) {<span class="swatch" [style.background]="group.hex"></span>}
                 <strong>{{ group.label }}</strong>
-                <span class="small tertiary">· {{ group.rows.length }} biến thể</span>
+                <span class="small tertiary">({{ group.rows.length }} biến thể)</span>
               </td>
               <td class="num secondary">{{ group.stock | admNum }}</td>
             </tr>
@@ -586,20 +586,15 @@
       </div>
       <div class="field">
         <label for="p-slug">Đường dẫn</label>
-        <div class="affix prefix-text">
-          <span class="prefix">/product/</span>
-          <input
-            id="p-slug"
-            class="input"
-            [value]="draft().slug"
-            (input)="patch({ slug: $any($event.target).value })"
-            [placeholder]="seoPreview().url.split('/').pop()"
-          />
-        </div>
+        <input id="p-slug" class="input mono" readonly [value]="seoPreview().url" />
         @if (showError('slug'); as error) {
         <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
-        } @else if (!isNew()) {
-        <p class="hint">Đổi đường dẫn sẽ làm hỏng các liên kết đã chia sẻ trước đó.</p>
+        } @else if (isNew()) {
+        <p class="hint">Tự tạo từ tên sản phẩm khi lưu.</p>
+        } @else {
+        <p class="hint">
+          Giữ cố định sau khi tạo để các liên kết đã chia sẻ không bị hỏng, kể cả khi bạn đổi tên.
+        </p>
         }
       </div>
     </section>
@@ -706,7 +701,7 @@
             [disabled]="!canEdit"
             (change)="toggleCollection(item.id, $any($event.target).checked)"
           />{{ item.name }}@if (item.status === 'draft') {<span class="tertiary">
-            · nháp</span
+            (nháp)</span
           >}</label
         >
         }

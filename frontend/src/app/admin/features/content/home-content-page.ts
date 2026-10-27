@@ -1,3 +1,11 @@
+import {
+  CdkDrag,
+  CdkDragDrop,
+  CdkDragHandle,
+  CdkDragPlaceholder,
+  CdkDropList,
+  moveItemInArray,
+} from '@angular/cdk/drag-drop';
 import { CdkMenu, CdkMenuItem, CdkMenuTrigger } from '@angular/cdk/menu';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -12,6 +20,7 @@ import { AdmPageHeader } from '../../ui/page-header';
 import { AdmSaveBar } from '../../ui/save-bar';
 import { AdminToastService } from '../../ui/toast';
 import { HasUnsavedChanges } from '../../ui/unsaved-changes';
+import { AdmLinkSelect } from './link-select';
 import { MediaPicker, mediaSrc } from './media-picker';
 
 type Campaign = Extract<LandingBlock, { kind: 'campaign' }>;
@@ -32,23 +41,10 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
   { value: 'price-asc', label: 'Giá thấp đến cao' },
 ];
 
-/** Storefront routes offered as link suggestions; any path still works. */
-const LINKS = [
-  '/shop',
-  '/new-in',
-  '/shop/tops',
-  '/shop/bottoms',
-  '/shop/dresses',
-  '/shop/outerwear',
-  '/shop-by-moment/work',
-  '/shop-by-moment/dinner',
-  '/shop-by-moment/event',
-  '/shop-by-moment/weekend',
-];
-
 /**
- * Nội dung trang chủ (Đợt 3): the storefront home blocks in order. Reorder, show/hide and edit
- * text, links and images; saving updates the shop's home page in the same browser tab.
+ * Nội dung trang chủ (Đợt 3): the storefront home blocks in order. Drag by the handle (or arrow keys
+ * on it) to reorder, show/hide and edit text, links and images; saving updates the shop's home
+ * page in the same browser tab.
  */
 @Component({
   selector: 'adm-home-content-page',
@@ -57,6 +53,11 @@ const LINKS = [
     CdkMenu,
     CdkMenuItem,
     CdkMenuTrigger,
+    CdkDropList,
+    CdkDrag,
+    CdkDragHandle,
+    CdkDragPlaceholder,
+    AdmLinkSelect,
     AdmPageHeader,
     AdmIcon,
     AdmEmptyState,
@@ -132,30 +133,45 @@ const LINKS = [
               <h2 id="blocks-title">Các khối ({{ content.blocks.length }})</h2>
               <span class="small secondary">{{ shownCount() }} đang hiển thị</span>
             </header>
-            <ol class="blocks">
+            <p class="small tertiary drag-hint">
+              Giữ biểu tượng 6 chấm rồi kéo khối tới vị trí mới. Thứ tự ở đây là thứ tự trên trang
+              chủ, từ trên xuống.
+            </p>
+            <ol
+              class="blocks"
+              cdkDropList
+              [cdkDropListDisabled]="!canEdit"
+              (cdkDropListDropped)="drop($event)"
+            >
               @for (block of content.blocks; track block.id; let i = $index; let last = $last) {
-                <li class="block" [class.is-off]="block.enabled === false">
+                <li
+                  class="block"
+                  cdkDrag
+                  cdkDragLockAxis="y"
+                  cdkDragPreviewContainer="parent"
+                  [class.is-off]="block.enabled === false"
+                >
+                  <div class="drop-slot" *cdkDragPlaceholder></div>
                   <div class="block-row">
-                    <div class="order">
+                    @if (canEdit) {
                       <button
                         type="button"
-                        class="adm-btn adm-btn--icon adm-btn--sm adm-btn--ghost"
-                        [attr.aria-label]="'Đưa lên: ' + title(block)"
-                        [disabled]="!canEdit || i === 0"
-                        (click)="move(i, -1)"
+                        class="handle"
+                        cdkDragHandle
+                        [attr.aria-label]="
+                          'Đổi vị trí khối ' +
+                          title(block) +
+                          ', đang ở vị trí ' +
+                          (i + 1) +
+                          '. Kéo thả, hoặc dùng phím mũi tên lên xuống.'
+                        "
+                        title="Kéo để đổi vị trí"
+                        (keydown.arrowup)="$event.preventDefault(); move(i, -1, $event)"
+                        (keydown.arrowdown)="$event.preventDefault(); last || move(i, 1, $event)"
                       >
-                        <adm-icon name="reiconChevronUp" [size]="16" />
+                        <adm-icon name="reiconDrag" [size]="18" />
                       </button>
-                      <button
-                        type="button"
-                        class="adm-btn adm-btn--icon adm-btn--sm adm-btn--ghost"
-                        [attr.aria-label]="'Đưa xuống: ' + title(block)"
-                        [disabled]="!canEdit || last"
-                        (click)="move(i, 1)"
-                      >
-                        <adm-icon name="reiconChevronDown" [size]="16" />
-                      </button>
-                    </div>
+                    }
                     @if (preview(block); as src) {
                       <img class="thumb thumb--wide" [src]="src" alt="" />
                     } @else {
@@ -222,13 +238,11 @@ const LINKS = [
                             <p class="hint">Xuống dòng sẽ giữ nguyên trên trang chủ.</p>
                           </div>
                           <div class="field">
-                            <label [for]="block.id + '-href'">Liên kết khi bấm</label>
-                            <input
-                              class="input mono"
-                              list="adm-links"
-                              [id]="block.id + '-href'"
-                              [ngModel]="asCampaign(block).href"
-                              (ngModelChange)="patch(i, { href: $event })"
+                            <label [for]="block.id + '-href'">Khi bấm, mở trang</label>
+                            <adm-link-select
+                              [inputId]="block.id + '-href'"
+                              [value]="asCampaign(block).href"
+                              (changed)="patch(i, { href: $event })"
                             />
                           </div>
                           <div class="images">
@@ -282,13 +296,11 @@ const LINKS = [
                             </div>
                           </div>
                           <div class="field">
-                            <label [for]="block.id + '-href'">Liên kết "Xem tất cả"</label>
-                            <input
-                              class="input mono"
-                              list="adm-links"
-                              [id]="block.id + '-href'"
-                              [ngModel]="asShop(block).href"
-                              (ngModelChange)="patch(i, { href: $event })"
+                            <label [for]="block.id + '-href'">Nút "Xem tất cả" mở trang</label>
+                            <adm-link-select
+                              [inputId]="block.id + '-href'"
+                              [value]="asShop(block).href"
+                              (changed)="patch(i, { href: $event })"
                             />
                           </div>
                         }
@@ -328,13 +340,11 @@ const LINKS = [
                                   [ngModel]="card.caption"
                                   (ngModelChange)="patchCard(i, j, { caption: $event })"
                                 />
-                                <input
-                                  class="input input--sm mono"
-                                  list="adm-links"
-                                  [attr.aria-label]="'Liên kết thẻ ' + (j + 1)"
-                                  placeholder="/shop"
-                                  [ngModel]="card.href"
-                                  (ngModelChange)="patchCard(i, j, { href: $event })"
+                                <adm-link-select
+                                  [small]="true"
+                                  [ariaLabel]="'Thẻ ' + (j + 1) + ' mở trang'"
+                                  [value]="card.href"
+                                  (changed)="patchCard(i, j, { href: $event })"
                                 />
                               </div>
                             }
@@ -381,18 +391,20 @@ const LINKS = [
                     <img [src]="src(cat.mediaId)" alt="" />
                   </button>
                   <div class="cat-fields">
+                    <label class="mini-label" [for]="'cat-label-' + j">Tên hiển thị</label>
                     <input
                       class="input input--sm"
-                      [attr.aria-label]="'Tên danh mục ' + (j + 1)"
+                      [id]="'cat-label-' + j"
                       [ngModel]="cat.label"
                       (ngModelChange)="patchCategory(j, { label: $event })"
                     />
-                    <input
-                      class="input input--sm mono"
-                      list="adm-links"
-                      [attr.aria-label]="'Liên kết danh mục ' + (j + 1)"
-                      [ngModel]="cat.href"
-                      (ngModelChange)="patchCategory(j, { href: $event })"
+                    <label class="mini-label" [for]="'cat-href-' + j">Mở trang</label>
+                    <adm-link-select
+                      [small]="true"
+                      [inputId]="'cat-href-' + j"
+                      [value]="cat.href"
+                      [disabled]="!canEdit"
+                      (changed)="patchCategory(j, { href: $event })"
                     />
                   </div>
                 </div>
@@ -408,11 +420,6 @@ const LINKS = [
           </section>
         </aside>
       </div>
-      <datalist id="adm-links">
-        @for (link of links; track link) {
-          <option [value]="link"></option>
-        }
-      </datalist>
     } @else {
       <div class="page-body"><span class="sk sk--title"></span></div>
     }
@@ -435,12 +442,51 @@ const LINKS = [
       gap: 12px;
       padding: 10px 0;
     }
-    .order {
-      display: flex;
-      flex-direction: column;
-      .adm-btn:disabled {
-        visibility: hidden;
+    .drag-hint {
+      margin: -4px 0 8px;
+    }
+    .handle {
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 40px;
+      padding: 0;
+      border: 0;
+      border-radius: var(--adm-radius-sm);
+      background: none;
+      color: var(--adm-text-tertiary);
+      cursor: grab;
+      touch-action: none;
+      &:hover,
+      &:focus-visible {
+        background: var(--adm-muted);
+        color: var(--adm-text);
       }
+      &:active {
+        cursor: grabbing;
+      }
+    }
+    .block.cdk-drag-preview {
+      background: var(--adm-raised);
+      box-shadow: var(--adm-shadow-lg);
+      border-radius: var(--adm-radius-md);
+      border-bottom: 0;
+      padding: 0 12px;
+      .editor {
+        display: none;
+      }
+    }
+    .drop-slot {
+      height: 64px;
+      border: 1px dashed var(--adm-text-tertiary);
+      border-radius: var(--adm-radius-md);
+      background: var(--adm-muted);
+    }
+    .blocks.cdk-drop-list-dragging .block:not(.cdk-drag-placeholder) {
+      transition: transform 200ms var(--adm-ease);
+    }
+    .cdk-drag-animating {
+      transition: transform 200ms var(--adm-ease);
     }
     .thumb--wide {
       width: 72px;
@@ -551,11 +597,20 @@ const LINKS = [
       display: grid;
       grid-template-columns: 56px minmax(0, 1fr);
       gap: 12px;
-      align-items: center;
+      align-items: start;
     }
     .cat-fields {
       display: grid;
-      gap: 6px;
+      gap: 4px;
+    }
+    .mini-label {
+      font-size: 12px;
+      color: var(--adm-text-secondary);
+      margin-top: 4px;
+    }
+    .cats .cat + .cat {
+      padding-top: 16px;
+      border-top: 1px solid var(--adm-divider);
     }
     @media (max-width: 767px) {
       .images {
@@ -571,7 +626,6 @@ export class HomeContentPage implements HasUnsavedChanges {
   protected readonly canEdit = inject(AdminSession).can('products.edit');
   protected readonly kinds = KIND_LABELS;
   protected readonly sorts = SORTS;
-  protected readonly links = LINKS;
   protected readonly src = mediaSrc;
 
   protected readonly draft = signal<LandingContent | null>(null);
@@ -661,11 +715,21 @@ export class HomeContentPage implements HasUnsavedChanges {
     });
   }
 
-  move(index: number, direction: 1 | -1): void {
-    this.update((content) => {
-      const [block] = content.blocks.splice(index, 1);
-      content.blocks.splice(index + direction, 0, block);
-    });
+  drop(event: CdkDragDrop<unknown>): void {
+    if (event.previousIndex === event.currentIndex) return;
+    this.update((content) =>
+      moveItemInArray(content.blocks, event.previousIndex, event.currentIndex),
+    );
+  }
+
+  /** Keyboard reorder from the handle; focus follows the block to its new place. */
+  move(index: number, direction: 1 | -1, event?: Event): void {
+    const target = index + direction;
+    const count = this.draft()?.blocks.length ?? 0;
+    if (target < 0 || target >= count) return;
+    this.update((content) => moveItemInArray(content.blocks, index, target));
+    const list = (event?.target as HTMLElement | undefined)?.closest('ol');
+    setTimeout(() => list?.querySelectorAll<HTMLElement>('.handle')[target]?.focus());
   }
 
   add(kind: 'campaign' | 'shop' | 'products'): void {

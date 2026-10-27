@@ -93,3 +93,11 @@ export function paginate<T>(
 }
 
 export const clone = <T>(value: T): T => structuredClone(value);
+
+/** `ao-blazer`, then `ao-blazer-2`, `ao-blazer-3`… until `taken` says no. */
+export function uniqueSlug(slug: string, taken: (slug: string) => boolean): string {
+  if (!slug || !taken(slug)) return slug;
+  let n = 2;
+  while (taken(`${slug}-${n}`)) n++;
+  return `${slug}-${n}`;
+}

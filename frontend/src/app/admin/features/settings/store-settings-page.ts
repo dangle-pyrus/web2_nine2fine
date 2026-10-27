@@ -242,7 +242,7 @@ const SECTIONS: SectionSpec[] = [
                     </p>
                   } @else if (field.kind === 'money' && read(field)) {
                     <p class="hint">
-                      {{ money(+read(field)) }}{{ field.hint ? ' · ' + field.hint : '' }}
+                      {{ money(+read(field)) }}{{ field.hint ? '. ' + field.hint : '' }}
                     </p>
                   } @else if (field.hint) {
                     <p class="hint">{{ field.hint }}</p>

@@ -126,7 +126,7 @@ export const RETURN_REASONS: Record<ReturnReason, string> = {
 };
 
 const TIER: Record<CustomerTier, BadgeSpec> = {
-  member: { label: 'Thành viên', tone: 'neutral' },
+  member: { label: 'Đồng', tone: 'neutral' },
   silver: { label: 'Bạc', tone: 'neutral' },
   gold: { label: 'Vàng', tone: 'warning' },
 };

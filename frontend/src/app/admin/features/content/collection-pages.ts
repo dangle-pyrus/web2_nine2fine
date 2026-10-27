@@ -231,17 +231,21 @@ export class CollectionListPage {
             }
           </div>
           <div class="field">
-            <label for="c-slug" class="req">Đường dẫn</label>
+            <label for="c-slug">Đường dẫn</label>
             <input
               id="c-slug"
               class="input mono"
               name="slug"
-              [ngModel]="draft().slug"
-              (ngModelChange)="patch({ slug: $event }); slugTouched = true"
+              readonly
+              [value]="'/' + (draft().slug || 'ten-bo-suu-tap')"
               [attr.aria-invalid]="!!errors()['slug']"
             />
             @if (errors()['slug']; as error) {
               <p class="error">{{ error }}</p>
+            } @else {
+              <p class="hint">
+                {{ data ? 'Giữ cố định để liên kết cũ không hỏng.' : 'Tự tạo từ tên bộ sưu tập.' }}
+              </p>
             }
           </div>
         </div>

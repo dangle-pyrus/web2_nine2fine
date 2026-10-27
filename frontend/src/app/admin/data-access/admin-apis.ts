@@ -42,6 +42,7 @@ import {
   DashboardSummary,
   InventoryAdjustment,
   InventoryItem,
+  InventoryFacets,
   InventoryMovement,
   InventoryQuery,
   OrderQuery,
@@ -121,6 +122,11 @@ export interface AdminInventoryApi {
   list(query: InventoryQuery): Observable<Page<InventoryItem>>;
   adjust(variantId: string, input: InventoryAdjustment): Observable<InventoryItem>;
   history(variantId: string): Observable<InventoryMovement[]>;
+  facets(): Observable<InventoryFacets>;
+  /** Own threshold for these SKUs; null puts them back on the shop default. */
+  setThreshold(variantIds: string[], value: number | null): Observable<void>;
+  /** Shop-wide default; `resetCustom` also drops every SKU's own threshold. */
+  setDefaultThreshold(value: number, resetCustom: boolean): Observable<void>;
 }
 
 export interface AdminCustomersApi {
@@ -364,6 +370,9 @@ export class HttpAdminInventoryApi implements AdminInventoryApi {
       .get<InventoryMovement[]>(`${this.base}/${variantId}/movements`)
       .pipe(adminErrors());
   }
+  facets = () => frontendOnly<InventoryFacets>();
+  setThreshold = () => frontendOnly<void>();
+  setDefaultThreshold = () => frontendOnly<void>();
 }
 
 @Injectable()

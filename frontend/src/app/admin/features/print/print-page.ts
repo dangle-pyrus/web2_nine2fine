@@ -51,7 +51,7 @@ interface PickLine {
       <p class="print-bar-title">
         {{ kind() === 'pick' ? 'Phiếu nhặt hàng' : 'Phiếu giao hàng A5' }}
         @if (orders(); as list) {
-          <span class="secondary"> · {{ list.length | admNum }} đơn</span>
+          <span class="secondary"> ({{ list.length | admNum }} đơn)</span>
         }
       </p>
       <button
@@ -87,7 +87,7 @@ interface PickLine {
           <section class="slip-to">
             <p class="small label">Người nhận</p>
             <p class="slip-name">
-              {{ order.shippingAddress.recipient }} · {{ order.shippingAddress.phone | admPhone }}
+              {{ order.shippingAddress.recipient }}, {{ order.shippingAddress.phone | admPhone }}
             </p>
             <p>
               {{ order.shippingAddress.street }}, {{ order.shippingAddress.ward }},
@@ -95,7 +95,7 @@ interface PickLine {
             </p>
             @if (order.delivery; as delivery) {
               <p class="small">
-                {{ delivery.carrier }} · Mã vận đơn
+                {{ delivery.carrier }}, mã vận đơn
                 <span class="mono">{{ delivery.trackingCode }}</span>
               </p>
             }
@@ -131,7 +131,7 @@ interface PickLine {
               <p class="small">Thu hộ (COD)</p>
               <p class="slip-amount">{{ order.pricing.total | admMoney }}</p>
             } @else {
-              <p class="slip-amount">Đã thanh toán · không thu tiền</p>
+              <p class="slip-amount">Đã thanh toán, không thu tiền</p>
             }
           </div>
 
@@ -152,8 +152,8 @@ interface PickLine {
         <header class="pick-head">
           <h1>Phiếu nhặt hàng</h1>
           <p class="small">
-            In lúc {{ now | admDateTime }} · {{ orders()!.length | admNum }} đơn ·
-            {{ pickTotal() | admNum }} sản phẩm
+            In lúc {{ now | admDateTime }}. Gồm {{ orders()!.length | admNum }} đơn,
+            {{ pickTotal() | admNum }} sản phẩm.
           </p>
         </header>
         <table class="pick-table">

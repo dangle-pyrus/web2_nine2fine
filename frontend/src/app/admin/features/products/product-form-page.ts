@@ -485,6 +485,9 @@ export class ProductFormPage implements HasUnsavedChanges {
     this.inventoryApi
       .list({
         view: 'all',
+        category: '',
+        color: '',
+        size: '',
         search: variant.sku,
         page: 1,
         pageSize: 20,

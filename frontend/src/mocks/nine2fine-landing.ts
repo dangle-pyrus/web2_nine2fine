@@ -68,7 +68,7 @@ export const NINE2FINE_LANDING: LandingContent = {
       'uniqlo-campaign-02',
       'uniqlo-campaign-02-mobile',
     ),
-    edit('work-edit', 'Gợi ý phối đồ · Mặc gì sáng mai?', [
+    edit('work-edit', 'Mặc gì sáng mai?', [
       {
         title: 'Khoác vào là đi',
         caption: 'Xem áo khoác',
@@ -103,7 +103,7 @@ export const NINE2FINE_LANDING: LandingContent = {
       'uniqlo-campaign-03',
       'uniqlo-campaign-03-mobile',
     ),
-    edit('colour-edit', 'Gợi ý phối đồ · Hôm nay màu gì?', [
+    edit('colour-edit', 'Hôm nay màu gì?', [
       {
         title: 'Áo sáng màu cho ngày xám',
         caption: 'Xem áo sáng màu',
@@ -162,7 +162,7 @@ export const NINE2FINE_LANDING: LandingContent = {
       'uniqlo-campaign-07',
       'uniqlo-campaign-07-mobile',
     ),
-    edit('weekend-edit', 'Gợi ý phối đồ · Ngày không báo thức', [
+    edit('weekend-edit', 'Ngày không báo thức', [
       {
         title: 'Áo màu tươi cho ngày nghỉ',
         caption: 'Xem áo',

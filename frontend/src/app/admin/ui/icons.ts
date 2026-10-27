@@ -1,5 +1,14 @@
 import { provideIcons } from '@ng-icons/core';
 import {
+  reiconDrag,
+  reiconArrowUp,
+  reiconArrowDown,
+  reiconLock,
+  reiconCrown,
+  reiconGraphUp,
+  reiconLink,
+  reiconPie,
+  reiconGift,
   reiconAlertCircle,
   reiconAlertTriangle,
   reiconArrowLeft,
@@ -59,6 +68,15 @@ import {
 
 export function provideAdminIcons() {
   return provideIcons({
+    reiconGift,
+    reiconPie,
+    reiconLink,
+    reiconGraphUp,
+    reiconCrown,
+    reiconLock,
+    reiconArrowDown,
+    reiconArrowUp,
+    reiconDrag,
     reiconAlertCircle,
     reiconAlertTriangle,
     reiconArrowLeft,

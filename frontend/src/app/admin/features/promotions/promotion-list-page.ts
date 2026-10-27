@@ -15,7 +15,7 @@ import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
 import { AdminToastService } from '../../ui/toast';
-import { promotionSummary } from './promotion-summary';
+import { promotionAudience, promotionSummary } from './promotion-summary';
 
 const VIEWS: { value: PromotionState | ''; label: string }[] = [
   { value: '', label: 'Tất cả' },
@@ -117,6 +117,7 @@ const VIEWS: { value: PromotionState | ''; label: string }[] = [
               <tr>
                 <th>Mã</th>
                 <th>Trạng thái</th>
+                <th>Đối tượng</th>
                 <th>Thời gian</th>
                 <th class="num">Đã dùng</th>
                 @if (canEdit) {
@@ -125,7 +126,7 @@ const VIEWS: { value: PromotionState | ''; label: string }[] = [
               </tr>
             </thead>
             @if (view.state().loading) {
-              <tbody [admSkeleton]="6" [columns]="canEdit ? 5 : 4"></tbody>
+              <tbody [admSkeleton]="6" [columns]="canEdit ? 6 : 5"></tbody>
             } @else {
               <tbody>
                 @for (promo of page()?.items ?? []; track promo.id) {
@@ -137,6 +138,7 @@ const VIEWS: { value: PromotionState | ''; label: string }[] = [
                       <div class="cell-sub">{{ summary(promo) }}</div>
                     </td>
                     <td data-label="Trạng thái"><adm-badge [spec]="badge(promo)" /></td>
+                    <td data-label="Đối tượng">{{ audience(promo) }}</td>
                     <td class="secondary" data-label="Thời gian">
                       {{ promo.startsAt | admDate }} –
                       {{ promo.endsAt ? (promo.endsAt | admDate) : 'không giới hạn' }}
@@ -218,5 +220,9 @@ export class PromotionListPage {
         this.toast.error(errorMessage(error));
       },
     });
+  }
+
+  audience(promo: Promotion): string {
+    return promotionAudience(promo);
   }
 }

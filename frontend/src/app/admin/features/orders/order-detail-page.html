@@ -5,8 +5,8 @@
     <adm-badge [spec]="orderBadge(order.status)" />
   </ng-container>
   <p subtitle class="secondary small subtitle">
-    <adm-copy [value]="order.id" label="mã đơn" /> Đặt lúc {{ order.placedAt | admDateTime }} ·
-    Website
+    <adm-copy [value]="order.id" label="mã đơn" /> Đặt lúc {{ order.placedAt | admDateTime }} qua
+    website
   </p>
   <ng-container actions>
     @if (position(); as pos) {
@@ -130,7 +130,7 @@
     <div class="banner banner--critical" role="status">
       <adm-icon name="reiconAlertTriangle" />
       <div class="banner-body">
-        <p class="banner-title">Giao không thành công · lần {{ failure.attempts }}</p>
+        <p class="banner-title">Giao không thành công (lần {{ failure.attempts }})</p>
         <p>
           {{ failure.reason }} ({{ failure.at | admDateTime }}). Liên hệ khách rồi chọn Giao lại,
           hoặc Hoàn về kho nếu khách không nhận.
@@ -163,7 +163,7 @@
               >{{ item.name }}</a
             >
             <p class="small secondary">
-              {{ item.color }} / {{ item.size }} · <span class="mono">{{ item.sku }}</span>
+              {{ item.color }} / {{ item.size }}<span class="sku-tag mono">{{ item.sku }}</span>
               @if (canEdit()) {
               <button type="button" class="link change-item" (click)="changeItem(i)">Đổi màu/size</button>
               }
@@ -220,8 +220,9 @@
         <div>
           <dt>Hoàn tiền</dt>
           <dd class="num">
-            {{ refund.amount | admMoney }} · {{ refund.refundedAt ? 'đã hoàn ' + (refund.refundedAt
-            | admDateTime) : 'đang xử lý' }}
+            {{ refund.amount | admMoney }}
+            <span class="secondary">({{ refund.refundedAt ? 'đã hoàn lúc ' + (refund.refundedAt
+            | admDateTime) : 'đang xử lý' }})</span>
           </dd>
         </div>
         }
@@ -255,7 +256,7 @@
         @if (order.deliveryFailure; as failure) {
         <div>
           <dt>Giao không thành công</dt>
-          <dd>{{ failure.attempts }} lần · gần nhất: {{ failure.reason }}</dd>
+          <dd>{{ failure.attempts }} lần. Lần gần nhất: {{ failure.reason }}</dd>
         </div>
         }
       </dl>
@@ -297,8 +298,7 @@
         <div class="span-2">
           <dt>Tài khoản nhận hoàn</dt>
           <dd>
-            {{ account.bank }} · <span class="mono">{{ account.accountNumber }}</span> · {{
-            account.accountName }}
+            <span class="stack-lines"><span>{{ account.bank }}</span><span class="mono">{{ account.accountNumber }}</span><span>{{ account.accountName }}</span></span>
           </dd>
         </div>
         } @if (request.decision; as decision) {

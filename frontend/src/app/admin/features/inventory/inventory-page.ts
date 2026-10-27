@@ -4,29 +4,59 @@ import { RouterLink } from '@angular/router';
 import { of } from 'rxjs';
 import { AdminSession } from '../../core/admin-session';
 import { NumPipe } from '../../core/format.pipes';
-import { stockBadge } from '../../core/status';
 import { ADMIN_INVENTORY_API } from '../../data-access/admin-apis';
 import { errorMessage } from '../../data-access/http-support';
-import type { InventoryItem, InventoryQuery, InventoryView } from '../../data-access/models';
+import type {
+  InventoryFacets,
+  InventoryItem,
+  InventoryQuery,
+  InventoryView,
+  StockStatus,
+} from '../../data-access/models';
+import type { BadgeSpec } from '../../core/status';
 import { AdmBadge } from '../../ui/badge';
 import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
 import { ExportDialog, ExportDialogData, ExportScope } from '../../ui/export-dialog';
-import { downloadCsv, fetchAllPages, loader, urlQuery } from '../../ui/list-state';
+import { downloadCsv, fetchAllPages, loader, Selection, urlQuery } from '../../ui/list-state';
 import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
 import { AdminToastService } from '../../ui/toast';
 import { AdjustStockDrawer } from './adjust-stock-drawer';
+import {
+  DefaultThresholdData,
+  DefaultThresholdDialog,
+  SkuThresholdData,
+  SkuThresholdDialog,
+} from './threshold-dialogs';
 
 const VIEWS: { value: InventoryView; label: string }[] = [
   { value: 'all', label: 'Tất cả' },
+  { value: 'in', label: 'Còn hàng' },
   { value: 'low', label: 'Sắp hết' },
   { value: 'out', label: 'Hết hàng' },
 ];
 
-/** Stock per SKU (6.4): on hand, held by unshipped orders, available; adjustments always carry a reason. */
+const STATUS: Record<StockStatus, BadgeSpec> = {
+  in: { label: 'Còn hàng', tone: 'success' },
+  low: { label: 'Sắp hết', tone: 'warning' },
+  out: { label: 'Hết hàng', tone: 'critical' },
+};
+
+const SORTS: { value: string; label: string }[] = [
+  { value: 'available:asc', label: 'Có thể bán: ít đến nhiều' },
+  { value: 'available:desc', label: 'Có thể bán: nhiều đến ít' },
+  { value: 'onHand:desc', label: 'Trong kho: nhiều đến ít' },
+  { value: 'name:asc', label: 'Tên sản phẩm: A đến Z' },
+  { value: 'sku:asc', label: 'SKU: A đến Z' },
+];
+
+/**
+ * Stock per SKU (6.4): on hand, held by unshipped orders, available, and a status from the low-stock
+ * threshold (shop default, or the SKU's own). Adjustments always carry a reason.
+ */
 @Component({
   selector: 'adm-inventory-page',
   imports: [
@@ -44,6 +74,16 @@ const VIEWS: { value: InventoryView; label: string }[] = [
   template: `
     <adm-page-header heading="Tồn kho">
       <ng-container actions>
+        @if (canAdjust) {
+          <button
+            type="button"
+            class="adm-btn adm-btn--lg"
+            [disabled]="!facets()"
+            (click)="editDefault()"
+          >
+            <adm-icon name="reiconSettings" [size]="16" /> Ngưỡng sắp hết
+          </button>
+        }
         <button
           type="button"
           class="adm-btn adm-btn--lg"
@@ -55,7 +95,7 @@ const VIEWS: { value: InventoryView; label: string }[] = [
       </ng-container>
     </adm-page-header>
     <div class="page-body page-body--wide">
-      <nav class="tabs" aria-label="Lọc tồn kho">
+      <nav class="tabs" aria-label="Lọc theo trạng thái tồn kho">
         @for (item of views; track item.value) {
           <button
             type="button"
@@ -63,9 +103,25 @@ const VIEWS: { value: InventoryView; label: string }[] = [
             (click)="list.update({ view: item.value })"
           >
             {{ item.label }}
+            @if (facets(); as f) {
+              <span class="count">{{ f.counts[item.value] | admNum }}</span>
+            }
           </button>
         }
       </nav>
+      @if (facets(); as f) {
+        <p class="rule small secondary">
+          <adm-icon name="reiconInfoCircle" [size]="16" />
+          <span
+            >Một SKU là "Sắp hết" khi số Có thể bán còn bằng hoặc thấp hơn ngưỡng. Ngưỡng mặc định
+            hiện là <strong>{{ f.defaultThreshold }}</strong
+            >{{ f.customCount ? ', ' + f.customCount + ' SKU dùng ngưỡng riêng' : '' }}.</span
+          >
+          @if (canAdjust) {
+            <button type="button" class="link" (click)="editDefault()">Đổi ngưỡng</button>
+          }
+        </p>
+      }
       <form class="toolbar" role="search" (ngSubmit)="list.update({ search: search().trim() })">
         <div class="affix search">
           <span class="prefix-icon"><adm-icon name="reiconSearch" [size]="16" /></span>
@@ -73,7 +129,7 @@ const VIEWS: { value: InventoryView; label: string }[] = [
             class="input input--sm"
             type="search"
             name="search"
-            placeholder="Tên sản phẩm hoặc SKU"
+            placeholder="Tìm SKU, tên sản phẩm, màu"
             aria-label="Tìm trong tồn kho"
             [ngModel]="search()"
             (ngModelChange)="search.set($event)"
@@ -81,27 +137,86 @@ const VIEWS: { value: InventoryView; label: string }[] = [
         </div>
         <select
           class="select select--sm"
-          name="sort"
-          aria-label="Sắp xếp"
-          [ngModel]="query().sort + ':' + query().dir"
-          (ngModelChange)="sort($event)"
+          name="category"
+          aria-label="Lọc theo danh mục"
+          [ngModel]="query().category"
+          (ngModelChange)="list.update({ category: $event })"
         >
-          <option value="available:asc">Còn ít nhất</option>
-          <option value="available:desc">Còn nhiều nhất</option>
-          <option value="name:asc">Tên A–Z</option>
-          <option value="onHand:desc">Trong kho nhiều nhất</option>
+          <option value="">Danh mục: tất cả</option>
+          @for (item of facets()?.categories ?? []; track item.value) {
+            <option [value]="item.value">{{ item.label }}</option>
+          }
         </select>
+        <select
+          class="select select--sm"
+          name="color"
+          aria-label="Lọc theo màu"
+          [ngModel]="query().color"
+          (ngModelChange)="list.update({ color: $event })"
+        >
+          <option value="">Màu: tất cả</option>
+          @for (item of facets()?.colors ?? []; track item.name) {
+            <option [value]="item.name">{{ item.name }}</option>
+          }
+        </select>
+        <select
+          class="select select--sm"
+          name="size"
+          aria-label="Lọc theo size"
+          [ngModel]="query().size"
+          (ngModelChange)="list.update({ size: $event })"
+        >
+          <option value="">Size: tất cả</option>
+          @for (item of facets()?.sizes ?? []; track item) {
+            <option [value]="item">{{ item }}</option>
+          }
+        </select>
+        <label class="sort-select">
+          <span class="small secondary">Sắp xếp</span>
+          <select
+            class="select select--sm"
+            name="sort"
+            aria-label="Sắp xếp tồn kho"
+            [ngModel]="query().sort + ':' + query().dir"
+            (ngModelChange)="sort($event)"
+          >
+            @for (item of sorts; track item.value) {
+              <option [value]="item.value">{{ item.label }}</option>
+            }
+          </select>
+        </label>
       </form>
-      @if (query().search) {
+      @if (chips().length) {
         <div class="chips filter-chips">
-          <span class="chip"
-            >Tìm: “{{ query().search }}”<button
-              type="button"
-              aria-label="Bỏ từ khóa"
-              (click)="search.set(''); list.update({ search: '' })"
-            >
-              <adm-icon name="reiconX" [size]="12" /></button
-          ></span>
+          @for (chip of chips(); track chip.key) {
+            <span class="chip"
+              >{{ chip.label
+              }}<button
+                type="button"
+                [attr.aria-label]="'Bỏ lọc ' + chip.label"
+                (click)="removeChip(chip.key)"
+              >
+                <adm-icon name="reiconX" [size]="12" /></button
+            ></span>
+          }
+          <button type="button" class="link small" (click)="clearFilters()">Xóa tất cả</button>
+        </div>
+      }
+
+      @if (selection.count()) {
+        <div class="bulkbar" role="region" aria-label="Thao tác hàng loạt">
+          <span>Đã chọn {{ selection.count() }} SKU</span>
+          <span class="spacer"></span>
+          <button type="button" class="adm-btn adm-btn--sm" (click)="editThreshold()">
+            <adm-icon name="reiconSettings" [size]="16" /> Đặt ngưỡng sắp hết
+          </button>
+          <button
+            type="button"
+            class="adm-btn adm-btn--sm adm-btn--ghost"
+            (click)="selection.clear()"
+          >
+            Bỏ chọn
+          </button>
         </div>
       }
 
@@ -114,28 +229,19 @@ const VIEWS: { value: InventoryView; label: string }[] = [
           <button type="button" class="adm-btn" (click)="view.reload()">Thử lại</button>
         </adm-empty>
       } @else if (page() && !page()!.total) {
-        @if (query().view === 'all' && !query().search) {
+        @if (!filtered()) {
           <adm-empty
             heading="Chưa có biến thể nào"
             description="Tồn kho hiện theo từng màu và size sau khi bạn thêm sản phẩm."
           >
             <a class="adm-btn adm-btn--primary" routerLink="/admin/products/new">Thêm sản phẩm</a>
           </adm-empty>
-        } @else if (query().view !== 'all' && !query().search) {
-          <adm-empty
-            [heading]="
-              query().view === 'out' ? 'Không có SKU nào hết hàng' : 'Không có SKU nào sắp hết'
-            "
-            description="Mọi biến thể đang còn đủ hàng."
-          />
         } @else {
           <adm-empty
-            heading="Không tìm thấy SKU phù hợp"
-            description="Thử tên sản phẩm hoặc SKU khác."
+            heading="Không có SKU nào khớp bộ lọc"
+            description="Thử bỏ bớt bộ lọc hoặc tìm SKU khác."
           >
-            <button type="button" class="adm-btn" (click)="search.set(''); list.reset()">
-              Xóa bộ lọc
-            </button>
+            <button type="button" class="adm-btn" (click)="clearFilters()">Xóa bộ lọc</button>
           </adm-empty>
         }
       } @else {
@@ -143,20 +249,47 @@ const VIEWS: { value: InventoryView; label: string }[] = [
           <table class="table table--cards">
             <thead>
               <tr>
+                @if (canAdjust) {
+                  <th class="w-check">
+                    <label class="check">
+                      <input
+                        type="checkbox"
+                        aria-label="Chọn tất cả SKU trên trang"
+                        [checked]="selection.allOf(ids())"
+                        [indeterminate]="selection.someOf(ids())"
+                        (change)="selection.setAll(ids(), $any($event.target).checked)"
+                      />
+                    </label>
+                  </th>
+                }
                 <th>Sản phẩm</th>
                 <th>SKU</th>
+                <th>Trạng thái</th>
                 <th class="num">Trong kho</th>
                 <th class="num">Đang giữ</th>
                 <th class="num">Có thể bán</th>
+                <th class="num">Ngưỡng</th>
                 <th><span class="sr-only">Thao tác</span></th>
               </tr>
             </thead>
             @if (view.state().loading) {
-              <tbody [admSkeleton]="10" [columns]="6"></tbody>
+              <tbody [admSkeleton]="10" [columns]="canAdjust ? 9 : 8"></tbody>
             } @else {
               <tbody>
                 @for (item of page()?.items ?? []; track item.variantId) {
-                  <tr>
+                  <tr [class.is-selected]="selection.has(item.variantId)">
+                    @if (canAdjust) {
+                      <td class="w-check">
+                        <label class="check">
+                          <input
+                            type="checkbox"
+                            [attr.aria-label]="'Chọn ' + item.sku"
+                            [checked]="selection.has(item.variantId)"
+                            (change)="selection.toggle(item.variantId)"
+                          />
+                        </label>
+                      </td>
+                    }
                     <td>
                       <div class="cell-media">
                         <img class="thumb" [src]="item.image" alt="" />
@@ -173,18 +306,31 @@ const VIEWS: { value: InventoryView; label: string }[] = [
                         </div>
                       </div>
                     </td>
-                    <td class="mono secondary" data-label="SKU">{{ item.sku }}</td>
+                    <td class="mono" data-label="SKU">{{ item.sku }}</td>
+                    <td data-label="Trạng thái"><adm-badge [spec]="status[item.status]" /></td>
                     <td class="num" data-label="Trong kho">{{ item.onHand | admNum }}</td>
                     <td class="num secondary" data-label="Đang giữ" title="Giữ cho đơn chưa giao">
                       {{ item.reserved | admNum }}
                     </td>
-                    <td class="num" data-label="Có thể bán">
-                      <span class="avail">
-                        @if (stock(item); as spec) {
-                          <adm-badge [spec]="spec" />
-                        }
-                        <strong>{{ item.available | admNum }}</strong>
-                      </span>
+                    <td class="num strong" data-label="Có thể bán">
+                      {{ item.available | admNum }}
+                    </td>
+                    <td class="num" data-label="Ngưỡng">
+                      @if (canAdjust) {
+                        <button
+                          type="button"
+                          class="threshold"
+                          [attr.aria-label]="'Đổi ngưỡng sắp hết của ' + item.sku"
+                          (click)="editThreshold(item)"
+                        >
+                          {{ item.lowStockThreshold }}
+                          <span class="tertiary small">{{
+                            item.thresholdCustom ? 'riêng' : 'mặc định'
+                          }}</span>
+                        </button>
+                      } @else {
+                        {{ item.lowStockThreshold }}
+                      }
                     </td>
                     <td class="row-actions">
                       <button type="button" class="adm-btn adm-btn--sm" (click)="adjust(item)">
@@ -210,10 +356,30 @@ const VIEWS: { value: InventoryView; label: string }[] = [
     </div>
   `,
   styles: `
-    .avail {
-      display: inline-flex;
+    .rule {
+      display: flex;
       align-items: center;
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .strong {
+      font-weight: 600;
+    }
+    .threshold {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      border: 0;
+      border-bottom: 1px dashed var(--adm-divider);
+      background: none;
+      padding: 2px 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      &:hover {
+        border-bottom-color: var(--adm-text);
+      }
     }
     .cell-sub .swatch {
       width: 10px;
@@ -232,8 +398,13 @@ export class InventoryPage {
   private readonly toast = inject(AdminToastService);
   protected readonly canAdjust = inject(AdminSession).can('inventory.adjust');
   protected readonly views = VIEWS;
+  protected readonly sorts = SORTS;
+  protected readonly status = STATUS;
   protected readonly list = urlQuery<InventoryQuery>({
     view: 'all',
+    category: '',
+    color: '',
+    size: '',
     sort: 'available',
     dir: 'asc',
   });
@@ -242,14 +413,96 @@ export class InventoryPage {
   protected readonly page = this.view.data;
   protected readonly search = signal(this.query().search);
   protected readonly total = computed(() => this.page()?.total ?? 0);
+  protected readonly facets = signal<InventoryFacets | null>(null);
+  protected readonly selection = new Selection<string>();
+  protected readonly ids = computed(() => (this.page()?.items ?? []).map((item) => item.variantId));
+  protected readonly filtered = computed(() => {
+    const { view, search, category, color, size } = this.query();
+    return view !== 'all' || !!search || !!category || !!color || !!size;
+  });
+  protected readonly chips = computed(() => {
+    const { search, category, color, size } = this.query();
+    const chips: { key: 'search' | 'category' | 'color' | 'size'; label: string }[] = [];
+    if (search) chips.push({ key: 'search', label: `Tìm: "${search}"` });
+    if (category)
+      chips.push({
+        key: 'category',
+        label: `Danh mục: ${this.facets()?.categories.find((item) => item.value === category)?.label ?? category}`,
+      });
+    if (color) chips.push({ key: 'color', label: `Màu: ${color}` });
+    if (size) chips.push({ key: 'size', label: `Size: ${size}` });
+    return chips;
+  });
 
-  stock(item: InventoryItem) {
-    return stockBadge(item.available, item.lowStockThreshold);
+  constructor() {
+    this.loadFacets();
+  }
+
+  removeChip(key: 'search' | 'category' | 'color' | 'size'): void {
+    if (key === 'search') this.search.set('');
+    this.list.update({ [key]: '' });
+  }
+
+  clearFilters(): void {
+    this.search.set('');
+    this.list.reset();
   }
 
   sort(value: string): void {
     const [sort, dir] = value.split(':') as [string, 'asc' | 'desc'];
     this.list.update({ sort, dir });
+  }
+
+  editDefault(): void {
+    const facets = this.facets();
+    if (!facets) return;
+    this.dialogs
+      .modal<DefaultThresholdData, { value: number; resetCustom: boolean }>(
+        DefaultThresholdDialog,
+        {
+          value: facets.defaultThreshold,
+          customCount: facets.customCount,
+        },
+      )
+      .closed.subscribe((result) => {
+        if (!result) return;
+        this.api.setDefaultThreshold(result.value, result.resetCustom).subscribe({
+          next: () => {
+            this.refresh();
+            this.toast.show(`Ngưỡng sắp hết mặc định giờ là ${result.value}`);
+          },
+          error: (error: unknown) => this.toast.error(errorMessage(error)),
+        });
+      });
+  }
+
+  /** One SKU from its row, or every selected SKU from the bulk bar. */
+  editThreshold(item?: InventoryItem): void {
+    const facets = this.facets();
+    if (!facets) return;
+    const ids = item ? [item.variantId] : [...this.selection.ids()];
+    if (!ids.length) return;
+    this.dialogs
+      .modal<SkuThresholdData, { value: number | null }>(SkuThresholdDialog, {
+        label: item ? item.sku : `${ids.length} SKU`,
+        current: item?.thresholdCustom ? item.lowStockThreshold : null,
+        defaultValue: facets.defaultThreshold,
+      })
+      .closed.subscribe((result) => {
+        if (!result) return;
+        this.api.setThreshold(ids, result.value).subscribe({
+          next: () => {
+            this.selection.clear();
+            this.refresh();
+            this.toast.show(
+              result.value === null
+                ? `${ids.length} SKU dùng lại ngưỡng mặc định`
+                : `Đã đặt ngưỡng ${result.value} cho ${ids.length} SKU`,
+            );
+          },
+          error: (error: unknown) => this.toast.error(errorMessage(error)),
+        });
+      });
   }
 
   adjust(item: InventoryItem): void {
@@ -260,7 +513,7 @@ export class InventoryPage {
       })
       .closed.subscribe((updated) => {
         if (!updated) return;
-        this.view.reload();
+        this.refresh();
         this.toast.show(`Đã cập nhật tồn kho ${updated.sku}: còn ${updated.onHand}`);
       });
   }
@@ -286,15 +539,27 @@ export class InventoryPage {
           next: (items) => {
             downloadCsv(
               `ton-kho-${new Date().toISOString().slice(0, 10)}.csv`,
-              ['SKU', 'Sản phẩm', 'Màu', 'Size', 'Trong kho', 'Đang giữ', 'Có thể bán'],
+              [
+                'SKU',
+                'Sản phẩm',
+                'Màu',
+                'Size',
+                'Trạng thái',
+                'Trong kho',
+                'Đang giữ',
+                'Có thể bán',
+                'Ngưỡng sắp hết',
+              ],
               items.map((item) => [
                 item.sku,
                 item.productName,
                 item.color.name,
                 item.size,
+                STATUS[item.status].label,
                 item.onHand,
                 item.reserved,
                 item.available,
+                item.lowStockThreshold,
               ]),
             );
             this.toast.show(`Đã xuất ${items.length} SKU`);
@@ -302,5 +567,17 @@ export class InventoryPage {
           error: (error: unknown) => this.toast.error(errorMessage(error)),
         });
       });
+  }
+
+  private refresh(): void {
+    this.view.reload();
+    this.loadFacets();
+  }
+
+  private loadFacets(): void {
+    this.api.facets().subscribe({
+      next: (facets) => this.facets.set(facets),
+      error: () => this.facets.set(null),
+    });
   }
 }

@@ -127,11 +127,12 @@ test.describe('admin', () => {
     await expect(page.getByRole('heading', { name: 'Phím tắt' })).toBeVisible();
   });
 
-  test('dashboard KPIs follow the chosen period', async ({ page }) => {
+  test('dashboard shows today and links to the reports', async ({ page }) => {
     await adminSignIn(page);
-    await page.getByRole('button', { name: '7 ngày' }).click();
-    await expect(page.getByText('Doanh thu · 7 ngày')).toBeVisible();
-    await expect(page.locator('.kpis a').first()).toHaveAttribute('href', /range=7d/);
+    await expect(page.getByText('Doanh thu hôm nay')).toBeVisible();
+    await expect(page.locator('.kpis a').first()).toHaveAttribute('href', /range=today/);
+    await page.getByRole('link', { name: 'Xem báo cáo' }).click();
+    await expect(page).toHaveURL(/\/admin\/reports/);
   });
 
   test('COD order: fix the address, swap a size, then confirm', async ({ page }) => {
@@ -160,7 +161,7 @@ test.describe('admin', () => {
     await adminSignIn(page);
     await page.goto('/admin/orders?view=failed');
     await page.locator('tbody tr').first().getByRole('link').click();
-    await expect(page.getByText(/Giao không thành công · lần 1/)).toBeVisible();
+    await expect(page.getByText(/Giao không thành công \(lần 1\)/)).toBeVisible();
     await page.getByRole('button', { name: 'Thêm thao tác' }).click();
     await page.getByRole('menuitem', { name: 'Hoàn về kho' }).click();
     await page.getByRole('button', { name: 'Hoàn về kho' }).click();

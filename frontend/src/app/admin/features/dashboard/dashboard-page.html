@@ -5,18 +5,9 @@
   </p>
   <ng-container actions>
     @if (session.can('dashboard.revenue')) {
-    <div class="segmented" role="group" aria-label="Kỳ của số liệu">
-      @for (item of ranges; track item.value) {
-      <button
-        type="button"
-        [class.is-active]="range() === item.value"
-        [attr.aria-pressed]="range() === item.value"
-        (click)="setRange(item.value)"
-      >
-        {{ item.label }}
-      </button>
-      }
-    </div>
+    <a class="adm-btn" routerLink="/admin/reports">
+      <adm-icon name="reiconChartBar" [size]="16" /> Xem báo cáo
+    </a>
     }
     <button
       type="button"
@@ -37,8 +28,8 @@
   } @else { @if (session.can('dashboard.revenue')) {
   <div class="kpis">
     @if (summary(); as data) {
-    <a class="kpi-main" routerLink="/admin/orders" [queryParams]="{ range: rangeInfo().preset }">
-      <p class="kpi-label">Doanh thu · {{ rangeInfo().label | lowercase }}</p>
+    <a class="kpi-main" routerLink="/admin/orders" [queryParams]="{ range: 'today' }">
+      <p class="kpi-label">Doanh thu hôm nay</p>
       <p class="kpi-value">{{ data.kpis.revenue.value | admMoney }}</p>
       <p
         class="kpi-delta"
@@ -48,8 +39,8 @@
         {{ delta(data.kpis.revenue).text }}
       </p>
     </a>
-    <a routerLink="/admin/orders" [queryParams]="{ range: rangeInfo().preset }">
-      <p class="kpi-label">Đơn hàng · {{ rangeInfo().label | lowercase }}</p>
+    <a routerLink="/admin/orders" [queryParams]="{ range: 'today' }">
+      <p class="kpi-label">Đơn hàng hôm nay</p>
       <p class="kpi-value">{{ data.kpis.orders.value | admNum }}</p>
       <p
         class="kpi-delta"
@@ -59,8 +50,8 @@
         {{ delta(data.kpis.orders).text }}
       </p>
     </a>
-    <a routerLink="/admin/orders" [queryParams]="{ range: rangeInfo().preset }">
-      <p class="kpi-label">Giá trị đơn trung bình · {{ rangeInfo().label | lowercase }}</p>
+    <a routerLink="/admin/orders" [queryParams]="{ range: 'today' }">
+      <p class="kpi-label">Giá trị đơn trung bình hôm nay</p>
       <p class="kpi-value">{{ data.kpis.averageOrderValue.value | admMoney }}</p>
       <p
         class="kpi-delta"
@@ -71,7 +62,7 @@
       </p>
     </a>
     <a routerLink="/admin/returns">
-      <p class="kpi-label">Tỷ lệ trả hàng (7 ngày)</p>
+      <p class="kpi-label">Tỷ lệ trả hàng 7 ngày qua</p>
       <p class="kpi-value">{{ percent(data.kpis.returnRate.value) }}</p>
       <p class="kpi-delta">Trên các đơn đã xử lý</p>
     </a>
@@ -121,7 +112,10 @@
         <div>
           <h2 id="chart-title">Doanh thu 30 ngày</h2>
           @if (summary()) {
-          <p class="small secondary">{{ chart().total | admMoney }} · {{ rangeChange() }}</p>
+          <p class="small secondary meta-list">
+            <span>Tổng {{ chart().total | admMoney }}</span>
+            @if (rangeChange(); as change) {<span>{{ change }}</span>}
+          </p>
           }
         </div>
         <div class="legend small secondary">

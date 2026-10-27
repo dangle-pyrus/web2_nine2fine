@@ -1,28 +1,24 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { CATEGORIES, Category } from '../../app/features/catalog/models/product';
-import { RETURN_REASONS } from '../../app/admin/core/status';
-import type { AdminReportsApi, AdminStorefrontApi } from '../../app/admin/data-access/admin-apis';
+import type { AdminStorefrontApi } from '../../app/admin/data-access/admin-apis';
 import type {
   AdminCollection,
   AdminReview,
   AdminSizeChart,
   CollectionInput,
   LandingContent,
-  ReportRange,
   ReviewQuery,
   ReviewStats,
   ReviewStatus,
-  SalesReport,
   SizeChart,
 } from '../../app/admin/data-access/models';
 import { MockCatalogApi } from '../mock-catalog-api';
 import { fail, respond } from '../mock-latency';
 import { MockStorefrontContent, StoredCollection } from '../mock-storefront-content';
 import { PRODUCTS } from '../products';
-import { AdminMockDb, invalid, matches, notFound, paginate } from './admin-mock-db';
+import { AdminMockDb, invalid, matches, notFound, paginate, uniqueSlug } from './admin-mock-db';
 
-const DAY = 86_400_000;
 /** Storefront product id `01` ↔ admin product id `p01`. */
 const adminId = (id: string) => `p${id}`;
 const shopId = (id: string) => id.replace(/^p/, '');
@@ -121,11 +117,15 @@ export class MockAdminStorefrontApi implements AdminStorefrontApi {
 
   saveCollection(id: string | null, input: CollectionInput) {
     const name = input.name.trim();
-    const slug = input.slug.trim();
+    const slug = id
+      ? input.slug.trim()
+      : uniqueSlug(input.slug.trim(), (value) =>
+          this.content.collections.some((item) => item.slug === value),
+        );
     const fields: Record<string, string> = {};
     if (!name) fields['name'] = 'Nhập tên bộ sưu tập.';
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug))
-      fields['slug'] = 'Chỉ dùng chữ thường không dấu, số và dấu gạch ngang.';
+      fields['slug'] = 'Tên cần có ít nhất một chữ hoặc số để tạo đường dẫn.';
     else if (this.content.collections.some((item) => item.slug === slug && item.id !== id))
       fields['slug'] = 'Đường dẫn này đã được dùng.';
     if (Object.keys(fields).length) return fail(invalid('Kiểm tra lại bộ sưu tập.', fields));
@@ -236,142 +236,4 @@ export class MockAdminStorefrontApi implements AdminStorefrontApi {
 
 function isCategory(value: string): value is Category {
   return CATEGORIES.some((item) => item.value === value);
-}
-
-const SOLD = new Set([
-  'processing',
-  'shipping',
-  'delivering',
-  'delivery-failed',
-  'completed',
-  'return-requested',
-  'returned',
-]);
-const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-
-/** Reports (Đợt 3) computed from the mock orders, products and promotions. */
-@Injectable({ providedIn: 'root' })
-export class MockAdminReportsApi implements AdminReportsApi {
-  private readonly db = inject(AdminMockDb);
-
-  sales(range: ReportRange): Observable<SalesReport> {
-    const days = range === '30d' ? 30 : range === '90d' ? 90 : 365;
-    const now = Date.now();
-    const since = now - days * DAY;
-    const { orders, products, promotions } = this.db.data;
-    const sold = orders.filter((order) => SOLD.has(order.status));
-    const inRange = sold.filter((order) => Date.parse(order.placedAt) >= since);
-
-    const bySize = new Map<string, SalesReport['bySize'][number]>();
-    const byColor = new Map<string, SalesReport['byColor'][number]>();
-    const byProduct = new Map<string, SalesReport['returnsByProduct'][number]>();
-    for (const order of inRange) {
-      const returned = order.returnRequest?.lines ?? [];
-      order.items.forEach((item, index) => {
-        const revenue = item.unitPrice * item.quantity;
-        const back = returned.find((line) => line.index === index)?.quantity ?? 0;
-        const size = bySize.get(item.size) ?? {
-          size: item.size,
-          units: 0,
-          revenue: 0,
-          returned: 0,
-        };
-        size.units += item.quantity;
-        size.revenue += revenue;
-        size.returned += back;
-        bySize.set(item.size, size);
-        const hex =
-          products
-            .find((product) => product.id === item.productId)
-            ?.variants.find((variant) => variant.id === item.variantId)?.color.hex ?? '#999999';
-        const color = byColor.get(item.color) ?? { color: item.color, hex, units: 0, revenue: 0 };
-        color.units += item.quantity;
-        color.revenue += revenue;
-        byColor.set(item.color, color);
-        const product = byProduct.get(item.productId) ?? {
-          productId: item.productId,
-          name: item.name,
-          sold: 0,
-          returned: 0,
-          reasons: [],
-        };
-        product.sold += item.quantity;
-        if (back && order.returnRequest) {
-          product.returned += back;
-          const label = RETURN_REASONS[order.returnRequest.reason];
-          const reason = product.reasons.find((entry) => entry.reason === label);
-          if (reason) reason.count += back;
-          else product.reasons.push({ reason: label, count: back });
-        }
-        byProduct.set(item.productId, product);
-      });
-    }
-
-    const lastSold = new Map<string, number>();
-    for (const order of sold)
-      for (const item of order.items)
-        lastSold.set(
-          item.variantId,
-          Math.max(lastSold.get(item.variantId) ?? 0, Date.parse(order.placedAt)),
-        );
-    const agingStock = products
-      .filter((product) => product.status === 'active')
-      .flatMap((product) =>
-        product.variants
-          .filter((variant) => variant.inventory > 0)
-          .map((variant) => {
-            const last = lastSold.get(variant.id);
-            return {
-              variantId: variant.id,
-              productId: product.id,
-              sku: variant.sku,
-              name: product.name,
-              variant: `${variant.color.name} / ${variant.size}`,
-              onHand: variant.inventory,
-              lastSoldAt: last ? new Date(last).toISOString() : null,
-              stockValue: variant.inventory * (product.cost ?? Math.round(product.price * 0.42)),
-            };
-          }),
-      )
-      .filter((row) => !row.lastSoldAt || now - Date.parse(row.lastSoldAt) > 30 * DAY)
-      .sort((a, b) => (a.lastSoldAt ?? '').localeCompare(b.lastSoldAt ?? '') || b.onHand - a.onHand)
-      .slice(0, 20);
-
-    const byCode = new Map<string, SalesReport['promotions'][number]>();
-    for (const order of inRange) {
-      if (!order.voucherCode) continue;
-      const row = byCode.get(order.voucherCode) ?? {
-        code: order.voucherCode,
-        title: promotions.find((promo) => promo.code === order.voucherCode)?.title ?? '',
-        orders: 0,
-        discount: 0,
-        revenue: 0,
-        averageOrder: 0,
-      };
-      row.orders += 1;
-      row.discount += order.pricing.discount;
-      row.revenue += order.pricing.total;
-      row.averageOrder = Math.round(row.revenue / row.orders);
-      byCode.set(order.voucherCode, row);
-    }
-
-    return respond({
-      range,
-      bySize: [...bySize.values()].sort(
-        (a, b) => rank(a.size) - rank(b.size) || a.size.localeCompare(b.size),
-      ),
-      byColor: [...byColor.values()].sort((a, b) => b.units - a.units),
-      returnsByProduct: [...byProduct.values()]
-        .filter((row) => row.returned > 0)
-        .map((row) => ({ ...row, reasons: row.reasons.sort((a, b) => b.count - a.count) }))
-        .sort((a, b) => b.returned / b.sold - a.returned / a.sold),
-      agingStock,
-      promotions: [...byCode.values()].sort((a, b) => b.orders - a.orders),
-    });
-  }
-}
-
-function rank(size: string): number {
-  const index = SIZE_ORDER.indexOf(size);
-  return index < 0 ? SIZE_ORDER.length + Number(size) || 99 : index;
 }

@@ -1,0 +1,774 @@
+<adm-page-header heading="Báo cáo kinh doanh">
+  <p subtitle class="secondary small">
+    @if (report()) { {{ period() }}. Doanh thu tính trên đơn đã xác nhận, không gồm đơn hủy. } @else { Đang
+    tính số liệu… }
+  </p>
+  <ng-container actions>
+    <div class="segmented" role="group" aria-label="Kỳ báo cáo">
+      @for (item of ranges; track item.value) {
+      <button
+        type="button"
+        [class.is-active]="range() === item.value"
+        [attr.aria-pressed]="range() === item.value"
+        (click)="setRange(item.value)"
+      >
+        {{ item.label }}
+      </button>
+      }
+    </div>
+    <button type="button" class="adm-btn" [disabled]="!report()" (click)="exportCsv()">
+      <adm-icon name="reiconDownload" [size]="16" /> Xuất CSV
+    </button>
+  </ng-container>
+</adm-page-header>
+
+<div class="page-body page-body--wide">
+  <nav class="tabs" aria-label="Nhóm báo cáo">
+    @for (item of tabs; track item.value) {
+    <button
+      type="button"
+      [class.is-active]="tab() === item.value"
+      [attr.aria-current]="tab() === item.value ? 'page' : null"
+      (click)="setTab(item.value)"
+    >
+      {{ item.label }}
+    </button>
+    }
+  </nav>
+
+  @if (view.state().error && !report()) {
+  <adm-empty kind="error" heading="Không tải được báo cáo" [description]="view.state().error ?? ''">
+    <button type="button" class="adm-btn" (click)="view.reload()">Thử lại</button>
+  </adm-empty>
+  } @else if (report(); as r) {
+  <div class="report" [class.is-refreshing]="view.state().refreshing">
+    @if (insights()[tab()].length) {
+    <section class="insights" aria-labelledby="insights-title">
+      <h2 id="insights-title">Điểm đáng chú ý</h2>
+      <ul>
+        @for (item of insights()[tab()]; track item.text) {
+        <li [class]="'insight insight--' + item.tone">
+          <adm-icon
+            [name]="item.tone === 'warn' ? 'reiconAlertTriangle' : item.tone === 'good' ? 'reiconGraphUp' : 'reiconInfoCircle'"
+            [size]="18"
+          />
+          <span>
+            {{ item.text }} @if (item.link; as link) {
+            <a class="link" [routerLink]="link.path" [queryParams]="link.query ?? null">{{
+              link.label
+            }}</a>
+            }
+          </span>
+        </li>
+        }
+      </ul>
+    </section>
+    }
+
+    <!-- ============ Tổng quan ============ -->
+    @switch (tab()) { @case ('overview') {
+    <div class="kpis">
+      @for (kpi of kpis(); track kpi.label) {
+      <div class="kpi" [title]="kpi.hint">
+        <p class="kpi-label">{{ kpi.label }}</p>
+        <p class="kpi-value num">{{ show(kpi.figure.value, kpi.format) }}</p>
+        <p class="kpi-delta" [class]="'kpi-delta ' + delta(kpi).tone">{{ delta(kpi).text }}</p>
+        <p class="kpi-hint">{{ kpi.hint }}</p>
+      </div>
+      }
+    </div>
+
+    <section class="section" aria-labelledby="trend-title">
+      <header>
+        <div>
+          <h2 id="trend-title">Doanh thu thuần {{ bucketLabel() }}</h2>
+          <p class="small secondary">Đường liền là kỳ này, đường nét đứt là kỳ trước cùng độ dài.</p>
+        </div>
+        <div class="legend small secondary">
+          <span><i class="line"></i>Kỳ này</span>
+          <span><i class="line dashed"></i>Kỳ trước</span>
+        </div>
+      </header>
+      <adm-chart
+        type="line"
+        label="Doanh thu thuần kỳ này so với kỳ trước"
+        [labels]="trendLabels()"
+        [series]="trendSeries()"
+        [format]="shortMoney"
+      />
+      <details class="as-table">
+        <summary class="small">Xem số liệu dạng bảng</summary>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Thời gian</th>
+                <th class="num">Số đơn</th>
+                <th class="num">Doanh thu thuần</th>
+                <th class="num">Lợi nhuận gộp</th>
+                <th class="num">Kỳ trước</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (point of r.trend.points; track $index) {
+              <tr>
+                <td>{{ point.label }}</td>
+                <td class="num">{{ point.orders | admNum }}</td>
+                <td class="num">{{ point.revenue | admMoney }}</td>
+                <td class="num">{{ point.profit | admMoney }}</td>
+                <td class="num secondary">{{ point.previous | admMoney }}</td>
+              </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <div class="grid">
+      <section class="section" aria-labelledby="cat-title">
+        <header><h2 id="cat-title">Doanh thu theo danh mục</h2></header>
+        <table class="table bars">
+          <thead>
+            <tr>
+              <th>Danh mục</th>
+              <th class="w-bar"><span class="sr-only">Tỉ trọng</span></th>
+              <th class="num">Doanh thu</th>
+              <th class="num">Biên LN</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.categories; track row.category) {
+            <tr>
+              <td class="strong">{{ row.label }}</td>
+              <td class="w-bar">
+                <span class="bar-wrap"
+                  ><span class="bar" [style.width.%]="row.share * 100"></span
+                  ><span class="small secondary">{{ percent(row.share) }}</span></span
+                >
+              </td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+              <td class="num secondary">{{ pct(row.profit, row.revenue) }}</td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="4" class="secondary">Chưa có đơn trong kỳ này.</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" aria-labelledby="pay-title">
+        <header><h2 id="pay-title">Phương thức thanh toán</h2></header>
+        <table class="table bars">
+          <thead>
+            <tr>
+              <th>Phương thức</th>
+              <th class="w-bar"><span class="sr-only">Tỉ trọng</span></th>
+              <th class="num">Số đơn</th>
+              <th class="num">Giao thất bại</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.payments; track row.method) {
+            <tr>
+              <td class="strong">{{ row.label }}</td>
+              <td class="w-bar">
+                <span class="bar-wrap"
+                  ><span class="bar" [style.width.%]="row.share * 100"></span
+                  ><span class="small secondary">{{ percent(row.share) }}</span></span
+                >
+              </td>
+              <td class="num">{{ row.orders | admNum }}</td>
+              <td class="num" [class.danger-text]="row.failureRate > 0.05">
+                {{ percent(row.failureRate) }}
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+        <p class="small tertiary note">
+          Giao thất bại tính trên đơn đã bàn giao cho vận chuyển. COD thường cao hơn vì khách có thể
+          từ chối nhận.
+        </p>
+      </section>
+    </div>
+    }
+
+    <!-- ============ Sản phẩm ============ -->
+    @case ('products') {
+    <div class="abc">
+      @for (group of abcSummary(); track group.abc) {
+      <div class="abc-card">
+        <span class="abc-tag" [attr.data-abc]="group.abc">{{ group.abc }}</span>
+        <div>
+          <p class="strong">{{ group.count | admNum }} sản phẩm</p>
+          <p class="small secondary">
+            {{ group.abc === 'A' ? 'Tạo 80% doanh thu đầu tiên' : group.abc === 'B' ? 'Tạo 15% doanh thu tiếp theo' : 'Tạo 5% doanh thu còn lại' }}
+          </p>
+        </div>
+        <p class="num strong">{{ group.revenue | admMoney }}</p>
+      </div>
+      }
+    </div>
+
+    <section class="section" aria-labelledby="prod-title">
+      <header>
+        <div>
+          <h2 id="prod-title">Hiệu quả từng sản phẩm</h2>
+          <p class="small secondary">
+            Tồn đủ bán là số ngày tồn kho hiện tại còn đủ bán theo tốc độ của kỳ này.
+          </p>
+        </div>
+        <label class="sort-select">
+          <span class="small secondary">Sắp xếp</span>
+          <select
+            class="select select--sm"
+            aria-label="Sắp xếp sản phẩm"
+            (change)="setProductSort($any($event.target).value)"
+          >
+            @for (item of productSorts; track item.value) {
+            <option [value]="item.value" [selected]="query().psort === item.value">
+              {{ item.label }}
+            </option>
+            }
+          </select>
+        </label>
+      </header>
+      <div class="table-wrap">
+        <table class="table table--cards">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th>
+              <th>Nhóm</th>
+              <th class="num">Đã bán</th>
+              <th class="num">Doanh thu</th>
+              <th class="num">Lợi nhuận gộp</th>
+              <th class="num">Biên LN</th>
+              <th class="num">Tỷ lệ trả</th>
+              <th class="num">Tồn kho</th>
+              <th class="num">Tồn đủ bán</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of products(); track row.productId) {
+            <tr>
+              <td>
+                <div class="cell-media">
+                  @if (row.image) {
+                  <img class="thumb" [src]="row.image" alt="" />
+                  }
+                  <div>
+                    <a class="cell-title" [routerLink]="['/admin/products', row.productId]">{{
+                      row.name
+                    }}</a>
+                    <div class="cell-sub">{{ row.category }}</div>
+                  </div>
+                </div>
+              </td>
+              <td data-label="Nhóm"><span class="abc-tag" [attr.data-abc]="row.abc">{{ row.abc }}</span></td>
+              <td class="num" data-label="Đã bán">{{ row.units | admNum }}</td>
+              <td class="num" data-label="Doanh thu">{{ row.revenue | admMoney }}</td>
+              <td class="num" data-label="Lợi nhuận gộp">{{ row.profit | admMoney }}</td>
+              <td class="num" data-label="Biên LN" [class.danger-text]="row.units > 0 && row.margin < 0.4">
+                {{ row.units ? percent(row.margin) : '–' }}
+              </td>
+              <td class="num" data-label="Tỷ lệ trả" [class.danger-text]="row.returnRate >= 0.15">
+                {{ row.returnRate ? percent(row.returnRate) : '–' }}
+              </td>
+              <td class="num" data-label="Tồn kho">{{ row.onHand | admNum }}</td>
+              <td class="num" data-label="Tồn đủ bán" [class.danger-text]="row.daysOfCover !== null && row.daysOfCover < 14">
+                {{ row.daysOfCover === null ? '–' : (row.daysOfCover | admNum) + ' ngày' }}
+              </td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="9" class="secondary">Chưa có sản phẩm nào đang bán.</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section" aria-labelledby="size-title">
+        <header><h2 id="size-title">Bán theo size</h2></header>
+        <table class="table bars">
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th class="w-bar"><span class="sr-only">Tỉ trọng</span></th>
+              <th class="num">Đã bán</th>
+              <th class="num">Bị trả</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.bySize; track row.size) {
+            <tr>
+              <td class="strong">{{ row.size }}</td>
+              <td class="w-bar"><span class="bar" [style.width.%]="(row.units / maxSize()) * 100"></span></td>
+              <td class="num">{{ row.units | admNum }}</td>
+              <td class="num secondary">
+                {{ row.returned ? (row.returned | admNum) + ' (' + pct(row.returned, row.units) + ')' : '–' }}
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+      <section class="section" aria-labelledby="color-title">
+        <header><h2 id="color-title">Bán theo màu</h2></header>
+        <table class="table bars">
+          <thead>
+            <tr>
+              <th>Màu</th>
+              <th class="w-bar"><span class="sr-only">Tỉ trọng</span></th>
+              <th class="num">Đã bán</th>
+              <th class="num">Doanh thu</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.byColor; track row.color) {
+            <tr>
+              <td><span class="swatch" [style.background]="row.hex"></span>{{ row.color }}</td>
+              <td class="w-bar"><span class="bar" [style.width.%]="(row.units / maxColor()) * 100"></span></td>
+              <td class="num">{{ row.units | admNum }}</td>
+              <td class="num secondary">{{ row.revenue | admMoney }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <section class="section" aria-labelledby="returns-title">
+      <header><h2 id="returns-title">Sản phẩm bị trả nhiều</h2></header>
+      @if (r.returnsByProduct.length) {
+      <div class="table-wrap">
+        <table class="table table--cards">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th>
+              <th class="num">Đã bán</th>
+              <th class="num">Bị trả</th>
+              <th class="num">Tỷ lệ</th>
+              <th>Lý do chính</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.returnsByProduct; track row.productId) {
+            <tr>
+              <td>
+                <a class="cell-title" [routerLink]="['/admin/products', row.productId]">{{ row.name }}</a>
+              </td>
+              <td class="num" data-label="Đã bán">{{ row.sold | admNum }}</td>
+              <td class="num" data-label="Bị trả">{{ row.returned | admNum }}</td>
+              <td class="num strong" data-label="Tỷ lệ">{{ pct(row.returned, row.sold) }}</td>
+              <td data-label="Lý do chính">
+                <span class="reason-list">
+                  @for (reason of row.reasons; track reason.reason) {
+                  <span class="chip chip--static">{{ reason.reason }}: {{ reason.count }}</span>
+                  }
+                </span>
+              </td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      } @else {
+      <p class="secondary">Không có đơn trả hàng trong kỳ này.</p>
+      }
+    </section>
+    }
+
+    <!-- ============ Khách hàng ============ -->
+    @case ('customers') {
+    <div class="kpis kpis--5">
+      <div class="kpi">
+        <p class="kpi-label">Khách mới</p>
+        <p class="kpi-value num">{{ r.customers.newCustomers | admNum }}</p>
+        <p class="kpi-hint">Mua lần đầu trong kỳ, mang về {{ r.customers.newRevenue | admMoney }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Khách quay lại</p>
+        <p class="kpi-value num">{{ r.customers.returningCustomers | admNum }}</p>
+        <p class="kpi-hint">Đã từng mua trước kỳ này, mang về {{ r.customers.returningRevenue | admMoney }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Tỷ lệ mua lại</p>
+        <p class="kpi-value num">{{ percent(r.customers.repeatRate) }}</p>
+        <p class="kpi-hint">Khách trong kỳ đã mua từ 2 lần</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Giá trị vòng đời trung bình</p>
+        <p class="kpi-value num">{{ r.customers.lifetimeValue | admMoney }}</p>
+        <p class="kpi-hint">Tổng chi tiêu từ trước đến nay của mỗi khách</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Đơn không tài khoản</p>
+        <p class="kpi-value num">{{ r.customers.guestOrders | admNum }}</p>
+        <p class="kpi-hint">Mang về {{ r.customers.guestRevenue | admMoney }}</p>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="section" aria-labelledby="tier-title">
+        <header><h2 id="tier-title">Theo hạng thành viên</h2></header>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Hạng</th>
+              <th class="num">Khách</th>
+              <th class="num">Đơn</th>
+              <th class="num">Doanh thu</th>
+              <th class="num">Đơn TB</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.customers.byTier; track row.tier) {
+            <tr>
+              <td><adm-badge [spec]="tierBadge(row.tier)" /></td>
+              <td class="num">{{ row.customers | admNum }}</td>
+              <td class="num">{{ row.orders | admNum }}</td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+              <td class="num secondary">{{ row.averageOrder | admMoney }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+        <p class="small tertiary note">
+          Muốn tặng ưu đãi riêng cho một hạng?
+          <a class="link" routerLink="/admin/promotions/new">Tạo mã cho hạng thành viên</a>
+        </p>
+      </section>
+
+      <section class="section" aria-labelledby="region-title">
+        <header><h2 id="region-title">Theo tỉnh thành</h2></header>
+        <table class="table bars">
+          <thead>
+            <tr>
+              <th>Tỉnh thành</th>
+              <th class="w-bar"><span class="sr-only">Tỉ trọng</span></th>
+              <th class="num">Đơn</th>
+              <th class="num">Doanh thu</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.regions; track row.province) {
+            <tr>
+              <td class="strong">{{ row.province }}</td>
+              <td class="w-bar">
+                <span class="bar-wrap"
+                  ><span class="bar" [style.width.%]="row.share * 100"></span
+                  ><span class="small secondary">{{ percent(row.share) }}</span></span
+                >
+              </td>
+              <td class="num">{{ row.orders | admNum }}</td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <section class="section" aria-labelledby="heat-title">
+      <header>
+        <div>
+          <h2 id="heat-title">Khách đặt hàng vào lúc nào</h2>
+          <p class="small secondary">Số đơn theo thứ trong tuần và khung giờ. Ô càng đậm càng nhiều đơn.</p>
+        </div>
+      </header>
+      <div class="table-wrap">
+        <table class="heatmap">
+          <thead>
+            <tr>
+              <th><span class="sr-only">Thứ</span></th>
+              @for (block of blocks; track block) {
+              <th scope="col">{{ block }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.heatmap; track $index; let d = $index) {
+            <tr>
+              <th scope="row">{{ weekdays[d] }}</th>
+              @for (count of row; track $index; let b = $index) {
+              <td
+                [style.--heat]="heat(count)"
+                [class.is-strong]="heat(count) >= 0.6"
+                [attr.aria-label]="weekdays[d] + ', ' + blocks[b] + ': ' + count + ' đơn'"
+              >
+                {{ count || '' }}
+              </td>
+              }
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="top-title">
+      <header><h2 id="top-title">Khách mua nhiều nhất trong kỳ</h2></header>
+      <div class="table-wrap">
+        <table class="table table--cards">
+          <thead>
+            <tr>
+              <th>Khách hàng</th>
+              <th>Hạng</th>
+              <th class="num">Đơn</th>
+              <th class="num">Chi tiêu</th>
+              <th>Đơn gần nhất</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.customers.top; track row.id) {
+            <tr>
+              <td><a class="cell-title" [routerLink]="['/admin/customers', row.id]">{{ row.name }}</a></td>
+              <td data-label="Hạng"><adm-badge [spec]="tierBadge(row.tier)" /></td>
+              <td class="num" data-label="Đơn">{{ row.orders | admNum }}</td>
+              <td class="num" data-label="Chi tiêu">{{ row.revenue | admMoney }}</td>
+              <td class="secondary" data-label="Đơn gần nhất">{{ row.lastOrderAt | admDate }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+    }
+
+    <!-- ============ Vận hành và tồn kho ============ -->
+    @case ('operations') {
+    <div class="kpis kpis--5">
+      <div class="kpi">
+        <p class="kpi-label">Thời gian xử lý đơn</p>
+        <p class="kpi-value num">
+          {{ r.operations.hoursToShip === null ? '–' : r.operations.hoursToShip + ' giờ' }}
+        </p>
+        <p class="kpi-hint">Từ lúc đặt đến lúc bàn giao vận chuyển, giá trị ở giữa</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Bàn giao trong 24 giờ</p>
+        <p class="kpi-value num">{{ percent(r.operations.shippedWithinDay) }}</p>
+        <p class="kpi-hint">Trên các đơn đã bàn giao</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Giao không thành công</p>
+        <p class="kpi-value num">{{ r.operations.deliveryFailures | admNum }}</p>
+        <p class="kpi-hint">{{ r.operations.returnedToSender | admNum }} đơn đã hoàn về shop</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Đơn trả hàng</p>
+        <p class="kpi-value num">{{ r.returns.orders | admNum }}</p>
+        <p class="kpi-hint">{{ r.returns.units | admNum }} sản phẩm, trị giá {{ r.returns.value | admMoney }}</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Đơn bị hủy</p>
+        <p class="kpi-value num">{{ r.operations.cancelled | admNum }}</p>
+        <p class="kpi-hint">{{ percent(r.kpis.cancelRate.value) }} số đơn đã đặt</p>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="section" aria-labelledby="cancel-title">
+        <header><h2 id="cancel-title">Lý do hủy đơn</h2></header>
+        <ul class="reasons">
+          @for (row of r.operations.cancelReasons; track row.reason) {
+          <li><span>{{ row.reason }}</span><span class="num strong">{{ row.count | admNum }}</span></li>
+          } @empty {
+          <li class="secondary">Không có đơn bị hủy.</li>
+          }
+        </ul>
+      </section>
+      <section class="section" aria-labelledby="reason-title">
+        <header><h2 id="reason-title">Lý do trả hàng</h2></header>
+        <ul class="reasons">
+          @for (row of r.returns.reasons; track row.reason) {
+          <li><span>{{ row.reason }}</span><span class="num strong">{{ row.count | admNum }}</span></li>
+          } @empty {
+          <li class="secondary">Không có yêu cầu trả hàng.</li>
+          }
+        </ul>
+      </section>
+    </div>
+
+    <div class="kpis kpis--3">
+      <div class="kpi">
+        <p class="kpi-label">Giá trị tồn kho theo giá vốn</p>
+        <p class="kpi-value num">{{ r.inventory.value | admMoney }}</p>
+        <p class="kpi-hint">{{ r.inventory.units | admNum }} sản phẩm đang bán</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Giá trị tồn kho theo giá bán</p>
+        <p class="kpi-value num">{{ r.inventory.retailValue | admMoney }}</p>
+        <p class="kpi-hint">Doanh thu tối đa nếu bán hết đúng giá</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">SKU đã hết hàng</p>
+        <p class="kpi-value num">{{ r.inventory.outOfStockSkus | admNum }}</p>
+        <p class="kpi-hint"><a class="link" routerLink="/admin/inventory" [queryParams]="{ view: 'out' }">Xem trong Tồn kho</a></p>
+      </div>
+    </div>
+
+    <section class="section" aria-labelledby="risk-title">
+      <header>
+        <div>
+          <h2 id="risk-title">Sắp hết ở sản phẩm bán chạy</h2>
+          <p class="small secondary">Biến thể của sản phẩm nhóm A còn 3 cái trở xuống và vẫn có khách mua trong 90 ngày qua.</p>
+        </div>
+      </header>
+      @if (r.inventory.stockoutRisks.length) {
+      <div class="table-wrap">
+        <table class="table table--cards">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th>
+              <th>SKU</th>
+              <th class="num">Còn</th>
+              <th class="num">Bán trong kỳ</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.inventory.stockoutRisks; track row.sku) {
+            <tr>
+              <td>
+                <a class="cell-title" [routerLink]="['/admin/products', row.productId]">{{ row.name }}</a>
+                <div class="cell-sub">{{ row.variant }}</div>
+              </td>
+              <td class="mono" data-label="SKU">{{ row.sku }}</td>
+              <td class="num strong" data-label="Còn" [class.danger-text]="row.available <= 0">
+                {{ row.available | admNum }}
+              </td>
+              <td class="num" data-label="Bán trong kỳ">{{ row.unitsSold | admNum }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      } @else {
+      <p class="secondary">Các sản phẩm bán chạy đều còn đủ hàng.</p>
+      }
+    </section>
+
+    <section class="section" aria-labelledby="aging-title">
+      <header>
+        <div>
+          <h2 id="aging-title">Hàng tồn lâu</h2>
+          <p class="small secondary">Biến thể còn hàng nhưng không bán được trong hơn 30 ngày.</p>
+        </div>
+      </header>
+      @if (r.agingStock.length) {
+      <div class="table-wrap">
+        <table class="table table--cards">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th>
+              <th>SKU</th>
+              <th class="num">Tồn</th>
+              <th>Bán gần nhất</th>
+              <th class="num">Vốn đang nằm</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.agingStock; track row.variantId) {
+            <tr>
+              <td>
+                <a class="cell-title" [routerLink]="['/admin/products', row.productId]">{{ row.name }}</a>
+                <div class="cell-sub">{{ row.variant }}</div>
+              </td>
+              <td class="mono" data-label="SKU">{{ row.sku }}</td>
+              <td class="num" data-label="Tồn">{{ row.onHand | admNum }}</td>
+              <td class="secondary" data-label="Bán gần nhất">
+                {{ row.lastSoldAt ? (row.lastSoldAt | admDate) : 'Chưa bán lần nào' }}
+              </td>
+              <td class="num" data-label="Vốn đang nằm">{{ row.stockValue | admMoney }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      } @else {
+      <p class="secondary">Không có hàng tồn lâu. Hàng đang xoay vòng tốt.</p>
+      }
+    </section>
+    }
+
+    <!-- ============ Khuyến mãi ============ -->
+    @case ('promotions') {
+    <div class="kpis kpis--4">
+      <div class="kpi">
+        <p class="kpi-label">Đơn dùng mã</p>
+        <p class="kpi-value num">{{ r.promotionLift.ordersWithCode | admNum }}</p>
+        <p class="kpi-hint">{{ pct(r.promotionLift.ordersWithCode, r.kpis.orders.value) }} tổng số đơn</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Đơn trung bình có mã</p>
+        <p class="kpi-value num">{{ r.promotionLift.withCode | admMoney }}</p>
+        <p class="kpi-hint">Trước khi trừ tiền giảm</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Đơn trung bình không mã</p>
+        <p class="kpi-value num">{{ r.promotionLift.withoutCode | admMoney }}</p>
+        <p class="kpi-hint">Để so sánh mức tăng giỏ hàng</p>
+      </div>
+      <div class="kpi">
+        <p class="kpi-label">Tỷ lệ giảm giá</p>
+        <p class="kpi-value num">{{ percent(r.kpis.discountRate.value) }}</p>
+        <p class="kpi-hint">Tiền giảm trên giá trị hàng</p>
+      </div>
+    </div>
+
+    <section class="section" aria-labelledby="promo-title">
+      <header>
+        <h2 id="promo-title">Hiệu quả từng mã</h2>
+        <a class="adm-btn adm-btn--ghost adm-btn--sm" routerLink="/admin/promotions">Xem khuyến mãi</a>
+      </header>
+      @if (r.promotions.length) {
+      <div class="table-wrap">
+        <table class="table table--cards">
+          <thead>
+            <tr>
+              <th>Mã</th>
+              <th class="num">Số đơn</th>
+              <th class="num">Tiền đã giảm</th>
+              <th class="num">Doanh thu mang về</th>
+              <th class="num">Chi phí mã</th>
+              <th class="num">Đơn trung bình</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.promotions; track row.code) {
+            <tr>
+              <td>
+                <span class="cell-title mono">{{ row.code }}</span>
+                @if (row.title) {
+                <div class="cell-sub">{{ row.title }}</div>
+                }
+              </td>
+              <td class="num" data-label="Số đơn">{{ row.orders | admNum }}</td>
+              <td class="num" data-label="Tiền đã giảm">{{ row.discount | admMoney }}</td>
+              <td class="num" data-label="Doanh thu mang về">{{ row.revenue | admMoney }}</td>
+              <td class="num" data-label="Chi phí mã" [class.danger-text]="row.cost > 0.15">
+                {{ percent(row.cost) }}
+              </td>
+              <td class="num" data-label="Đơn trung bình">{{ row.averageOrder | admMoney }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="small tertiary note">Chi phí mã là tiền giảm trên doanh thu mà mã đó mang về.</p>
+      } @else {
+      <p class="secondary">Chưa có đơn dùng mã giảm giá trong kỳ này.</p>
+      }
+    </section>
+    } }
+  </div>
+  } @else {
+  <div class="stack"><span class="sk sk--title"></span><span class="sk"></span><span class="sk"></span></div>
+  }
+</div>

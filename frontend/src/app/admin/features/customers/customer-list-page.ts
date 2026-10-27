@@ -21,7 +21,7 @@ import { AdmSkeletonRows } from '../../ui/skeleton';
 import { AdminToastService } from '../../ui/toast';
 
 const TIERS: { value: CustomerTier; label: string }[] = [
-  { value: 'member', label: 'Thành viên' },
+  { value: 'member', label: 'Đồng' },
   { value: 'silver', label: 'Bạc' },
   { value: 'gold', label: 'Vàng' },
 ];

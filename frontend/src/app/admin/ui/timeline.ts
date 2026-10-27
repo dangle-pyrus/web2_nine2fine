@@ -64,7 +64,7 @@ type Filter = 'all' | 'comment' | 'system';
             <p class="meta">
               {{ event.at | admDateTime }}
               @if (event.author) {
-                · {{ event.author }}
+                bởi {{ event.author }}
               }
             </p>
           </div>

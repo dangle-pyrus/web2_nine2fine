@@ -55,9 +55,10 @@ const FIT: Record<-1 | 0 | 1, string> = {
   template: `
     <adm-page-header heading="Đánh giá sản phẩm">
       @if (stats(); as s) {
-        <p subtitle class="secondary small">
-          {{ s.total | admNum }} đánh giá · điểm trung bình {{ s.average }}/5 ·
-          {{ s.unanswered | admNum }} chưa trả lời
+        <p subtitle class="secondary small meta-list">
+          <span>{{ s.total | admNum }} đánh giá</span>
+          <span>Điểm trung bình {{ s.average }}/5</span>
+          <span>{{ s.unanswered | admNum }} chưa trả lời</span>
         </p>
       }
     </adm-page-header>
@@ -197,9 +198,11 @@ const FIT: Record<-1 | 0 | 1, string> = {
                   }
                 </div>
                 <p>{{ review.body }}</p>
-                <p class="small secondary">
-                  {{ review.author }} · size {{ review.sizeBought }} · {{ fit[review.fit] }} ·
-                  {{ review.date | admDate }}
+                <p class="small secondary meta-list">
+                  <span>{{ review.author }}</span>
+                  <span>Size đã mua: {{ review.sizeBought }}</span>
+                  <span>{{ fit[review.fit] }}</span>
+                  <span>{{ review.date | admDate }}</span>
                 </p>
                 <a class="product" [routerLink]="['/admin/products', review.productId]">
                   @if (review.productImage) {
@@ -239,9 +242,9 @@ const FIT: Record<-1 | 0 | 1, string> = {
                   </form>
                 } @else if (review.reply; as answer) {
                   <blockquote class="answer">
-                    <p class="small secondary">
-                      Phản hồi từ nine2fine · {{ answer.author }} ·
-                      {{ answer.at | admDateTime }}
+                    <p class="small secondary meta-list">
+                      <span>Phản hồi của {{ answer.author }}</span>
+                      <span>{{ answer.at | admDateTime }}</span>
                     </p>
                     <p>{{ answer.body }}</p>
                   </blockquote>

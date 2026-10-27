@@ -64,10 +64,10 @@ import { AdmIcon } from '../../ui/icon';
           <div class="demo">
             <p class="small tertiary">Tài khoản demo (chế độ mock)</p>
             <button type="button" class="link" (click)="fill('admin@nine2fine.vn', 'admin123')">
-              Quản trị viên · admin&#64;nine2fine.vn / admin123
+              Quản trị viên: admin&#64;nine2fine.vn / admin123
             </button>
             <button type="button" class="link" (click)="fill('staff@nine2fine.vn', 'staff123')">
-              Nhân viên · staff&#64;nine2fine.vn / staff123
+              Nhân viên: staff&#64;nine2fine.vn / staff123
             </button>
           </div>
         }

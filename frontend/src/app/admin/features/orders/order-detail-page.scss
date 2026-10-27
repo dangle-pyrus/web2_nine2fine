@@ -112,3 +112,14 @@
   margin-left: 8px;
   color: var(--adm-text-secondary);
 }
+
+.sku-tag {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: var(--adm-radius-sm);
+  background: var(--adm-muted);
+  font-size: 12px;
+}
+.stack-lines {
+  display: grid;
+}

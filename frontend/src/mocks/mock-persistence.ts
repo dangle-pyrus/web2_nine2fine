@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 
-const KEY = 'n2f.mock.v2';
+const KEY = 'n2f.mock.v3';
 
 /**
  * Keeps the in-memory mock "backend" (accounts, orders, stock, reviews, session) across reloads of

@@ -130,6 +130,20 @@
       <option [value]="method[0]">{{ method[1] }}</option>
       }
     </select>
+    <label class="sort-select">
+      <span class="small secondary">Sắp xếp</span>
+      <select
+        class="select select--sm"
+        aria-label="Sắp xếp đơn hàng"
+        name="sort"
+        [ngModel]="sortKey()"
+        (ngModelChange)="setSort($event)"
+      >
+        @for (option of sortOptions; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </label>
   </form>
   @if (chips().length) {
   <div class="chips filter-chips">
@@ -185,38 +199,41 @@
               />
             </label>
           </th>
-          <th>
+          <th [attr.aria-sort]="ariaSort('id')">
             <button
               type="button"
               class="sort-btn"
               [class.is-active]="query().sort === 'id'"
+              [attr.title]="sortTitle('id')"
               (click)="sortBy('id')"
             >
-              Mã đơn <adm-icon name="reiconSortV" [size]="14" />
+              Mã đơn <adm-icon [name]="sortIcon('id')" [size]="14" />
             </button>
           </th>
-          <th>
+          <th [attr.aria-sort]="ariaSort('placedAt')">
             <button
               type="button"
               class="sort-btn"
               [class.is-active]="query().sort === 'placedAt'"
+              [attr.title]="sortTitle('placedAt')"
               (click)="sortBy('placedAt')"
             >
-              Ngày đặt <adm-icon name="reiconSortV" [size]="14" />
+              Ngày đặt <adm-icon [name]="sortIcon('placedAt')" [size]="14" />
             </button>
           </th>
           <th>Khách hàng</th>
           <th>Thanh toán</th>
           <th>Trạng thái</th>
           <th class="num">Số SP</th>
-          <th class="num">
+          <th class="num" [attr.aria-sort]="ariaSort('total')">
             <button
               type="button"
               class="sort-btn"
               [class.is-active]="query().sort === 'total'"
+              [attr.title]="sortTitle('total')"
               (click)="sortBy('total')"
             >
-              Tổng tiền <adm-icon name="reiconSortV" [size]="14" />
+              Tổng tiền <adm-icon [name]="sortIcon('total')" [size]="14" />
             </button>
           </th>
         </tr>

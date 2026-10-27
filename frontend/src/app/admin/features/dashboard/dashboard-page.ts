@@ -1,4 +1,3 @@
-import { LowerCasePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AdminSession } from '../../core/admin-session';
@@ -12,52 +11,9 @@ import { AdmIcon } from '../../ui/icon';
 import { loader } from '../../ui/list-state';
 import { AdmPageHeader } from '../../ui/page-header';
 
-const RANGE_KEY = 'n2f.admin.dashboard-range';
-
-const RANGES: {
-  value: DashboardRange;
-  label: string;
-  /** Order list date preset with the same span, for the KPI links. */
-  preset: string;
-  /** Short comparison shown under a KPI; the long form is its tooltip. */
-  versus: string;
-  versusLong: string;
-}[] = [
-  {
-    value: 'today',
-    label: 'Hôm nay',
-    preset: 'today',
-    versus: 'tuần trước',
-    versusLong: 'so với cùng thứ tuần trước',
-  },
-  {
-    value: '7d',
-    label: '7 ngày',
-    preset: '7d',
-    versus: '7 ngày trước',
-    versusLong: 'so với 7 ngày trước đó',
-  },
-  {
-    value: '30d',
-    label: '30 ngày',
-    preset: '30d',
-    versus: '30 ngày trước',
-    versusLong: 'so với 30 ngày trước đó',
-  },
-];
-
-function readRange(): DashboardRange {
-  try {
-    const value = localStorage.getItem(RANGE_KEY);
-    return RANGES.some((item) => item.value === value) ? (value as DashboardRange) : 'today';
-  } catch {
-    return 'today';
-  }
-}
-
 /**
  * Operations dashboard (4.5, 6.1): "what do I need to handle today?". Every KPI and to-do row links
- * to a pre-filtered list.
+ * to a pre-filtered list. It always shows today: longer periods and comparisons live in Báo cáo.
  */
 @Component({
   selector: 'adm-dashboard-page',
@@ -70,7 +26,6 @@ function readRange(): DashboardRange {
     MoneyPipe,
     NumPipe,
     RelativePipe,
-    LowerCasePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard-page.html',
@@ -79,12 +34,8 @@ function readRange(): DashboardRange {
 export class DashboardPage {
   protected readonly session = inject(AdminSession);
   private readonly api = inject(ADMIN_DASHBOARD_API);
-  protected readonly ranges = RANGES;
-  protected readonly range = signal<DashboardRange>(readRange());
+  private readonly range = signal<DashboardRange>('today');
   protected readonly view = loader(this.range, (range) => this.api.summary(range));
-  protected readonly rangeInfo = computed(
-    () => RANGES.find((item) => item.value === this.range()) ?? RANGES[0],
-  );
   protected readonly summary = this.view.data;
 
   protected readonly greeting = computed(() => {
@@ -217,28 +168,18 @@ export class DashboardPage {
       };
     const arrow = kpi.change > 0 ? '▲' : kpi.change < 0 ? '▼' : '';
     const value = `${arrow} ${percent(Math.abs(kpi.change))}`;
-    const info = this.rangeInfo();
     return {
-      text: `${value} vs ${info.versus}`,
-      title: `${value} ${info.versusLong}`,
+      text: `${value} so với cùng thứ tuần trước`,
+      title: `${value} so với cùng thứ tuần trước`,
       dir: kpi.change > 0 ? 'up' : kpi.change < 0 ? 'down' : '',
     };
-  }
-
-  setRange(range: DashboardRange): void {
-    this.range.set(range);
-    try {
-      localStorage.setItem(RANGE_KEY, range);
-    } catch {
-      /* Storage unavailable: the choice lasts for this page only. */
-    }
   }
 
   rangeChange(): string {
     const { total, previous } = this.chart();
     if (!previous) return '';
     const change = (total - previous) / previous;
-    return `${change >= 0 ? '▲' : '▼'} ${percent(Math.abs(change))} so với 30 ngày trước đó`;
+    return `${change >= 0 ? 'Tăng' : 'Giảm'} ${percent(Math.abs(change))} so với 30 ngày trước đó`;
   }
 
   protected readonly percent = percent;
