@@ -1,5 +1,16 @@
 # Handoff
 
+## Slice 2 — Catalog (2026-11-07, chờ QA/PO nghiệm thu)
+- BE (commit c263fee, 3e3a306, dc488d3, ee7fe6a): mã `not-found`, migration cộng thêm `20261107000400_catalog_schema` (RLS bật 4 bảng mới), `foldVi` + seed catalog idempotent (8 SP, 64 biến thể, 4 bảng size), module catalog, rate limit 120/60s/IP, cache header, đếm truy vấn. typecheck/build qua; `npm test` 133/133 pass (8 file), chưa đạt 3 lần pass liền do worker crash 0xC0000409 (không có assertion fail).
+- FE (commit 62d6520, b4c0d4a, 975ed2a): `catalogMode`, adapter HTTP + mock theo contract, Xem thêm, tiêu đề theo `total`, wishlist theo `ids`, PDP ẩn đánh giá ở http, hết hàng. lint/format/build qua; `catalog.spec.ts` 12/12; `pdp-plp/header/home/commerce` 32 pass, 4 skip, 2 fail (`commerce:144` flaky, `home:56` mobile banner → /auth/login, luồng auth, chưa xác nhận có từ trước).
+- Tích hợp thật cục bộ (BE + `start:local`): PLP 8 SP từ API, slug chữ hoa đổi về slug chuẩn, slug lạ hiện "Không tìm thấy sản phẩm", `/search?q=dam` ra 1 SP, bảng size `public, max-age=3600`, route lạ 404 `not-found` + `no-store`, giỏ localStorage không vỡ. Console chỉ có lỗi 404 mạng của slug lạ (mong đợi).
+- Chưa kiểm được: Xem thêm với 30 SP (AC-CAT-41, seed chỉ 8), ngắt mạng/Thử lại (AC-CAT-28, 49), p95 trên Supabase (AC-CAT-52).
+- Postgres cục bộ: cổng 54329 hiện là cụm tạm `C:/Users/ADMIN/AppData/Local/Temp/n2f-pg18` do agent BE dựng lại; dữ liệu auth cũ của `n2f_dev` không có trong cụm này. Bật lại: `"C:/Program Files/PostgreSQL/18/bin/pg_ctl" -D C:/Users/ADMIN/AppData/Local/Temp/n2f-pg18 -o "-p 54329 -c listen_addresses=127.0.0.1" start`.
+- Áp Supabase (chỉ khi Thắng xác nhận), trong `backend/` với `.env` Supabase: `npx prisma migrate deploy` rồi `npm run seed:catalog` (DIRECT_URL cổng 5432).
+
+### Đề xuất đổi contract (Slice 2)
+- `gender` dài hơn `maxLength` 20: BE coi là giá trị lạ, trả trang rỗng thay vì 422. Cần xác nhận.
+
 ## Slice hiện tại: 1 — Auth thật
 
 ### Đã xong
