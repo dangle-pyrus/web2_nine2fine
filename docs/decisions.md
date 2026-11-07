@@ -1,0 +1,25 @@
+# Nhật ký quyết định
+
+| Ngày | Quyết định | Lý do | Người quyết định |
+| --- | --- | --- | --- |
+| 2026-11-05 | Làm việc theo đội 5 sub-agent (`.claude/agents/`), trao đổi qua `docs/`. | Yêu cầu của Thắng. | Thắng |
+| 2026-11-05 | Slice 1 = Auth thật (đăng ký / đăng nhập nối API thật). Thứ tự tiếp theo: Catalog → Cart & Checkout. | Chỉ Auth đã có cả FE và BE; Checkout cần BE có sản phẩm, tồn kho, đơn hàng. | Thắng |
+| 2026-11-05 | Agent Backend được sửa code backend hiện có (kể cả đổi tên endpoint) và chạy migration lên Supabase. Migration phá hủy dữ liệu vẫn phải xin xác nhận. | Thắng đồng ý ("được luôn"). | Thắng |
+| 2026-11-07 | Đăng ký yêu cầu đủ 13 tuổi trở lên (tính theo ngày sinh nếu người dùng nhập). Bộ chọn ngày sinh giới hạn năm tối đa = năm hiện tại − 10 (Thắng nêu 2026-11-06). | Trả lời câu hỏi mở 1; câu trả lời 2026-11-07 thay cho "không áp dụng". | Thắng |
+| 2026-11-07 | Gửi email OTP qua Gmail SMTP của nhóm. Thông tin đăng nhập SMTP chỉ nằm trong `backend/.env`. | Câu hỏi mở 2. | Thắng |
+| 2026-11-07 | Staff/admin đăng nhập ở trang riêng `/admin/login`; storefront dùng `/auth/login`. | Câu hỏi mở 3. | Thắng |
+| 2026-11-07 | Điều khoản: chỉ lưu log thời điểm người dùng đồng ý, không quản lý phiên bản, không bắt đồng ý lại. | Câu hỏi mở 4. | Thắng |
+| 2026-11-07 | Thời hạn phiên theo đề xuất PO: member 30 ngày không hoạt động / tối đa 90 ngày; staff/admin 8 giờ / tối đa 24 giờ. | Câu hỏi mở 5. | Thắng |
+| 2026-11-07 | Email liên hệ hỗ trợ (ví dụ khi tài khoản bị khoá): phthang0872@gmail.com. | Câu hỏi mở 6. | Thắng |
+| 2026-11-07 | Đổi/tạo mật khẩu ở trang Profile dời sang slice Account (Won't ở Slice 1). | Câu hỏi mở 8. | Thắng |
+| 2026-11-07 | Stack backend giữ nguyên: Express + TypeScript + Prisma + PostgreSQL (Supabase). | Kết luận thread đánh giá stack. | Thắng |
+| 2026-11-07 | Câu hỏi mở 7 (dữ liệu bảng users, tài khoản staff/admin cần seed): Orchestrator tự kiểm tra trên Supabase ở bước triển khai, trước khi chạy migration. | Thắng giao tự kiểm tra. | Thắng |
+| 2026-11-07 | Tài khoản seed dùng email giả tên miền `.test` (không gửi thư được): admin `admin@nine2fine.test`, staff `staff@nine2fine.test`, member demo `member@nine2fine.test`. Các tài khoản này đăng nhập bằng mật khẩu; luồng mã xác thực thử bằng email thật của người kiểm thử. Mật khẩu seed đọc từ `SEED_*_PASSWORD` trong `backend/.env`, không ghi vào repo hay tài liệu. Seed idempotent (upsert theo email), không xoá 2 tài khoản member đang có. | Thắng yêu cầu không dùng email cá nhân cho seed (thay phương án plus-address cùng ngày). | Thắng |
+| 2026-11-07 | FE và API chạy cùng site: dev dùng Angular proxy `/api` → BE, production deploy cùng domain. Cookie `SameSite=Lax`. | Đơn giản nhất cho cookie HttpOnly + CSRF; trả lời câu hỏi BE #1. | Orchestrator |
+| 2026-11-07 | Cơ chế phiên: token mờ phía server (DB lưu SHA-256), cookie HttpOnly tách `n2f_sid` (storefront) và `n2f_asid` (admin); CSRF = SameSite + kiểm Origin allowlist + header `X-Requested-With: n2f`. Bỏ JWT. | Thu hồi phiên được ngay (BR-AUTH đăng xuất, đặt lại mật khẩu); câu hỏi BE #4. | Orchestrator |
+| 2026-11-07 | Duyệt thư viện BE: zod, nodemailer, cookie-parser, helmet, vitest, supertest; gỡ jsonwebtoken. Không thêm thư viện nào khác cho Slice 1. | Mỗi thư viện phục vụ trực tiếp một BR (validation, gửi mail, cookie, header bảo mật, test). | Orchestrator |
+| 2026-11-07 | 2 user member trên Supabase là dữ liệu thử: không đảo first_name/last_name; chấp nhận user có mật khẩu cũ phải đặt lại (không viết code tương thích băm cũ). | Tránh mã chết cho 1 tài khoản thử; câu hỏi BE #2. | Orchestrator |
+| 2026-11-07 | Chấp nhận `GET /api/admin/auth/me` trả 401 khi chưa đăng nhập, `GET /api/auth/me` trả 200 `{user:null}`. | Khớp guard admin hiện có và BR-AUTH-25; câu hỏi BE #6. | Orchestrator |
+| 2026-11-07 | Slice 1 chỉ dùng migration cộng thêm: KHÔNG xoá `login_attempts`, cột `attempts`/`locked_until`, `sessions.device_id`, enum `Role`, OTP cũ. Phần không còn dùng ghi vào backlog "Dọn schema auth" ở slice sau. Thay đổi cần NOT NULL → nullable vẫn được phép. | Thắng chọn "Giữ lại, để sau" trên thẻ quyết định. | Thắng |
+| 2026-11-07 | Chốt contract `docs/api/openapi.yaml` (11 endpoint, 13 mã lỗi) cho Slice 1 sau khi đối chiếu với 4 spec màn hình: khớp field, ràng buộc tên/mật khẩu/mã, `retryAfterSeconds` cho đếm ngược và khoá. Quy tắc "mật khẩu không trùng email" kiểm ở BE, trả `validation` với `field: newPassword`. | Bước 3 quy trình. | Orchestrator |
+| 2026-11-07 | Câu hỏi Designer: (1) giữ 3 ô nhập ngày/tháng/năm, không làm dropdown — năm > năm hiện tại − 10 báo lỗi; (2) giữ nhãn "Họ", nhận microcopy Designer đề xuất; (3) admin: staff bị khoá mật khẩu chờ 15 phút hoặc liên hệ admin, không có đường mã xác thực; member đăng nhập ở `/admin/login` → `invalid-credentials`; staff đã đăng nhập mở `/admin/login` → chuyển `/admin`; returnUrl admin chỉ nhận đường dẫn bắt đầu bằng `/admin`; (4) banner "phiên hết hạn" ở admin dùng tone Info. | Không đổi phạm vi; giữ visual hiện có, tránh lộ thông tin tài khoản. | Orchestrator |

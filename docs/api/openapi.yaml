@@ -1,0 +1,604 @@
+openapi: 3.1.0
+info:
+  title: nine2fine API - Auth (Slice 1)
+  version: 0.1.0
+  description: |
+    status: locked (2026-11-07, Orchestrator)
+
+    Hợp đồng auth duy nhất cho storefront (Angular) và backend (Express 5 + Prisma). BR/AC tham chiếu `docs/product/PRD.md` Slice 1.
+    Khi chuyển `locked`, chỉ đổi qua quy trình: đề xuất trong `docs/handoff.md` -> Orchestrator duyệt -> cập nhật file này + `docs/decisions.md`.
+
+    ## Quy ước chung
+    - Mọi đường dẫn nằm sau `/api`. JSON UTF-8, `camelCase`, thời gian ISO 8601 UTC.
+    - **Chuẩn hoá đầu vào (server làm trước khi validate):** `email` trim + lowercase (BR-AUTH-01); `code` bỏ khoảng trắng và dấu `-` (Should); `firstName`/`lastName` trim, gộp khoảng trắng, chuẩn hoá Unicode NFC (BR-AUTH-10). `password` giữ nguyên văn (BR-AUTH-17). Trường lạ trong body bị bỏ qua (ví dụ `role` khi đăng ký không có tác dụng, AC-AUTH-83).
+    - Mọi lỗi 4xx do dữ liệu (kể cả JSON hỏng, body > 16 KB) trả `422 validation`. Không dùng 400.
+
+    ## Cơ chế phiên (BR-AUTH-23..29, 35)
+    - **Phiên phía máy chủ, token mờ (opaque), không dùng JWT.** Đăng nhập thành công tạo 1 dòng `sessions`; token là 32 byte ngẫu nhiên (CSPRNG) mã hoá base64url, CSDL chỉ lưu SHA-256 của token. Thu hồi phiên có hiệu lực ngay (BR-AUTH-29), đăng xuất chỉ thu hồi đúng 1 dòng (BR-AUTH-27).
+    - **Cookie:** `HttpOnly; SameSite=Lax; Secure` (Secure bật khi `NODE_ENV=production`), `Max-Age` = thời gian còn lại tới hạn tuyệt đối. Hai cookie tách biệt: storefront `n2f_sid` (`Path=/api`), admin `n2f_asid` (`Path=/api/admin`). Cookie storefront không có giá trị ở `/api/admin/**` và ngược lại. Không trả token trong body, không có header `Authorization`.
+    - **Hạn phiên:** member 30 ngày không hoạt động / tối đa 90 ngày; staff, admin 8 giờ / 24 giờ (BR-AUTH-24). Hạn không-hoạt-động trượt theo mỗi yêu cầu có xác thực (ghi `lastUsedAt` tối đa 1 lần/phút). Tối đa 10 phiên còn hạn mỗi tài khoản (BR-AUTH-28).
+    - **Vai trò đọc từ bảng `users` ở mỗi yêu cầu** (không sao chép vào phiên), nên vô hiệu hoá / đổi vai trò có hiệu lực ngay; đồng thời vẫn thu hồi phiên theo BR-AUTH-29.
+    - **Chống CSRF (3 lớp):** (1) `SameSite=Lax`; (2) mọi yêu cầu không phải GET/HEAD/OPTIONS phải có header `Origin` thuộc `CORS_ALLOWED_ORIGINS`, thiếu hoặc sai -> `403 origin-not-allowed`; (3) mọi yêu cầu ghi phải có header `X-Requested-With: n2f` (buộc preflight) và `Content-Type: application/json`. GET không bao giờ đổi trạng thái.
+    - **CORS:** allowlist `CORS_ALLOWED_ORIGINS` (không dùng `*`), `Access-Control-Allow-Credentials: true`, cho phép header `Content-Type`, `X-Requested-With`. FE phải gọi với `withCredentials: true` (đã có).
+
+    ## Phân quyền cho các module khác
+    - Không có cookie hợp lệ -> `401 unauthenticated`. Có phiên nhưng thiếu quyền -> `403 forbidden` (BR-AUTH-34). Ma trận quyền ở slice Admin.
+
+    ## Giới hạn tần suất
+    Mọi `429` có header `Retry-After` (giây) và `error.retryAfterSeconds`. Ngưỡng chi tiết ở từng endpoint (BR-AUTH-02, 06, 08, 18).
+
+    ## Chống dò email (BR-AUTH-03)
+    Ngoài `POST /auth/lookup`, các endpoint trả cùng mã trạng thái, cấu trúc và thông điệp cho email có / không tồn tại. Việc gửi thư chạy nền (không chờ) và luôn thực hiện một phép so sánh băm giả khi không có bản ghi, để chênh lệch thời gian trung vị <= 300 ms.
+
+    ## Khác biệt so với FE hiện tại (giữ tên cũ khi hợp lý)
+    Giữ nguyên: đường dẫn `lookup`, `codes`, `login/code`, `login/password`, `register`, `password/reset`; `camelCase`; `withCredentials`; purpose `reset-password`; `AuthUser`. Đổi: (1) body lỗi dạng `{error:{code,message,...}}` và FE map theo `error.code` thay vì theo HTTP status (lý do: 422/400 hiện bị trộn, BR-AUTH-36); `AuthErrorCode` mở rộng; (2) `AuthUser` thêm `role` (BR-AUTH-25); (3) thêm `GET /auth/me`, `POST /auth/logout`; (4) `ResetPasswordRequest` giữ `{email, code, newPassword}`, không có `confirmPassword`; (5) FE thêm header `X-Requested-With: n2f` bằng 1 interceptor; (6) admin: lỗi đổi từ `{code,message,fields}` sang `{error:{code,message,field}}` (một schema duy nhất), `fields` map thành một `field` mỗi lỗi; `AdminUser` = `AuthUser` với `role` in (`staff`,`admin`).
+  license:
+    name: Proprietary
+servers:
+  - url: /api
+    description: Cùng origin qua proxy (khuyến nghị); dev Angular dùng proxy `/api`.
+tags:
+  - name: storefront-auth
+    description: Khách mua hàng, cookie `n2f_sid`.
+  - name: admin-auth
+    description: Staff / admin, cookie `n2f_asid`, `/api/admin/auth/*` (BR-AUTH-33).
+security: []
+paths:
+  /auth/lookup:
+    post:
+      tags: [storefront-auth]
+      operationId: lookupEmail
+      summary: Tra email đã đăng ký chưa (BR-AUTH-02)
+      description: |
+        Chỉ trả `registered`. Tài khoản bị vô hiệu vẫn là `true`. Giới hạn: 20 lần / 15 phút / IP và 10 lần / 15 phút / email.
+        Đây là đường dò email duy nhất được chấp nhận (luồng Figma).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+      responses:
+        '200':
+          description: Kết quả tra cứu (AC-AUTH-01, 03, 04).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registered]
+                additionalProperties: false
+                properties:
+                  registered: { type: boolean }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/codes:
+    post:
+      tags: [storefront-auth]
+      operationId: requestCode
+      summary: Gửi / gửi lại mã 8 số (BR-AUTH-04..09)
+      description: |
+        Phản hồi 200 luôn giống nhau dù email có tài khoản hay không (BR-AUTH-03, 09):
+        - `register` + email chưa có tài khoản: gửi mã. `register` + đã có: gửi thư "đã có tài khoản", không mã.
+        - `login` / `reset-password` + tài khoản hoạt động: gửi mã. Không có tài khoản: không gửi gì. Tài khoản bị vô hiệu: gửi thư báo khoá kèm email hỗ trợ, không mã.
+        - Đang trong thời gian chờ 60 giây (cùng email + mục đích): không tạo mã mới, mã cũ còn hiệu lực, vẫn 200 với `resendAfterSeconds` = số giây còn lại (BR-AUTH-06a, AC-AUTH-13/14).
+        Mã hết hạn sau 10 phút; tạo mã mới vô hiệu mã cũ cùng email + mục đích (BR-AUTH-05, 07).
+        Giới hạn: 5 lần gửi / 30 phút / email / mục đích; 30 lần / giờ / IP (BR-AUTH-06b/c) -> `429 rate-limited`. Email đang bị khoá xác thực bằng mã (BR-AUTH-08) -> `429 code-locked`.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, purpose]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+                purpose: { $ref: '#/components/schemas/CodePurpose' }
+      responses:
+        '200':
+          description: Đã xử lý (có thể không gửi thư). AC-AUTH-24, 25, 26.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resendAfterSeconds]
+                additionalProperties: false
+                properties:
+                  resendAfterSeconds:
+                    type: integer
+                    minimum: 0
+                    maximum: 60
+                    description: Số giây FE phải chờ trước lần gửi kế tiếp.
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429':
+          description: '`rate-limited` (AC-AUTH-15, 16) hoặc `code-locked` (AC-AUTH-20).'
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/login/code:
+    post:
+      tags: [storefront-auth]
+      operationId: loginWithCode
+      summary: Đăng nhập bằng mã (BR-AUTH-16)
+      description: |
+        Mã mục đích `login`, dùng 1 lần. Mã đúng + tài khoản hoạt động -> tạo phiên (`method=otp`), `Set-Cookie: n2f_sid`.
+        Mọi thất bại (sai, hết hạn, đã dùng, bị thay, email không có mã) -> `422 invalid-code` cùng thông điệp, không nêu số lần còn lại (BR-AUTH-08). Sai 5 lần / email / mục đích (đếm cả email không tồn tại) -> huỷ mã, khoá xác thực bằng mã 15 phút -> `429 code-locked`.
+        Mã đúng nhưng tài khoản bị vô hiệu -> `403 account-disabled` (chỉ sau khi xác thực đúng, BR-AUTH-19). Đăng nhập thành công xoá bộ đếm sai mã và sai mật khẩu của email.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+                code: { $ref: '#/components/schemas/Code' }
+      responses:
+        '200': { $ref: '#/components/responses/SessionCreated' }
+        '403':
+          description: '`account-disabled` (AC-AUTH-26 luồng X) hoặc `origin-not-allowed`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: '`validation` (định dạng) hoặc `invalid-code` (AC-AUTH-09..12, 17, 19, 21).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: '`code-locked` (AC-AUTH-20..22) hoặc `rate-limited` (IP).'
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/login/password:
+    post:
+      tags: [storefront-auth]
+      operationId: loginWithPassword
+      summary: Đăng nhập bằng mật khẩu (BR-AUTH-17, 18, 19)
+      description: |
+        Email không tồn tại, tài khoản chưa có mật khẩu, sai mật khẩu, tài khoản bị vô hiệu + mật khẩu sai -> cùng `401 invalid-credentials` (AC-AUTH-42, 43, 49). Mật khẩu so nguyên văn.
+        5 lần sai liên tiếp / email (mỗi lần cách lần trước <= 15 phút; đếm cả email không tồn tại) -> khoá 15 phút -> `429 password-locked`, kể cả khi nhập đúng (AC-AUTH-44, 47). Thêm 20 lần sai / 15 phút / IP -> `429 rate-limited` (AC-AUTH-48). Đăng nhập bằng mã không bị ảnh hưởng và gỡ khoá (AC-AUTH-45).
+        Mật khẩu đúng + tài khoản bị vô hiệu -> `403 account-disabled` (AC-AUTH-50). Thành công -> phiên `method=password`, `Set-Cookie: n2f_sid`.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+                password:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+                  description: Nguyên văn, không trim. Không áp quy tắc BR-AUTH-20 ở đường đăng nhập.
+      responses:
+        '200': { $ref: '#/components/responses/SessionCreated' }
+        '401':
+          description: '`invalid-credentials`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: '`account-disabled` hoặc `origin-not-allowed`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429':
+          description: '`password-locked` hoặc `rate-limited`.'
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/register:
+    post:
+      tags: [storefront-auth]
+      operationId: register
+      summary: Đăng ký không mật khẩu (BR-AUTH-10..15)
+      description: |
+        Thứ tự xử lý: (1) validate định dạng mọi trường (kể cả tuổi >= 13, đồng ý điều khoản) **trước khi tiêu mã** -> `422 validation`/`underage`; (2) kiểm mã mục đích `register` -> `422 invalid-code` / `429 code-locked`; (3) trong 1 transaction: nếu email đã có tài khoản -> `409 email-registered` (chỉ lộ sau khi mã đúng, BR-AUTH-14), nếu chưa -> tạo user `role=member`, `isActive=true`, không mật khẩu, `termsAcceptedAt=now`, `marketingOptInAt=now` nếu tick; huỷ mã; tạo phiên `method=register`. Ràng buộc UNIQUE(email) bảo đảm đúng 1 tài khoản khi 2 yêu cầu đồng thời (AC-AUTH-37), yêu cầu thua nhận `409 email-registered`.
+        `birthDate`: `null` hoặc ngày có thật trong [1900-01-01, hôm nay giờ VN); nếu có thì phải đủ 13 tuổi tính theo ngày giờ VN (đúng sinh nhật 13 là đủ). Thiếu 1 phần / ngày không có thật / tương lai -> `validation` field `birthDate`; chưa đủ 13 -> `underage` field `birthDate`.
+        `acceptedTerms` phải đúng `true` (AC-AUTH-33).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, firstName, lastName, marketingOptIn, acceptedTerms]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+                code: { $ref: '#/components/schemas/Code' }
+                firstName:
+                  allOf: [{ $ref: '#/components/schemas/PersonName' }]
+                  description: Tên gọi, ví dụ "Minh" (BR-AUTH-10, D14).
+                lastName:
+                  allOf: [{ $ref: '#/components/schemas/PersonName' }]
+                  description: Họ và tên đệm, ví dụ "Nguyễn Văn".
+                birthDate:
+                  type: [string, 'null']
+                  format: date
+                  description: YYYY-MM-DD hoặc null.
+                marketingOptIn: { type: boolean, default: false }
+                acceptedTerms:
+                  type: boolean
+                  const: true
+      responses:
+        '201':
+          description: Đã tạo tài khoản và phiên (AC-AUTH-29, 34, 36, 39).
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetCookieSession' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthUser' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409':
+          description: '`email-registered` (AC-AUTH-37).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: '`validation` (có `field`), `underage` (field `birthDate`) hoặc `invalid-code` (AC-AUTH-27, 28, 32, 32b, 33, 38).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: '`code-locked` hoặc `rate-limited`.'
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/password/reset:
+    post:
+      tags: [storefront-auth]
+      operationId: resetPassword
+      summary: Đặt lại / tạo mật khẩu lần đầu (BR-AUTH-20..22)
+      description: |
+        Mã mục đích `reset-password`. Thứ tự: validate `newPassword` (BR-AUTH-20: 8-64 ký tự, >= 1 A-Z, >= 1 0-9, không trùng email không phân biệt hoa thường) **trước khi tiêu mã** (AC-AUTH-53); kiểm mã; trong 1 transaction: lưu băm bcrypt, huỷ mọi mã reset còn lại của email, xoá bộ đếm sai mật khẩu + khoá, **thu hồi mọi phiên** của user (cả storefront và admin). Không tự đăng nhập, không `Set-Cookie`. Gửi thư "Mật khẩu vừa thay đổi" (Should, nền). Email không có tài khoản: mã không thể đúng nên trả `invalid-code` như mọi trường hợp (BR-AUTH-03).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, newPassword]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+                code: { $ref: '#/components/schemas/Code' }
+                newPassword: { $ref: '#/components/schemas/NewPassword' }
+      responses:
+        '204':
+          description: Đã đổi mật khẩu, mọi phiên đã bị thu hồi (AC-AUTH-54, 56, 57, 58, 59).
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422':
+          description: '`validation` (field `newPassword`) hoặc `invalid-code` (AC-AUTH-51, 51b, 53, 59).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429':
+          description: '`code-locked` hoặc `rate-limited`.'
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/me:
+    get:
+      tags: [storefront-auth]
+      operationId: getCurrentSession
+      summary: Phiên hiện tại (khôi phục khi tải lại, BR-AUTH-25)
+      description: |
+        Luôn 200. Khách -> `{user:null}` (không phải lỗi, AC-AUTH-66). Cookie hết hạn / bị thu hồi -> `{user:null}` và `Set-Cookie` xoá cookie. Phiên hợp lệ -> hồ sơ công khai và trượt hạn không-hoạt-động.
+        Khác `GET /admin/auth/me`: storefront coi "chưa đăng nhập" là trạng thái bình thường nên không 401.
+        Phản hồi có `Cache-Control: no-store`.
+      security:
+        - storefrontSession: []
+        - {}
+      responses:
+        '200':
+          description: Hồ sơ hoặc null.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                additionalProperties: false
+                properties:
+                  user:
+                    oneOf:
+                      - $ref: '#/components/schemas/AuthUser'
+                      - type: 'null'
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /auth/logout:
+    post:
+      tags: [storefront-auth]
+      operationId: logout
+      summary: Đăng xuất phiên hiện tại (BR-AUTH-27)
+      description: |
+        Chỉ thu hồi đúng phiên khớp cookie; phiên khác của user giữ nguyên (AC-AUTH-70). Cookie thiếu / giả / hết hạn -> vẫn `204` và xoá cookie, không thu hồi phiên nào (AC-AUTH-71, 73). Cần qua kiểm tra CSRF để kẻ khác không đăng xuất hộ.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+        - {}
+      responses:
+        '204':
+          description: Đã đăng xuất (hoặc vốn đã là khách).
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetCookieCleared' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/auth/login:
+    post:
+      tags: [admin-auth]
+      operationId: adminLogin
+      summary: Đăng nhập staff / admin bằng mật khẩu (BR-AUTH-31, 33)
+      description: |
+        Chỉ tài khoản `role` in (`staff`,`admin`); member hay email lạ -> cùng `401 invalid-credentials`. Cùng bộ đếm khoá và giới hạn IP với `/auth/login/password` (BR-AUTH-18). Tài khoản bị vô hiệu + đúng mật khẩu -> `403 account-disabled`. Phiên `audience=admin`, hạn 8 giờ / 24 giờ, `Set-Cookie: n2f_asid`. Staff/admin vẫn đăng nhập được ở storefront bằng `/auth/login/*` (bảng 4.10a). Không có đăng nhập bằng mã ở admin trong Slice 1; quên mật khẩu admin dùng `/auth/codes` + `/auth/password/reset` (cùng bảng users).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { $ref: '#/components/schemas/Email' }
+                password: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '200':
+          description: Hồ sơ staff/admin + cookie admin.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetCookieAdminSession' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthUser' }
+        '401':
+          description: '`invalid-credentials`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: '`account-disabled` hoặc `origin-not-allowed`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429':
+          description: '`password-locked` hoặc `rate-limited`.'
+          headers:
+            Retry-After: { $ref: '#/components/headers/RetryAfter' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/auth/me:
+    get:
+      tags: [admin-auth]
+      operationId: adminGetCurrentSession
+      summary: Phiên admin hiện tại
+      description: 'Giữ hành vi FE admin hiện có (adminAuthGuard bắt lỗi 401): chưa đăng nhập -> 401 unauthenticated. Phản hồi Cache-Control: no-store.'
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Hồ sơ staff/admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthUser' }
+        '401':
+          description: '`unauthenticated` (AC-AUTH-64, 88).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/auth/logout:
+    post:
+      tags: [admin-auth]
+      operationId: adminLogout
+      summary: Đăng xuất phiên admin hiện tại
+      description: Như `/auth/logout` nhưng với cookie `n2f_asid`; luôn `204`.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - adminSession: []
+        - {}
+      responses:
+        '204':
+          description: Đã đăng xuất.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetCookieCleared' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    storefrontSession:
+      type: apiKey
+      in: cookie
+      name: n2f_sid
+      description: Token phiên mờ, HttpOnly, SameSite=Lax, Path=/api.
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: n2f_asid
+      description: Token phiên admin mờ, HttpOnly, SameSite=Lax, Path=/api/admin.
+  parameters:
+    CsrfHeader:
+      name: X-Requested-With
+      in: header
+      required: true
+      schema: { type: string, const: n2f }
+      description: Bắt buộc ở mọi yêu cầu ghi (lớp CSRF 3). Thiếu -> `403 origin-not-allowed`.
+  headers:
+    RetryAfter:
+      description: Số giây chờ, bằng `error.retryAfterSeconds`.
+      schema: { type: integer, minimum: 1 }
+    SetCookieSession:
+      description: '`n2f_sid=<token>; HttpOnly; SameSite=Lax; Path=/api; Max-Age=<s>[; Secure]`'
+      schema: { type: string }
+    SetCookieAdminSession:
+      description: '`n2f_asid=<token>; HttpOnly; SameSite=Lax; Path=/api/admin; Max-Age=<s>[; Secure]`'
+      schema: { type: string }
+    SetCookieCleared:
+      description: Cookie phiên tương ứng bị xoá (`Max-Age=0`).
+      schema: { type: string }
+  responses:
+    SessionCreated:
+      description: Đăng nhập thành công, hồ sơ công khai + cookie (AC-AUTH-40, 61).
+      headers:
+        Set-Cookie: { $ref: '#/components/headers/SetCookieSession' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AuthUser' }
+    Validation:
+      description: '`validation`, kèm `field` khi gắn được vào một trường (AC-AUTH-02).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    OriginNotAllowed:
+      description: '`origin-not-allowed`: thiếu / sai `Origin` hoặc thiếu `X-Requested-With` (AC-AUTH-92).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateLimited:
+      description: '`rate-limited` (AC-AUTH-05, 06).'
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unavailable:
+      description: '`unavailable`: lỗi máy chủ; không có stack trace, SQL, tên bảng (AC-AUTH-93, 94).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    Email:
+      type: string
+      minLength: 6
+      maxLength: 254
+      pattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+      description: Server trim + lowercase rồi mới kiểm; giữ dấu chấm và phần `+` (BR-AUTH-01).
+      examples: ['minh@example.com']
+    Code:
+      type: string
+      pattern: '^[0-9]{8}$'
+      description: 8 chữ số, có thể bắt đầu bằng 0. Server bỏ khoảng trắng và `-` trước khi kiểm. Chỉ so băm HMAC (BR-AUTH-04).
+      examples: ['04817392']
+    CodePurpose:
+      type: string
+      enum: [login, register, reset-password]
+    PersonName:
+      type: string
+      minLength: 1
+      maxLength: 50
+      pattern: "^[\\p{L}\\p{M}][\\p{L}\\p{M} '-]*$"
+      description: Sau trim + gộp khoảng trắng + NFC. Chữ cái (kể cả có dấu), khoảng trắng, `'`, `-` (BR-AUTH-10). Regex Unicode (cờ `u`).
+    NewPassword:
+      type: string
+      minLength: 8
+      maxLength: 64
+      pattern: '^(?=.*[A-Z])(?=.*[0-9]).+$'
+      description: BR-AUTH-20. Không bỏ khoảng trắng; ngoài regex, server kiểm không trùng email (không phân biệt hoa thường). Không bao giờ trả lại trong phản hồi.
+    Role:
+      type: string
+      enum: [member, staff, admin]
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, role]
+      additionalProperties: false
+      description: Hồ sơ công khai (BR-AUTH-25). Không có hash, trạng thái, hasPassword.
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        firstName: { type: string, description: Tên gọi }
+        lastName: { type: string, description: Họ và tên đệm }
+        role: { $ref: '#/components/schemas/Role' }
+    ErrorCode:
+      type: string
+      description: |
+        Mã lỗi ổn định (BR-AUTH-36). Map HTTP / AC:
+        | code | HTTP | AC |
+        | validation | 422 | AC-AUTH-02, 27, 28, 32, 33, 51, 51b, 52(FE), 53 |
+        | underage | 422 | AC-AUTH-32b |
+        | invalid-code | 422 | AC-AUTH-09..12, 17, 19, 21, 38, 59 |
+        | code-locked | 429 | AC-AUTH-20, 21, 22 |
+        | rate-limited | 429 | AC-AUTH-05, 06, 15, 16, 48 |
+        | password-locked | 429 | AC-AUTH-44, 47, 58 |
+        | invalid-credentials | 401 | AC-AUTH-42, 43, 49 |
+        | account-disabled | 403 | AC-AUTH-26, 50 |
+        | email-registered | 409 | AC-AUTH-37 |
+        | unauthenticated | 401 | AC-AUTH-64, 68, 75, 88 |
+        | forbidden | 403 | AC-AUTH-84, 85, 88 |
+        | origin-not-allowed | 403 | AC-AUTH-92 |
+        | unavailable | 500 | AC-AUTH-93, 94 |
+      enum:
+        - validation
+        - underage
+        - invalid-code
+        - code-locked
+        - rate-limited
+        - password-locked
+        - invalid-credentials
+        - account-disabled
+        - email-registered
+        - unauthenticated
+        - forbidden
+        - origin-not-allowed
+        - unavailable
+    ErrorResponse:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message:
+              type: string
+              description: Câu tiếng Việt hiển thị thẳng (thông điệp theo PRD BR-AUTH-08, 17, 18, 19). Không chứa dữ liệu nhạy cảm; FE có thể dùng bản của mình theo `code`.
+            retryAfterSeconds:
+              type: integer
+              minimum: 1
+              description: Có khi `code` in (`rate-limited`, `code-locked`, `password-locked`).
+            field:
+              type: string
+              description: Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`).
