@@ -2,7 +2,7 @@ import prisma from '../../config/prisma';
 import { addMs, MINUTE, now, secondsUntil } from '../../lib/clock';
 import { generateOtp, hashOtp } from '../../lib/crypto';
 import { Errors } from '../../lib/errors';
-import { clearKeys, getLockSeconds, hitWindow, keys, peekWindow, recordFailure, setLock } from './rate-limit.service';
+import { clearKeys, getLockSeconds, getStates, hitWindow, keys, lockOf, recordFailure, setLock, windowOf } from './rate-limit.service';
 
 export type CodePurpose = 'login' | 'register' | 'reset-password';
 type DbPurpose = 'login' | 'register' | 'reset_password';
@@ -54,10 +54,10 @@ export async function verifyAndConsumeCode(
   const dbPurpose = toDbPurpose(purpose);
   const t = now();
 
-  const ipFails = await peekWindow(keys.codeVerifyFailIp(ip), 15 * MINUTE);
+  const states = await getStates([keys.codeVerifyFailIp(ip), keys.codeLock(email), keys.codeVerify(email, purpose)]);
+  const ipFails = windowOf(states.get(keys.codeVerifyFailIp(ip)), 15 * MINUTE, t);
   if (ipFails.count >= VERIFY_IP_FAIL_LIMIT) throw Errors.rateLimited(ipFails.retryAfterSeconds);
-
-  const lockSec = await codeLockSeconds(email);
+  const lockSec = lockOf(states.get(keys.codeLock(email)), t);
   if (lockSec > 0) throw Errors.codeLocked(lockSec);
 
   const token = await prisma.authActionToken.findFirst({
@@ -73,7 +73,7 @@ export async function verifyAndConsumeCode(
       data: { used_at: t },
     });
     if (consumed.count !== 1) throw Errors.invalidCode(); // thua cuộc đua với yêu cầu đồng thời
-    await clearKeys([keys.codeVerify(email, purpose)]);
+    if (states.has(keys.codeVerify(email, purpose))) await clearKeys([keys.codeVerify(email, purpose)]);
     return { userId: token.user_id };
   }
 
@@ -90,7 +90,7 @@ export async function verifyAndConsumeCode(
       where: { email, purpose: dbPurpose, used_at: null, invalidated_at: null },
       data: { invalidated_at: t },
     });
-    throw Errors.codeLocked(secondsUntil(failure.lockedUntil, t));
+    throw Errors.codeLocked(secondsUntil(failure.lockedUntil));
   }
   throw Errors.invalidCode();
 }

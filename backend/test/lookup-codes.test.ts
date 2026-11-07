@@ -219,7 +219,9 @@ describe('codes (OTP)', () => {
     const fifth = await post('/api/auth/login/code', { email: A.email, code: bad });
     expect(fifth.status).toBe(429);
     expect(fifth.body.error.code).toBe('code-locked');
-    expect(fifth.body.error.retryAfterSeconds).toBeGreaterThan(0);
+    expect(fifth.body.error.retryAfterSeconds).toBe(900);
+    expect(fifth.body.error.message).toContain('15 phút');
+    expect(fifth.headers['retry-after']).toBe('900');
     const right = await post('/api/auth/login/code', { email: A.email, code });
     expect(right.status).toBe(429);
     const resend = await post('/api/auth/codes', { email: A.email, purpose: 'reset-password' });
@@ -290,6 +292,22 @@ describe('codes (OTP)', () => {
     expect(mails).toHaveLength(1);
     expect(mails[0].text).toContain('support@example.test');
     expect(lastCode(X.email)).toBeUndefined();
+  });
+
+  it('N4: email chứa ký tự NUL -> 422 validation (không phải 500) ở mọi endpoint', async () => {
+    const email = 'a b@example.com';
+    const bodies: Array<[string, Record<string, unknown>]> = [
+      ['/api/auth/lookup', { email }],
+      ['/api/auth/codes', { email, purpose: 'login' }],
+      ['/api/auth/login/password', { email, password: 'Nine2fine1' }],
+      ['/api/auth/login/code', { email, code: '12345678' }],
+      ['/api/auth/register', { email, code: '12345678', firstName: 'A', lastName: 'B', acceptedTerms: true }],
+    ];
+    for (const [url, body] of bodies) {
+      const r = await post(url, body);
+      expect(r.status, url).toBe(422);
+      expect(r.body.error).toMatchObject({ code: 'validation', field: 'email' });
+    }
   });
 
   it('purpose không hợp lệ -> 422 validation', async () => {

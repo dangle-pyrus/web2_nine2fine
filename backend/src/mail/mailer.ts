@@ -79,11 +79,21 @@ export function setMailTransport(t: MailTransport | undefined): void {
  * Lỗi chỉ được log tên lỗi, không log địa chỉ nhận đầy đủ, nội dung hay mã.
  */
 export function sendMailInBackground(msg: MailMessage): void {
+  runInBackground('mail-send', async () => {
+    await getTransport().send(msg);
+  });
+}
+
+/**
+ * Chạy tác vụ nền (không chờ). Lỗi chỉ được log tên lỗi + nhãn, không log địa chỉ, nội dung hay mã.
+ * Được theo dõi để flushMail() chờ xong (test ổn định, tắt máy chủ gọn).
+ */
+export function runInBackground(label: string, task: () => Promise<void>): void {
   const p = (async () => {
     try {
-      await getTransport().send(msg);
+      await task();
     } catch (err) {
-      logger.error('mail-send-failed', { reason: err instanceof Error ? err.name : 'unknown' });
+      logger.error(`${label}-failed`, { reason: err instanceof Error ? err.name : 'unknown' });
     }
   })();
   pending.add(p);

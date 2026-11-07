@@ -43,6 +43,29 @@ export async function peekWindow(key: string, windowMs: number): Promise<WindowR
   return { allowed: true, count: row.count, retryAfterSeconds: secondsUntil(addMs(row.windowStart, windowMs), t) };
 }
 
+export type RateRow = { key: string; count: number; windowStart: Date; lockedUntil: Date | null };
+
+/** Đọc nhiều bộ đếm bằng 1 truy vấn. */
+export async function getStates(names: string[]): Promise<Map<string, RateRow>> {
+  const rows = await prisma.authRateLimit.findMany({ where: { key: { in: names } } });
+  return new Map(rows.map((r) => [r.key, r]));
+}
+
+/** Số lần trong cửa sổ cố định của một hàng đã đọc (0 nếu hết cửa sổ) + số giây còn lại. */
+export function windowOf(
+  row: RateRow | undefined,
+  windowMs: number,
+  t: Date = now(),
+): { count: number; retryAfterSeconds: number } {
+  if (!row || addMs(row.windowStart, windowMs) <= t) return { count: 0, retryAfterSeconds: 1 };
+  return { count: row.count, retryAfterSeconds: secondsUntil(addMs(row.windowStart, windowMs), t) };
+}
+
+/** Số giây khoá còn lại của một hàng đã đọc (0 nếu không khoá). */
+export function lockOf(row: RateRow | undefined, t: Date = now()): number {
+  return row?.lockedUntil && row.lockedUntil > t ? secondsUntil(row.lockedUntil, t) : 0;
+}
+
 export interface FailureResult {
   count: number;
   lockedUntil: Date | null;
