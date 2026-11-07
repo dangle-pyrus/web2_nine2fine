@@ -23,7 +23,6 @@
 - Test dùng Postgres 18 cục bộ, Supabase là 17.
 
 ### Đề xuất từ frontend-dev, chờ quyết định
-- Staff/admin đăng nhập ở `/auth/login` được chuyển `/admin`, nhưng cookie admin tách riêng nên guard đẩy tiếp sang `/admin/login`. Cần chốt hành vi.
 - Guard admin: member đang đăng nhập mở `/admin` → `/new-in` (AC-AUTH-87), thêm ngoài yêu cầu ghi rõ.
 - Mật khẩu mock admin (`admin-seed.ts`, tests) vẫn nằm trong repo, chỉ dùng cho mock.
 
@@ -52,3 +51,9 @@
 
 ### Đề xuất đổi contract
 (chưa có)
+
+### Sau QA vòng 1 (2026-11-07)
+- product-owner đã cập nhật PRD (BR-AUTH-09, 26, 31, 35, 36; AC-29, 32c, 79, 95a/95b; mục 6) và backlog (Dọn schema auth, Dọn mock, việc phát sinh sau QA). Quyết định ở decisions.md.
+- Việc cho ui-ux-designer: `docs/design/auth-login.md:11` còn ghi staff/admin đăng nhập storefront về `/admin`; cập nhật theo decisions 2026-11-07. Xem thêm N20 (link nhỏ ở 320px).
+- Việc cho backend-dev trước Slice 2: thêm mã `not-found` vào contract; test riêng cho giới hạn 30 lần sai mã/15 phút/IP.
+- Cần Thắng: chạy AC-95a (10 lần mã qua Gmail thật); xác nhận hoãn 8 AC.

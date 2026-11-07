@@ -42,7 +42,29 @@ PRD: `docs/product/PRD.md` › Slice 1 (BR-AUTH-01..38, AC-AUTH-01..97).
 
 Won't trong Slice 1: gộp giỏ phía máy chủ (→ Slice 3), đồng bộ wishlist (→ P1 Wishlist), ghi nhớ đăng nhập, đăng xuất mọi thiết bị, đăng nhập mạng xã hội, 2FA, CAPTCHA, đổi email, xoá tài khoản, quản lý staff bằng UI, tạo/đổi mật khẩu ở Profile (→ slice Account), lưu phiên bản điều khoản.
 
-Nghiệm thu: _chưa có `docs/qa/report-slice-1.md`._
+Nghiệm thu: QA vòng 1 (`docs/qa/report-slice-1-auth.md`, 2026-11-07): chưa đạt (89 Pass, 4 Fail: AC-07, 20, 29, 70; 8 chưa kiểm được). PO đề xuất đạt có điều kiện khi: M1, M3, N1, N2 sửa và QA kiểm lại; AC-29 đã sửa chữ AC (N3); AC-95a do Thắng chạy; AC hoãn theo PRD mục 6. M2 (test crash `0xC0000409`) không chặn nghiệm thu vì chỉ tái hiện trong vitest/Windows, không phải runtime; điều kiện: chạy `npm test` 3 lần liên tiếp pass hoặc pass trên Linux/CI, và M2 giữ mở trong backlog.
+
+### Việc phát sinh sau QA vòng 1 (Slice 1)
+
+| # | Hạng mục | Mức | Ghi chú |
+| --- | --- | --- | --- |
+| 1.20 | Sửa M1 (thời gian phản hồi `/auth/codes`), N1 (900 giây/"15 phút"), N2 (đăng xuất về `/`), M3 (ẩn "Tạo mật khẩu" ở Profile khi `authMode: http`) | Must | Điều kiện nghiệm thu |
+| 1.21 | M2: ổn định test backend (thử Linux CI, Node 22 LTS, Prisma `engineType = "client"`) | Should | Không chặn nghiệm thu; chặn tin vào CI |
+| 1.22 | N4 (email chứa NUL → 422), N6, N7, N8, N10, N11, N13, N14, N15, N18, N20 | Should | Minor, làm cùng đợt sửa nếu rẻ |
+| 1.23 | N17 đăng nhập chậm: đặt API cùng vùng DB, giảm số lượt truy vấn | Should | PRD chưa có chỉ tiêu; xem xét khi triển khai |
+
+### Dọn schema auth (slice sau Slice 1)
+
+Không làm trong Slice 1 (decisions 2026-11-07: chỉ migration cộng thêm). Cần Thắng xác nhận trước khi chạy vì phá huỷ dữ liệu.
+
+- Xoá bảng `login_attempts`, cột `attempts` và `locked_until`, cột `sessions.device_id`, enum `Role` không còn dùng.
+- Dọn OTP cũ ở `auth_action_tokens`, token và phiên đã hết hạn/đã dùng (job định kỳ hoặc script một lần).
+- Dọn `auth_rate_limits` quá hạn.
+
+### Dọn mock (trước go-live)
+
+- Bản production không chứa mật khẩu/mã demo mock (`app.config.ts`, `admin-providers.ts`, `mocks/accounts.ts`, `admin-seed.ts`); tách mock khỏi bundle production hoặc loại ở build. Hạn: khi Catalog, Account, Admin đều có API thật, và trước go-live. Tới lúc đó `mode: mock` được dùng cho catalog/account.
+- Thêm `fullstack.bundle` vào `.gitignore` (Orchestrator/dev).
 
 ---
 
