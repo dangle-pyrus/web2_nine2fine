@@ -248,7 +248,7 @@ export class LoginPage {
   private complete(user: AuthUser): void {
     this.flow.completing = true;
     this.session.signIn(user);
-    void this.router.navigateByUrl(this.flow.destinationFor(user.role));
+    void this.router.navigateByUrl(this.flow.destinationFor());
   }
 
   private run<T>(

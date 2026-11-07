@@ -325,7 +325,7 @@ export class RegisterPage {
           this.flow.completing = true;
           this.session.signIn(user);
           void this.router
-            .navigateByUrl(this.flow.destinationFor(user.role))
+            .navigateByUrl(this.flow.destinationFor())
             .finally(() => this.busy.set(false));
         },
         error: (error: unknown) => {

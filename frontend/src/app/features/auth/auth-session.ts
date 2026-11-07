@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { catchError, finalize, Observable, of, ReplaySubject, take, tap, timeout } from 'rxjs';
 import { SessionEvents } from '../../core/session-events';
 import { isAdminPath, sanitizeReturnUrl } from '../../core/return-url';
-import { AUTH_API, AuthRole, AuthUser } from './data-access/auth-api';
+import { AUTH_API, AuthUser } from './data-access/auth-api';
 
 /** BR-AUTH-25: pages that need a session wait at most this long for `GET /auth/me`. */
 const RESTORE_TIMEOUT_MS = 10_000;
@@ -92,12 +92,14 @@ export class AuthFlowState {
     this.returnUrl.set(sanitizeReturnUrl(candidate));
   }
 
-  /** Where to go after signing in: the return path, else `/admin` for staff and `/new-in`. */
-  destinationFor(role: AuthRole): string {
+  /**
+   * Where to go after signing in at the storefront: the return path, else `/new-in`. Every role
+   * lands in the shop; the admin has its own session (cookie) and sign-in page, so an `/admin`
+   * return path is dropped here.
+   */
+  destinationFor(): string {
     const url = this.returnUrl();
-    const staff = role !== 'member';
-    if (url && (staff || !isAdminPath(url))) return url;
-    return staff ? '/admin' : '/new-in';
+    return url && !isAdminPath(url) ? url : '/new-in';
   }
 }
 
@@ -114,6 +116,6 @@ export function redirectWhenSignedIn(): void {
     const user = session.user();
     if (session.restoring() || !user || flow.completing) return;
     flow.completing = true;
-    void router.navigateByUrl(flow.destinationFor(user.role), { replaceUrl: true });
+    void router.navigateByUrl(flow.destinationFor(), { replaceUrl: true });
   });
 }

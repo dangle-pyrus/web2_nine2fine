@@ -8,7 +8,8 @@ import {
 } from '../src/mocks/accounts';
 
 const member = MOCK_ACCOUNTS[0];
-const disabled = MOCK_ACCOUNTS[1];
+const disabled = MOCK_ACCOUNTS.find((account) => account.disabled)!;
+const staff = MOCK_ACCOUNTS.find((account) => account.role === 'staff')!;
 const CODE_LABEL = 'Mã xác thực (8 số)';
 const SIGN_IN = { name: 'Đăng nhập', exact: true } as const;
 
@@ -188,6 +189,26 @@ test.describe('storefront sign-in', () => {
       await expect(page).toHaveURL(/\/new-in$/);
     });
   }
+});
+
+test.describe('staff signing in at the storefront', () => {
+  test('BR-AUTH-31: staff lands on /new-in, an /admin returnUrl is dropped', async ({ page }) => {
+    await submitEmail(page, staff.email, '/auth/login?returnUrl=%2Fadmin%2Forders');
+    await page.getByLabel(CODE_LABEL).fill(DEMO_VERIFICATION_CODE);
+    await page.getByRole('button', SIGN_IN).click();
+    await expect(page).toHaveURL(/\/new-in$/);
+  });
+
+  test('BR-AUTH-30: signed-in staff opening an auth page goes to /new-in', async ({ page }) => {
+    await submitEmail(page, staff.email);
+    await page.getByLabel(CODE_LABEL).fill(DEMO_VERIFICATION_CODE);
+    await page.getByRole('button', SIGN_IN).click();
+    await expect(page).toHaveURL(/\/new-in$/);
+    await page.goto('/auth/login');
+    await expect(page).toHaveURL(/\/new-in$/);
+    await page.goto('/auth/login?returnUrl=%2Fadmin');
+    await expect(page).toHaveURL(/\/new-in$/);
+  });
 });
 
 test.describe('storefront register', () => {

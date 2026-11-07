@@ -41,7 +41,17 @@
               ],
               "outputHashing": "all"
             },
-            "development": { "optimization": false, "sourceMap": true }
+            "development": { "optimization": false, "sourceMap": true },
+            "e2e": {
+              "optimization": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/app/core/api-config.ts",
+                  "with": "src/app/core/api-config.e2e.ts"
+                }
+              ]
+            }
           },
           "defaultConfiguration": "production"
         },
@@ -51,6 +61,7 @@
           "configurations": {
             "production": { "buildTarget": "nine2fine:build:production" },
             "development": { "buildTarget": "nine2fine:build:development" },
+            "e2e": { "buildTarget": "nine2fine:build:e2e" },
             "share": {
               "buildTarget": "nine2fine:build:production",
               "allowedHosts": [".ngrok-free.app", ".ngrok-free.dev", ".ngrok.app", ".ngrok.dev"],

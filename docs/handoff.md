@@ -15,7 +15,7 @@
 - 2026-11-07 frontend-dev: adapter HTTP, interceptor, proxy, thay đổi UI theo spec, mock bám contract. Lint/build/format qua; Playwright mock 154 pass, 6 skip (số do agent báo).
 
 ### Đang làm
-- Áp lên Supabase: chờ Thắng tự chạy `migrate resolve --applied 0_baseline`, `migrate deploy`, `npm run seed` trong `backend/` (hệ thống quyền chặn agent). Sau đó bước 5 tích hợp và QA.
+- Supabase: Thắng đã chạy baseline, migrate deploy, seed (06:54Z); `_prisma_migrations` 4 dòng, users = 5. Đang chạy các luồng trên Supabase với Gmail thật, sau đó QA.
 
 ### Vấn đề đã biết
 - `npm test` backend: worker vitest thỉnh thoảng chết với mã `0xC0000409` trên Windows/Node 24 (5/11 lần), xảy ra cả với pool threads và forks. Prisma và các thư viện chạy riêng ngoài vitest không tái hiện (15 lần mỗi loại). Chưa rõ nguyên nhân. Khi crash, lệnh báo lỗi, không báo đạt giả.
@@ -46,6 +46,7 @@
 6. Admin `me` giữ 401 khi chưa đăng nhập (khớp FE admin hiện có), trong khi storefront `me` trả 200 `{user:null}` (BR-AUTH-25). Chấp nhận không đồng nhất này?
 
 ### Việc cho product-owner
+- Cập nhật BR-AUTH-31 (và BR-AUTH-30 nếu cần) cho khớp quyết định 2026-11-07: staff/admin đăng nhập ở storefront về `/new-in`, không tự vào `/admin`.
 - Thêm vào backlog mục "Dọn schema auth cũ" (xoá `login_attempts`, cột `attempts`/`locked_until`, `sessions.device_id`, enum `Role`) cho slice sau — Thắng chọn giữ lại ở Slice 1.
 
 ### Đề xuất đổi contract

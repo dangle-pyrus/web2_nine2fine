@@ -33,7 +33,8 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },
   ],
   webServer: {
-    command: 'npm start -- --port 4200',
+    // Mock build (no backend): the default build/serve use the real API (authMode 'http').
+    command: 'npm run start:e2e -- --port 4200',
     url: 'http://127.0.0.1:4200',
     reuseExistingServer: true,
     timeout: 180000,

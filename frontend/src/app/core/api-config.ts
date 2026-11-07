@@ -11,4 +11,4 @@ export interface ApiConfig {
   baseUrl: string;
 }
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
-export const apiConfig: ApiConfig = { mode: 'mock', authMode: 'mock', baseUrl: '/api' };
+export const apiConfig: ApiConfig = { mode: 'mock', authMode: 'http', baseUrl: '/api' };

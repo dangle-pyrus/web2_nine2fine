@@ -24,6 +24,16 @@ export const MOCK_ACCOUNTS: readonly MockAccount[] = [
     phone: '0901234567',
   },
   {
+    id: 'demo-staff',
+    email: 'staff.shopper@nine2fine.vn',
+    firstName: 'Hà',
+    lastName: 'Trần',
+    role: 'staff',
+    password: 'Nine2fine1',
+    birthDate: null,
+    phone: null,
+  },
+  {
     id: 'demo-disabled',
     email: 'locked@nine2fine.vn',
     firstName: 'Khoa',
