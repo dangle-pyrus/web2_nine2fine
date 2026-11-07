@@ -33,6 +33,10 @@ const schema = z
     MAIL_FROM_NAME: z.preprocess(emptyToUndefined, z.string().default('nine2fine')),
     MAIL_FROM_ADDRESS: opt(z.string()),
     SUPPORT_EMAIL: z.preprocess(emptyToUndefined, z.string().default('phthang0872@gmail.com')),
+    APP_BASE_URL: opt(z.string()),
+    BANK_NAME: opt(z.string()),
+    BANK_ACCOUNT_NUMBER: opt(z.string()),
+    BANK_ACCOUNT_NAME: opt(z.string()),
   })
   .superRefine((env, ctx) => {
     if (env.MAIL_MODE === 'smtp') {
@@ -69,6 +73,10 @@ export interface AppConfig {
     fromAddress: string;
   };
   supportEmail: string;
+  /** Gốc URL của storefront, dùng cho link trong email (Slice 3). */
+  appBaseUrl: string;
+  /** Tài khoản nhận chuyển khoản (G2). `null` khi chưa cấu hình đủ -> QR không bật được. */
+  bank: { name: string; accountNumber: string; accountName: string } | null;
 }
 
 function parseTrustProxy(v: string): boolean | number {
@@ -86,6 +94,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new ConfigError(names);
   }
   const e = parsed.data;
+  const firstOrigin = e.CORS_ALLOWED_ORIGINS.split(',')[0]?.trim() || 'http://localhost:4200';
   const smtp =
     e.MAIL_MODE === 'smtp'
       ? { host: e.SMTP_HOST!, port: e.SMTP_PORT!, secure: e.SMTP_SECURE, user: e.SMTP_USER!, pass: e.SMTP_PASS! }
@@ -109,6 +118,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       fromAddress: e.MAIL_FROM_ADDRESS ?? 'no-reply@nine2fine.test',
     },
     supportEmail: e.SUPPORT_EMAIL,
+    appBaseUrl: (e.APP_BASE_URL ?? firstOrigin).replace(/\/$/, ''),
+    bank:
+      e.BANK_NAME && e.BANK_ACCOUNT_NUMBER && e.BANK_ACCOUNT_NAME
+        ? { name: e.BANK_NAME, accountNumber: e.BANK_ACCOUNT_NUMBER, accountName: e.BANK_ACCOUNT_NAME }
+        : null,
   };
 }
 

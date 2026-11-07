@@ -7,6 +7,9 @@ import { originGuard, requireJsonBody } from './middleware/csrf';
 import { errorHandler, notFound } from './middleware/error';
 import { catalogRouter } from './modules/catalog/catalog.routes';
 import { adminAuthRouter, authRouter } from './modules/auth/auth.routes';
+import { cartRouter } from './modules/cart/cart.routes';
+import { locationRouter } from './modules/location/location.routes';
+import { checkoutRouter, voucherRouter } from './modules/checkout/checkout.routes';
 
 export interface CreateAppOptions {
   /** Cho module khác (và test) gắn thêm route dưới /api, trước middleware 404 / lỗi. */
@@ -26,7 +29,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
       origin: (origin, cb) => cb(null, !!origin && config.corsAllowedOrigins.includes(origin.replace(/\/$/, ''))),
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'X-Requested-With'],
+      allowedHeaders: ['Content-Type', 'X-Requested-With', 'Idempotency-Key'],
+      exposedHeaders: ['Idempotency-Replayed', 'Retry-After'],
       maxAge: 600,
     }),
   );
@@ -38,12 +42,17 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const api = Router();
   // Catalog trước originGuard: POST/PUT/DELETE không Origin vẫn trả 404 not-found (AC-CAT-46).
   api.use(catalogRouter);
+  // Địa giới công khai, chỉ đọc (như catalog).
+  api.use(locationRouter);
   api.use(originGuard);
   api.use(requireJsonBody);
   api.use(express.json({ limit: '16kb' }));
   api.use(cookieParser());
   api.use('/auth', authRouter);
   api.use('/admin/auth', adminAuthRouter);
+  api.use('/checkout', checkoutRouter);
+  api.use('/vouchers', voucherRouter);
+  api.use('/cart', cartRouter);
   options.extraApiRoutes?.(api);
   app.use('/api', api);
 

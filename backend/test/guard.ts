@@ -51,7 +51,7 @@ export function forceTestEnv(): void {
     SUPPORT_EMAIL: 'support@example.test',
     MAIL_FROM_NAME: 'nine2fine',
   });
-  for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'MAIL_FROM_ADDRESS', 'MAIL_OUTBOX_DIR']) {
+  for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'MAIL_FROM_ADDRESS', 'MAIL_OUTBOX_DIR', 'APP_BASE_URL', 'BANK_NAME', 'BANK_ACCOUNT_NUMBER', 'BANK_ACCOUNT_NAME']) {
     delete process.env[k];
   }
   assertLocalTestDb();
