@@ -140,7 +140,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: CATALOG_API,
       useFactory: () =>
-        inject(API_CONFIG).mode === 'mock' ? inject(MockCatalogApi) : inject(HttpCatalogApi),
+        inject(API_CONFIG).catalogMode === 'mock' ? inject(MockCatalogApi) : inject(HttpCatalogApi),
     },
     {
       provide: CHECKOUT_API,

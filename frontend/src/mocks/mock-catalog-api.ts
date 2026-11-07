@@ -8,6 +8,7 @@ import {
   ProductReview,
   ReviewEligibility,
   ReviewInput,
+  StockStatus,
 } from '../app/features/catalog/models/product';
 import { AuthSession } from '../app/features/auth/auth-session';
 import { PRODUCTS } from './products';
@@ -37,6 +38,29 @@ function withRating(product: Product): Product {
   return { ...product, rating: { average: Math.round(average * 10) / 10, count: reviews.length } };
 }
 const RATED_PRODUCTS = PRODUCTS.map(withRating);
+
+/** Same rule as the server: 0 = out, 1..5 = low, otherwise in stock. */
+function stockStatus(inventory: number): StockStatus {
+  if (inventory <= 0) return 'OUT_OF_STOCK';
+  return inventory <= 5 ? 'LOW_STOCK' : 'IN_STOCK';
+}
+
+/** Stock changes while the demo runs (orders), so the status is derived on every read. */
+function withStock(product: Product): Product {
+  return {
+    ...product,
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      stockStatus: stockStatus(variant.inventory),
+    })),
+  };
+}
+
+function withStockOrUndefined(product: Product | undefined): Product | undefined {
+  return product && withStock(product);
+}
+
+const DEFAULT_LIMIT = 24;
 
 interface CatalogSnapshot {
   reviews: [string, ProductReview[]][];
@@ -76,8 +100,12 @@ export class MockCatalogApi implements CatalogApi {
           (!query.category || product.category === query.category) &&
           (!query.moment || product.moments.some((moment) => moment === query.moment)) &&
           // Name or product type, accent-insensitive ("dam" finds "Đầm midi").
-          (!query.search ||
-            normalize(`${product.name} ${product.type}`).includes(normalize(query.search))) &&
+          (!query.q ||
+            normalize(query.q)
+              .split(/\s+/)
+              .filter(Boolean)
+              .every((word) => normalize(`${product.name} ${product.type}`).includes(word))) &&
+          (!query.ids || query.ids.includes(product.id)) &&
           (!query.maxPrice || product.price <= query.maxPrice) &&
           product.variants.some(
             (variant) =>
@@ -90,12 +118,21 @@ export class MockCatalogApi implements CatalogApi {
       if (query.sort === 'price-desc') items.sort((a, b) => b.price - a.price);
       if (query.sort === 'newest') items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       if (query.sort === 'bestselling') items.sort((a, b) => a.salesRank - b.salesRank);
-      return of({ items, total: items.length });
+      const limit = query.limit ?? DEFAULT_LIMIT;
+      const page = query.page ?? 1;
+      return of({
+        items: items.slice((page - 1) * limit, page * limit).map(withStock),
+        total: items.length,
+        page,
+        limit,
+      });
     }).pipe(delay(280));
   }
 
   get(slug: string) {
-    return of(RATED_PRODUCTS.find((product) => product.slug === slug)).pipe(delay(180));
+    return of(withStockOrUndefined(RATED_PRODUCTS.find((product) => product.slug === slug))).pipe(
+      delay(180),
+    );
   }
 
   reviews(productId: string) {

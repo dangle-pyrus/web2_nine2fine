@@ -9,7 +9,14 @@ export interface ApiConfig {
    * only this value to `http`; the other slices keep following `mode`.
    */
   authMode: 'mock' | 'http';
+  /** Catalog (products, size charts): `http` once Slice 2 is integrated; cart, checkout, account, admin follow `mode`. */
+  catalogMode: 'mock' | 'http';
   baseUrl: string;
 }
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
-export const apiConfig: ApiConfig = { mode: 'mock', authMode: 'mock', baseUrl: '/api' };
+export const apiConfig: ApiConfig = {
+  mode: 'mock',
+  authMode: 'mock',
+  catalogMode: 'mock',
+  baseUrl: '/api',
+};

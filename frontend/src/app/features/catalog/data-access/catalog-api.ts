@@ -1,7 +1,8 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, map } from 'rxjs';
+import { Observable, catchError, map, of, throwError } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
+import { readApiError } from '../../../core/api-error';
 import {
   Category,
   CatalogQuery,
@@ -31,47 +32,74 @@ export class HttpCatalogApi implements CatalogApi {
   private readonly baseUrl = inject(API_CONFIG).baseUrl;
 
   list(query: CatalogQuery): Observable<ProductPage> {
-    const params = new HttpParams({ fromObject: { ...query } });
     return this.http
-      .get<ProductPage>(`${this.baseUrl}/products`, { params })
+      .get<ProductPage>(`${this.baseUrl}/products`, { params: toParams(query) })
       .pipe(map(mapProductPage));
   }
 
+  /** `404 not-found` means the product does not exist (`undefined`); any other failure is thrown. */
   get(slug: string): Observable<Product | undefined> {
-    return this.http.get<Product>(`${this.baseUrl}/products/${encodeURIComponent(slug)}`);
+    return this.http
+      .get<Product>(`${this.baseUrl}/products/${encodeURIComponent(slug)}`)
+      .pipe(
+        catchError((error: unknown) =>
+          readApiError(error).code === 'not-found' ? of(undefined) : throwError(() => error),
+        ),
+      );
   }
 
-  reviews(productId: string): Observable<ProductReview[]> {
-    return this.http.get<ProductReview[]>(
-      `${this.baseUrl}/products/${encodeURIComponent(productId)}/reviews`,
-    );
+  /** The backend has no reviews yet (BR-CAT-17): nothing to fetch. */
+  reviews(): Observable<ProductReview[]> {
+    return of([]);
   }
 
   sizeChart(category: Category): Observable<SizeChart> {
     return this.http.get<SizeChart>(`${this.baseUrl}/size-charts/${category}`);
   }
 
-  reviewEligibility(productId: string): Observable<ReviewEligibility> {
-    return this.http.get<ReviewEligibility>(
-      `${this.baseUrl}/products/${encodeURIComponent(productId)}/reviews/eligibility`,
-      { withCredentials: true },
+  reviewEligibility(): Observable<ReviewEligibility> {
+    return throwError(
+      () => new Error('Reviews are not available on the HTTP catalog (BR-CAT-17).'),
     );
   }
 
-  submitReview(productId: string, input: ReviewInput): Observable<ProductReview> {
-    return this.http.post<ProductReview>(
-      `${this.baseUrl}/products/${encodeURIComponent(productId)}/reviews`,
-      input,
-      { withCredentials: true },
+  submitReview(): Observable<ProductReview> {
+    return throwError(
+      () => new Error('Reviews are not available on the HTTP catalog (BR-CAT-17).'),
     );
   }
 
-  notifyBackInStock(variantId: string, email: string): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/stock-alerts`, { variantId, email });
+  notifyBackInStock(): Observable<void> {
+    return throwError(
+      () => new Error('Back-in-stock alerts are not available on the HTTP catalog.'),
+    );
   }
 }
 
-// Proposed contract only: adapt this boundary once the backend DTO is available.
+/** Only meaningful values reach the URL: empty, `false` and `0` mean "no filter". */
+export function toParams(query: CatalogQuery): HttpParams {
+  const entries: [string, string | number | boolean | undefined][] = [
+    ['gender', query.gender],
+    ['category', query.category],
+    ['moment', query.moment],
+    ['size', query.size],
+    ['color', query.color],
+    ['maxPrice', query.maxPrice],
+    ['available', query.available],
+    ['q', query.q.trim()],
+    ['sort', query.sort],
+    ['page', query.page],
+    ['limit', query.limit],
+    ['ids', query.ids?.join(',')],
+  ];
+  const fromObject: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    if (value === undefined || value === '' || value === false || value === 0) continue;
+    fromObject[key] = String(value);
+  }
+  return new HttpParams({ fromObject });
+}
+
 function mapProductPage(dto: ProductPage): ProductPage {
-  return { items: dto.items, total: dto.total };
+  return { items: dto.items, total: dto.total, page: dto.page, limit: dto.limit };
 }

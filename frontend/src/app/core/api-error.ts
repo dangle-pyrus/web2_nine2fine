@@ -15,6 +15,7 @@ export const API_ERROR_CODES = [
   'forbidden',
   'origin-not-allowed',
   'unavailable',
+  'not-found',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 

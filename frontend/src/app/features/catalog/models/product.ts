@@ -4,12 +4,16 @@ export type Category = 'tops' | 'bottoms' | 'dresses' | 'outerwear';
 export type Gender = 'nam' | 'nu';
 export type SortOrder = 'featured' | 'newest' | 'price-asc' | 'price-desc' | 'bestselling';
 
+export type StockStatus = 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+
 export interface ProductVariant {
   id: string;
   sku: string;
   size: string;
   color: { name: string; hex: string };
   inventory: number;
+  /** Server-computed stock level; the mock derives it from `inventory`. */
+  stockStatus: StockStatus;
 }
 
 export interface ProductFit {
@@ -108,13 +112,23 @@ export interface CatalogQuery {
   color: string;
   maxPrice: number;
   available: boolean;
-  search: string;
+  /** Free-text search (query param `q`). */
+  q: string;
   sort: SortOrder;
+  /** 1-based page; kept in memory only, never on the page URL. */
+  page?: number;
+  /** Page size: contract default 24, maximum 48. */
+  limit?: number;
+  /** Fetch these product IDs only (wishlist), at most 48. */
+  ids?: string[];
 }
 
 export interface ProductPage {
   items: Product[];
+  /** Products matching every filter, independent of the page. */
   total: number;
+  page: number;
+  limit: number;
 }
 
 export const DEFAULT_QUERY: CatalogQuery = {
@@ -125,7 +139,7 @@ export const DEFAULT_QUERY: CatalogQuery = {
   color: '',
   maxPrice: 0,
   available: false,
-  search: '',
+  q: '',
   sort: 'featured',
 };
 

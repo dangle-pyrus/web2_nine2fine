@@ -10,6 +10,7 @@ function variants(id: string, colors: { name: string; hex: string }[]): ProductV
       size,
       color,
       inventory: sizeIndex === 3 ? 0 : 5 + index,
+      stockStatus: sizeIndex === 3 ? ('OUT_OF_STOCK' as const) : ('IN_STOCK' as const),
     })),
   );
 }
