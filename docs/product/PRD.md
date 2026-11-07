@@ -487,7 +487,7 @@ Dữ liệu tham chiếu: 8 sản phẩm seed (giá đồng): the-everyday-blaze
 | AC-CAT-15 | 06 | DB đã seed | `maxPrice=589999`; `maxPrice=590000`; `maxPrice=500000`; `maxPrice=0` | 2 (390.000, 550.000); 3 (thêm nine-to-fine-shirt 590.000, mốc bằng được tính); 1 (off-duty-top); 8. |
 | AC-CAT-16 | 06 | T có: Đen/S=0 và Trắng/S=3 | `color=Đen&size=S&available=true`; `color=Trắng&size=S&available=true` | Lần một **không** trả T (biến thể Đen/S hết hàng, dù T còn S ở màu khác); lần hai trả T. |
 | AC-CAT-17 | 06 | DB đã seed | `category=xyz`; `maxPrice=-5`; `maxPrice=abc`; `maxPrice=1.5` | `category=xyz`: 200, `total` 0; ba trường hợp `maxPrice`: 422 `validation`, `field: maxPrice`. |
-| AC-CAT-18 | 06 | Mở `/shop/nu?color=Đỏ&maxPrice=1000000&sort=price-asc` | Quan sát, tải lại, bấm Back sau khi đổi bộ lọc | Yêu cầu API mang đủ lọc `gender=nu`, `color=Đỏ`, `maxPrice`, `sort`; hiện "Đang lọc (3)" và chỉ after-hours-dress; tải lại giữ nguyên; Back về đúng trạng thái trước; "Xóa tất cả" về `/shop`. |
+| AC-CAT-18 | 06 | Mở `/shop/nu?color=Đỏ&maxPrice=1000000&sort=price-asc` | Quan sát, tải lại, bấm Back sau khi đổi bộ lọc | Yêu cầu API mang đủ lọc `gender=nu`, `color=Đỏ`, `maxPrice`, `sort`; hiện "Đang lọc (3)" và đúng 2 sản phẩm theo thứ tự: off-duty-top (390.000), rồi after-hours-dress (890.000); `total` 2; tải lại giữ nguyên; Back về đúng trạng thái trước; "Xóa tất cả" về `/shop`. |
 | AC-CAT-19 | 07 | DB đã seed | `sort=price-asc`; `sort=price-desc` | Asc: đầu off-duty-top 390.000, cuối the-everyday-blazer 1.290.000; Desc: ngược lại hoàn toàn. |
 | AC-CAT-20 | 07 | DB đã seed; T1 và T2 cùng `price` | `sort=bestselling`; `sort=newest`; `sort=price-asc` | `bestselling`: đầu là nine-to-fine-shirt; `newest`: đầu là sản phẩm có `createdAt` lớn nhất; T1, T2 luôn theo `slug` tăng dần và gọi 2 lần ra cùng thứ tự. |
 | AC-CAT-21 | 07 | DB đã seed | Không có `sort`; `sort=featured`; `sort=hot` | Hai lần đầu: thứ tự `displayOrder` (the-everyday-blazer đầu), giống nhau; `sort=hot`: 422 `validation`, `field: sort`. Mở `/shop?sort=hot` trên FE vẫn hiện danh sách `featured` (FE chuẩn hoá trước khi gọi). |
@@ -525,6 +525,8 @@ Dữ liệu tham chiếu: 8 sản phẩm seed (giá đồng): the-everyday-blaze
 | AC-CAT-53 | 23 | DB Supabase đang ở schema Slice 1 và có dữ liệu `users`, `sessions` | Chạy `migrate deploy` hai lần | Lần một chỉ thêm đối tượng catalog; số dòng `users`, `sessions`, `auth_action_tokens` không đổi; file migration không chứa `DROP`, `TRUNCATE`, `DELETE`, đổi kiểu cột; lần hai không lỗi, không thay đổi. |
 
 Tổng: 23 BR (20 Must, 3 Should; không đánh số BR cho mục Won't), 53 AC (50 Must, 3 Should: AC-CAT-41, 42, 52). Mục Won't: 8 hạng mục ở bảng phạm vi.
+
+Sửa sau QA (2026-11-07, PO): AC-CAT-18 phần Then trước ghi "chỉ after-hours-dress", sai so với seed vì off-duty-top cũng có màu Đỏ và bán cho nữ (báo cáo QA m1). API đúng BR-CAT-06; chỉ chữ AC đổi.
 
 ### 6. Định nghĩa xong của Slice 2
 
