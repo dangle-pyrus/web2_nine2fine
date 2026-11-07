@@ -47,8 +47,8 @@ export class HomeShopRail implements OnInit {
 
   ngOnInit(): void {
     this.catalog
-      .list({ ...DEFAULT_QUERY, sort: this.content().sort })
+      .list({ ...DEFAULT_QUERY, sort: this.content().sort, limit: 4 })
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((page) => this.products.set(page.items.slice(0, 4)));
+      .subscribe((page) => this.products.set(page.items));
   }
 }

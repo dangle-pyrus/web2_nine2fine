@@ -160,7 +160,7 @@ export class SearchPanel {
           return !search
             ? of(IDLE)
             : timer(250).pipe(
-                switchMap(() => this.api.list({ ...DEFAULT_QUERY, search })),
+                switchMap(() => this.api.list({ ...DEFAULT_QUERY, q: search, limit: 5 })),
                 map((page): SearchState => ({ ...IDLE, items: page.items, total: page.total })),
                 startWith<SearchState>({ ...this.state(), loading: true, failed: false }),
                 catchError(() => of<SearchState>({ ...IDLE, failed: true })),

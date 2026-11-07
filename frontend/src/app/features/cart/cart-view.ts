@@ -885,7 +885,7 @@ export class CartView {
   constructor() {
     if (!this.dialog) {
       this.catalog
-        .list({ ...DEFAULT_QUERY, sort: 'bestselling' })
+        .list({ ...DEFAULT_QUERY, sort: 'bestselling', limit: 12 })
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe((page) => this.bestSellers.set(page.items));
     }

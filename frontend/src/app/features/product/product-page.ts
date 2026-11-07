@@ -11,7 +11,19 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, filter, forkJoin, map, of, startWith, switchMap, tap } from 'rxjs';
+import {
+  catchError,
+  combineLatest,
+  filter,
+  forkJoin,
+  map,
+  of,
+  startWith,
+  Subject,
+  switchMap,
+  tap,
+} from 'rxjs';
+import { API_CONFIG } from '../../core/api-config';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
 import { CATEGORIES, DEFAULT_QUERY, Product, ProductReview } from '../catalog/models/product';
 import { CartState } from '../cart/cart-state';
@@ -53,6 +65,9 @@ import { SizeGuideData, SizeGuideDialog } from './size-guide-dialog';
 })
 export class ProductPage {
   private readonly api = inject(CATALOG_API);
+  /** Reviews, ratings and back-in-stock alerts exist only on the mock catalog (BR-CAT-17). */
+  readonly reviewsEnabled = inject(API_CONFIG).catalogMode === 'mock';
+  private readonly retry$ = new Subject<void>();
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly overlay = inject(OverlayService);
@@ -100,15 +115,16 @@ export class ProductPage {
   readonly categoryLabel = computed(
     () => CATEGORIES.find((category) => category.value === this.product()?.category)?.label ?? '',
   );
-  readonly lowStock = computed(() => {
-    const variant = this.selected();
-    return !!variant && variant.inventory > 0 && variant.inventory <= 5;
-  });
+  readonly lowStock = computed(() => this.selected()?.stockStatus === 'LOW_STOCK');
+  /** Nothing to buy: every variant of every colour is out of stock. */
+  readonly allSoldOut = computed(() =>
+    (this.product()?.variants ?? []).every((variant) => variant.stockStatus === 'OUT_OF_STOCK'),
+  );
 
   constructor() {
-    this.route.paramMap
+    combineLatest([this.route.paramMap, this.retry$.pipe(startWith(undefined))])
       .pipe(
-        switchMap((params) =>
+        switchMap(([params]) =>
           this.api.get(params.get('slug') ?? '').pipe(
             map((product) => ({ product, loading: false, failed: false })),
             startWith({ product: undefined, loading: true, failed: false }),
@@ -124,7 +140,11 @@ export class ProductPage {
           }
           this.loading.set(state.loading);
           this.failed.set(state.failed);
-          this.color.set(state.product?.variants[0]?.color.name ?? '');
+          // Default colour: the first one that still has stock, else the first one.
+          const variants = state.product?.variants ?? [];
+          this.color.set(
+            (variants.find((variant) => variant.inventory > 0) ?? variants[0])?.color.name ?? '',
+          );
           this.size.set('');
           this.error.set('');
           this.reviews.set([]);
@@ -136,7 +156,7 @@ export class ProductPage {
         switchMap((product) =>
           forkJoin({
             reviews: this.api.reviews(product.id).pipe(catchError(() => of([]))),
-            related: this.api.list({ ...DEFAULT_QUERY, moment: product.moments[0] }).pipe(
+            related: this.api.list({ ...DEFAULT_QUERY, moment: product.moments[0], limit: 5 }).pipe(
               map((page) => page.items.filter((item) => item.id !== product.id).slice(0, 4)),
               catchError(() => of([])),
             ),
@@ -177,23 +197,34 @@ export class ProductPage {
     this.api
       .sizeChart(item.category)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((chart) => {
-        const data: SizeGuideData = {
-          productName: item.name,
-          chart,
-          fit: item.fit,
-          available: this.variants()
-            .filter((variant) => variant.inventory > 0)
-            .map((variant) => variant.size),
-        };
-        // "Chọn size M" in the guide closes it with that size; apply it to the selector.
-        this.overlay
-          .open(SizeGuideDialog, 'Hướng dẫn chọn size', 'modal', data)
-          .closed.pipe(takeUntilDestroyed(this.destroyRef))
-          .subscribe((size) => {
-            if (typeof size === 'string') this.chooseSize(size);
-          });
+      .subscribe({
+        error: () =>
+          this.toast.show({
+            title: 'Chưa tải được bảng size',
+            detail: 'Bạn thử bấm lại sau một chút.',
+          }),
+        next: (chart) => {
+          const data: SizeGuideData = {
+            productName: item.name,
+            chart,
+            fit: item.fit,
+            available: this.variants()
+              .filter((variant) => variant.inventory > 0)
+              .map((variant) => variant.size),
+          };
+          // "Chọn size M" in the guide closes it with that size; apply it to the selector.
+          this.overlay
+            .open(SizeGuideDialog, 'Hướng dẫn chọn size', 'modal', data)
+            .closed.pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe((size) => {
+              if (typeof size === 'string') this.chooseSize(size);
+            });
+        },
       });
+  }
+
+  retry(): void {
+    this.retry$.next();
   }
 
   /** Both purchase buttons need a size; points the shopper at the size field otherwise. */

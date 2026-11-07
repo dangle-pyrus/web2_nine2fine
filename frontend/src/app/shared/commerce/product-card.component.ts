@@ -36,8 +36,9 @@ const BADGE_LABELS: Record<string, string> = { NEW: 'Mới về', BESTSELLER: 'B
             [animate.leave]="direction() ? 'slide-out-' + direction() : ''"
           >
             <img
-              [src]="slide.media.src"
+              [src]="broken().has(slide.media.src) ? fallback.src : slide.media.src"
               [alt]="slide.media.alt"
+              (error)="markBroken(slide.media.src)"
               width="400"
               height="500"
               loading="lazy"
@@ -119,7 +120,7 @@ const BADGE_LABELS: Record<string, string> = { NEW: 'Mới về', BESTSELLER: 'B
           type="button"
           class="quick-add"
           [class.expanded]="quickOpen()"
-          [disabled]="quickOpen() && !quickSize()"
+          [disabled]="soldOutAll() || (quickOpen() && !quickSize())"
           [attr.aria-label]="
             quickOpen() ? 'Thêm vào giỏ' : 'Chọn size để thêm ' + product().name + ' vào giỏ'
           "
@@ -613,8 +614,21 @@ export class ProductCardComponent {
     getMedia(this.product().colorMedia?.[this.activeColor().name] ?? this.product().mediaId),
   );
   /** Merchandising badge first, otherwise the computed discount. */
+  /** Every variant is out of stock: the card says so and the quick add is off. */
+  readonly soldOutAll = computed(() =>
+    this.product().variants.every((variant) => variant.stockStatus === 'OUT_OF_STOCK'),
+  );
+  readonly fallback = getMedia('catalog-placeholder');
+  /** Image URLs that failed to load; the placeholder shows instead. */
+  readonly broken = signal<ReadonlySet<string>>(new Set());
+
+  markBroken(src: string): void {
+    this.broken.update((set) => new Set(set).add(src));
+  }
+
   readonly badge = computed(() => {
     const product = this.product();
+    if (this.soldOutAll()) return 'Hết hàng';
     if (product.badge) return BADGE_LABELS[product.badge] ?? product.badge;
     if (product.compareAtPrice) {
       return `-${Math.round((1 - product.price / product.compareAtPrice) * 100)}%`;
