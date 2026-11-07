@@ -3,7 +3,8 @@ import { AppError, Errors } from '../lib/errors';
 import { logger } from '../lib/logger';
 
 export function notFound(_req: Request, res: Response): void {
-  res.status(404).json({ error: { code: 'validation', message: 'Không tìm thấy tài nguyên.' } });
+  res.set('Cache-Control', 'no-store');
+  res.status(404).json({ error: { code: 'not-found', message: 'Không tìm thấy tài nguyên.' } });
 }
 
 function body(e: AppError) {
@@ -45,5 +46,6 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     appErr = Errors.unavailable();
   }
   if (appErr.extras.retryAfterSeconds !== undefined) res.set('Retry-After', String(appErr.extras.retryAfterSeconds));
+  res.set('Cache-Control', 'no-store');
   res.status(appErr.status).json(body(appErr));
 }

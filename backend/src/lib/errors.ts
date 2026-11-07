@@ -11,6 +11,7 @@ export type ErrorCode =
   | 'unauthenticated'
   | 'forbidden'
   | 'origin-not-allowed'
+  | 'not-found'
   | 'unavailable';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -26,6 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
   unauthenticated: 401,
   forbidden: 403,
   'origin-not-allowed': 403,
+  'not-found': 404,
   unavailable: 500,
 };
 
@@ -77,5 +79,6 @@ export const Errors = {
   unauthenticated: () => new AppError('unauthenticated', 'Bạn chưa đăng nhập hoặc phiên đã hết hạn.'),
   forbidden: () => new AppError('forbidden', 'Bạn không có quyền thực hiện thao tác này.'),
   originNotAllowed: () => new AppError('origin-not-allowed', 'Yêu cầu không được chấp nhận.'),
+  notFound: (message = 'Không tìm thấy tài nguyên.') => new AppError('not-found', message),
   unavailable: () => new AppError('unavailable', 'Không thể kết nối. Vui lòng thử lại.'),
 };
