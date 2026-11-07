@@ -11,6 +11,7 @@ import {
   ProductReview,
   ReviewEligibility,
   ReviewInput,
+  SEARCH_MAX_LENGTH,
   SizeChart,
 } from '../models/product';
 
@@ -86,7 +87,7 @@ export function toParams(query: CatalogQuery): HttpParams {
     ['color', query.color],
     ['maxPrice', query.maxPrice],
     ['available', query.available],
-    ['q', query.q.trim()],
+    ['q', query.q.trim().slice(0, SEARCH_MAX_LENGTH)],
     ['sort', query.sort],
     ['page', query.page],
     ['limit', query.limit],

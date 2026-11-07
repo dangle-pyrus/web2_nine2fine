@@ -13,7 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Params, Router, RouterLink } from '@angular/router';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 import {
@@ -29,7 +29,7 @@ import {
 } from 'rxjs';
 import type { SearchOrigin } from './search-origin';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
-import { DEFAULT_QUERY, Product } from '../catalog/models/product';
+import { DEFAULT_QUERY, Product, SEARCH_MAX_LENGTH } from '../catalog/models/product';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { MediaImageComponent } from '../../shared/ui/media-image.component';
 import { PricePipe } from '../../shared/commerce/price.pipe';
@@ -96,7 +96,11 @@ export class SearchPanel {
   readonly origin = input<SearchOrigin | null>(null);
   readonly history = inject(SearchHistory);
   readonly popular = POPULAR_SEARCHES;
-  readonly search = new FormControl('', { nonNullable: true });
+  readonly search = new FormControl('', {
+    nonNullable: true,
+    validators: [Validators.maxLength(SEARCH_MAX_LENGTH)],
+  });
+  readonly maxLength = SEARCH_MAX_LENGTH;
   readonly query = signal('');
   readonly state = signal<SearchState>(IDLE);
   readonly activeIndex = signal(-1);
@@ -144,9 +148,15 @@ export class SearchPanel {
   private closing = false;
 
   constructor() {
+    // A long paste is cut at the limit instead of being rejected.
+    this.search.valueChanges.pipe(takeUntilDestroyed()).subscribe((value) => {
+      if (value.length > SEARCH_MAX_LENGTH) {
+        this.search.setValue(value.slice(0, SEARCH_MAX_LENGTH));
+      }
+    });
     combineLatest([
       this.search.valueChanges.pipe(
-        map((value) => value.trim()),
+        map((value) => value.slice(0, SEARCH_MAX_LENGTH).trim()),
         distinctUntilChanged(),
       ),
       this.retry$.pipe(startWith(undefined)),

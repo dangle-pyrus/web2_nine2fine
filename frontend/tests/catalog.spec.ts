@@ -31,7 +31,7 @@ test('C6: search ignores accents and word order', async ({ page }) => {
   await expect(page.locator('n2f-product-card')).toHaveCount(1);
 });
 
-test('AC-CAT-41: no "Xem thêm" when every product is already shown; title counts the total', async ({
+test('AC-CAT-41 (mock only, no API call): no "Xem thêm" when every product is already shown; title counts the total', async ({
   page,
 }) => {
   await page.goto('/shop');
@@ -40,7 +40,10 @@ test('AC-CAT-41: no "Xem thêm" when every product is already shown; title count
   await expect(page.getByRole('button', { name: 'Xem thêm' })).toHaveCount(0);
 });
 
-test('AC-CAT-44: a broken session cookie does not stop the listing', async ({ page, context }) => {
+test('AC-CAT-44 (mock only, no API call): a stray session cookie does not change the listing', async ({
+  page,
+  context,
+}) => {
   await context.addCookies([{ name: 'n2f_sid', value: 'garbage', url: 'http://127.0.0.1:4200' }]);
   await page.goto('/shop');
   await expect(page.locator('n2f-product-card')).toHaveCount(8);
@@ -66,4 +69,21 @@ test('C-sold-out (PDP/PLP, plan §3): fully sold-out product — disabled "Hết
   const card = page.locator('n2f-product-card', { hasText: 'The Everyday Blazer' });
   await expect(card.locator('.badge')).toHaveText('Hết hàng');
   await expect(card.locator('.quick-add')).toBeDisabled();
+});
+
+test('2.15: search text is capped at 100 characters (typed, pasted, or in the URL)', async ({
+  page,
+}) => {
+  await page.goto('/new-in');
+  await page.getByRole('button', { name: 'Tìm kiếm', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: 'Tìm kiếm sản phẩm' });
+  const input = panel.getByLabel('Tìm sản phẩm', { exact: true });
+  await expect(input).toHaveAttribute('maxlength', '100');
+  await input.fill('a'.repeat(101));
+  await expect(input).toHaveValue('a'.repeat(100));
+  await input.press('Enter');
+  await expect(page).toHaveURL(/\/search\?q=a{100}$/);
+
+  await page.goto('/search?q=' + 'b'.repeat(150));
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('(0)');
 });

@@ -131,6 +131,9 @@ export interface ProductPage {
   limit: number;
 }
 
+/** Longest search text sent to the API (docs: `q` <= 100). */
+export const SEARCH_MAX_LENGTH = 100;
+
 export const DEFAULT_QUERY: CatalogQuery = {
   gender: '',
   category: '',

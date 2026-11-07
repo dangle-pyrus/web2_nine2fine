@@ -20,6 +20,7 @@ import {
   SORT_OPTIONS,
   CatalogQuery,
   ProductPage,
+  SEARCH_MAX_LENGTH,
   SortOrder,
 } from './models/product';
 import { ProductCardComponent } from '../../shared/commerce/product-card.component';
@@ -136,7 +137,7 @@ export class CatalogPage {
             size: params.get('size') ?? '',
             color: params.get('color') ?? '',
             available: params.get('available') === 'true',
-            q: (params.get('q') ?? '').trim(),
+            q: (params.get('q') ?? '').slice(0, SEARCH_MAX_LENGTH).trim(),
             maxPrice: Number.isFinite(price) && price > 0 ? price : 0,
             sort: SORT_OPTIONS.some((option) => option.value === sort)
               ? (sort as SortOrder)
