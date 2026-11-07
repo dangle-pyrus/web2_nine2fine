@@ -1,5 +1,9 @@
 node_modules/
+dist/
+dev-outbox/
 .env
+.env.*
+!.env.example
 .agents/
 .claude/
 .cursor/

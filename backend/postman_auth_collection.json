@@ -1,134 +1,24 @@
 {
   "info": {
-    "name": "Nine2Fine - Auth API Collection",
-    "description": "Bộ sưu tập Postman kiểm thử trọn bộ module Auth cho đồ án Nine2Fine (Đăng ký, Đăng nhập, OTP, Đặt lại mật khẩu)",
+    "name": "Nine2Fine - Auth API (Slice 1, locked contract)",
+    "description": "Cookie phiên HttpOnly do Postman cookie jar tự giữ. Mọi yêu cầu ghi cần Origin thuộc CORS_ALLOWED_ORIGINS và X-Requested-With: n2f. Mã OTP xem trong backend/dev-outbox/*.eml.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:5000/api/auth",
+      "value": "http://localhost:4000/api",
       "type": "string"
     },
     {
-      "key": "accessToken",
-      "value": "",
+      "key": "origin",
+      "value": "http://localhost:4200",
       "type": "string"
     }
   ],
   "item": [
     {
-      "name": "1. Kiểm tra tài khoản email (Check Email)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/check-email",
-          "host": ["{{baseUrl}}"],
-          "path": ["check-email"]
-        },
-        "description": "Kiểm tra xem email đã đăng ký chưa và đã có mật khẩu hay chưa để Frontend điều hướng màn hình phù hợp."
-      }
-    },
-    {
-      "name": "2. Gửi mã OTP - Đăng ký (Send OTP - Register)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\",\n  \"purpose\": \"register\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/send-otp",
-          "host": ["{{baseUrl}}"],
-          "path": ["send-otp"]
-        },
-        "description": "Gửi mã OTP 8 chữ số để đăng ký tài khoản (giới hạn 60s/lần, tối đa 5 lần trong 30 phút)."
-      }
-    },
-    {
-      "name": "3. Đăng ký tài khoản (Register)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\",\n  \"otp\": \"12345678\",\n  \"first_name\": \"Nguyễn\",\n  \"last_name\": \"Văn A\",\n  \"date_of_birth\": \"2003-05-15\",\n  \"accepted_terms\": true,\n  \"marketing_opt_in\": true\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/register",
-          "host": ["{{baseUrl}}"],
-          "path": ["register"]
-        },
-        "description": "Xác thực OTP và tạo tài khoản với role MEMBER (không cần mật khẩu theo tài liệu)."
-      }
-    },
-    {
-      "name": "4. Gửi mã OTP - Đăng nhập (Send OTP - Login)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\",\n  \"purpose\": \"login\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/send-otp",
-          "host": ["{{baseUrl}}"],
-          "path": ["send-otp"]
-        },
-        "description": "Gửi OTP đăng nhập nhanh cho tài khoản đã tồn tại."
-      }
-    },
-    {
-      "name": "5. Đăng nhập bằng OTP (Login OTP)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\",\n  \"otp\": \"12345678\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/login-otp",
-          "host": ["{{baseUrl}}"],
-          "path": ["login-otp"]
-        },
-        "description": "Đăng nhập bằng OTP, trả về JWT Access Token."
-      }
-    },
-    {
-      "name": "6. Đăng nhập bằng mật khẩu (Login Password)",
+      "name": "1. Tra cứu email",
       "request": {
         "method": "POST",
         "header": [
@@ -137,82 +27,237 @@
             "value": "application/json"
           },
           {
-            "key": "X-Device-Id",
-            "value": "pc-chrome-uuid-001"
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
           }
         ],
+        "url": "{{baseUrl}}/auth/lookup",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\",\n  \"password\": \"MatKhau@123\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["login"]
-        },
-        "description": "Đăng nhập bằng mật khẩu. Nhập sai 5 lần liên tiếp sẽ khóa thiết bị 15 phút (LOGIN-05)."
+          "raw": "{\n  \"email\": \"minh@example.com\"\n}"
+        }
       }
     },
     {
-      "name": "7. Quên mật khẩu (Forgot Password)",
+      "name": "2. Gửi mã (login | register | reset-password)",
       "request": {
         "method": "POST",
         "header": [
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
           }
         ],
+        "url": "{{baseUrl}}/auth/codes",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/forgot-password",
-          "host": ["{{baseUrl}}"],
-          "path": ["forgot-password"]
-        },
-        "description": "Yêu cầu mã OTP đặt lại mật khẩu (hoặc thiết lập mật khẩu lần đầu cho tài khoản chưa có pass)."
+          "raw": "{\n  \"email\": \"minh@example.com\",\n  \"purpose\": \"login\"\n}"
+        }
       }
     },
     {
-      "name": "8. Đặt lại mật khẩu (Reset Password)",
+      "name": "3. Đăng nhập bằng mã",
       "request": {
         "method": "POST",
         "header": [
           {
             "key": "Content-Type",
             "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
           }
         ],
+        "url": "{{baseUrl}}/auth/login/code",
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"email\": \"sinhvien@uel.edu.vn\",\n  \"otp\": \"12345678\",\n  \"new_password\": \"MatKhauMoi@123\",\n  \"confirm_password\": \"MatKhauMoi@123\"\n}"
-        },
-        "url": {
-          "raw": "{{baseUrl}}/reset-password",
-          "host": ["{{baseUrl}}"],
-          "path": ["reset-password"]
-        },
-        "description": "Nhập mã OTP và cập nhật mật khẩu mới (kiểm tra khớp 2 mật khẩu trước khi check OTP)."
+          "raw": "{\n  \"email\": \"minh@example.com\",\n  \"code\": \"00000000\"\n}"
+        }
       }
     },
     {
-      "name": "9. Đăng xuất (Logout)",
+      "name": "4. Đăng nhập bằng mật khẩu",
       "request": {
         "method": "POST",
         "header": [
           {
-            "key": "Authorization",
-            "value": "Bearer {{accessToken}}"
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
           }
         ],
-        "url": {
-          "raw": "{{baseUrl}}/logout",
-          "host": ["{{baseUrl}}"],
-          "path": ["logout"]
-        },
-        "description": "Thu hồi token và hủy phiên đăng nhập của người dùng."
+        "url": "{{baseUrl}}/auth/login/password",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"minh@example.com\",\n  \"password\": \"\"\n}"
+        }
+      }
+    },
+    {
+      "name": "5. Đăng ký",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"new@example.com\",\n  \"code\": \"00000000\",\n  \"firstName\": \"Minh\",\n  \"lastName\": \"Nguyễn Văn\",\n  \"birthDate\": null,\n  \"marketingOptIn\": false,\n  \"acceptedTerms\": true\n}"
+        }
+      }
+    },
+    {
+      "name": "6. Đặt lại mật khẩu",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/password/reset",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"minh@example.com\",\n  \"code\": \"00000000\",\n  \"newPassword\": \"\"\n}"
+        }
+      }
+    },
+    {
+      "name": "7. Phiên hiện tại",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/me"
+      }
+    },
+    {
+      "name": "8. Đăng xuất",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/logout"
+      }
+    },
+    {
+      "name": "9. Admin - đăng nhập",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
+          }
+        ],
+        "url": "{{baseUrl}}/admin/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@nine2fine.test\",\n  \"password\": \"\"\n}"
+        }
+      }
+    },
+    {
+      "name": "10. Admin - phiên hiện tại",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          }
+        ],
+        "url": "{{baseUrl}}/admin/auth/me"
+      }
+    },
+    {
+      "name": "11. Admin - đăng xuất",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Requested-With",
+            "value": "n2f"
+          }
+        ],
+        "url": "{{baseUrl}}/admin/auth/logout"
       }
     }
   ]

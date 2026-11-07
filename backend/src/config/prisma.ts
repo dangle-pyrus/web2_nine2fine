@@ -1,8 +1,9 @@
 import { PrismaClient } from '@prisma/client';
+import { getConfig } from './env';
 
-// Khởi tạo một thể hiện (instance) duy nhất của PrismaClient để tái sử dụng xuyên suốt ứng dụng
-// Tránh việc mở quá nhiều connection pool tới database (Supabase PostgreSQL)
+// Một PrismaClient duy nhất. URL lấy từ cấu hình đã kiểm (không phụ thuộc vào việc Prisma tự đọc .env).
 const prisma = new PrismaClient({
+  datasourceUrl: getConfig().databaseUrl,
   log: ['warn', 'error'],
 });
 

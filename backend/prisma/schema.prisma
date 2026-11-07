@@ -33,6 +33,7 @@ model User {
   role               user_role @default(member)
   isActive           Boolean   @default(true) @map("is_active")
   marketingOptIn     Boolean   @default(false) @map("marketing_opt_in")
+  marketingOptInAt   DateTime? @map("marketing_opt_in_at") @db.Timestamp(6)
   terms_accepted_at  DateTime  @db.Timestamp(6)
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
@@ -68,6 +69,7 @@ model AuthActionToken {
   invalidated_at DateTime?     @db.Timestamp(6)
 
   @@index([email, purpose], map: "idx_auth_tokens_email_purpose")
+  @@index([email, purpose, createdAt], map: "idx_auth_tokens_email_purpose_created")
   @@map("auth_action_tokens")
 }
 
@@ -83,24 +85,36 @@ model LoginAttempt {
 }
 
 model Session {
-  session_id       String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId           String      @map("user_id") @db.Uuid
-  deviceId         String      @map("device_id") @db.VarChar(100)
-  refreshTokenHash String      @unique @map("refresh_token_hash") @db.VarChar(255)
-  login_method     auth_method
-  userAgent        String?     @map("user_agent") @db.VarChar(500)
-  ipAddress        String?     @map("ip_address") @db.VarChar(45)
-  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamp(6)
-  last_used_at     DateTime    @default(now()) @db.Timestamp(6)
-  expiresAt        DateTime    @map("expires_at") @db.Timestamp(6)
-  revoked_at       DateTime?   @db.Timestamp(6)
-  revoke_reason    String?     @db.VarChar(50)
+  session_id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String           @map("user_id") @db.Uuid
+  deviceId          String?          @map("device_id") @db.VarChar(100)
+  tokenHash         String           @unique @map("refresh_token_hash") @db.VarChar(255)
+  audience          session_audience @default(storefront)
+  login_method      auth_method
+  userAgent         String?          @map("user_agent") @db.VarChar(500)
+  ipAddress         String?          @map("ip_address") @db.VarChar(45)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamp(6)
+  last_used_at      DateTime         @default(now()) @db.Timestamp(6)
+  expiresAt         DateTime         @map("expires_at") @db.Timestamp(6)
+  absoluteExpiresAt DateTime         @map("absolute_expires_at") @db.Timestamp(6)
+  revoked_at        DateTime?        @db.Timestamp(6)
+  revoke_reason     String?          @db.VarChar(50)
 
   @@index([deviceId], map: "idx_sessions_device_id")
   @@index([expiresAt], map: "idx_sessions_expires_at")
   @@index([userId, deviceId], map: "idx_sessions_user_device")
   @@index([userId], map: "idx_sessions_user_id")
   @@map("sessions")
+}
+
+model AuthRateLimit {
+  key         String    @id @db.VarChar(400)
+  count       Int       @default(0)
+  windowStart DateTime  @map("window_start") @db.Timestamp(6)
+  lockedUntil DateTime? @map("locked_until") @db.Timestamp(6)
+
+  @@index([windowStart], map: "idx_auth_rate_limits_window_start")
+  @@map("auth_rate_limits")
 }
 
 enum Role {
@@ -112,6 +126,12 @@ enum Role {
 enum auth_method {
   password
   otp
+  register
+}
+
+enum session_audience {
+  storefront
+  admin
 }
 
 enum token_purpose {
