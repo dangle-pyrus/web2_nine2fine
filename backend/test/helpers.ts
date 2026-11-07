@@ -7,6 +7,8 @@ import { hashPassword } from '../src/lib/crypto';
 import { flushMail, MailMessage, setMailTransport } from '../src/mail/mailer';
 import { requireAuth, requireRole } from '../src/middleware/auth';
 import { assertLocalTestDb } from './guard';
+import { clearCategoryCache } from '../src/modules/catalog/catalog.cache';
+import { resetCatalogRateLimit } from '../src/middleware/catalog-rate-limit';
 import { seedCatalog } from '../prisma/seed-catalog';
 
 export const ORIGIN = 'http://localhost:4200';
@@ -45,6 +47,8 @@ export async function resetCatalog(): Promise<void> {
   await prisma.$executeRawUnsafe(
     'TRUNCATE TABLE "product_variants", "products", "size_charts", "categories" RESTART IDENTITY CASCADE',
   );
+  clearCategoryCache();
+  resetCatalogRateLimit();
   await seedCatalog(prisma);
 }
 

@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import { getConfig } from './config/env';
 import { originGuard, requireJsonBody } from './middleware/csrf';
 import { errorHandler, notFound } from './middleware/error';
+import { catalogRouter } from './modules/catalog/catalog.routes';
 import { adminAuthRouter, authRouter } from './modules/auth/auth.routes';
 
 export interface CreateAppOptions {
@@ -35,6 +36,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   });
 
   const api = Router();
+  // Catalog trước originGuard: POST/PUT/DELETE không Origin vẫn trả 404 not-found (AC-CAT-46).
+  api.use(catalogRouter);
   api.use(originGuard);
   api.use(requireJsonBody);
   api.use(express.json({ limit: '16kb' }));
