@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -32,6 +32,21 @@ info:
 
     ## Khác biệt so với FE hiện tại (giữ tên cũ khi hợp lý)
     Giữ nguyên: đường dẫn `lookup`, `codes`, `login/code`, `login/password`, `register`, `password/reset`; `camelCase`; `withCredentials`; purpose `reset-password`; `AuthUser`. Đổi: (1) body lỗi dạng `{error:{code,message,...}}` và FE map theo `error.code` thay vì theo HTTP status (lý do: 422/400 hiện bị trộn, BR-AUTH-36); `AuthErrorCode` mở rộng; (2) `AuthUser` thêm `role` (BR-AUTH-25); (3) thêm `GET /auth/me`, `POST /auth/logout`; (4) `ResetPasswordRequest` giữ `{email, code, newPassword}`, không có `confirmPassword`; (5) FE thêm header `X-Requested-With: n2f` bằng 1 interceptor; (6) admin: lỗi đổi từ `{code,message,fields}` sang `{error:{code,message,field}}` (một schema duy nhất), `fields` map thành một `field` mỗi lỗi; `AdminUser` = `AuthUser` với `role` in (`staff`,`admin`).
+
+    ---
+    # Catalog (Slice 2, chỉ đọc)
+
+    **status: locked** (2026-11-07, Orchestrator). Phần catalog (tag `catalog`, schema `Product*`, `SizeChart*`, `Catalog*`) đã đối chiếu với PRD Slice 2; phần auth ở trên vẫn **locked**. Ngoại lệ đã được duyệt: thêm mã `not-found` vào `ErrorCode` (decisions 2026-11-07). BR/AC: `docs/product/PRD.md` mục "Slice 2: Catalog" (BR-CAT-01..23, AC-CAT-01..53); khi mâu thuẫn, PRD thắng. Kế hoạch triển khai: `docs/api/catalog-implementation-plan.md`.
+
+    - **Công khai, chỉ đọc (BR-CAT-18):** không cần cookie, không cần `X-Requested-With`. Cookie phiên (`n2f_sid`, `n2f_asid`) gửi kèm dù sai, đã thu hồi hay hết hạn đều bị bỏ qua: không bao giờ `401`, không `Set-Cookie`, phản hồi không phụ thuộc người dùng nên cache dùng chung được (AC-CAT-44, 45). `POST/PUT/PATCH/DELETE` trên `/products*`, `/size-charts*` -> `404 not-found`, kể cả khi thiếu `Origin` (AC-CAT-46).
+    - **Chỉ sản phẩm `ACTIVE`** (BR-CAT-02): `DRAFT`/`ARCHIVED` không xuất hiện ở danh sách, `total`, tìm kiếm, `ids`; chi tiết -> `404 not-found`.
+    - **Tiền:** số nguyên VND (không phần lẻ). **Ảnh:** API trả `mediaId` (khoá trong `frontend/src/media/media-manifest.ts`), không trả URL.
+    - **Tham số lọc:** `gender`, `category`, `moment`, `size`, `color`, `maxPrice`, `available`, `q`, `sort`, `page`, `limit`, `ids`. Tên trùng `CatalogQuery` của FE trừ hai chỗ FE phải ánh xạ ở `HttpCatalogApi.list`: `search` -> `q`, và thêm `limit`/`page`/`ids`.
+    - **Dung sai (BR-CAT-06, C3):** tham số rỗng / vắng = không lọc; `maxPrice=0` và `available=false` = không lọc. Giá trị lạ của `gender`, `category`, `moment`, `size`, `color` -> `200` danh sách rỗng (không lỗi). `sort`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids` sai dạng / ngoài khoảng, hoặc tham số lặp -> `422 validation` kèm `field` là tên tham số. Tham số không khai báo bị bỏ qua.
+    - **Sắp xếp ổn định (BR-CAT-07):** mọi `sort` đều hoà bằng `slug` tăng dần.
+    - **Cache:** `GET /products` và `GET /products/{slug}`: `Cache-Control: public, max-age=10` + `ETag`, để giá / tồn kho phản ánh DB sau <= 30 giây (BR-CAT-11). `GET /size-charts/{category}`: `public, max-age=3600`. Phản hồi lỗi: `Cache-Control: no-store`.
+    - **Giới hạn (BR-CAT-19):** 120 yêu cầu catalog / 60 giây / IP, bộ đếm riêng khỏi auth; vượt -> `429 rate-limited`, `Retry-After` và `retryAfterSeconds` trong 1..60. `limit` mặc định 24, tối đa 48. `ids` tối đa 48. `q` tối đa 100 ký tự sau chuẩn hoá.
+    - **Đánh giá (BR-CAT-17):** `GET /products/{productId}/reviews` luôn `200 []`. Không có `rating` trong sản phẩm. Các đường dẫn đánh giá khác (`eligibility`, tạo đánh giá) và `/stock-alerts` không tồn tại ở slice này (`404 not-found`); FE chế độ HTTP không gọi chúng. Wishlist lưu ở FE; BE chỉ cung cấp `ids`.
   license:
     name: Proprietary
 servers:
@@ -42,6 +57,8 @@ tags:
     description: Khách mua hàng, cookie `n2f_sid`.
   - name: admin-auth
     description: Staff / admin, cookie `n2f_asid`, `/api/admin/auth/*` (BR-AUTH-33).
+  - name: catalog
+    description: 'Slice 2, status: locked. Công khai, chỉ đọc.'
 security: []
 paths:
   /auth/lookup:
@@ -445,6 +462,100 @@ paths:
             Set-Cookie: { $ref: '#/components/headers/SetCookieCleared' }
         '403': { $ref: '#/components/responses/OriginNotAllowed' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /products:
+    get:
+      tags: [catalog]
+      operationId: listProducts
+      summary: Danh sách sản phẩm có lọc, sắp xếp, phân trang, tìm kiếm (status draft)
+      description: |
+        Phục vụ `/new-in`, `/shop`, `/shop/nam|nu`, `/shop/{category}`, `/shop-by-moment/{moment}`, `/search?q=`, trang Yêu thích (`ids`), panel gợi ý (`q` + `limit=5`) và dải sản phẩm ở Home / giỏ (`limit` <= 12). BR-CAT-06, 07, 08, 13, 14, 15, 16.
+
+        **Lọc (AND):** `gender` -> `genders` chứa giá trị; `category` -> trùng `slug` danh mục; `moment` -> `moments` chứa giá trị; `maxPrice` -> `price <= maxPrice` (bằng là đạt, so với giá bán, không phải `compareAtPrice`); `q` -> sau khi trim, gộp khoảng trắng, bỏ dấu, `đ` = `d`, không phân biệt hoa thường, **mọi** từ phải là chuỗi con của "tên + loại" (`name` + `type`); `%`, `_`, dấu gạch ngược, `'`, `"` là ký tự thường; `ids` -> `id` thuộc danh sách (id sai định dạng UUID hoặc không tồn tại bị bỏ qua; mọi id đều bị bỏ -> `items: []`).
+        **Lọc theo biến thể (C4):** `size` (không phân biệt hoa thường), `color` (tên màu, ví dụ `Đỏ`), `available=true` áp lên **cùng một biến thể**: sản phẩm khớp nếu tồn tại ít nhất 1 biến thể thoả đồng thời mọi điều kiện đã cho (`size`, `color.name`, `inventory > 0` nếu `available=true`). Không có tham số biến thể -> không xét biến thể.
+        **Sắp xếp:** `featured` (mặc định) = `displayOrder` tăng; `newest` = `createdAt` giảm; `price-asc`; `price-desc`; `bestselling` = `salesRank` tăng; luôn hoà bằng `slug` tăng.
+        **Phân trang:** `total` = số sản phẩm khớp toàn bộ bộ lọc, không phụ thuộc trang. `page` vượt trang cuối -> `200`, `items: []`. Mỗi sản phẩm trong `items` có đủ `variants` (mọi biến thể, kể cả biến thể không khớp bộ lọc) để thẻ hiện đúng màu / tồn kho.
+      parameters:
+        - { name: gender, in: query, schema: { type: string, maxLength: 20 }, description: '`nam` hoặc `nu`. Giá trị lạ -> danh sách rỗng.' }
+        - { name: category, in: query, schema: { type: string, maxLength: 50 }, description: 'Slug danh mục (`tops`, `bottoms`, `dresses`, `outerwear`). Giá trị lạ -> danh sách rỗng.' }
+        - { name: moment, in: query, schema: { type: string, maxLength: 50 }, description: '`work`, `dinner`, `event`, `weekend`. Giá trị lạ -> danh sách rỗng.' }
+        - { name: size, in: query, schema: { type: string, maxLength: 10 }, description: 'Ví dụ `S`, `M`, `L`, `XL`. Giá trị lạ -> danh sách rỗng.' }
+        - { name: color, in: query, schema: { type: string, maxLength: 50 }, description: 'Tên màu hiển thị, ví dụ `Đen`, `Trắng`, `Xám`, `Đỏ`. Giá trị lạ -> danh sách rỗng.' }
+        - { name: maxPrice, in: query, schema: { type: integer, minimum: 0, maximum: 999999999999 }, description: '0 hoặc vắng = không lọc. Không phải số nguyên >= 0 (`-5`, `abc`, `1.5`) -> 422 field `maxPrice`.' }
+        - { name: available, in: query, schema: { type: boolean }, description: '`true` = chỉ sản phẩm có biến thể (khớp `size`/`color` nếu có) với tồn kho > 0. `false` = không lọc. Giá trị khác -> 422 field `available`.' }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: 'Từ khoá. Rỗng sau chuẩn hoá = không tìm. Quá 100 ký tự sau chuẩn hoá -> 422 field `q`.' }
+        - { name: sort, in: query, schema: { $ref: '#/components/schemas/SortOrder' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 10000, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 48, default: 24 } }
+        - { name: ids, in: query, schema: { type: string, maxLength: 2000 }, description: 'Danh sách `id` sản phẩm cách nhau dấu phẩy, tối đa 48 phần tử (quá -> 422 field `ids`).' }
+      responses:
+        '200':
+          description: Trang kết quả (có thể rỗng).
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=10' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductPage' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /products/{slug}:
+    get:
+      tags: [catalog]
+      operationId: getProduct
+      summary: Chi tiết sản phẩm theo slug (status draft)
+      description: |
+        BR-CAT-09, 10. `slug` trong đường dẫn được trim và hạ chữ thường trước khi tìm (`The-Everyday-Blazer%20` tìm được); phản hồi mang `slug` chuẩn để FE đổi URL bằng `replaceUrl`. Không có, không `ACTIVE`, quá 80 ký tự hoặc chứa ký tự ngoài `a-z 0-9 -` (sau chuẩn hoá) -> `404 not-found`, không bao giờ `422`/`500`.
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Sản phẩm đầy đủ.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=10' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /products/{productId}/reviews:
+    get:
+      tags: [catalog]
+      operationId: listProductReviews
+      summary: Đánh giá sản phẩm - luôn rỗng ở Slice 2 (status draft)
+      description: |
+        BR-CAT-17 (Thắng chốt 2026-11-07). Luôn `200 []`, không truy vấn DB, không kiểm `productId` có tồn tại. Giữ endpoint để adapter HTTP hiện có (`reviews(productId)`) không gặp lỗi; FE ở chế độ HTTP không hiện khối đánh giá. Đánh giá thật làm sau Slice 3.
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string, maxLength: 64 } }
+      responses:
+        '200':
+          description: Mảng rỗng.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=10' } }
+          content:
+            application/json:
+              schema: { type: array, maxItems: 0, items: {} }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /size-charts/{category}:
+    get:
+      tags: [catalog]
+      operationId: getSizeChart
+      summary: Bảng size theo danh mục (status draft)
+      description: BR-CAT-12. Danh mục không thuộc `Category` (ví dụ `shoes`) -> `404 not-found`. Mỗi bảng có đủ hàng S, M, L, XL ở `body` và `garment`.
+      parameters:
+        - { name: category, in: path, required: true, schema: { type: string, maxLength: 50 } }
+      responses:
+        '200':
+          description: Bảng size (cm).
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=3600' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SizeChart' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -499,6 +610,11 @@ components:
       description: '`rate-limited` (AC-AUTH-05, 06).'
       headers:
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: '`not-found`: tài nguyên hoặc đường dẫn không tồn tại. Cũng là phản hồi của mọi route `/api/**` không khai báo (thay cho `validation` cũ).'
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -566,6 +682,7 @@ components:
         | unauthenticated | 401 | AC-AUTH-64, 68, 75, 88 |
         | forbidden | 403 | AC-AUTH-84, 85, 88 |
         | origin-not-allowed | 403 | AC-AUTH-92 |
+        | not-found | 404 | AC-CAT-03, 26, 27, 32, 46 (route lạ, sản phẩm / bảng size không có) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -580,6 +697,7 @@ components:
         - unauthenticated
         - forbidden
         - origin-not-allowed
+        - not-found
         - unavailable
     ErrorResponse:
       type: object
@@ -601,4 +719,111 @@ components:
               description: Có khi `code` in (`rate-limited`, `code-locked`, `password-locked`).
             field:
               type: string
-              description: Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`).
+              description: Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`). Catalog (tên tham số query, gồm `sort`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids`) (`sort`, `gender`, `page`, `pageSize`, `ids`, ...).
+    Category:
+      type: string
+      enum: [tops, bottoms, dresses, outerwear]
+      description: Slug danh mục (khớp `Category` của FE).
+    Moment:
+      type: string
+      enum: [work, dinner, event, weekend]
+    Gender:
+      type: string
+      enum: [nam, nu]
+      description: Sản phẩm unisex có cả hai giá trị.
+    SortOrder:
+      type: string
+      enum: [featured, newest, price-asc, price-desc, bestselling]
+      default: featured
+    StockStatus:
+      type: string
+      enum: [OUT_OF_STOCK, LOW_STOCK, IN_STOCK]
+      description: 'Suy từ `inventory` (BR-CAT-04): 0 -> OUT_OF_STOCK; 1..5 -> LOW_STOCK; >= 6 -> IN_STOCK.'
+    Color:
+      type: object
+      required: [name, hex]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 50, examples: ['Đen'] }
+        hex: { type: string, pattern: '^#[0-9a-fA-F]{6}$', examples: ['#242323'] }
+    ProductVariant:
+      type: object
+      required: [id, sku, size, color, inventory, stockStatus]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid, description: 'Ổn định qua các lần seed. Đổi từ dạng `01-0-S` của mock.' }
+        sku: { type: string, maxLength: 64, examples: ['N2F-01-0-S'] }
+        size: { type: string, enum: [S, M, L, XL] }
+        color: { $ref: '#/components/schemas/Color' }
+        inventory: { type: integer, minimum: 0, description: 'Tồn kho hiển thị, không phải giữ hàng (BR-CAT-11).' }
+        stockStatus: { $ref: '#/components/schemas/StockStatus' }
+    ProductFit:
+      type: object
+      required: [summary, model]
+      additionalProperties: false
+      properties:
+        summary: { type: string }
+        model: { type: string }
+    StylingLook:
+      type: object
+      required: [time, moment, tip]
+      additionalProperties: false
+      properties:
+        time: { type: string, examples: ['09:00'] }
+        moment: { type: string, examples: ['At work'] }
+        tip: { type: string }
+    Product:
+      type: object
+      description: 'Khớp interface `Product` của FE (`frontend/src/app/features/catalog/models/product.ts`) trừ `id`, `variants[].id` (UUID) và `variants[].stockStatus` (mới). Không có `rating` (FE vốn để tuỳ chọn). Chuỗi / mảng nội dung thiếu là `""` / `[]`, không bao giờ `null` (BR-CAT-10); trường tuỳ chọn (`compareAtPrice`, `badge`, `colorMedia`) bị bỏ khi không có.'
+      required: [id, slug, name, type, category, moments, genders, price, mediaId, gallery, variants, description, material, care, fit, looks, createdAt, salesRank]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', minLength: 3, maxLength: 80 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        type: { type: string, minLength: 1, maxLength: 120, description: 'Dòng loại dưới tên, ví dụ "Áo blazer · Dáng suông".' }
+        category: { $ref: '#/components/schemas/Category' }
+        moments: { type: array, items: { $ref: '#/components/schemas/Moment' }, minItems: 1 }
+        genders: { type: array, items: { $ref: '#/components/schemas/Gender' }, minItems: 1 }
+        price: { type: integer, minimum: 10000, maximum: 50000000, description: VND }
+        compareAtPrice: { type: integer, description: 'Chỉ có khi > `price`.' }
+        mediaId: { type: string, maxLength: 100, description: Ảnh bìa (khoá media manifest). }
+        gallery: { type: array, items: { type: string }, minItems: 1 }
+        colorMedia:
+          type: object
+          additionalProperties: { type: string }
+          description: Ảnh bìa theo tên màu.
+        variants: { type: array, items: { $ref: '#/components/schemas/ProductVariant' }, minItems: 1, description: 'Sắp theo màu (thứ tự seed) rồi S, M, L, XL.' }
+        badge: { type: string, maxLength: 20 }
+        description: { type: string }
+        material: { type: string }
+        care: { type: array, items: { type: string } }
+        fit: { $ref: '#/components/schemas/ProductFit' }
+        looks: { type: array, items: { $ref: '#/components/schemas/StylingLook' } }
+        createdAt: { type: string, format: date, description: 'Ngày ISO `YYYY-MM-DD`, giữ như FE hiện có (C13).' }
+        salesRank: { type: integer, minimum: 1, description: '1 = bán chạy nhất. Số lưu sẵn ở Slice 2.' }
+    ProductPage:
+      type: object
+      required: [items, total, page, limit]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Product' }, maxItems: 48 }
+        total: { type: integer, minimum: 0, description: Số sản phẩm khớp toàn bộ bộ lọc. }
+        page: { type: integer, minimum: 1, description: Trang đã dùng (echo). }
+        limit: { type: integer, minimum: 1, maximum: 48, description: Kích thước trang đã dùng (echo). }
+    SizeChartRow:
+      type: object
+      required: [size, values]
+      additionalProperties: false
+      properties:
+        size: { type: string }
+        values: { type: object, additionalProperties: { type: string }, description: 'Nhãn số đo -> giá trị (cm), ví dụ "82–86".' }
+    SizeChart:
+      type: object
+      required: [body, garment, bodyColumns, garmentColumns]
+      additionalProperties: false
+      properties:
+        body: { type: array, items: { $ref: '#/components/schemas/SizeChartRow' } }
+        garment: { type: array, items: { $ref: '#/components/schemas/SizeChartRow' } }
+        bodyColumns: { type: array, items: { type: string } }
+        garmentColumns: { type: array, items: { type: string } }
