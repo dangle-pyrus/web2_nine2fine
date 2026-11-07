@@ -14,7 +14,21 @@ Một slice chỉ "Xong" khi đủ cả:
 
 ---
 
-## Slice 1 — Auth thật (P0) · Đang làm
+## Việc phải chạy trước go-live (chuyển từ Slice 1, chốt 2026-11-07)
+
+Slice 1 đóng có điều kiện theo yêu cầu Thắng (decisions 2026-11-07). Các việc dưới đây hoãn, **không được bỏ**; chưa xong thì chưa go-live.
+
+| # | Việc | Người làm | Ghi chú |
+| --- | --- | --- | --- |
+| G1 | **QA vòng 2 Slice 1** (`docs/qa/report-slice-1-auth.md`): kiểm lại AC-07, 20, 29, 70 sau khi M1, M3, N1, N2 sửa; chạy `npm test` backend 3 lần liên tiếp pass hoặc pass trên Linux/CI | qa-reviewer | Điều kiện nghiệm thu chính thức của Slice 1. |
+| G2 | **AC-AUTH-95a**: Thắng yêu cầu mã 10 lần cho một hộp thư Gmail thật; đạt khi ≥ 9/10 vào hộp thư chính trong 60 giây, người gửi "nine2fine" | Thắng | Trước đây là điều kiện đóng Slice 1; nay là điều kiện go-live. |
+| G3 | AC-AUTH-95b (Outlook, 10 lần, Should) và AC-AUTH-89 (kiểm log/console/URL/analytics một lần trên môi trường triển khai) | Thắng, qa-reviewer | Theo PRD Slice 1 mục 6. |
+| G4 | AC hoãn theo slice: AC-AUTH-69 → Slice 2 (AC-CAT-44); AC-AUTH-68, 88 → Account; AC-AUTH-75, 84, 85 → Admin | qa-reviewer | Slice được giao không được đóng nếu chưa kiểm. |
+| G5 | Dọn mock (xem mục "Dọn mock") và nội dung catalog thật (xem Slice 2) | dev, Thắng | Bản production sạch. |
+
+---
+
+## Slice 1 — Auth thật (P0) · Đóng có điều kiện (2026-11-07)
 
 PRD: `docs/product/PRD.md` › Slice 1 (BR-AUTH-01..38, AC-AUTH-01..97).
 
@@ -42,13 +56,15 @@ PRD: `docs/product/PRD.md` › Slice 1 (BR-AUTH-01..38, AC-AUTH-01..97).
 
 Won't trong Slice 1: gộp giỏ phía máy chủ (→ Slice 3), đồng bộ wishlist (→ P1 Wishlist), ghi nhớ đăng nhập, đăng xuất mọi thiết bị, đăng nhập mạng xã hội, 2FA, CAPTCHA, đổi email, xoá tài khoản, quản lý staff bằng UI, tạo/đổi mật khẩu ở Profile (→ slice Account), lưu phiên bản điều khoản.
 
+Trạng thái đóng (decisions 2026-11-07, Thắng yêu cầu): chỉ sửa nốt M1, M3, N1, N2 (mục 1.20) rồi chuyển sang Slice 2. QA vòng 2 và AC-95a hoãn, nằm ở mục "Việc phải chạy trước go-live" (G1, G2). Kết quả nghiệm thu chính thức của Slice 1 ghi vào đây sau G1.
+
 Nghiệm thu: QA vòng 1 (`docs/qa/report-slice-1-auth.md`, 2026-11-07): chưa đạt (89 Pass, 4 Fail: AC-07, 20, 29, 70; 8 chưa kiểm được). PO đề xuất đạt có điều kiện khi: M1, M3, N1, N2 sửa và QA kiểm lại; AC-29 đã sửa chữ AC (N3); AC-95a do Thắng chạy; AC hoãn theo PRD mục 6. M2 (test crash `0xC0000409`) không chặn nghiệm thu vì chỉ tái hiện trong vitest/Windows, không phải runtime; điều kiện: chạy `npm test` 3 lần liên tiếp pass hoặc pass trên Linux/CI, và M2 giữ mở trong backlog.
 
 ### Việc phát sinh sau QA vòng 1 (Slice 1)
 
 | # | Hạng mục | Mức | Ghi chú |
 | --- | --- | --- | --- |
-| 1.20 | Sửa M1 (thời gian phản hồi `/auth/codes`), N1 (900 giây/"15 phút"), N2 (đăng xuất về `/`), M3 (ẩn "Tạo mật khẩu" ở Profile khi `authMode: http`) | Must | Điều kiện nghiệm thu |
+| 1.20 | Sửa M1 (thời gian phản hồi `/auth/codes`), N1 (900 giây/"15 phút"), N2 (đăng xuất về `/`), M3 (ẩn "Tạo mật khẩu" ở Profile khi `authMode: http`) | Must | Điều kiện đóng Slice 1; việc duy nhất còn lại trước khi sang Slice 2 |
 | 1.21 | M2: ổn định test backend (thử Linux CI, Node 22 LTS, Prisma `engineType = "client"`) | Should | Không chặn nghiệm thu; chặn tin vào CI |
 | 1.22 | N4 (email chứa NUL → 422), N6, N7, N8, N10, N11, N13, N14, N15, N18, N20 | Should | Minor, làm cùng đợt sửa nếu rẻ |
 | 1.23 | N17 đăng nhập chậm: đặt API cùng vùng DB, giảm số lượt truy vấn | Should | PRD chưa có chỉ tiêu; xem xét khi triển khai |
@@ -68,21 +84,39 @@ Không làm trong Slice 1 (decisions 2026-11-07: chỉ migration cộng thêm). 
 
 ---
 
-## Slice 2 — Catalog (P0) · Tiếp theo
+## Slice 2 — Catalog chỉ đọc (P0) · Đang làm (PO đã viết BR/AC 2026-11-07)
 
-Mục tiêu: PLP, PDP, Search đọc dữ liệu sản phẩm thật từ BE thay fixture. Cần PO viết BR-CAT trước khi bắt đầu.
+PRD: `docs/product/PRD.md` › Slice 2 (BR-CAT-01..23, AC-CAT-01..53). Mục tiêu: PLP, PDP, Search, panel gợi ý, dải sản phẩm ở Home/giỏ đọc dữ liệu thật từ BE thay fixture `products.ts`. Phạm vi chốt: không admin CRUD, giỏ/checkout, đánh giá thật, "báo khi có hàng", wishlist server.
 
-| # | Hạng mục | Mức |
+Chia lát giao được (mỗi lát nghiệm thu riêng):
+
+| # | Hạng mục | Mức | BR | Người làm chính | Trạng thái |
+| --- | --- | --- | --- | --- | --- |
+| 2.1 | Schema catalog (migration cộng thêm) + seed idempotent từ mock (8 sản phẩm, 64 biến thể, 4 bảng size) | Must | 01–05, 23 | BE | Chưa |
+| 2.2 | Hợp đồng `openapi.yaml` catalog + mã lỗi `not-found`, `validation`, `rate-limited` | Must | 20 | BE | Chưa |
+| 2.3 | API danh sách: lọc, sắp xếp, phân trang, `q` | Must | 06–08, 13 | BE | Chưa |
+| 2.4 | API chi tiết theo slug, bảng size, đánh giá `[]` | Must | 09–12, 17 | BE | Chưa |
+| 2.5 | Công khai chỉ đọc, giới hạn 120 yêu cầu/60 giây/IP | Must | 18, 19 | BE | Chưa |
+| 2.6 | FE: cờ catalog độc lập (`catalogMode`), nối `HttpCatalogApi`, `not-found` → trang không tìm thấy, tiêu đề PLP theo `total`, `limit` cho panel (5) và dải (≤ 12), xử lý lỗi bảng size, ẩn đánh giá/báo hàng về ở HTTP | Must | 14, 17, 20, 21 | FE | Chưa |
+| 2.7 | Spec thiết kế trạng thái mới (không tìm thấy, lỗi bảng size, khối đánh giá trống; "Xem thêm") | Must | 09, 12, 15 | Designer | Chưa |
+| 2.8 | Nút "Xem thêm" khi `total` > số đã tải | Should | 15 | FE | Chưa |
+| 2.9 | Lọc theo `ids` cho trang Yêu thích | Should | 16 | BE, FE | Chưa |
+| 2.10 | Chỉ tiêu hiệu năng (100 sản phẩm thử) | Should | 22 | BE, QA | Chưa |
+| 2.11 | Quản lý sản phẩm/tồn kho/ảnh trong admin | Won't | — | slice Admin | Lý do: Slice 2 chỉ đọc |
+| 2.12 | Đọc/gửi đánh giá thật; "Báo khi có hàng"; chuyển hướng slug cũ; giá theo biến thể; xếp hạng độ liên quan | Won't | 17 | — | Sau Slice 3 / slice thông báo |
+
+Chờ xác nhận Thắng: câu hỏi 1 (nội dung catalog demo cho go-live) và 2 (ẩn đánh giá/báo hàng về ở HTTP; BR-CAT-17).
+
+DoD: theo DoD chung; thêm: giá/tồn kho hiển thị lấy từ BE, không còn fixture trong chế độ HTTP; Cart/Checkout/Account vẫn mock; AC-AUTH-69 kiểm bằng AC-CAT-44; migration chỉ cộng thêm.
+
+Nghiệm thu: (chưa có báo cáo QA).
+
+### Việc cần làm trước go-live phát sinh từ Slice 2
+
+| # | Việc | Người làm |
 | --- | --- | --- |
-| 2.1 | Mô hình sản phẩm / biến thể / trạng thái theo master plan mục 31, 33 (ACTIVE/DRAFT/ARCHIVED; IN_STOCK/LOW_STOCK/OUT_OF_STOCK) + schema + seed | Must |
-| 2.2 | Danh sách sản phẩm: lọc (category, moment, size, color, giá, còn hàng), sắp xếp, phân trang | Must |
-| 2.3 | Chi tiết sản phẩm theo slug, gallery, fit, care, tồn kho theo biến thể | Must |
-| 2.4 | Tìm kiếm | Must |
-| 2.5 | Bảng size theo danh mục | Must |
-| 2.6 | Đọc đánh giá sản phẩm (gửi đánh giá cần đơn đã nhận → sau Slice 3) | Should |
-| 2.7 | Quản lý sản phẩm trong admin | Won't (slice Admin) |
-
-DoD: theo DoD chung; thêm: giá/tồn kho hiển thị lấy từ BE, không còn fixture trong chế độ HTTP.
+| 2.13 | Nội dung catalog thật (giá, chất liệu, ảnh, phân Nam/Nữ) thay dữ liệu demo; nhập bằng file seed đến khi có Admin | Thắng, BE |
+| 2.14 | Đơn mock không trừ kho trong DB (chấp nhận đến Slice 3); Slice 3 phải đọc tồn kho từ DB khi đặt hàng | BE (Slice 3) |
 
 ---
 

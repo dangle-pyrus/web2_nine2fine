@@ -358,3 +358,186 @@ Theo `docs/README.md` và master plan mục 49–50:
 | 6 | Kênh liên hệ ghi trong thông báo "tài khoản bị tạm khóa" là gì? `store-info.ts` hiện toàn giá trị giả định. | BR-AUTH-09, BR-AUTH-19 | Thắng — **Đã trả lời 2026-11-07: phthang0872@gmail.com (BR-AUTH-09, 19).** |
 | 7 | Bảng `users` trên Supabase đã có dữ liệu thật chưa? Danh sách email staff/admin cần seed? | BR-AUTH-33, migration của BE | Thắng / Backend — **Chuyển Orchestrator xử lý**: tự kiểm tra Supabase ở bước triển khai, trước khi chạy migration (decisions 2026-11-07); vẫn mở. Seed dùng mật khẩu hợp lệ BR-AUTH-20, không ghi vào tài liệu. |
 | 8 | Tạo/đổi mật khẩu ở Profile làm trong Slice 1 (Should) hay dời sang slice Account? Nếu làm: đổi mật khẩu có kết thúc phiên trên thiết bị khác không (PO đề xuất: có, trừ phiên hiện tại)? | Phạm vi Slice 1 | Thắng — **Đã trả lời 2026-11-07: Won't ở Slice 1, dời sang slice Account.** |
+
+---
+
+## Slice 2: Catalog (chỉ đọc)
+
+Nguồn: master plan mục 0, 31, 33, 52; FE `features/{catalog,product,search,home}`, `mocks/{products,mock-inventory,mock-catalog-api,reviews}.ts`, interface `CATALOG_API`; BE chưa có module catalog, `schema.prisma` chưa có bảng sản phẩm. Quy ước dấu như Slice 1. Tên endpoint và tên trường do Backend chốt trong `docs/api/openapi.yaml`; PO chỉ chốt hành vi. Mức Must/Should áp dụng cho từng BR; AC kế thừa mức của BR.
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** PLP, PDP, tìm kiếm và các dải sản phẩm ở Home/giỏ đang đọc 8 sản phẩm cố định trong `products.ts`; giá, tồn kho, trạng thái không đổi được ngoài code và không có nguồn thật để Slice 3 (giỏ, đặt hàng) dựa vào.
+
+**Mục tiêu.**
+1. Mọi màn hình xem sản phẩm đọc từ BE: giá, biến thể, tồn kho hiển thị lấy từ cơ sở dữ liệu, khớp URL state hiện có (`/shop`, `/shop/nam|nu`, `/shop/:category`, `/shop-by-moment/:moment`, `/search?q=`, `/product/:slug`).
+2. Seed từ dữ liệu mock để FE chạy HTTP mà không mất tính năng đang có (trừ mục Won't).
+3. Chuẩn bị nguồn sự thật cho Slice 3: id sản phẩm/biến thể ổn định, tồn kho không âm.
+
+**Không phải mục tiêu.** Đổi giao diện PLP/PDP/search (giữ visual), chọn công nghệ tìm kiếm/cache.
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Lý do |
+| --- | --- | --- |
+| Sản phẩm, biến thể màu/size, trạng thái ACTIVE/DRAFT/ARCHIVED, tồn kho hiển thị | Must | Nền cho mọi màn hình và Slice 3. |
+| Danh sách: lọc, sắp xếp, phân trang theo URL state hiện có | Must | PLP là cửa vào chính; không có phân trang thì không mở rộng được. |
+| Chi tiết theo slug, bảng size theo danh mục | Must | PDP và hướng dẫn chọn size đang có. |
+| Tìm kiếm trang `/search` và panel gợi ý nhanh | Must | FE đang có cả hai. |
+| Seed từ `products.ts` + bảng size trong `reviews.ts` | Must | Không có nội dung thì FE trống. |
+| Giới hạn tần suất, mã lỗi ổn định, cấu hình bật catalog thật độc lập | Must | Vận hành thực tế; tránh kéo Cart/Account sang HTTP. |
+| Nút "Xem thêm" khi tổng > số đã tải | Should | Seed chỉ 8 sản phẩm; cần khi danh mục > 24. |
+| Lọc theo danh sách id (trang Yêu thích) | Should | Trang Yêu thích lọc phía FE trên kết quả danh sách; hỏng khi > 1 trang. |
+| Chỉ tiêu thời gian phản hồi | Should | Chưa có số liệu nền. |
+| Quản lý sản phẩm, tồn kho, ảnh trong admin | Won't | Slice Admin. Slice 2 thay đổi dữ liệu bằng seed/SQL. |
+| Đọc/gửi đánh giá thật, điểm sao trên thẻ, đánh giá mẫu | Won't | Gửi đánh giá cần đơn đã nhận (sau Slice 3). Không đưa đánh giá mẫu vào dữ liệu thật. Xem BR-CAT-17. |
+| "Báo khi có hàng" (`/stock-alerts`) | Won't | Cần lưu email và gửi thư theo sự kiện; FE ẩn ở chế độ HTTP. |
+| Wishlist lưu server, giỏ hàng, báo giá, giữ/trừ tồn kho, voucher | Won't | Slice 3 / P1. |
+| Giá theo biến thể, xếp hạng theo độ liên quan, gợi ý từ khoá động, chuyển hướng slug cũ | Won't | FE không có; không đủ giá trị cho lần này. |
+| Upload/xử lý ảnh | Won't | `mediaId` là id trong media manifest của FE, không phải URL. |
+
+### 3. Hiện trạng FE và hành vi được chọn
+
+| # | Điểm | FE mock hiện tại | Chọn | Lý do |
+| --- | --- | --- | --- | --- |
+| C1 | Phân trang | `list` trả toàn bộ, `total = items.length`; panel và dải Home/giỏ tự `slice` phía FE; tiêu đề đếm `items.length` | BE phân trang (BR-CAT-08). FE gửi `limit` nhỏ cho panel (5) và dải (≤ 12); tiêu đề PLP đếm theo `total`; URL **không** thêm `page` (Xem thêm giữ trong bộ nhớ) | Giữ URL state hiện có; mở rộng được khi > 24 sản phẩm. |
+| C2 | `featured` | Thứ tự mảng mock | Thứ tự hiển thị cố định `displayOrder` (seed = thứ tự mock 01..08) | Ổn định, không cần quy tắc phức tạp. |
+| C3 | Giá trị lạ của `category/moment/gender/size/color` | Trả danh sách rỗng, không lỗi | Giữ: 200 rỗng. `sort`, `maxPrice`, `page`, `limit`, `q` sai dạng → 422 `validation` | `/shop/xyz` đang cho trạng thái rỗng; FE đã chuẩn hoá `sort`, `maxPrice`. |
+| C4 | `size` + `color` + `available` | Cùng khớp trên **một** biến thể | Giữ | Tránh "có size M" ở màu A nhưng "còn hàng" ở màu B. |
+| C5 | `get(slug)` không tồn tại | Mock trả `undefined` → trang không tìm thấy; HTTP adapter hiện coi mọi 4xx là lỗi → "không tải được" | BE trả 404 `not-found`; **FE adapter chuyển `not-found` thành `undefined`** | Dùng mã `not-found` đã chốt 2026-11-07. |
+| C6 | Tìm kiếm | Chuỗi con liền mạch trên "tên + loại", bỏ dấu | Tách từ, mọi từ phải có trong "tên + loại", bỏ dấu, `đ` = `d` | Rộng hơn nhưng không đổi kết quả cho truy vấn một từ. |
+| C7 | Đánh giá, điểm sao, đủ điều kiện đánh giá, báo hàng về | Dữ liệu mẫu trong `reviews.ts`, lưu trong bộ nhớ | HTTP: `reviews` trả `[]`; FE ẩn form đánh giá, khối điểm sao, "Báo khi có hàng"; không gọi `/stock-alerts` hay `/reviews/eligibility` | Không có dữ liệu thật; tránh đánh giá giả lên môi trường thật (chờ xác nhận, câu hỏi 2). |
+| C8 | Id | Sản phẩm `01..08`, biến thể `01-0-S` | Id mới do BE cấp, ổn định qua mọi lần seed; giỏ/yêu thích cũ trong trình duyệt tham chiếu id không còn → bỏ qua êm, không lỗi | Dữ liệu demo; không viết mã tương thích. |
+| C9 | Cấu hình | `apiConfig` chỉ có `mode` và `authMode` | Thêm cờ riêng cho catalog (như `authMode`); đặt `mode: 'http'` toàn cục không phải cách bật catalog | Cart/Account/Admin chưa có API. |
+| C10 | Đặt hàng mock | `MockInventory` trừ kho trong bộ nhớ trên `PRODUCTS` | Giữ nguyên đến Slice 3. Đơn mock **không** làm đổi tồn kho trong DB; giá/tồn kho hiển thị lấy từ DB | Chấp nhận lệch tạm thời; Slice 3 thay checkout. |
+| C11 | Bảng size lỗi | `sizeChart(...).subscribe` không xử lý lỗi, nút im lặng | FE hiện thông báo lỗi + cho thử lại | Mất mạng không được làm nút "chết". |
+| C12 | Trang Yêu thích | Lọc phía FE theo id đã lưu trên kết quả danh sách | Thêm lọc theo danh sách id (BR-CAT-16, Should) | Không thì chỉ thấy mục nằm trong trang đầu. |
+| C13 | Ngày tạo | Chuỗi `YYYY-MM-DD` | Giữ định dạng ngày ISO; sắp xếp "Mới nhất" so sánh được | Tương thích `createdAt` hiện có. |
+
+### 4. Business Rules
+
+#### 4.1 Dữ liệu
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-CAT-01 | Must | **Sản phẩm.** Trường bắt buộc: `slug` (chữ thường a-z, số, dấu `-`; 3–80 ký tự; duy nhất), `name` (1–120), `type` (1–120), `category` ∈ {tops, bottoms, dresses, outerwear}, `moments` ⊆ {work, dinner, event, weekend} (≥ 1), `genders` ⊆ {nam, nu} (≥ 1), `price` (số nguyên đồng, 10.000 – 50.000.000; đề xuất PO), `mediaId`, `createdAt`, `salesRank` (số nguyên ≥ 1), `displayOrder`. Tuỳ chọn: `compareAtPrice` (nếu có phải > `price`), `badge` (≤ 20 ký tự), `colorMedia`. Nội dung: `description`, `material`, `care[]`, `fit{summary, model}`, `looks[]`, `gallery[]` (≥ 1 `mediaId`). Ràng buộc nằm ở cơ sở dữ liệu, không chỉ ở seed. |
+| BR-CAT-02 | Must | **Trạng thái hiển thị.** `ACTIVE` / `DRAFT` / `ARCHIVED` (master plan 33). API công khai chỉ thấy `ACTIVE`: `DRAFT` và `ARCHIVED` không xuất hiện trong danh sách, tổng số, tìm kiếm, lọc theo id; xem chi tiết → 404 `not-found`. Seed: toàn bộ `ACTIVE`. |
+| BR-CAT-03 | Must | **Biến thể.** Mỗi sản phẩm `ACTIVE` có ≥ 1 biến thể. Biến thể có `id`, `sku` (duy nhất toàn hệ thống), `size` ∈ {S, M, L, XL}, `color{name, hex}` (hex dạng `#RRGGBB`), `inventory` (số nguyên ≥ 0). Cặp (màu, size) duy nhất trong một sản phẩm. Màu lọc được: Đen, Trắng, Xám, Đỏ. |
+| BR-CAT-04 | Must | **Trạng thái tồn kho hiển thị.** Suy ra từ `inventory`: 0 → `OUT_OF_STOCK`; 1–5 → `LOW_STOCK`; ≥ 6 → `IN_STOCK` (ngưỡng 5 khớp FE hiện có; đề xuất PO). API trả `inventory` và `stockStatus`. PDP: `LOW_STOCK` hiện "Chỉ còn N"; `OUT_OF_STOCK` làm nút size bị vô hiệu, ghi "Size X - hết hàng". |
+| BR-CAT-05 | Must | **Seed.** Từ `products.ts` (8 sản phẩm × 2 màu × 4 size = 64 biến thể; mọi trường nội dung, `mediaId`, `gallery` giữ nguyên) và 4 bảng size trong `reviews.ts`. Idempotent theo `slug` và `sku`: chạy lại không tạo bản ghi trùng và **không đặt lại `inventory`** của biến thể đã có. Chạy trong một giao dịch: lỗi giữa chừng thì không để lại dữ liệu nửa vời. Không seed đánh giá. |
+
+#### 4.2 Danh sách
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-CAT-06 | Must | **Bộ lọc** (tham số rỗng hoặc vắng = không lọc, kết hợp bằng AND): `gender` ∈ {nam, nu} (sản phẩm có giá trị đó trong `genders`); `category`; `moment` (có trong `moments`); `size`, `color` (so tên màu đúng chữ, ví dụ `Đỏ`), `available=true`: **cùng khớp trên ít nhất một biến thể** (BR chọn C4); `maxPrice` (số nguyên ≥ 0; `price` ≤ `maxPrice`, bằng là đạt; 0 = không lọc). Giá trị lạ của gender/category/moment/size/color → 200, danh sách rỗng. `maxPrice` không phải số nguyên ≥ 0 → 422 `validation`, `field: maxPrice`. `/shop/nam`, `/shop/nu`, `/shop/:category`, `/shop-by-moment/:moment` tương đương tham số lọc tương ứng. |
+| BR-CAT-07 | Must | **Sắp xếp.** `featured` (mặc định khi vắng; `displayOrder` tăng), `newest` (`createdAt` giảm), `price-asc`, `price-desc`, `bestselling` (`salesRank` tăng). Mọi kiểu hoà phân định bằng `slug` tăng dần để thứ tự lặp lại được giữa các lần gọi và các trang. Giá trị khác → 422 `validation`, `field: sort`. |
+| BR-CAT-08 | Must | **Phân trang.** `page` ≥ 1 (mặc định 1), `limit` 1–48 (mặc định 24; đề xuất PO), đều là số nguyên. Phản hồi: `items` của trang và `total` = số sản phẩm khớp bộ lọc trên **toàn bộ** (không phải số trong trang). `page` vượt quá trang cuối → 200, `items: []`, `total` đúng. Sai dạng hoặc ngoài khoảng → 422 `validation`. Ghép mọi trang cùng bộ lọc và sắp xếp ra đúng `total` sản phẩm, không trùng, không thiếu. |
+| BR-CAT-15 | Should | **Xem thêm (FE).** Khi số đã tải < `total`, PLP hiện nút "Xem thêm" tải trang kế và **nối** vào danh sách; hết thì ẩn nút; URL không đổi; tiêu đề đếm theo `total`. Đổi bộ lọc/sắp xếp → quay về trang 1. Lỗi khi tải thêm: giữ nguyên các sản phẩm đã hiện, báo lỗi và cho thử lại. |
+| BR-CAT-16 | Should | **Lọc theo id.** Tham số `ids` (tối đa 48 id, phân tách bằng dấu phẩy) giới hạn kết quả vào các sản phẩm có id đó; id không tồn tại hoặc không `ACTIVE` bị bỏ qua; > 48 id → 422 `validation`. Dùng cho trang Yêu thích (kết hợp được với mọi bộ lọc khác). |
+
+#### 4.3 Chi tiết, bảng size, đánh giá
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-CAT-09 | Must | **Chi tiết theo slug.** Slug trong đường dẫn được bỏ khoảng trắng hai đầu và hạ chữ thường trước khi tìm; phản hồi mang slug chuẩn, FE đổi URL bằng `replaceUrl` (hành vi hiện có). Không có, `DRAFT`, `ARCHIVED`, quá 80 ký tự hoặc chứa ký tự ngoài `a-z 0-9 -` → 404 `not-found` (không phải 422, không phải 500). FE hiện trang "không tìm thấy sản phẩm" có đường về `/shop`; lỗi mạng/5xx hiện trạng thái lỗi có nút thử lại — hai trạng thái này khác nhau. |
+| BR-CAT-10 | Must | **Đủ nội dung PDP.** Phản hồi chi tiết có đủ `gallery`, `description`, `material`, `care`, `fit`, `looks`, `variants` (kèm `inventory`, `stockStatus`). Nội dung thiếu là chuỗi rỗng hoặc mảng rỗng, không `null`. |
+| BR-CAT-11 | Must | **Độ tươi và ý nghĩa của giá/tồn kho.** Giá và tồn kho hiển thị phản ánh thay đổi trong DB sau ≤ 30 giây (đề xuất PO). Tồn kho trên PDP chỉ để tham khảo, **không phải giữ hàng**; Slice 3 kiểm lại khi đặt hàng. |
+| BR-CAT-12 | Must | **Bảng size theo danh mục.** Mỗi danh mục trong BR-CAT-01 có đúng 1 bảng gồm `body`, `garment`, `bodyColumns`, `garmentColumns`, mỗi hàng ứng với S, M, L, XL (nội dung seed theo `SIZE_CHARTS`). Danh mục không có → 404 `not-found`. FE mở hộp thoại size ở PDP theo danh mục của sản phẩm; lỗi tải → thông báo lỗi và mở lại được. |
+| BR-CAT-17 | Must | **Đánh giá và báo hàng về ở chế độ HTTP (chờ xác nhận, câu hỏi 2).** Danh sách đánh giá của sản phẩm trả `[]` (200); thẻ sản phẩm không có điểm sao; FE không hiện đánh giá mẫu, form viết đánh giá và "Báo khi có hàng", không gọi `/stock-alerts` hay kiểm tra đủ điều kiện đánh giá. Chế độ mock giữ nguyên hành vi cũ. |
+
+#### 4.4 Tìm kiếm
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-CAT-13 | Must | **Tìm kiếm.** Tham số `q`: bỏ khoảng trắng hai đầu, gộp khoảng trắng liên tiếp; rỗng sau chuẩn hoá = không tìm (như không có `q`); tối đa 100 ký tự (vượt → 422 `validation`, `field: q`). Không phân biệt hoa thường và dấu, `đ` = `d`. Tách thành từ; sản phẩm khớp khi **mọi** từ nằm trong "tên + loại" (`type`). `%`, `_`, `\`, `'`, `"` là ký tự thường: không thành ký tự đại diện, không gây lỗi. Không khớp → 200, `total: 0`. Kết hợp được với mọi bộ lọc, sắp xếp, phân trang. Không xếp hạng theo độ liên quan: thứ tự theo `sort` (BR-CAT-07). |
+| BR-CAT-14 | Must | **Panel gợi ý nhanh (hành vi FE hiện có, giữ).** Chờ 250 ms sau lần gõ cuối rồi gọi tìm kiếm với `limit=5`; hiện tối đa 5 sản phẩm và "Xem tất cả (`total`)" dẫn tới `/search?q=`; gõ tiếp thì huỷ yêu cầu trước, kết quả cũ không hiện đè; lỗi → trạng thái lỗi + thử lại, giữ nguyên từ khoá; FE giới hạn ô nhập 100 ký tự. |
+
+#### 4.5 Vận hành
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-CAT-18 | Must | **Công khai, chỉ đọc.** Mọi thao tác catalog dùng được không cần đăng nhập. Cookie phiên sai, đã thu hồi hoặc hết hạn gửi kèm **không** làm yêu cầu bị từ chối (vẫn 200). Chỉ phương thức đọc; `POST/PUT/PATCH/DELETE` trên đường dẫn catalog không đổi dữ liệu (404 hoặc 405). Phản hồi không chứa dữ liệu cá nhân. |
+| BR-CAT-19 | Must | **Giới hạn tần suất.** Tối đa 120 yêu cầu catalog / 60 giây / địa chỉ IP (đề xuất PO), tách khỏi bộ đếm auth. Vượt → 429 `rate-limited` kèm `retryAfterSeconds` (1–60). Duyệt bình thường (PLP → PDP → quay lại, gõ tìm kiếm) không chạm giới hạn. |
+| BR-CAT-20 | Must | **Lỗi có mã ổn định.** Lỗi catalog theo BR-AUTH-36: `validation` (kèm `field`), `not-found`, `rate-limited`, lỗi máy chủ; không stack trace, SQL, tên bảng. PLP lỗi mạng/5xx/429: trạng thái lỗi có nút thử lại, thử lại giữ nguyên bộ lọc đang có trên URL. |
+| BR-CAT-21 | Must | **Bật catalog thật độc lập.** Cờ cấu hình riêng cho catalog (C9). Cờ = http: PLP, PDP, Search, panel, dải Home/giỏ, bảng size đều gọi API và **không còn hiển thị dữ liệu từ `products.ts`**; Cart/Checkout/Account/Admin vẫn chạy mock. Cờ = mock: hành vi và bộ test mock như trước Slice 2. |
+| BR-CAT-22 | Should | **Hiệu năng.** Trên DB Supabase với 100 sản phẩm thử, đo tại máy chủ: danh sách p95 ≤ 500 ms, chi tiết p95 ≤ 300 ms (đề xuất PO; không tính thời gian mạng). |
+| BR-CAT-23 | Must | **Migration chỉ cộng thêm.** Chỉ tạo bảng/cột/chỉ mục mới cho catalog; không xoá, đổi tên hay đổi kiểu bảng/cột có sẵn (kể cả phần auth cũ chờ "Dọn schema auth"). Chạy lại `migrate deploy` không lỗi. |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu: 8 sản phẩm seed (giá đồng): the-everyday-blazer 1.290.000 (outerwear), nine-to-fine-shirt 590.000 (tops, `salesRank` 1), after-hours-dress 890.000 (dresses, chỉ `nu`, `compareAtPrice` 1.090.000), the-straight-trousers 690.000, off-duty-top 390.000, the-midi-skirt 650.000, weekend-shirt 550.000, city-vest 790.000. Mỗi sản phẩm 2 màu × 4 size; size XL `inventory` 0; S/M/L = 5 ở màu thứ nhất, 6 ở màu thứ hai. "T" = sản phẩm thử do test tạo thêm. AC ở BR Should (15, 16, 22) là Should.
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-CAT-01 | 01 | DB đã seed | Gọi chi tiết từng slug trong 8 slug | 200; `price` là số nguyên đúng bảng giá trên; `category`, `moments` (≥ 1), `genders` (≥ 1) hợp lệ; after-hours-dress có `compareAtPrice` 1.090.000 > `price`. |
+| AC-CAT-02 | 01 | Ghi trực tiếp vào DB | Thêm sản phẩm với slug trùng / slug có chữ hoa / `price` 0 / `compareAtPrice` ≤ `price` / `moments` rỗng | Mỗi lần bị DB từ chối, 0 bản ghi mới. |
+| AC-CAT-03 | 02 | T1 `DRAFT`, T2 `ARCHIVED` cùng khớp từ khoá "thu" | Gọi danh sách, tìm kiếm `q=thu`, lọc `ids` chứa T1, chi tiết T1 và T2 | T1, T2 không có trong `items` và không được tính vào `total`; chi tiết cả hai → 404 `not-found`. |
+| AC-CAT-04 | 03 | DB đã seed | Đếm biến thể | 64 biến thể, 8 mỗi sản phẩm; `sku` không trùng; mọi `size` ∈ {S, M, L, XL}; mọi `hex` đúng dạng `#RRGGBB`. |
+| AC-CAT-05 | 03 | Ghi trực tiếp vào DB | Thêm biến thể trùng (sản phẩm, màu, size) / `sku` trùng / `inventory` = -1 | Cả ba bị DB từ chối. |
+| AC-CAT-06 | 04 | T có biến thể `inventory` 0, 1, 5, 6 | Gọi chi tiết T | `stockStatus` lần lượt `OUT_OF_STOCK`, `LOW_STOCK`, `LOW_STOCK`, `IN_STOCK`. |
+| AC-CAT-07 | 04 | PDP the-everyday-blazer, màu Đen (S=5, XL=0), màu Xám (S=6) | Chọn Đen → size S; chọn Xám → size S; xem size XL | Đen S hiện "Chỉ còn 5"; Xám S không hiện; XL bị vô hiệu, nhãn "Size XL - hết hàng", không thêm được vào giỏ. |
+| AC-CAT-08 | 05 | DB trống phần catalog | Chạy seed | 8 sản phẩm, 64 biến thể, 4 bảng size (tops, bottoms, dresses, outerwear), 0 đánh giá; tên, mô tả, `gallery`, `fit`, `care`, `looks` bằng với `products.ts`. |
+| AC-CAT-09 | 05 | Đã seed; một biến thể bị hạ `inventory` xuống 2 bằng SQL | Chạy seed lần hai | Vẫn 8 sản phẩm, 64 biến thể; biến thể đó vẫn `inventory` 2; không bản ghi trùng. |
+| AC-CAT-10 | 05 | Seed bị ngắt (mất kết nối) giữa chừng trên DB trống | Kiểm DB | Có 0 sản phẩm hoặc đủ 8, không ở giữa; chạy lại seed thành công. |
+| AC-CAT-11 | 06 | DB đã seed | `gender=nam`; `gender=nu` | `nam`: không có after-hours-dress, mọi item có `nam`; `nu`: có after-hours-dress. |
+| AC-CAT-12 | 06 | DB đã seed | `category=dresses`; truy cập `/shop/dresses` | Đúng 1 sản phẩm (after-hours-dress), `total` 1; trang `/shop/dresses` hiện đúng 1 thẻ và tiêu đề đúng danh mục. |
+| AC-CAT-13 | 06 | DB đã seed | `moment=event`; truy cập `/shop-by-moment/event` | Mọi item có `event` trong `moments` (gồm after-hours-dress); không item nào thiếu `event`. |
+| AC-CAT-14 | 06 | DB đã seed | `size=XL`; `size=XL&available=true`; `available=true` | `size=XL`: `total` 8; `size=XL&available=true`: `total` 0, `items: []`, FE hiện trạng thái rỗng (không phải lỗi); `available=true`: 8 (mỗi sản phẩm còn S/M/L). |
+| AC-CAT-15 | 06 | DB đã seed | `maxPrice=589999`; `maxPrice=590000`; `maxPrice=500000`; `maxPrice=0` | 2 (390.000, 550.000); 3 (thêm nine-to-fine-shirt 590.000, mốc bằng được tính); 1 (off-duty-top); 8. |
+| AC-CAT-16 | 06 | T có: Đen/S=0 và Trắng/S=3 | `color=Đen&size=S&available=true`; `color=Trắng&size=S&available=true` | Lần một **không** trả T (biến thể Đen/S hết hàng, dù T còn S ở màu khác); lần hai trả T. |
+| AC-CAT-17 | 06 | DB đã seed | `category=xyz`; `maxPrice=-5`; `maxPrice=abc`; `maxPrice=1.5` | `category=xyz`: 200, `total` 0; ba trường hợp `maxPrice`: 422 `validation`, `field: maxPrice`. |
+| AC-CAT-18 | 06 | Mở `/shop/nu?color=Đỏ&maxPrice=1000000&sort=price-asc` | Quan sát, tải lại, bấm Back sau khi đổi bộ lọc | Yêu cầu API mang đủ lọc `gender=nu`, `color=Đỏ`, `maxPrice`, `sort`; hiện "Đang lọc (3)" và chỉ after-hours-dress; tải lại giữ nguyên; Back về đúng trạng thái trước; "Xóa tất cả" về `/shop`. |
+| AC-CAT-19 | 07 | DB đã seed | `sort=price-asc`; `sort=price-desc` | Asc: đầu off-duty-top 390.000, cuối the-everyday-blazer 1.290.000; Desc: ngược lại hoàn toàn. |
+| AC-CAT-20 | 07 | DB đã seed; T1 và T2 cùng `price` | `sort=bestselling`; `sort=newest`; `sort=price-asc` | `bestselling`: đầu là nine-to-fine-shirt; `newest`: đầu là sản phẩm có `createdAt` lớn nhất; T1, T2 luôn theo `slug` tăng dần và gọi 2 lần ra cùng thứ tự. |
+| AC-CAT-21 | 07 | DB đã seed | Không có `sort`; `sort=featured`; `sort=hot` | Hai lần đầu: thứ tự `displayOrder` (the-everyday-blazer đầu), giống nhau; `sort=hot`: 422 `validation`, `field: sort`. Mở `/shop?sort=hot` trên FE vẫn hiện danh sách `featured` (FE chuẩn hoá trước khi gọi). |
+| AC-CAT-22 | 08 | DB đã seed | `sort=price-asc&limit=3` với `page=1,2,3` | Lần lượt 3, 3, 2 item; `total` luôn 8; ghép 8 item không trùng, không thiếu, đúng thứ tự giá tăng. |
+| AC-CAT-23 | 08 | DB đã seed | `page=4&limit=3`; không tham số phân trang | `page=4`: 200, `items: []`, `total` 8; không tham số: 8 item (mặc định `limit` 24). |
+| AC-CAT-24 | 08 | — | `limit=0`; `limit=49`; `page=0`; `page=1.5`; `limit=abc` | Mỗi lần 422 `validation` với `field` tương ứng (`limit` hoặc `page`); `limit=48` hợp lệ. |
+| AC-CAT-25 | 09 | DB đã seed | Chi tiết với `The-Everyday-Blazer ` (chữ hoa, có khoảng trắng cuối) | 200; `slug` trả về `the-everyday-blazer`. Mở `/product/The-Everyday-Blazer` trên FE: URL đổi sang slug chuẩn, không thêm mục lịch sử (Back không quay lại URL chữ hoa). |
+| AC-CAT-26 | 09 | — | Mở `/product/khong-co-san-pham` | API 404 `not-found`; FE hiện trang không tìm thấy sản phẩm có đường về `/shop`; không hiện "Không thể tải" hay nút thử lại. |
+| AC-CAT-27 | 09 | — | Chi tiết với slug 300 ký tự; `../etc`; `a'b`; `%00` | Mỗi lần 404 `not-found`; không 500, không stack trace/SQL. |
+| AC-CAT-28 | 09 | Đang mở PDP, ngắt mạng | Tải lại PDP | Trạng thái lỗi có nút thử lại (không phải trang không tìm thấy); bật mạng, bấm thử lại → PDP hiện đúng sản phẩm. |
+| AC-CAT-29 | 10 | DB đã seed | Chi tiết từng sản phẩm | `gallery` ≥ 1 phần tử; `description`, `material`, `care`, `fit.summary`, `fit.model`, `looks` hiện diện; không trường nào `null`; trường thiếu là `""` hoặc `[]`. |
+| AC-CAT-30 | 11 | PDP weekend-shirt hiện 550.000 ₫ | Đổi `price` trong DB thành 520.000, chờ 30 giây, tải lại PDP và PLP | Cả hai hiện 520.000 ₫; hạ một biến thể xuống `inventory` 0 thì size đó hiện "hết hàng" sau cùng khoảng thời gian. |
+| AC-CAT-31 | 12 | DB đã seed | Gọi bảng size của 4 danh mục | Mỗi bảng 200, có `body`, `garment`, 2 mảng cột; mỗi mảng hàng đủ S, M, L, XL; giá trị bằng `SIZE_CHARTS`. |
+| AC-CAT-32 | 12 | PDP; ngắt mạng; sau đó danh mục `shoes` | Bấm "Hướng dẫn chọn size"; gọi bảng size `shoes` | Mạng tắt: có thông báo lỗi, nút bấm lại được, bật mạng bấm lại mở được hộp thoại. `shoes`: 404 `not-found`. |
+| AC-CAT-33 | 13 | DB đã seed | `q=BLAZER`; `q=blazer`; `q=%20%20blazer%20%20` | Ba lần cùng kết quả, `total` bằng nhau, đều có the-everyday-blazer. |
+| AC-CAT-34 | 13 | DB đã seed | `q=dam`; `q=đầm`; `q=blazer everyday` | `dam` và `đầm` cùng kết quả, có after-hours-dress (`type` đầm); `blazer everyday` có the-everyday-blazer dù hai từ không liền kề. |
+| AC-CAT-35 | 13 | DB đã seed | `q=%`; `q=_`; `q=\`; `q='`; `q=a'; DROP TABLE products;--` | Mỗi lần 200, `total` 0 (không khớp tất cả), không 500; bảng sản phẩm còn nguyên. |
+| AC-CAT-36 | 13 | — | `q` rỗng; `q` toàn khoảng trắng; `q` đúng 100 ký tự; `q` 101 ký tự | Rỗng và khoảng trắng: như không có `q` (8 item); 100 ký tự: 200; 101 ký tự: 422 `validation`, `field: q`. |
+| AC-CAT-37 | 13 | DB đã seed | `q=blazer&maxPrice=1000000`; `q=blazer&maxPrice=1300000&sort=price-asc&limit=1` | Lần một `total` 0 (blazer 1.290.000 vượt mốc); lần hai: the-everyday-blazer, `total` 1. |
+| AC-CAT-38 | 13 | Mở `/search?q=zzzz` | Quan sát | Tiêu đề "Tìm kiếm.", trạng thái rỗng có đường xóa tìm kiếm / về `/shop`; không hiện lỗi; số kết quả "0". |
+| AC-CAT-39 | 14 | Panel tìm kiếm mở | Gõ "bl" rồi dừng 250 ms | Đúng 1 yêu cầu có `q=bl&limit=5`; hiện ≤ 5 sản phẩm và "Xem tất cả (`total`)"; bấm → `/search?q=bl`. |
+| AC-CAT-40 | 14 | Panel mở; kết nối chậm 2 giây; sau đó ngắt mạng | Gõ "bl" rồi ngay "blazer"; sau đó gõ thêm khi mất mạng | Chỉ kết quả "blazer" hiện, không bị "bl" ghi đè; mất mạng: trạng thái lỗi + nút thử lại, từ khoá còn nguyên; bật mạng bấm thử lại ra kết quả. |
+| AC-CAT-41 | 15 | T tạo đủ 30 sản phẩm `ACTIVE`; PLP `/shop` (Should) | Quan sát; bấm "Xem thêm"; thử lại khi mất mạng | Ban đầu 24 thẻ, tiêu đề "30 sản phẩm", có "Xem thêm"; bấm → 30 thẻ không trùng, nút ẩn, URL không đổi. Mất mạng: 24 thẻ cũ còn, báo lỗi, bật mạng bấm lại được. Ở 8 sản phẩm seed không có nút. |
+| AC-CAT-42 | 16 | Đã lưu yêu thích 3 sản phẩm, trong đó 1 sản phẩm T ở ngoài 24 đầu (Should) | Mở `/wishlist` | Hiện đủ 3 thẻ; gọi `ids` với 3 id; với 49 id → 422 `validation`; id không tồn tại hoặc `DRAFT` bị bỏ qua, không lỗi. |
+| AC-CAT-43 | 17 | Cờ catalog = http | Mở PDP, PLP, kiểm Network và giao diện | `reviews` 200 `[]`; không có đánh giá mẫu (nhãn "mẫu"), không điểm sao trên thẻ, không form viết đánh giá, không "Báo khi có hàng" ở size hết hàng; không có yêu cầu tới `/stock-alerts` hay `/reviews/eligibility`. Cờ = mock: các phần này hiển thị như cũ. |
+| AC-CAT-44 | 18 | Phiên của A bị thu hồi (AC-AUTH-69), A đang ở `/shop` | PLP gọi API; tải lại trang | Danh sách vẫn tải 200 (không 401); ở lại PLP, header chuyển sang khách, không chuyển hướng. Cookie `n2f_sid` và `n2f_asid` bị xoá/sai/hết hạn đều cho kết quả này. |
+| AC-CAT-45 | 18 | Khách chưa đăng nhập | Xem PLP, PDP, tìm kiếm, bảng size | Đủ chức năng, không bị chuyển sang `/auth/login`; phản hồi không có trường thuộc về người dùng. |
+| AC-CAT-46 | 18 | — | `POST /api/products`, `PUT /api/products/{slug}`, `DELETE /api/products/{slug}` | 404 hoặc 405; số sản phẩm và giá không đổi. |
+| AC-CAT-47 | 19 | Một IP | Gửi 120 yêu cầu catalog trong 60 giây; gửi yêu cầu thứ 121 trong cùng khoảng; chờ hết `retryAfterSeconds` | 120 yêu cầu đầu: 200; yêu cầu 121: 429 `rate-limited` với `retryAfterSeconds` trong 1–60; PLP hiện trạng thái lỗi có thử lại; sau khoảng chờ: 200. Bộ đếm auth không bị ảnh hưởng. Duyệt tay 30 thao tác trong 1 phút không bị chặn. |
+| AC-CAT-48 | 20 | — | Gây từng lỗi: `sort=hot`, `limit=0`, slug lạ, bảng size lạ, vượt tần suất, tắt DB | Mỗi loại có `code` riêng, ổn định (`validation` kèm `field`, `not-found`, `rate-limited`, lỗi máy chủ); không có stack trace, SQL, tên bảng trong phản hồi. |
+| AC-CAT-49 | 20 | Đang xem `/shop/nu?color=Đỏ&sort=price-asc`, ngắt mạng | Tải lại; bật mạng; bấm "Thử lại" | Có trạng thái lỗi và nút thử lại; sau khi bấm, danh sách ra đúng theo bộ lọc trên URL (không bị reset). |
+| AC-CAT-50 | 21 | Cờ catalog = http, `mode` = mock; đổi `price` the-straight-trousers trong DB thành 700.000 | Duyệt PLP → PDP, thêm vào giỏ, xem giỏ, đăng nhập bằng tài khoản thật | PLP/PDP hiện 700.000 ₫ (không còn 690.000 từ `products.ts`); thêm giỏ hoạt động bằng mock; đăng nhập thật vẫn chạy; không có yêu cầu `/api/cart`, `/api/orders`, `/api/account/...`. |
+| AC-CAT-51 | 21 | Cờ catalog = mock | Chạy bộ test Playwright mock hiện có | Số test pass không giảm so với trước Slice 2; không có yêu cầu `/api/products`. |
+| AC-CAT-52 | 22 | 100 sản phẩm T trên DB Supabase (Should) | Gọi danh sách mặc định và chi tiết 50 lần mỗi loại | p95 danh sách ≤ 500 ms; p95 chi tiết ≤ 300 ms, đo ở máy chủ. |
+| AC-CAT-53 | 23 | DB Supabase đang ở schema Slice 1 và có dữ liệu `users`, `sessions` | Chạy `migrate deploy` hai lần | Lần một chỉ thêm đối tượng catalog; số dòng `users`, `sessions`, `auth_action_tokens` không đổi; file migration không chứa `DROP`, `TRUNCATE`, `DELETE`, đổi kiểu cột; lần hai không lỗi, không thay đổi. |
+
+Tổng: 23 BR (20 Must, 3 Should; không đánh số BR cho mục Won't), 53 AC (50 Must, 3 Should: AC-CAT-41, 42, 52). Mục Won't: 8 hạng mục ở bảng phạm vi.
+
+### 6. Định nghĩa xong của Slice 2
+
+- Mọi AC-CAT Must đạt trong `docs/qa/report-slice-2-catalog.md`; AC Should ghi rõ làm hay hoãn.
+- AC hoãn từ Slice 1 được giao cho Slice 2: **AC-AUTH-69** kiểm bằng AC-CAT-44 (đây là slice đầu có API thật ở trang công khai). **AC-AUTH-68** vẫn hoãn sang slice Account vì Catalog không có trang đòi đăng nhập; Slice 2 chấp nhận bằng interceptor và test hiện có. AC-AUTH-75, 84, 85 → Admin; AC-AUTH-88 → Account; AC-AUTH-89, 95a, 95b, QA vòng 2 Slice 1 → trước go-live (xem backlog).
+- `docs/api/openapi.yaml` có catalog (danh sách, chi tiết, bảng size, đánh giá `[]`) kèm mã lỗi `validation`, `not-found`, `rate-limited`.
+- `docs/design/` có spec cho trạng thái mới: "Xem thêm" (Should), không tìm thấy sản phẩm, lỗi tải bảng size, khối đánh giá trống ở chế độ HTTP.
+- FE chạy cờ catalog = http với BE thật trên Supabase; Cart/Checkout/Account vẫn mock; mock vẫn cùng interface; Playwright mock pass nguyên; không còn fixture `products.ts` hiển thị ở chế độ HTTP.
+- Migration chỉ cộng thêm; quyết định ghi `docs/decisions.md`; bàn giao ghi `docs/handoff.md`.
+
+### 7. Câu hỏi mở
+
+| # | Câu hỏi | Ảnh hưởng | Cần ai / trạng thái |
+| --- | --- | --- | --- |
+| 1 | Nội dung catalog hiện là dữ liệu demo (`material` là "Thông tin chất liệu sẽ được cập nhật.", giá và phân Nam/Nữ "cần xác nhận kinh doanh", ảnh là placeholder). Chấp nhận dùng để nghiệm thu Slice 2 và chặn go-live đến khi có nội dung thật? **Đề xuất PO:** chấp nhận cho Slice 2; thêm vào backlog "Nội dung catalog thật" (Thắng cung cấp giá, chất liệu, ảnh; nhập bằng file seed cho đến khi có Admin). | BR-CAT-05, go-live | Thắng |
+| 2 | Ở chế độ HTTP, ẩn đánh giá mẫu, điểm sao, form viết đánh giá và "Báo khi có hàng" (FE mất các phần này so với bản mock). **Đề xuất PO:** đồng ý ẩn; đánh giá thật làm sau Slice 3, "Báo khi có hàng" cùng slice thông báo. BR-CAT-17 **chờ xác nhận**. | BR-CAT-17, AC-CAT-43 | Thắng |
