@@ -15,7 +15,7 @@ import { PASSWORD_RULES, PasswordRule } from '../auth-messages';
         aria-required="true"
         placeholder=" "
         [formControl]="control()"
-        [attr.aria-invalid]="showError()"
+        [attr.aria-invalid]="showError() || !!serverError()"
         [attr.aria-describedby]="describedBy()"
       />
       <label [for]="fieldId()">{{ label() }}<span class="req" aria-hidden="true">*</span></label>
@@ -29,24 +29,27 @@ import { PASSWORD_RULES, PasswordRule } from '../auth-messages';
         <n2f-icon [name]="visible() ? 'reiconEye' : 'reiconEyeOff'" size="26px" />
       </button>
     </div>
+    @if (serverError()) {
+      <p class="field-error" role="alert" [id]="fieldId() + '-error'">{{ serverError() }}</p>
+    }
     @if (showRules()) {
       <ul class="rules" [id]="fieldId() + '-rules'">
         @for (rule of rules(); track rule.id) {
-          <li [class.met]="rule.test(value())">
+          <li [class.met]="rule.test(value(), email())">
             <n2f-icon
-              [name]="rule.test(value()) ? 'reiconCheckCircle' : 'reiconXCircle'"
+              [name]="rule.test(value(), email()) ? 'reiconCheckCircle' : 'reiconXCircle'"
               size="18px"
             />
             <span
               >{{ rule.label
               }}<span class="sr-only">{{
-                rule.test(value()) ? ' Đã đạt.' : ' Chưa đạt.'
+                rule.test(value(), email()) ? ' Đã đạt.' : ' Chưa đạt.'
               }}</span></span
             >
           </li>
         }
       </ul>
-    } @else if (showError()) {
+    } @else if (showError() && !serverError()) {
       <p class="field-error" [id]="fieldId() + '-error'">{{ errorText() }}</p>
     }
   `,
@@ -56,7 +59,7 @@ import { PASSWORD_RULES, PasswordRule } from '../auth-messages';
       margin: 10px 0 0;
       padding: 0 0 0 calc(12 * var(--u));
       list-style: none;
-      color: #9a9a9a;
+      color: var(--muted);
       font-size: max(13px, calc(20 * var(--u)));
     }
     .rules li {
@@ -79,6 +82,10 @@ export class PasswordField {
   readonly showRules = input(false);
   readonly errorText = input('Nhập mật khẩu của bạn.');
   readonly rules = input<readonly PasswordRule[]>(PASSWORD_RULES);
+  /** Email of the flow, for the "not the same as your email" rule. */
+  readonly email = input('');
+  /** Verdict from the server for this field (e.g. password refused although the client passed). */
+  readonly serverError = input<string | null>(null);
 
   readonly visible = signal(false);
   readonly value = signal('');
@@ -97,7 +104,11 @@ export class PasswordField {
   }
 
   describedBy(): string | null {
-    if (this.showRules()) return `${this.fieldId()}-rules`;
-    return this.showError() ? `${this.fieldId()}-error` : null;
+    const error = this.serverError() || (!this.showRules() && this.showError());
+    const ids = [
+      this.showRules() ? `${this.fieldId()}-rules` : '',
+      error ? `${this.fieldId()}-error` : '',
+    ];
+    return ids.filter(Boolean).join(' ') || null;
   }
 }

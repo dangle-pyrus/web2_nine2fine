@@ -5,9 +5,9 @@
  */
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { Observable, throwError } from 'rxjs';
+import { Observable, of, switchMap, throwError } from 'rxjs';
 import type { StoreSettingsValue } from '../../core/store-settings';
-import { adminBase, adminErrors, toParams } from './http-support';
+import { adminBase, adminErrors, defaultMessage, toParams } from './http-support';
 import {
   AdminApiError,
   AdminCollection,
@@ -211,17 +211,43 @@ function frontendOnly<T>(): Observable<T> {
   );
 }
 
+/** Public profile of docs/api/openapi.yaml `AuthUser`; the admin shell shows one display name. */
+interface ContractUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: 'member' | 'staff' | 'admin';
+}
+
+function toAdminUser(user: ContractUser): Observable<AdminUser> {
+  // A member never gets an admin session; treat a stray one as refused.
+  if (user.role === 'member') {
+    return throwError(() => new AdminApiError('forbidden', defaultMessage('forbidden')));
+  }
+  return of({
+    id: user.id,
+    email: user.email,
+    name: `${user.lastName} ${user.firstName}`.trim(),
+    role: user.role,
+  });
+}
+
 @Injectable()
 export class HttpAdminAuthApi implements AdminAuthApi {
   private readonly http = inject(HttpClient);
   private readonly base = adminBase();
   login(email: string, password: string) {
-    return this.http
-      .post<AdminUser>(`${this.base}/auth/login`, { email, password })
-      .pipe(adminErrors());
+    return this.http.post<ContractUser>(`${this.base}/auth/login`, { email, password }).pipe(
+      adminErrors(),
+      switchMap((user) => toAdminUser(user)),
+    );
   }
   me() {
-    return this.http.get<AdminUser>(`${this.base}/auth/me`).pipe(adminErrors());
+    return this.http.get<ContractUser>(`${this.base}/auth/me`).pipe(
+      adminErrors(),
+      switchMap((user) => toAdminUser(user)),
+    );
   }
   logout() {
     return this.http.post<void>(`${this.base}/auth/logout`, {}).pipe(adminErrors());

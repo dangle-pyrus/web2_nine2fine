@@ -1,15 +1,19 @@
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { catchError, Observable, throwError } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { catchError, map, Observable, throwError } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
+import { ApiErrorCode, readApiError } from '../../../core/api-error';
 
 export type VerificationPurpose = 'login' | 'register' | 'reset-password';
+
+export type AuthRole = 'member' | 'staff' | 'admin';
 
 export interface AuthUser {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
+  role: AuthRole;
 }
 
 export interface EmailLookup {
@@ -37,16 +41,17 @@ export interface ResetPasswordRequest {
   newPassword: string;
 }
 
-export type AuthErrorCode =
-  | 'invalid-code'
-  | 'invalid-credentials'
-  | 'email-registered'
-  | 'email-not-registered'
-  | 'rate-limited'
-  | 'unavailable';
+export type AuthErrorCode = ApiErrorCode;
 
+/** Failure of an auth request, identified only by the contract `error.code`. */
 export class AuthError extends Error {
-  constructor(readonly code: AuthErrorCode) {
+  constructor(
+    readonly code: AuthErrorCode,
+    /** Seconds to wait; present for `rate-limited`, `code-locked`, `password-locked`. */
+    readonly retryAfterSeconds?: number,
+    /** Body field the error belongs to (`validation`, `underage`). */
+    readonly field?: string,
+  ) {
     super(code);
   }
 }
@@ -59,20 +64,17 @@ export interface AuthApi {
   loginWithPassword(email: string, password: string): Observable<AuthUser>;
   register(request: RegisterRequest): Observable<AuthUser>;
   resetPassword(request: ResetPasswordRequest): Observable<void>;
+  /** Current session; `null` for a guest (never an error). */
+  me(): Observable<AuthUser | null>;
+  /** Ends the current session only. Always succeeds, also for a guest. */
+  logout(): Observable<void>;
 }
 
 export const AUTH_API = new InjectionToken<AuthApi>('AUTH_API');
 
-const HTTP_ERROR_CODES: Record<number, AuthErrorCode> = {
-  401: 'invalid-credentials',
-  409: 'email-registered',
-  422: 'invalid-code',
-  429: 'rate-limited',
-};
-
 function toAuthError(error: unknown): Observable<never> {
-  const status = error instanceof HttpErrorResponse ? error.status : 0;
-  return throwError(() => new AuthError(HTTP_ERROR_CODES[status] ?? 'unavailable'));
+  const { code, retryAfterSeconds, field } = readApiError(error);
+  return throwError(() => new AuthError(code, retryAfterSeconds, field));
 }
 
 @Injectable({ providedIn: 'root' })
@@ -99,9 +101,18 @@ export class HttpAuthApi implements AuthApi {
     return this.post<void>('password/reset', request);
   }
 
+  me(): Observable<AuthUser | null> {
+    return this.http.get<{ user: AuthUser | null }>(`${this.baseUrl}/me`).pipe(
+      map((response) => response.user),
+      catchError(toAuthError),
+    );
+  }
+  logout(): Observable<void> {
+    return this.post<void>('logout', {});
+  }
+
+  // The interceptor adds the session cookie and the `X-Requested-With` CSRF header.
   private post<T>(path: string, body: object): Observable<T> {
-    return this.http
-      .post<T>(`${this.baseUrl}/${path}`, body, { withCredentials: true })
-      .pipe(catchError(toAuthError));
+    return this.http.post<T>(`${this.baseUrl}/${path}`, body).pipe(catchError(toAuthError));
   }
 }

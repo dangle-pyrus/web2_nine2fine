@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { adminAuthGuard, requirePermission } from './core/admin-session';
+import { adminAuthGuard, adminGuestGuard, requirePermission } from './core/admin-session';
 import { provideAdmin } from './admin-providers';
 import { AdminShell } from './layout/admin-shell';
 import { unsavedChangesGuard } from './ui/unsaved-changes';
@@ -17,6 +17,7 @@ export const ADMIN_ROUTES: Routes = [
     children: [
       {
         path: 'login',
+        canActivate: [adminGuestGuard],
         title: T('Đăng nhập'),
         loadComponent: () => import('./features/auth/login-page').then((m) => m.LoginPage),
       },

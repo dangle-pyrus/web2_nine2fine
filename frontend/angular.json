@@ -47,6 +47,7 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": { "proxyConfig": "proxy.conf.json" },
           "configurations": {
             "production": { "buildTarget": "nine2fine:build:production" },
             "development": { "buildTarget": "nine2fine:build:development" },

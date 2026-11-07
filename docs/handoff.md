@@ -11,8 +11,26 @@
 - 2026-11-07 ui-ux-designer: `docs/design/` (design-system + 4 spec: auth-login, auth-register, auth-forgot-password, admin-login). Câu hỏi đã chốt trong decisions.md.
 - 2026-11-07 Orchestrator: contract `docs/api/openapi.yaml` chuyển **locked**.
 
+- 2026-11-07 backend-dev: triển khai 11 endpoint, 4 migration (baseline + 3 cộng thêm), seed. Typecheck/build qua. Test 88 test, nhưng vitest crash native Windows ngắt quãng (xem mục Vấn đề đã biết).
+- 2026-11-07 frontend-dev: adapter HTTP, interceptor, proxy, thay đổi UI theo spec, mock bám contract. Lint/build/format qua; Playwright mock 154 pass, 6 skip (số do agent báo).
+
 ### Đang làm
-- 2026-11-07 backend-dev: draft `docs/api/openapi.yaml` (11 endpoint auth, status: draft) và `docs/api/auth-implementation-plan.md`. Chờ Orchestrator duyệt trước khi viết code. FE cần sửa adapter: map lỗi theo `error.code`, thêm `role` vào `AuthUser`, `GET /auth/me`, `POST /auth/logout`, header `X-Requested-With: n2f`; admin: đổi shape lỗi sang `{error:{code,message,field}}`.
+- Áp lên Supabase: chờ Thắng tự chạy `migrate resolve --applied 0_baseline`, `migrate deploy`, `npm run seed` trong `backend/` (hệ thống quyền chặn agent). Sau đó bước 5 tích hợp và QA.
+
+### Vấn đề đã biết
+- `npm test` backend: worker vitest thỉnh thoảng chết với mã `0xC0000409` trên Windows/Node 24 (5/11 lần), xảy ra cả với pool threads và forks. Prisma và các thư viện chạy riêng ngoài vitest không tái hiện (15 lần mỗi loại). Chưa rõ nguyên nhân. Khi crash, lệnh báo lỗi, không báo đạt giả.
+- Test dùng Postgres 18 cục bộ, Supabase là 17.
+
+### Đề xuất từ frontend-dev, chờ quyết định
+- Staff/admin đăng nhập ở `/auth/login` được chuyển `/admin`, nhưng cookie admin tách riêng nên guard đẩy tiếp sang `/admin/login`. Cần chốt hành vi.
+- Guard admin: member đang đăng nhập mở `/admin` → `/new-in` (AC-AUTH-87), thêm ngoài yêu cầu ghi rõ.
+- Mật khẩu mock admin (`admin-seed.ts`, tests) vẫn nằm trong repo, chỉ dùng cho mock.
+
+### Đề xuất từ backend-dev, chờ quyết định
+- Giới hạn sai mã 30 lần/15 phút/IP do agent tự chọn (contract chỉ nói `rate-limited`).
+- Route không tồn tại trả 404 với `error.code = validation` (contract không có mã not-found).
+- Dọn token/phiên cũ đưa vào backlog "Dọn schema auth".
+- Slice Admin phải gọi `revokeAllUserSessions` khi vô hiệu hoá hoặc đổi vai trò (AC-AUTH-75 mới kiểm một phần).
 
 ### Câu hỏi mở
 - 8 câu hỏi cho Thắng ở `docs/product/PRD.md` › Slice 1 › mục 7 (tuổi tối thiểu, email người gửi, trang đăng nhập admin, phiên bản điều khoản, thời hạn phiên, kênh liên hệ khi tài khoản bị khoá, dữ liệu/seed Supabase, đổi mật khẩu ở Profile). BR liên quan đánh dấu "chờ xác nhận".

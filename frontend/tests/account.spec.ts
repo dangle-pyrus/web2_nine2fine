@@ -9,7 +9,7 @@ async function signIn(page: Page, returnUrl: string, email = member.email): Prom
   await expect(page).toHaveURL(/\/auth\/login\?returnUrl=/);
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã số (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 }
 
@@ -152,7 +152,7 @@ test('new member sees Figma empty states and creates a first password', async ({
   await page.goto('/auth/login?returnUrl=%2Faccount%2Fvouchers');
   await page.getByLabel('Email').fill('first.timer@example.com');
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã số (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('textbox', { name: 'Tên', exact: true }).fill('Lan');
   await page.getByRole('textbox', { name: 'Họ', exact: true }).fill('Phạm');
   await page.getByRole('checkbox', { name: /Tôi đồng ý/ }).check();

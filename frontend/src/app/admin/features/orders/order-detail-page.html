@@ -37,7 +37,8 @@
     </div>
     } @if (order.status !== 'cancelled' && order.status !== 'returned-to-sender') {
     <button type="button" class="adm-btn adm-btn--lg" [cdkMenuTriggerFor]="printMenu">
-      <adm-icon name="reiconPrinter" [size]="16" /> In <adm-icon name="reiconChevronDown" [size]="16" />
+      <adm-icon name="reiconPrinter" [size]="16" /> In
+      <adm-icon name="reiconChevronDown" [size]="16" />
     </button>
     } @if (hasMenu()) {
     <button type="button" class="adm-btn adm-btn--lg" [cdkMenuTriggerFor]="more">
@@ -165,7 +166,9 @@
             <p class="small secondary">
               {{ item.color }} / {{ item.size }}<span class="sku-tag mono">{{ item.sku }}</span>
               @if (canEdit()) {
-              <button type="button" class="link change-item" (click)="changeItem(i)">Đổi màu/size</button>
+              <button type="button" class="link change-item" (click)="changeItem(i)">
+                Đổi màu/size
+              </button>
               }
             </p>
           </div>
@@ -221,8 +224,10 @@
           <dt>Hoàn tiền</dt>
           <dd class="num">
             {{ refund.amount | admMoney }}
-            <span class="secondary">({{ refund.refundedAt ? 'đã hoàn lúc ' + (refund.refundedAt
-            | admDateTime) : 'đang xử lý' }})</span>
+            <span class="secondary"
+              >({{ refund.refundedAt ? 'đã hoàn lúc ' + (refund.refundedAt | admDateTime) : 'đang xử
+              lý' }})</span
+            >
           </dd>
         </div>
         }
@@ -298,7 +303,10 @@
         <div class="span-2">
           <dt>Tài khoản nhận hoàn</dt>
           <dd>
-            <span class="stack-lines"><span>{{ account.bank }}</span><span class="mono">{{ account.accountNumber }}</span><span>{{ account.accountName }}</span></span>
+            <span class="stack-lines"
+              ><span>{{ account.bank }}</span><span class="mono">{{ account.accountNumber }}</span
+              ><span>{{ account.accountName }}</span></span
+            >
           </dd>
         </div>
         } @if (request.decision; as decision) {

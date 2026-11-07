@@ -2,6 +2,7 @@ import { HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, Observable, OperatorFunction, throwError } from 'rxjs';
 import { API_CONFIG } from '../../core/api-config';
+import { readApiError } from '../../core/api-error';
 import { AdminApiError, AdminErrorCode } from './models';
 
 /** `${baseUrl}/admin` – every admin endpoint lives under this prefix. */
@@ -27,10 +28,43 @@ const STATUS_CODES: Record<number, AdminErrorCode> = {
   422: 'validation',
 };
 
-/** Maps a backend error body `{ code, message, fields }` (or a bare status) to AdminApiError. */
+const AUTH_CODES: readonly string[] = [
+  'unauthenticated',
+  'forbidden',
+  'validation',
+  'invalid-credentials',
+  'account-disabled',
+  'rate-limited',
+  'password-locked',
+  'origin-not-allowed',
+  'unavailable',
+];
+
+/**
+ * Maps a failed admin request to AdminApiError. Auth endpoints answer with the contract shape
+ * `{ error: { code, message, field?, retryAfterSeconds? } }` (docs/api/openapi.yaml) and are read
+ * by `error.code` only. The other admin endpoints keep the older `{ code, message, fields }` body
+ * (or a bare status) until their slice is integrated.
+ */
 export function adminErrors<T>(): OperatorFunction<T, T> {
   return catchError((error: unknown): Observable<never> => {
     if (error instanceof HttpErrorResponse) {
+      const contract = readApiError(error);
+      if (contract.code !== 'unavailable' || (error.error as { error?: unknown } | null)?.error) {
+        const code = (
+          AUTH_CODES.includes(contract.code) ? contract.code : 'unavailable'
+        ) as AdminErrorCode;
+        const fields = contract.field ? { [contract.field]: contract.message } : {};
+        return throwError(
+          () =>
+            new AdminApiError(
+              code,
+              contract.message || defaultMessage(code),
+              fields,
+              contract.retryAfterSeconds,
+            ),
+        );
+      }
       const body = (error.error ?? {}) as {
         code?: AdminErrorCode;
         message?: string;

@@ -129,7 +129,7 @@ export class PasswordDialog {
     : PASSWORD_RULES;
   readonly newPassword = this.builder.control('', [
     Validators.required,
-    passwordPolicy(this.rules),
+    passwordPolicy(() => '', this.rules),
   ]);
   readonly form = this.builder.group({
     currentPassword: this.currentPassword,

@@ -8,12 +8,17 @@ import { AdminDialogs } from './ui/dialogs';
 import { provideAdminIcons } from './ui/icons';
 
 /** Binds a port to its mock or HTTP adapter from `apiConfig.mode` (src/app/core/api-config.ts). */
-function bind<T>(token: InjectionToken<T>, mock: Type<T>, http: Type<T>): Provider[] {
+function bind<T>(
+  token: InjectionToken<T>,
+  mock: Type<T>,
+  http: Type<T>,
+  mode: 'mode' | 'authMode' = 'mode',
+): Provider[] {
   return [
     http,
     {
       provide: token,
-      useFactory: () => (inject(API_CONFIG).mode === 'mock' ? inject(mock) : inject(http)),
+      useFactory: () => (inject(API_CONFIG)[mode] === 'mock' ? inject(mock) : inject(http)),
     },
   ];
 }
@@ -26,7 +31,8 @@ export function provideAdmin(): Provider[] {
   return [
     provideAdminIcons(),
     AdminDialogs,
-    ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi),
+    // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
+    ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),
     ...bind(ports.ADMIN_DASHBOARD_API, mocks.MockAdminDashboardApi, ports.HttpAdminDashboardApi),
     ...bind(ports.ADMIN_ORDERS_API, mocks.MockAdminOrdersApi, ports.HttpAdminOrdersApi),
     ...bind(ports.ADMIN_RETURNS_API, mocks.MockAdminReturnsApi, ports.HttpAdminReturnsApi),

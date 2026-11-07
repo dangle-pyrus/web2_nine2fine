@@ -25,7 +25,7 @@ test('catalog filters survive product navigation; guests sign in before saving a
   await expect(page).toHaveURL(/\/auth\/login\?returnUrl=/);
   await page.getByLabel('Email').fill(MOCK_ACCOUNTS[0].email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã số (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).toHaveURL(/moment=work/);
   await expect(page.getByRole('button', { name: 'Bỏ yêu thích Nine-to-Fine Shirt' })).toBeVisible();

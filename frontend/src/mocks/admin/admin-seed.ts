@@ -850,7 +850,7 @@ function staffSeed(now: number): (StaffMember & { password: string })[] {
       status: 'active',
       createdAt: iso(now - 300 * DAY),
       lastActiveAt: iso(now - 5 * MINUTE),
-      password: 'admin123',
+      password: 'Admin2026Mock',
     },
     {
       id: 's2',
@@ -860,7 +860,7 @@ function staffSeed(now: number): (StaffMember & { password: string })[] {
       status: 'active',
       createdAt: iso(now - 200 * DAY),
       lastActiveAt: iso(now - 2 * HOUR),
-      password: 'staff123',
+      password: 'Staff2026Mock',
     },
     {
       id: 's3',
@@ -870,7 +870,7 @@ function staffSeed(now: number): (StaffMember & { password: string })[] {
       status: 'active',
       createdAt: iso(now - 90 * DAY),
       lastActiveAt: iso(now - 26 * HOUR),
-      password: 'staff123',
+      password: 'Staff2026Mock',
     },
     {
       id: 's4',
@@ -880,7 +880,7 @@ function staffSeed(now: number): (StaffMember & { password: string })[] {
       status: 'disabled',
       createdAt: iso(now - 150 * DAY),
       lastActiveAt: iso(now - 40 * DAY),
-      password: 'staff123',
+      password: 'Staff2026Mock',
     },
   ];
 }

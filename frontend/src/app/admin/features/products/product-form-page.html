@@ -700,8 +700,7 @@
             [checked]="item.productIds.includes(id()!)"
             [disabled]="!canEdit"
             (change)="toggleCollection(item.id, $any($event.target).checked)"
-          />{{ item.name }}@if (item.status === 'draft') {<span class="tertiary">
-            (nháp)</span
+          />{{ item.name }}@if (item.status === 'draft') {<span class="tertiary"> (nháp)</span
           >}</label
         >
         }
@@ -718,9 +717,7 @@
         </p>
       </div>
     </section>
-    }
-
-    @if (product(); as saved) {
+    } @if (product(); as saved) {
     <section class="section">
       <dl class="dl">
         <div>

@@ -4,7 +4,7 @@ import { expect, Page, test } from '@playwright/test';
 async function adminSignIn(
   page: Page,
   email = 'admin@nine2fine.vn',
-  password = 'admin123',
+  password = 'Admin2026Mock',
 ): Promise<void> {
   await page.goto('/admin/login');
   await page.getByLabel('Email').fill(email);
@@ -63,7 +63,7 @@ test.describe('admin', () => {
   });
 
   test('staff role does not see revenue, cost or settings', async ({ page }) => {
-    await adminSignIn(page, 'staff@nine2fine.vn', 'staff123');
+    await adminSignIn(page, 'staff@nine2fine.vn', 'Staff2026Mock');
     await expect(page.getByRole('link', { name: 'Cài đặt' })).toHaveCount(0);
     await page.goto('/admin/products/p01');
     await expect(page.getByLabel('Giá vốn')).toHaveCount(0);

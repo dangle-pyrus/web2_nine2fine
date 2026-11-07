@@ -172,7 +172,6 @@ export class AccountLayout {
   ];
 
   signOut(): void {
-    this.session.signOut();
-    void this.router.navigateByUrl('/new-in');
+    this.session.logout().subscribe(() => void this.router.navigateByUrl('/new-in'));
   }
 }

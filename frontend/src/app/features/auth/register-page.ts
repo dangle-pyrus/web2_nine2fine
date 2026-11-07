@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  inject,
+  Injector,
+  signal,
+  viewChild,
+} from '@angular/core';
 import {
   AbstractControl,
   FormBuilder,
@@ -8,56 +18,74 @@ import {
 } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { finalize } from 'rxjs';
-import { AUTH_API } from './data-access/auth-api';
-import { AuthFlowState, AuthSession } from './auth-session';
-import { authErrorMessage, CODE_PATTERN } from './auth-messages';
+import { AUTH_API, AuthError } from './data-access/auth-api';
+import { AuthFlowState, AuthSession, redirectWhenSignedIn } from './auth-session';
+import { AuthMessage, authMessage, CODE_PATTERN } from './auth-messages';
+import {
+  BirthDateParts,
+  checkBirthDate,
+  nameProblem,
+  normalizeName,
+  todayInVietnam,
+} from './auth-validation';
+import { AuthMessageText } from './ui/auth-message';
 import { VerificationCodeField } from './ui/verification-code-field';
 
-interface BirthDateParts {
-  day: string;
-  month: string;
-  year: string;
-}
+type NameKey = 'firstName' | 'lastName';
+type FieldKey = NameKey | 'birthDate' | 'acceptedTerms';
 
-/** Returns an ISO date for complete, real past dates; null when every part is empty. */
-function toBirthDate({ day, month, year }: BirthDateParts): string | null | undefined {
-  if (!day && !month && !year) return null;
-  const [d, m, y] = [Number(day), Number(month), Number(year)];
-  const date = new Date(Date.UTC(y, m - 1, d));
-  const real =
-    Number.isInteger(d) &&
-    Number.isInteger(m) &&
-    y >= 1900 &&
-    date.getUTCFullYear() === y &&
-    date.getUTCMonth() === m - 1 &&
-    date.getUTCDate() === d;
-  return real && date.getTime() < Date.now() ? date.toISOString().slice(0, 10) : undefined;
+const NAME_MESSAGES: Record<NameKey, Record<string, string>> = {
+  firstName: {
+    required: 'Nhập tên của bạn.',
+    chars: "Tên chỉ gồm chữ cái, dấu cách, dấu ' và dấu -.",
+    max: 'Tên tối đa 50 ký tự.',
+  },
+  lastName: {
+    required: 'Nhập họ của bạn.',
+    chars: "Họ chỉ gồm chữ cái, dấu cách, dấu ' và dấu -.",
+    max: 'Họ tối đa 50 ký tự.',
+  },
+};
+const BIRTH_MESSAGES = {
+  invalid: 'Ngày sinh chưa hợp lệ.',
+  underage: 'Bạn cần đủ 13 tuổi để tạo tài khoản.',
+};
+const TERMS_MESSAGE = 'Bạn cần đồng ý để tạo tài khoản.';
+const SERVER_FIELDS: readonly string[] = ['firstName', 'lastName', 'birthDate', 'acceptedTerms'];
+
+function nameValidator(control: AbstractControl<string>): ValidationErrors | null {
+  const problem = nameProblem(control.value);
+  return problem ? { name: problem } : null;
 }
 
 function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationErrors | null {
-  return toBirthDate(group.value) === undefined ? { birthDate: true } : null;
+  const result = checkBirthDate(group.value, todayInVietnam());
+  return result.kind === 'invalid' || result.kind === 'underage'
+    ? { birthDate: result.kind }
+    : null;
 }
 
 /** Figma frame 43:1058, reached when the login email has no account yet. */
 @Component({
   selector: 'n2f-register-page',
-  imports: [ReactiveFormsModule, RouterLink, VerificationCodeField],
+  imports: [ReactiveFormsModule, RouterLink, AuthMessageText, VerificationCodeField],
   template: `
     @if (flow.email()) {
-      <h1>Giờ hãy thực hiện một bước cuối để trở thành thành viên nine2fine.</h1>
-      <p class="lead">Chúng tôi đã gửi mã số đến</p>
+      <h1 #heading tabindex="-1">
+        Giờ hãy thực hiện một bước cuối để trở thành thành viên nine2fine.
+      </h1>
+      <p class="lead">Chúng tôi đã gửi mã xác thực đến</p>
       <p class="email-row">
         <strong>{{ flow.email() }}</strong
         ><a class="link" routerLink="/auth/login">Chỉnh sửa Email</a>
       </p>
       <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <n2f-verification-code-field
+          #codeField
           fieldId="register-code"
           purpose="register"
           [email]="flow.email()"
           [control]="form.controls.code"
-          (dispatchFailed)="error.set($event)"
         />
         <div class="name-row">
           @for (field of nameFields; track field.key) {
@@ -67,22 +95,21 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
                   [id]="'register-' + field.key"
                   type="text"
                   [attr.autocomplete]="field.autocomplete"
+                  autocapitalize="words"
                   aria-required="true"
                   placeholder=" "
                   [formControlName]="field.key"
-                  [attr.aria-invalid]="invalid(field.key)"
+                  [attr.aria-invalid]="!!fieldError(field.key)"
                   [attr.aria-describedby]="
-                    invalid(field.key) ? 'register-' + field.key + '-error' : null
+                    fieldError(field.key) ? 'register-' + field.key + '-error' : null
                   "
                 />
                 <label [for]="'register-' + field.key"
                   >{{ field.label }}<span class="req" aria-hidden="true">*</span></label
                 >
               </div>
-              @if (invalid(field.key)) {
-                <p class="field-error" [id]="'register-' + field.key + '-error'">
-                  {{ field.error }}
-                </p>
+              @if (fieldError(field.key); as message) {
+                <p class="field-error" [id]="'register-' + field.key + '-error'">{{ message }}</p>
               }
             </div>
           }
@@ -100,14 +127,17 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
                   [attr.autocomplete]="part.autocomplete"
                   placeholder=" "
                   [formControlName]="part.key"
-                  [attr.aria-invalid]="birthDateInvalid()"
+                  [attr.aria-invalid]="!!fieldError('birthDate')"
+                  [attr.aria-describedby]="
+                    fieldError('birthDate') ? 'birth-date-error' : 'birth-date-hint'
+                  "
                 />
                 <label [for]="'birth-' + part.key">{{ part.label }}</label>
               </div>
             }
           </div>
-          @if (birthDateInvalid()) {
-            <p class="field-error" role="alert">Ngày sinh chưa hợp lệ.</p>
+          @if (fieldError('birthDate'); as message) {
+            <p class="field-error" id="birth-date-error" role="alert">{{ message }}</p>
           }
           <p class="hint" id="birth-date-hint">
             Nhận ưu đãi thành viên khi đến ngày sinh nhật của bạn
@@ -122,21 +152,29 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
         </label>
         <label class="check">
           <input
+            id="register-terms"
             type="checkbox"
             formControlName="acceptedTerms"
-            [attr.aria-invalid]="invalid('acceptedTerms')"
-            [attr.aria-describedby]="invalid('acceptedTerms') ? 'terms-error' : null"
+            [attr.aria-invalid]="!!fieldError('acceptedTerms')"
+            [attr.aria-describedby]="fieldError('acceptedTerms') ? 'terms-error' : null"
           />
           <span
-            >Tôi đồng ý với <a routerLink="/policies/privacy">Chính sách bảo mật</a> và
-            <a routerLink="/policies/terms">Điều khoản sử dụng</a> của nine2fine.</span
+            >Tôi đồng ý với
+            <a routerLink="/policies/privacy" target="_blank" rel="noopener"
+              >Chính sách bảo mật<span class="sr-only"> (mở tab mới)</span></a
+            >
+            và
+            <a routerLink="/policies/terms" target="_blank" rel="noopener"
+              >Điều khoản sử dụng<span class="sr-only"> (mở tab mới)</span></a
+            >
+            của nine2fine.</span
           >
         </label>
-        @if (invalid('acceptedTerms')) {
-          <p class="field-error" id="terms-error">Bạn cần đồng ý để tạo tài khoản.</p>
+        @if (fieldError('acceptedTerms'); as message) {
+          <p class="field-error" id="terms-error">{{ message }}</p>
         }
-        @if (error()) {
-          <p class="form-error" role="alert">{{ error() }}</p>
+        @if (error(); as problem) {
+          <p class="form-error" role="alert"><n2f-auth-message [message]="problem" /></p>
         }
         <div class="actions">
           <button class="pill" type="submit" [disabled]="busy()">
@@ -195,10 +233,12 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
 export class RegisterPage {
   readonly flow = inject(AuthFlowState);
   readonly busy = signal(false);
-  readonly error = signal('');
+  readonly error = signal<AuthMessage | null>(null);
+  /** Verdicts the server gave for a field after the client check passed. */
+  readonly serverErrors = signal<Partial<Record<FieldKey, string>>>({});
   readonly nameFields = [
-    { key: 'firstName', label: 'Tên', autocomplete: 'given-name', error: 'Nhập tên của bạn.' },
-    { key: 'lastName', label: 'Họ', autocomplete: 'family-name', error: 'Nhập họ của bạn.' },
+    { key: 'firstName', label: 'Tên', autocomplete: 'given-name' },
+    { key: 'lastName', label: 'Họ', autocomplete: 'family-name' },
   ] as const;
   readonly dateParts = [
     { key: 'day', label: 'Ngày', maxLength: 2, autocomplete: 'bday-day' },
@@ -210,11 +250,15 @@ export class RegisterPage {
   private readonly session = inject(AuthSession);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly codeField = viewChild<VerificationCodeField>('codeField');
   private readonly builder = inject(FormBuilder).nonNullable;
   readonly form = this.builder.group({
     code: ['', [Validators.required, Validators.pattern(CODE_PATTERN)]],
-    firstName: ['', [Validators.required, Validators.pattern(/\S/)]],
-    lastName: ['', [Validators.required, Validators.pattern(/\S/)]],
+    firstName: ['', [Validators.required, nameValidator]],
+    lastName: ['', [Validators.required, nameValidator]],
     birthDate: this.builder.group(
       { day: [''], month: [''], year: [''] },
       { validators: birthDateValidator },
@@ -224,46 +268,105 @@ export class RegisterPage {
   });
 
   constructor() {
+    redirectWhenSignedIn();
     // The email comes from the first login step; without it the code cannot be sent.
     if (!this.flow.email()) void this.router.navigateByUrl('/auth/login');
+    else afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
+    // A new value makes an earlier server verdict about a field obsolete.
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.serverErrors.set({}));
   }
 
-  invalid(key: 'firstName' | 'lastName' | 'acceptedTerms'): boolean {
-    const control = this.form.controls[key];
-    return control.invalid && control.touched;
-  }
-
-  birthDateInvalid(): boolean {
-    const group = this.form.controls.birthDate;
-    return group.invalid && Object.values(group.controls).every((control) => control.touched);
+  /** Message under a field: the client check first, then what the server said about it. */
+  fieldError(key: FieldKey): string | null {
+    const server = this.serverErrors()[key] ?? null;
+    switch (key) {
+      case 'firstName':
+      case 'lastName': {
+        const control = this.form.controls[key];
+        const problem = control.touched ? nameProblem(control.value) : null;
+        return (problem && NAME_MESSAGES[key][problem]) || server;
+      }
+      case 'birthDate': {
+        const group = this.form.controls.birthDate;
+        const shown = Object.values(group.controls).every((control) => control.touched);
+        const kind = shown ? (group.errors?.['birthDate'] as 'invalid' | 'underage' | null) : null;
+        return (kind && BIRTH_MESSAGES[kind]) || server;
+      }
+      case 'acceptedTerms': {
+        const control = this.form.controls.acceptedTerms;
+        return control.invalid && control.touched ? TERMS_MESSAGE : server;
+      }
+    }
   }
 
   submit(): void {
     this.form.markAllAsTouched();
-    if (this.form.invalid || this.busy()) return;
+    if (this.busy()) return;
+    if (this.form.invalid) return this.focusFirstProblem();
     const value = this.form.getRawValue();
+    const birth = checkBirthDate(value.birthDate, todayInVietnam());
     this.busy.set(true);
-    this.error.set('');
+    this.error.set(null);
     this.api
       .register({
         email: this.flow.email(),
         code: value.code,
-        firstName: value.firstName.trim(),
-        lastName: value.lastName.trim(),
-        birthDate: toBirthDate(value.birthDate) ?? null,
+        firstName: normalizeName(value.firstName),
+        lastName: normalizeName(value.lastName),
+        birthDate: birth.kind === 'ok' ? birth.iso : null,
         marketingOptIn: value.marketingOptIn,
         acceptedTerms: true,
       })
-      .pipe(
-        finalize(() => this.busy.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (user) => {
+          // The button stays disabled until the target page is open, so a second click cannot
+          // send the code again (AC-AUTH-96).
+          this.flow.completing = true;
           this.session.signIn(user);
-          void this.router.navigateByUrl(this.flow.returnUrl());
+          void this.router
+            .navigateByUrl(this.flow.destinationFor(user.role))
+            .finally(() => this.busy.set(false));
         },
-        error: (error: unknown) => this.error.set(authErrorMessage(error)),
+        error: (error: unknown) => {
+          this.busy.set(false);
+          this.showFailure(error);
+        },
       });
+  }
+
+  private showFailure(error: unknown): void {
+    const message = authMessage(error);
+    const failure = error instanceof AuthError ? error : null;
+    const field = failure?.field;
+    const code = this.codeField();
+    const aboutCode =
+      failure?.code === 'invalid-code' || failure?.code === 'code-locked' || field === 'code';
+    if (code && aboutCode) {
+      code.fail(message);
+      code.focus();
+    } else if (field && SERVER_FIELDS.includes(field)) {
+      this.serverErrors.set({ [field]: message.text });
+      this.focusField(field as FieldKey);
+    } else {
+      this.error.set(message);
+    }
+  }
+
+  private focusFirstProblem(): void {
+    if (this.form.controls.code.invalid) return this.codeField()?.focus();
+    for (const key of ['firstName', 'lastName', 'birthDate', 'acceptedTerms'] as const) {
+      if (this.fieldError(key)) return this.focusField(key);
+    }
+  }
+
+  private focusField(key: FieldKey): void {
+    const id =
+      key === 'birthDate'
+        ? 'birth-day'
+        : key === 'acceptedTerms'
+          ? 'register-terms'
+          : `register-${key}`;
+    this.host.nativeElement.querySelector<HTMLElement>(`#${id}`)?.focus();
   }
 }

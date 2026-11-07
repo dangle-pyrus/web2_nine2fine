@@ -83,27 +83,28 @@ const money = (value: number) => `${value.toLocaleString('vi-VN')} ₫`;
 @Injectable({ providedIn: 'root' })
 export class MockAdminAuthApi implements AdminAuthApi {
   private readonly db = inject(AdminMockDb);
+  private readonly failures = new Map<string, { count: number; lockedUntil: number }>();
 
+  /** Same answers as `POST /admin/auth/login`: every refusal is a contract error code. */
   login(email: string, password: string): Observable<AdminUser> {
-    const member = this.db.data.staff.find(
-      (item) => item.email.toLowerCase() === email.trim().toLowerCase(),
-    );
+    const address = email.trim().toLowerCase();
+    const state = this.failures.get(address) ?? { count: 0, lockedUntil: 0 };
+    const left = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+    if (left > 0) return fail(new AdminApiError('password-locked', '', {}, left));
+    const member = this.db.data.staff.find((item) => item.email.toLowerCase() === address);
     if (!member || member.password !== password) {
-      return fail(
-        new AdminApiError(
-          'unauthenticated',
-          'Email hoặc mật khẩu không đúng. Kiểm tra lại rồi thử lại.',
-        ),
-      );
+      state.count += 1;
+      if (state.count >= 5) {
+        state.count = 0;
+        state.lockedUntil = Date.now() + 15 * 60_000;
+        this.failures.set(address, state);
+        return fail(new AdminApiError('password-locked', '', {}, 15 * 60));
+      }
+      this.failures.set(address, state);
+      return fail(new AdminApiError('invalid-credentials', ''));
     }
-    if (member.status === 'disabled') {
-      return fail(
-        new AdminApiError(
-          'forbidden',
-          'Tài khoản này đã bị khóa. Liên hệ quản trị viên để mở lại.',
-        ),
-      );
-    }
+    this.failures.delete(address);
+    if (member.status === 'disabled') return fail(new AdminApiError('account-disabled', ''));
     member.lastActiveAt = new Date().toISOString();
     const user = toUser(member);
     sessionStorage.setItem(SESSION_KEY, member.id);
@@ -1382,7 +1383,7 @@ export class MockAdminSettingsApi implements AdminSettingsApi {
       role: input.role,
       status: 'active' as const,
       createdAt: new Date().toISOString(),
-      password: 'staff123',
+      password: 'Staff2026Mock',
     };
     this.db.data.staff.push(member);
     this.db.log({

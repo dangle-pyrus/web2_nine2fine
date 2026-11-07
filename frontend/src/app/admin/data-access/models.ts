@@ -45,7 +45,13 @@ export type AdminErrorCode =
   | 'conflict'
   | 'invalid-transition'
   | 'validation'
-  | 'unavailable';
+  | 'unavailable'
+  // Sign-in only (docs/api/openapi.yaml):
+  | 'invalid-credentials'
+  | 'account-disabled'
+  | 'rate-limited'
+  | 'password-locked'
+  | 'origin-not-allowed';
 
 export class AdminApiError extends Error {
   constructor(
@@ -53,6 +59,8 @@ export class AdminApiError extends Error {
     message: string,
     /** Field → message for `validation` errors. */
     readonly fields: Record<string, string> = {},
+    /** Seconds to wait; present for `rate-limited` and `password-locked`. */
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }

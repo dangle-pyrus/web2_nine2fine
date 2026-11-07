@@ -5,7 +5,7 @@ import {
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideIcons } from '@ng-icons/core';
 import {
   reiconArrowLeft,
@@ -52,6 +52,7 @@ import {
 import { reiconHeartFill } from '@ng-icons/reicon/fill';
 import { routes } from './app.routes';
 import { API_CONFIG, apiConfig } from './core/api-config';
+import { apiInterceptor } from './core/api-interceptor';
 import { CATALOG_API, HttpCatalogApi } from './features/catalog/data-access/catalog-api';
 import { MockCatalogApi } from '../mocks/mock-catalog-api';
 import { CHECKOUT_API, HttpCheckoutApi, PAYMENT_SIMULATOR } from './features/checkout/checkout-api';
@@ -70,14 +71,13 @@ import { HttpNewsletterApi, NEWSLETTER_API } from './features/home/newsletter-ap
 import { MockNewsletterApi } from '../mocks/mock-newsletter-api';
 import { MockPersistence } from '../mocks/mock-persistence';
 import { AuthSession } from './features/auth/auth-session';
-import { AuthUser } from './features/auth/data-access/auth-api';
 import { CheckoutSession } from './features/checkout/checkout-session';
 import { OrderReceipt } from './features/checkout/checkout-api';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(),
+    provideHttpClient(withInterceptors([apiInterceptor])),
     provideRouter(
       routes,
       withInMemoryScrolling({ scrollPositionRestoration: 'enabled', anchorScrolling: 'enabled' }),
@@ -125,15 +125,13 @@ export const appConfig: ApplicationConfig = {
       reiconXCircle,
     }),
     { provide: API_CONFIG, useValue: apiConfig },
-    // Mock mode only: restore the demo session and last receipt after F5 (a real backend restores
-    // the session from its cookie via GET /me instead).
+    // Signed-in shopper: asked from the backend cookie (`GET /auth/me`), or from the mock session.
+    provideAppInitializer(() => inject(AuthSession).restore()),
+    // Mock mode only: keep the last receipt across F5 (a real backend owns orders).
     provideAppInitializer(() => {
       if (inject(API_CONFIG).mode !== 'mock') return;
       const persistence = inject(MockPersistence);
-      const session = inject(AuthSession);
       const checkout = inject(CheckoutSession);
-      const user = persistence.register<AuthUser | null>('session', () => session.user());
-      if (user) session.signIn(user);
       const receipt = persistence.register<OrderReceipt | null>('receipt', () =>
         checkout.lastReceipt(),
       );
@@ -156,7 +154,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: AUTH_API,
       useFactory: () =>
-        inject(API_CONFIG).mode === 'mock' ? inject(MockAuthApi) : inject(HttpAuthApi),
+        inject(API_CONFIG).authMode === 'mock' ? inject(MockAuthApi) : inject(HttpAuthApi),
     },
     // Home page content is provided by the lazy home page (`HOME_CONTENT_API`).
     {

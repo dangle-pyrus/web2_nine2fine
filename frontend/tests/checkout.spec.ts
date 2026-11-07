@@ -37,7 +37,7 @@ test('member checkout: saved address, voucher rules, QR payment, account order',
   await page.goto('/auth/login?returnUrl=%2Fcheckout');
   await page.getByLabel('Email').fill(member.email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã số (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).toHaveURL(/\/checkout$/);
 
