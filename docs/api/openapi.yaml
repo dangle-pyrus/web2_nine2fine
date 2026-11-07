@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -47,6 +47,28 @@ info:
     - **Cache:** `GET /products` và `GET /products/{slug}`: `Cache-Control: public, max-age=10` + `ETag`, để giá / tồn kho phản ánh DB sau <= 30 giây (BR-CAT-11). `GET /size-charts/{category}`: `public, max-age=3600`. Phản hồi lỗi: `Cache-Control: no-store`.
     - **Giới hạn (BR-CAT-19):** 120 yêu cầu catalog / 60 giây / IP, bộ đếm riêng khỏi auth; vượt -> `429 rate-limited`, `Retry-After` và `retryAfterSeconds` trong 1..60. `limit` mặc định 24, tối đa 48. `ids` tối đa 48. `q` tối đa 100 ký tự sau chuẩn hoá.
     - **Đánh giá (BR-CAT-17):** `GET /products/{productId}/reviews` luôn `200 []`. Không có `rating` trong sản phẩm. Các đường dẫn đánh giá khác (`eligibility`, tạo đánh giá) và `/stock-alerts` không tồn tại ở slice này (`404 not-found`); FE chế độ HTTP không gọi chúng. Wishlist lưu ở FE; BE chỉ cung cấp `ids`.
+
+    ---
+    # Cart & Checkout (Slice 3)
+
+    **status: locked (2026-11-07)**: contract Slice 3 được chốt cùng tài liệu `docs/api/cart-checkout-implementation-plan.md`; phần auth và catalog ở trên không đổi (chỉ thêm mã lỗi và thuộc tính tuỳ chọn của `ErrorResponse`, xem `ErrorCode`). BR/AC: `docs/product/PRD.md` mục "Slice 3: Cart & Checkout" (BR-CART, BR-CHK, BR-VOU; AC-CART, AC-CHK, AC-VOU); khi mâu thuẫn, PRD thắng. Nguồn nghiệp vụ: `docs/product/cart-checkout-business-rules.md`.
+
+    **Giả định chờ Thắng (đánh dấu `[giả định chờ Thắng]`, đổi thì sửa theo quy trình contract locked):**
+    1. COMMON-01..06 không có nội dung: tên trạng thái đơn / thanh toán theo danh sách nêu trong CHK-PAY-14; mã giảm % làm tròn **xuống** tới 1.000 ₫; tra cứu đơn khách bằng OTP theo thông số BR-AUTH-04..09 (8 số, 10 phút, gửi lại sau 60 giây), quyền xem đơn sau OTP 30 phút.
+    2. Chuyển khoản QR tự đối soát (SePay hoặc tương đương) chưa có tài khoản nhận: khi `bankTransferEnabled = false` thì `bank-transfer` bị khoá trong `paymentMethods`, `POST /orders` với `bank-transfer` -> `422 validation` (`field: paymentMethod`), `GET /orders/{orderCode}/payment` -> `404 not-found`. Webhook đối soát là điểm mở rộng phía máy chủ (plan mục 4.8), chưa thuộc contract này.
+    3. Địa giới: toàn quốc, 34 tỉnh/thành và phường/xã sau 01/07/2025.
+    4. Khách tự huỷ đơn `to_ship` thẳng (`cancelledBy = customer`) cho tới khi có slice Admin; khi đó `to_ship` chuyển sang `cancel_requested` (đổi hành vi, cần quy trình contract).
+
+    ## Quy ước Slice 3
+    - **Tiền** là số nguyên VND. **Ngày giao** là ngày ISO `YYYY-MM-DD` theo giờ Việt Nam (Asia/Ho_Chi_Minh); thời điểm khác là ISO 8601 UTC. Tổng luôn `subtotal - discount + shippingFee - shippingDiscount = total` do máy chủ tính; mọi giá / tổng gửi từ trình duyệt chỉ để **đối chiếu** (`expected`), không bao giờ được tin.
+    - **Người dùng:** `quote`, `vouchers/check`, `POST /orders`, `locations` dùng được khi chưa đăng nhập. Cookie `n2f_sid` sai / hết hạn / bị thu hồi ở các endpoint này bị coi như khách, **không** `401` (BR-CHK-02); staff / admin không gắn đơn. `/cart/**` và `GET /orders` bắt buộc phiên storefront (`401 unauthenticated`). Giỏ khách lưu ở trình duyệt, không gọi `/cart/**` (BR-CART-09); giá / tồn của giỏ khách được làm tươi bằng `POST /checkout/quote`.
+    - **Tên trạng thái:** đơn `to_pay`, `to_ship`, `to_receive`, `completed`, `cancel_requested`, `cancelled`; thanh toán `pending`, `paid`, `failed`, `refunded`, `partially_refunded`. FE ánh xạ sang `OrderStatus` hiện có (plan mục 8).
+    - **Định danh đơn:** `Order.id` là mã đơn `N2F` + `YYMMDD` + 4 số (vd. `N2F2611040427`); mọi `{orderCode}` chấp nhận chữ thường và dấu `#`, server chuẩn hoá. Không lộ UUID nội bộ hay `userId`.
+    - **Quyền xem đơn:** (a) phiên storefront là chủ đơn; hoặc (b) cookie `n2f_oa` do `POST /orders/lookup/verify` cấp, gắn đúng 1 đơn, 30 phút. Không có (a) và (b) hợp lệ -> `401 unauthenticated`; có nhưng không đúng đơn -> `404 not-found` (không phân biệt "không tồn tại" và "của người khác").
+    - **Idempotency (BR-CHK-15):** `POST /orders` và `POST /cart/merge` bắt buộc header `Idempotency-Key` (16-64 ký tự `A-Za-z0-9-`; thiếu / sai -> `422 validation`, `field: Idempotency-Key`). Cùng khoá + cùng nội dung trong 24 giờ -> trả lại đúng kết quả đầu tiên (`200`, header `Idempotency-Replayed: true`; không trừ kho, lượt voucher, không gửi thư lại). Cùng khoá khác nội dung -> `409 idempotency-conflict`. Lỗi `4xx/5xx` không lưu khoá (gửi lại cùng khoá được xử lý lại từ đầu). Sau 24 giờ khoá hết hiệu lực.
+    - **Thứ tự kiểm khi đặt hàng (CHK-CF-01):** `422 validation` -> `422 invalid-address` -> `422 validation` (`paymentMethod`) -> `409 stock-changed` -> `409 voucher-changed` -> `409 price-changed` -> `409 possible-duplicate` -> `201`. Mọi `409` mang theo `quote` mới nhất để FE hiện số cũ / mới mà không gọi thêm.
+    - **Giới hạn tần suất theo IP** (bộ đếm riêng từng nhóm, tách khỏi auth và catalog; mọi `429` có `Retry-After`): giỏ + báo giá + kiểm mã 120 / 60 giây; `POST /orders` 10 / 10 phút; tra cứu đơn khách (`lookup/codes` + `lookup/verify`) 10 / 15 phút; kiểm mã voucher: 10 mã không tồn tại trong 15 phút thì khoá kiểm mã 15 phút (BR-VOU-09).
+    - **Cache:** mọi endpoint giỏ, báo giá, đơn: `Cache-Control: no-store`. `locations`: `public, max-age=86400`.
   license:
     name: Proprietary
 servers:
@@ -59,6 +81,14 @@ tags:
     description: Staff / admin, cookie `n2f_asid`, `/api/admin/auth/*` (BR-AUTH-33).
   - name: catalog
     description: 'Slice 2, status: locked. Công khai, chỉ đọc.'
+  - name: cart
+    description: 'Slice 3, status: locked (2026-11-07). Giỏ của thành viên lưu ở máy chủ, cần phiên storefront.'
+  - name: checkout
+    description: 'Slice 3, status: locked (2026-11-07). Địa giới, báo giá phía máy chủ.'
+  - name: voucher
+    description: 'Slice 3, status: locked (2026-11-07). Kiểm mã giảm giá.'
+  - name: order
+    description: 'Slice 3, status: locked (2026-11-07). Đặt đơn, xem / huỷ đơn của thành viên, tra cứu đơn khách bằng mã + email + OTP.'
 security: []
 paths:
   /auth/lookup:
@@ -556,6 +586,545 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /locations/provinces:
+    get:
+      tags: [checkout]
+      operationId: listProvinces
+      summary: Danh sách tỉnh / thành (34 đơn vị sau 01/07/2025, BR-CHK-06)
+      description: Công khai, không cần cookie. `[giả định chờ Thắng]` phạm vi toàn quốc. Sắp theo `name` (so sánh không dấu).
+      responses:
+        '200':
+          description: Danh sách tỉnh / thành.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=86400' } }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Location' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /locations/provinces/{provinceCode}/wards:
+    get:
+      tags: [checkout]
+      operationId: listWards
+      summary: Phường / xã của một tỉnh (BR-CHK-06)
+      parameters:
+        - { name: provinceCode, in: path, required: true, schema: { type: string, maxLength: 10 } }
+      responses:
+        '200':
+          description: Danh sách phường / xã của tỉnh.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=86400' } }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Location' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /checkout/quote:
+    post:
+      tags: [checkout]
+      operationId: quoteCheckout
+      summary: Báo giá phía máy chủ (BR-CART-08, BR-CHK-10, BR-VOU-05..08)
+      description: |
+        Dùng cho cả làm tươi giỏ khách (không cần địa chỉ) lẫn checkout. Không đổi dữ liệu, không giữ hàng, không trừ lượt voucher. Cần `X-Requested-With` vì là `POST` có body.
+        - Giá, tồn, trạng thái bán lấy từ DB; mọi giá trong body bị bỏ qua (AC-CHK-10). Mỗi dòng trả `effectiveQuantity = min(quantity, 5, tồn)`; `pricing` tính trên `effectiveQuantity` (dòng hết hàng / ngừng bán = 0).
+        - Vượt hạn mức **cấu trúc** (hơn 30 dòng, hoặc tổng `effectiveQuantity` quá 20) -> `422 validation`, `field: items` (AC-CART-05).
+        - `voucherCodes` tối đa 2 mã (1 mã giảm + 1 mã free-ship; hai mã cùng loại thì mã đứng sau thay mã đứng trước). Mã bị từ chối **không** làm hỏng báo giá: nằm trong `rejectedVouchers` kèm `reason`, `pricing` tính không có mã đó (BR-VOU-08). Mã không tồn tại cộng vào bộ đếm chống dò (BR-VOU-09).
+        - Chưa có `address`: `shipping.addressRequired = true`; phí vẫn tính theo mức đồng giá nhưng FE hiện "tính sau khi nhập địa chỉ" (BR-CHK-06, CHK-PAY-02).
+        - `contact.phone` / `contact.email` dùng để nhận diện khách vãng lai khi kiểm lượt riêng của mã và điều kiện COD; thành viên dùng tài khoản.
+        - Giới hạn: 120 yêu cầu / 60 giây / IP (chung nhóm với giỏ và kiểm mã).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteRequest' }
+      responses:
+        '200':
+          description: Báo giá. AC-CART-08..10, AC-CHK-10, AC-VOU-01, 06, 07.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /vouchers/check:
+    post:
+      tags: [voucher]
+      operationId: checkVoucher
+      summary: Kiểm một mã giảm giá trên đơn hiện tại (BR-VOU-03, 04, 09)
+      description: |
+        Áp thử `code` lên các `items` (cùng ngữ nghĩa với `quote`) cùng các mã đã áp (`voucherCodes`). Mã không đạt **không** là lỗi HTTP: `200` với `result` là `VoucherRejection` để FE giữ nguyên mã khách gõ. `quote` là báo giá sau khi áp (có mã nếu đạt, không có nếu không đạt). Không trừ lượt.
+        Kiểm theo thứ tự BR-VOU-03 và dừng ở điều kiện đầu tiên không đạt (AC-VOU-03). Mã không tồn tại tính vào bộ đếm 10 lần / 15 phút / IP; vượt -> `429 rate-limited` (`retryAfterSeconds` <= 900) kể cả cho mã đúng (AC-VOU-11); 9 lần sai chưa khoá.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, items]
+              additionalProperties: false
+              properties:
+                code: { type: string, minLength: 1, maxLength: 40, description: 'Server trim, bỏ khoảng trắng, chuyển chữ hoa. Dài hơn 20 ký tự sau chuẩn hoá = không tồn tại.' }
+                items: { $ref: '#/components/schemas/QuoteItems' }
+                voucherCodes: { $ref: '#/components/schemas/VoucherCodes' }
+                address: { $ref: '#/components/schemas/QuoteAddress' }
+                contact: { $ref: '#/components/schemas/QuoteContact' }
+      responses:
+        '200':
+          description: Kết quả kiểm mã và báo giá mới.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [result, quote]
+                additionalProperties: false
+                properties:
+                  result:
+                    oneOf:
+                      - $ref: '#/components/schemas/VoucherApplied'
+                      - $ref: '#/components/schemas/VoucherRejection'
+                  quote: { $ref: '#/components/schemas/Quote' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /cart:
+    get:
+      tags: [cart]
+      operationId: getCart
+      summary: Giỏ của thành viên, đã làm tươi giá / tồn (BR-CART-08, 09)
+      description: |
+        Chỉ đọc, không sửa giỏ. Giỏ không sửa trong 30 ngày (tính từ lần sửa cuối) bị coi là rỗng và xoá (AC-CART-12). Mỗi dòng trả `maxQuantity` và `availability` hiện tại; FE tự so với bản chụp giá cục bộ để hiện "Giá đã thay đổi từ X thành Y" (máy chủ không lưu giá đã thấy). Giới hạn: 120 yêu cầu / 60 giây / IP.
+      security:
+        - storefrontSession: []
+      responses:
+        '200':
+          description: Giỏ.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CartView' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /cart/lines:
+    post:
+      tags: [cart]
+      operationId: addCartLine
+      summary: Thêm vào giỏ (BR-CART-01..03)
+      description: |
+        Thêm lại phiên bản đã có thì **cộng** vào dòng cũ, cắt ở `min(5, tồn)` (`notice` ghi lại việc cắt). Dòng thứ 31 -> `422 validation` (`field: variantId`, "Giỏ hàng tối đa 30 sản phẩm khác nhau.", AC-CART-04). Phiên bản không bán / hết hàng -> `409 stock-changed` (không thêm).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [variantId, quantity]
+              additionalProperties: false
+              properties:
+                variantId: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1, maximum: 5 }
+      responses:
+        '200': { $ref: '#/components/responses/CartMutated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409': { $ref: '#/components/responses/StockChanged' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /cart/lines/{variantId}:
+    put:
+      tags: [cart]
+      operationId: setCartLineQuantity
+      summary: Đặt số lượng một dòng (BR-CART-02)
+      description: |
+        Đặt (không cộng) số lượng; vượt `min(5, tồn)` thì cắt và `notice` ghi `stock-limit` / `per-variant-limit`. Dòng không có trong giỏ -> `404 not-found`. Muốn xoá dùng `DELETE`.
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              additionalProperties: false
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 5 }
+      responses:
+        '200': { $ref: '#/components/responses/CartMutated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [cart]
+      operationId: removeCartLine
+      summary: Xoá một dòng (BR-CART-02). Hoàn tác 5 giây là việc của FE bằng cách thêm lại đúng số lượng.
+      description: Dòng không có trong giỏ vẫn `200` (idempotent).
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+      responses:
+        '200': { $ref: '#/components/responses/CartMutated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /cart/lines/{variantId}/change-variant:
+    post:
+      tags: [cart]
+      operationId: changeCartLineVariant
+      summary: Đổi màu / size trong cùng sản phẩm (BR-CART-05)
+      description: |
+        `toVariantId` phải cùng sản phẩm với dòng hiện tại và còn hàng, nếu không `422 validation` (`field: toVariantId`) / `409 stock-changed`. Đã có dòng `toVariantId` thì gộp: số lượng = tổng hai dòng cắt theo `min(5, tồn)`; `notice.code = merged` (kèm `adjustedTo` khi bị cắt). Nguyên tử trong một giao dịch.
+      parameters:
+        - { name: variantId, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [toVariantId]
+              additionalProperties: false
+              properties:
+                toVariantId: { type: string, format: uuid }
+      responses:
+        '200': { $ref: '#/components/responses/CartMutated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StockChanged' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /cart/merge:
+    post:
+      tags: [cart]
+      operationId: mergeGuestCart
+      summary: Gộp giỏ khách vào giỏ tài khoản sau đăng nhập (BR-CART-10)
+      description: |
+        Bắt buộc `Idempotency-Key`: gửi lại sau mất kết nối không nhân đôi (AC-CART-15). `lines` là phần **cần cộng thêm** (FE chỉ gửi phần khách thêm lúc chưa đăng nhập, không gửi lại phần đã đồng bộ từ máy chủ, AC-CART-18). Cùng phiên bản -> cộng số lượng cắt theo `min(5, tồn)`; khác -> thêm dòng; phiên bản không còn bán bị bỏ qua (`skippedVariantIds`). Vượt 30 dòng: máy chủ xoá các dòng có `updatedAt` cũ nhất cho tới khi còn 30 và trả chúng ở `evicted` để FE chuyển vào Yêu thích (AC-CART-14). `mergedVariantIds` là các dòng vừa mang sang (FE chỉ chọn chúng, AC-CART-13); `addedCount` = số dòng vừa mang sang, FE báo một lần "Đã thêm N sản phẩm từ giỏ hàng trước khi đăng nhập.".
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - storefrontSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lines]
+              additionalProperties: false
+              properties:
+                lines:
+                  type: array
+                  minItems: 1
+                  maxItems: 30
+                  items:
+                    type: object
+                    required: [variantId, quantity]
+                    additionalProperties: false
+                    properties:
+                      variantId: { type: string, format: uuid }
+                      quantity: { type: integer, minimum: 1, maximum: 5 }
+      responses:
+        '200':
+          description: 'Giỏ sau khi gộp (cũng là phản hồi của lần gửi lại cùng khoá, kèm header `Idempotency-Replayed` = true).'
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Idempotency-Replayed: { schema: { type: string, const: 'true' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cart, mergedVariantIds, skippedVariantIds, addedCount, evicted]
+                additionalProperties: false
+                properties:
+                  cart: { $ref: '#/components/schemas/CartView' }
+                  mergedVariantIds: { type: array, items: { type: string, format: uuid } }
+                  skippedVariantIds: { type: array, items: { type: string, format: uuid } }
+                  addedCount: { type: integer, minimum: 0 }
+                  evicted:
+                    type: array
+                    items:
+                      type: object
+                      required: [variantId, productId, quantity]
+                      additionalProperties: false
+                      properties:
+                        variantId: { type: string, format: uuid }
+                        productId: { type: string, format: uuid }
+                        quantity: { type: integer, minimum: 1 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders:
+    post:
+      tags: [order]
+      operationId: placeOrder
+      summary: Đặt hàng (BR-CHK-12..18, 20, 21; BR-VOU-10..12)
+      description: |
+        Công khai: khách vãng lai đặt được; cookie phiên sai / hết hạn / bị thu hồi -> đơn khách, không `401` (AC-CHK-02). Phiên member hợp lệ -> đơn gắn tài khoản; đơn khách trùng email / SĐT với tài khoản **không** tự gắn (BR-CHK-27).
+        Một giao dịch DB duy nhất: kiểm lại mọi thứ -> trừ lượt voucher -> trừ tồn từng dòng (chỉ khi còn đủ) -> tạo đơn + dòng đơn chụp giá -> xoá khỏi giỏ thành viên đúng các dòng đã mua. Thứ tự lỗi xem "Quy ước Slice 3". Thất bại ở bất kỳ bước nào: không đơn, không trừ tồn, không trừ lượt.
+        Trạng thái ban đầu: COD -> `to_ship` + `pending`; `bank-transfer` -> `to_pay` + `pending` kèm `paymentDueAt` = lúc đặt + 30 phút (không gia hạn). `bank-transfer` chỉ khi `bankTransferEnabled` `[giả định chờ Thắng]`.
+        Email xác nhận gửi nền sau khi đơn commit; email lỗi không bao giờ làm đơn thất bại (BR-CHK-28). Giới hạn: 10 yêu cầu / 10 phút / IP.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security:
+        - storefrontSession: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceOrderRequest' }
+      responses:
+        '201':
+          description: Đơn mới tạo.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderReceipt' }
+        '200':
+          description: 'Gửi lại cùng `Idempotency-Key` + cùng nội dung trong 24 giờ: đúng đơn đã tạo (trạng thái hiện tại), không tác dụng phụ.'
+          headers:
+            Idempotency-Replayed: { schema: { type: string, const: 'true' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderReceipt' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409':
+          description: |
+            Một trong: `stock-changed` (kèm `stockIssues`, AC-CHK-13), `voucher-changed` (kèm `removedVoucherCodes`, AC-VOU-12/13), `price-changed` (AC-CHK-12), `idempotency-conflict` (AC-CHK-18), `possible-duplicate` (kèm `existingOrderCode`, Should, AC-CHK-20). Trừ `idempotency-conflict` và `possible-duplicate`, luôn kèm `quote` mới nhất.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '422':
+          description: '`validation` (kèm `field`, ví dụ `contact.phone`, `address.street`, `acceptedTerms`, `paymentMethod`, `items`, `Idempotency-Key`) hoặc `invalid-address` (`field: address.wardCode`).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    get:
+      tags: [order]
+      operationId: listMyOrders
+      summary: Đơn của thành viên, mới nhất trước (BR-CHK-27)
+      description: Chỉ đơn gắn với người đang đăng nhập (đơn khách trùng email không hiện). 10 đơn mỗi lần "Xem thêm". Phiên hỏng -> `401 unauthenticated` (AC-CHK-33).
+      security:
+        - storefrontSession: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        '200':
+          description: Một trang đơn (sắp `placedAt` giảm dần, hoà bằng mã đơn).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/lookup/codes:
+    post:
+      tags: [order]
+      operationId: requestOrderLookupCode
+      summary: Khách gửi mã đơn + email để nhận OTP tra cứu (BR-CHK-26)
+      description: |
+        Luôn `200` cùng nội dung dù mã đơn / email có khớp hay không; chỉ gửi OTP khi khớp (chống dò đơn, AC-CHK-31). OTP 8 số, hiệu lực 10 phút, gửi lại sau 60 giây, hạn mức gửi như BR-AUTH-04..09 `[giả định chờ Thắng]`; lưu băm trong `auth_action_tokens` (`purpose = guest_order_lookup`). Email so sánh sau trim + chữ thường. Giới hạn: 10 yêu cầu / 15 phút / IP (chung với `lookup/verify`).
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderCode, email]
+              additionalProperties: false
+              properties:
+                orderCode: { $ref: '#/components/schemas/OrderCodeInput' }
+                email: { $ref: '#/components/schemas/Email' }
+      responses:
+        '200':
+          description: Đã xử lý (có thể không gửi thư).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resendAfterSeconds]
+                additionalProperties: false
+                properties:
+                  resendAfterSeconds: { type: integer, minimum: 0, maximum: 60 }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/lookup/verify:
+    post:
+      tags: [order]
+      operationId: verifyOrderLookup
+      summary: Nhập OTP để xem đơn khách (BR-CHK-26)
+      description: |
+        Đúng cả ba (mã đơn + email + OTP) -> `200` kèm đơn và `Set-Cookie: n2f_oa` (HttpOnly, SameSite=Lax, `Path=/api/orders`, `Max-Age=1800`; gắn đúng đơn này; cookie mới thay cookie cũ). OTP chỉ dùng một lần. Sai bất kỳ thứ nào -> **cùng** `404 not-found` với thông điệp "Không tìm thấy đơn hàng phù hợp" (không phân biệt, AC-CHK-31). Sai OTP nhiều lần: khoá theo email như BR-AUTH-08 (`429 code-locked`). Mã đơn, email, OTP chỉ nằm trong body, không nằm trong URL; phản hồi không có `userId`.
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderCode, email, code]
+              additionalProperties: false
+              properties:
+                orderCode: { $ref: '#/components/schemas/OrderCodeInput' }
+                email: { $ref: '#/components/schemas/Email' }
+                code: { $ref: '#/components/schemas/Code' }
+      responses:
+        '200':
+          description: Chi tiết đơn.
+          headers:
+            Set-Cookie: { schema: { type: string, description: '`n2f_oa=<token>; HttpOnly; SameSite=Lax; Path=/api/orders; Max-Age=1800[; Secure]`' } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}:
+    get:
+      tags: [order]
+      operationId: getOrder
+      summary: Chi tiết một đơn (chủ đơn hoặc khách đã xác minh OTP, BR-CHK-26, 27)
+      description: 'Quyền xem: xem "Quy ước Slice 3". Đơn `to_pay` đã quá `paymentDueAt` được máy chủ huỷ ngay khi đọc (không chờ tác vụ nền) rồi trả `cancelled`.'
+      security:
+        - storefrontSession: []
+        - orderAccess: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+      responses:
+        '200':
+          description: Chi tiết đơn.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/cancel:
+    post:
+      tags: [order]
+      operationId: cancelOrder
+      summary: Khách huỷ đơn (BR-CHK-23, BR-VOU-12)
+      description: |
+        Được huỷ khi `to_pay` (bất kỳ lúc nào) hoặc `to_ship` `[giả định chờ Thắng]`; trạng thái khác (`to_receive`, `completed`, `cancel_requested`, đã `cancelled`) -> `409 not-cancellable` và không hoàn gì thêm (AC-CHK-16, 29). Một giao dịch: `status = cancelled`, `cancelledBy = customer`, trả tồn đúng số đã trừ (đúng một lần), trả lượt voucher nếu mã còn hạn (AC-VOU-15). `paymentStatus` giữ nguyên (đơn đã `paid` được kế toán hoàn thủ công, email báo 1-3 ngày làm việc). Gửi email "đơn đã huỷ" nền. Quyền: chủ đơn hoặc cookie `n2f_oa` (trong 30 phút).
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+        - orderAccess: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 250, description: 'Lý do (tuỳ chọn), lưu vào lịch sử đơn.' }
+      responses:
+        '200':
+          description: Đơn sau khi huỷ.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/NotCancellable' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/payment:
+    get:
+      tags: [order]
+      operationId: getOrderPayment
+      summary: Trang thanh toán chuyển khoản QR của một đơn (BR-CHK-21) [giả định chờ Thắng]
+      description: |
+        Chỉ cho đơn `bank-transfer`; chủ đơn hoặc cookie `n2f_oa`. Khi `bankTransferEnabled = false` hoặc đơn là COD -> `404 not-found`. Trả `status`: `awaiting` (đang chờ, còn hạn), `paid` (đã nhận đủ), `expired` (hết 30 phút, đơn đã `cancelled`). FE poll mỗi 5 giây tới khi khác `awaiting`. `transferContent` = mã đơn.
+      security:
+        - storefrontSession: []
+        - orderAccess: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+      responses:
+        '200':
+          description: Phiên thanh toán.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentSession' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -568,6 +1137,11 @@ components:
       in: cookie
       name: n2f_asid
       description: Token phiên admin mờ, HttpOnly, SameSite=Lax, Path=/api/admin.
+    orderAccess:
+      type: apiKey
+      in: cookie
+      name: n2f_oa
+      description: 'Quyền xem / huỷ đúng 1 đơn khách trong 30 phút sau khi nhập đúng OTP (`POST /orders/lookup/verify`). HttpOnly, SameSite=Lax, Path=/api/orders. Slice 3.'
   parameters:
     CsrfHeader:
       name: X-Requested-With
@@ -575,6 +1149,12 @@ components:
       required: true
       schema: { type: string, const: n2f }
       description: Bắt buộc ở mọi yêu cầu ghi (lớp CSRF 3). Thiếu -> `403 origin-not-allowed`.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
+      description: 'Khoá một lần thao tác (BR-CHK-15), sinh một lần cho mỗi lượt checkout và dùng lại khi Thử lại. Hiệu lực 24 giờ. Thiếu / sai dạng -> `422 validation`, `field: Idempotency-Key`.'
   headers:
     RetryAfter:
       description: Số giây chờ, bằng `error.retryAfterSeconds`.
@@ -623,6 +1203,39 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthenticated:
+      description: '`unauthenticated`: không có phiên / quyền xem đơn hợp lệ, hoặc phiên đã hết hạn / bị thu hồi (AC-CHK-33). FE chuyển `/auth/login?returnUrl=...` và giữ giỏ.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    StockChanged:
+      description: '`stock-changed`: thiếu hàng hoặc ngừng bán; kèm `stockIssues` cho **mọi** dòng thiếu (BR-CHK-13).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    IdempotencyConflict:
+      description: '`idempotency-conflict`: cùng `Idempotency-Key` nhưng nội dung khác trong 24 giờ (AC-CHK-18).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotCancellable:
+      description: '`not-cancellable`: đơn không ở trạng thái huỷ được hoặc đã huỷ (AC-CHK-16, 29).'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    CartMutated:
+      description: Giỏ sau thao tác (và ghi chú nếu số lượng bị cắt / gộp).
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [cart, notice]
+            additionalProperties: false
+            properties:
+              cart: { $ref: '#/components/schemas/CartView' }
+              notice: { oneOf: [{ $ref: '#/components/schemas/CartNotice' }, { type: 'null' }] }
   schemas:
     Email:
       type: string
@@ -683,6 +1296,13 @@ components:
         | forbidden | 403 | AC-AUTH-84, 85, 88 |
         | origin-not-allowed | 403 | AC-AUTH-92 |
         | not-found | 404 | AC-CAT-03, 26, 27, 32, 46 (route lạ, sản phẩm / bảng size không có) |
+        | invalid-address | 422 | AC-CHK-06 |
+        | stock-changed | 409 | AC-CHK-13, 15 (kèm `stockIssues`) |
+        | price-changed | 409 | AC-CHK-12 (kèm `quote`) |
+        | voucher-changed | 409 | AC-VOU-12, 13 (kèm `quote`, `removedVoucherCodes`) |
+        | idempotency-conflict | 409 | AC-CHK-18 |
+        | possible-duplicate | 409 | AC-CHK-20 (Should, kèm `existingOrderCode`) |
+        | not-cancellable | 409 | AC-CHK-16, 29 |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -698,6 +1318,13 @@ components:
         - forbidden
         - origin-not-allowed
         - not-found
+        - invalid-address
+        - stock-changed
+        - price-changed
+        - voucher-changed
+        - idempotency-conflict
+        - possible-duplicate
+        - not-cancellable
         - unavailable
     ErrorResponse:
       type: object
@@ -720,6 +1347,26 @@ components:
             field:
               type: string
               description: Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`). Catalog (tên tham số query, gồm `sort`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids`) (`sort`, `gender`, `page`, `pageSize`, `ids`, ...).
+            quote:
+              description: 'Slice 3: báo giá mới nhất, có ở `price-changed`, `voucher-changed`, `stock-changed` (đặt hàng).'
+              $ref: '#/components/schemas/Quote'
+            stockIssues:
+              type: array
+              description: 'Slice 3, `stock-changed`: mọi dòng thiếu. `available` = còn lại (0 = hết hàng hoặc ngừng bán).'
+              items:
+                type: object
+                required: [variantId, available]
+                additionalProperties: false
+                properties:
+                  variantId: { type: string, format: uuid }
+                  available: { type: integer, minimum: 0 }
+            removedVoucherCodes:
+              type: array
+              description: 'Slice 3, `voucher-changed`: các mã bị gỡ.'
+              items: { type: string }
+            existingOrderCode:
+              description: 'Slice 3, `possible-duplicate`: mã đơn trước đó.'
+              $ref: '#/components/schemas/OrderCode'
     Category:
       type: string
       enum: [tops, bottoms, dresses, outerwear]
@@ -827,3 +1474,428 @@ components:
         garment: { type: array, items: { $ref: '#/components/schemas/SizeChartRow' } }
         bodyColumns: { type: array, items: { type: string } }
         garmentColumns: { type: array, items: { type: string } }
+    Location:
+      type: object
+      required: [code, name]
+      additionalProperties: false
+      description: Tỉnh / thành hoặc phường / xã (danh mục 2 cấp sau 01/07/2025; nguồn dữ liệu ghi ở plan mục 3).
+      properties:
+        code: { type: string, maxLength: 10, examples: ['79'] }
+        name: { type: string, maxLength: 100, examples: ['Thành phố Hồ Chí Minh'] }
+    OrderCodeInput:
+      type: string
+      minLength: 1
+      maxLength: 20
+      description: 'Mã đơn do khách gõ. Server trim, bỏ `#`, chuyển chữ hoa rồi mới kiểm `^N2F[0-9]{10}$`; sai dạng ở `lookup/*` vẫn đi theo luồng "không tìm thấy" (không 422) để không phân biệt (BR-CHK-26). Ở các đường dẫn `/orders/{orderCode}` sai dạng -> `404 not-found`.'
+      examples: ['n2f2611040427', '#N2F2611040427']
+    OrderCode:
+      type: string
+      pattern: '^N2F[0-9]{10}$'
+      description: 'N2F + YYMMDD (giờ Việt Nam) + 4 số ngẫu nhiên, không đổi, không tái sử dụng (BR-CHK-17).'
+      examples: ['N2F2611040427']
+    VnPhone:
+      type: string
+      pattern: '^(\+84|0)(3|5|7|8|9)[0-9]{8}$'
+      description: 'Di động Việt Nam. Server trim, bỏ khoảng trắng, đổi `+84` thành `0` rồi lưu / trả `0xxxxxxxxx` (BR-CHK-04).'
+      examples: ['0912345678']
+    QuoteItems:
+      type: array
+      minItems: 1
+      maxItems: 30
+      description: 'Mỗi `variantId` xuất hiện tối đa một lần (trùng -> `422 validation`, `field: items`).'
+      items:
+        type: object
+        required: [variantId, quantity]
+        additionalProperties: false
+        properties:
+          variantId: { type: string, format: uuid }
+          quantity: { type: integer, minimum: 1, maximum: 99, description: 'Quá 5 hoặc quá tồn: `quote` cắt (xem `effectiveQuantity`); `POST /orders` với quantity > 5 -> `422 validation`.' }
+    VoucherCodes:
+      type: array
+      maxItems: 2
+      items: { type: string, minLength: 1, maxLength: 40 }
+      description: 'Tối đa 1 mã giảm + 1 mã free-ship (BR-VOU-01). Quá 2 phần tử -> `422 validation`, `field: voucherCodes`.'
+    QuoteAddress:
+      type: object
+      required: [provinceCode, wardCode]
+      additionalProperties: false
+      properties:
+        provinceCode: { type: string, maxLength: 10 }
+        wardCode: { type: string, maxLength: 10 }
+    QuoteContact:
+      type: object
+      additionalProperties: false
+      properties:
+        email: { $ref: '#/components/schemas/Email' }
+        phone: { $ref: '#/components/schemas/VnPhone' }
+    PaymentMethod:
+      type: string
+      enum: [cod, bank-transfer]
+    QuoteRequest:
+      type: object
+      required: [items]
+      additionalProperties: false
+      description: Mọi trường giá / tổng gửi kèm bị bỏ qua (trường lạ bị loại).
+      properties:
+        items: { $ref: '#/components/schemas/QuoteItems' }
+        voucherCodes: { $ref: '#/components/schemas/VoucherCodes' }
+        address: { $ref: '#/components/schemas/QuoteAddress' }
+        contact: { $ref: '#/components/schemas/QuoteContact' }
+        paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+    Availability:
+      type: string
+      enum: [available, low-stock, out-of-stock, discontinued]
+      description: '`low-stock` khi tồn 1..5; `out-of-stock` khi 0; `discontinued` khi sản phẩm không `ACTIVE` hoặc biến thể không tồn tại (BR-CART-08).'
+    RefreshedLine:
+      type: object
+      required: [variantId, productId, slug, name, mediaId, color, size, unitPrice, requestedQuantity, maxQuantity, effectiveQuantity, availability, inventory]
+      additionalProperties: false
+      description: Một dòng đã làm tươi từ DB. Với dòng `discontinued` chỉ `variantId`, `requestedQuantity`, `availability`, `maxQuantity = 0`, `effectiveQuantity = 0` là bảo đảm có giá trị; các trường còn lại là `""` / `0`.
+      properties:
+        variantId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        mediaId: { type: string }
+        color: { type: string }
+        size: { type: string }
+        unitPrice: { type: integer, minimum: 0, description: Giá hiện tại sau khuyến mãi (đã gồm VAT). }
+        compareAtPrice: { type: integer }
+        requestedQuantity: { type: integer, minimum: 1 }
+        maxQuantity: { type: integer, minimum: 0, description: 'min(5, tồn); 0 nếu hết / ngừng bán.' }
+        effectiveQuantity: { type: integer, minimum: 0, description: 'min(requestedQuantity, maxQuantity).' }
+        availability: { $ref: '#/components/schemas/Availability' }
+        inventory: { type: integer, minimum: 0 }
+        limitedBy:
+          type: string
+          enum: [stock, per-variant-limit]
+          description: Có khi `effectiveQuantity < requestedQuantity`; `stock` -> câu "Chỉ còn N sản phẩm cho màu, size này.", `per-variant-limit` -> câu "Mỗi đơn mua tối đa 5 sản phẩm cùng màu, size...".
+    Policy:
+      type: object
+      required: [maxPerVariant, maxItemsPerOrder, maxCartLines, shippingFee, freeShippingThreshold, codMaxTotal, bankHoldMinutes, bankTransferEnabled, cartRetentionDays]
+      additionalProperties: false
+      description: Tham số vận hành đọc từ DB (bảng `store_settings`), thay `store-policy.ts` của FE ở chế độ http.
+      properties:
+        maxPerVariant: { type: integer, examples: [5] }
+        maxItemsPerOrder: { type: integer, examples: [20] }
+        maxCartLines: { type: integer, examples: [30] }
+        shippingFee: { type: integer, examples: [30000] }
+        freeShippingThreshold: { type: integer, examples: [1000000] }
+        codMaxTotal: { type: integer, examples: [5000000] }
+        bankHoldMinutes: { type: integer, examples: [30] }
+        bankTransferEnabled: { type: boolean, description: '`[giả định chờ Thắng]` false cho tới khi có dịch vụ đối soát.' }
+        cartRetentionDays: { type: integer, examples: [30] }
+    CartView:
+      type: object
+      required: [lines, policy, expiresAt]
+      additionalProperties: false
+      properties:
+        lines:
+          type: array
+          maxItems: 30
+          description: Sắp theo `updatedAt` giảm dần (dòng mới thêm / sửa lên đầu), hoà bằng `variantId`.
+          items:
+            allOf:
+              - $ref: '#/components/schemas/RefreshedLine'
+              - type: object
+                required: [updatedAt]
+                properties:
+                  updatedAt: { type: string, format: date-time }
+        policy: { $ref: '#/components/schemas/Policy' }
+        expiresAt: { type: [string, 'null'], format: date-time, description: 'Lần sửa cuối + 30 ngày; null khi giỏ rỗng.' }
+    CartNotice:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code: { type: string, enum: [stock-limit, per-variant-limit, merged] }
+        variantId: { type: string, format: uuid }
+        adjustedTo: { type: integer, minimum: 1, description: Số lượng sau khi cắt. }
+    VoucherKind:
+      type: string
+      enum: [discount, free-shipping]
+      description: '`discount` (giảm theo % hoặc số tiền) hoặc `free-shipping`. Phân loại phía FE; loại %/số tiền là chi tiết nội bộ.'
+    VoucherApplied:
+      type: object
+      required: [applied, code, kind, label, amount]
+      additionalProperties: false
+      properties:
+        applied: { type: boolean, const: true }
+        code: { type: string, description: 'Chữ hoa chuẩn.' }
+        kind: { $ref: '#/components/schemas/VoucherKind' }
+        label: { type: string, description: 'Tên hiển thị, ví dụ "Giảm 15% đơn đầu tiên".' }
+        amount: { type: integer, minimum: 0, description: 'Tiền giảm hàng (`discount`); 0 với `free-shipping` (giảm phí nằm ở `pricing.shippingDiscount`).' }
+    VoucherReason:
+      type: string
+      enum: [not-found, not-started, expired, exhausted, login-required, per-user-limit, first-order-only, category-mismatch, excluded-sale-items, min-spend, shipping-already-free]
+      description: |
+        Thứ tự kiểm BR-VOU-03; thông điệp FE (BR-VOU-04): not-found "Mã giảm giá không tồn tại."; not-started "Mã này áp dụng từ {startsAt}."; expired (hết hạn **hoặc** bị tắt) "Mã giảm giá đã hết hạn."; exhausted "Mã giảm giá đã hết lượt sử dụng."; login-required "Đăng nhập để dùng mã này."; per-user-limit "Bạn đã dùng mã này đủ số lần cho phép."; first-order-only "Mã chỉ áp dụng cho đơn hàng đầu tiên."; category-mismatch "Mã chỉ áp dụng cho {categoryName}." (Should); excluded-sale-items "Mã không áp dụng cho sản phẩm đang giảm giá." (Should); min-spend "Mua thêm {missingAmount}₫ để dùng mã này (đơn tối thiểu {minSubtotal}₫)."; shipping-already-free "Đơn của bạn đã được miễn phí giao hàng.".
+    VoucherRejection:
+      type: object
+      required: [applied, code, reason]
+      additionalProperties: false
+      properties:
+        applied: { type: boolean, const: false }
+        code: { type: string, description: 'Đúng mã khách gõ (đã trim, chữ hoa) để FE giữ trong ô.' }
+        reason: { $ref: '#/components/schemas/VoucherReason' }
+        startsAt: { type: string, format: date-time, description: 'Có khi `not-started`.' }
+        missingAmount: { type: integer, description: 'Có khi `min-spend`.' }
+        minSubtotal: { type: integer, description: 'Có khi `min-spend`.' }
+        categoryName: { type: string, description: 'Có khi `category-mismatch`.' }
+    Pricing:
+      type: object
+      required: [subtotal, discount, shippingFee, shippingDiscount, total]
+      additionalProperties: false
+      description: 'Khớp `OrderPricing` của FE. `total = subtotal - discount + shippingFee - shippingDiscount` (BR-VOU-05). Miễn phí giao (ngưỡng hoặc mã) -> `shippingDiscount = shippingFee`.'
+      properties:
+        subtotal: { type: integer, minimum: 0 }
+        discount: { type: integer, minimum: 0 }
+        shippingFee: { type: integer, minimum: 0 }
+        shippingDiscount: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
+    PaymentOption:
+      type: object
+      required: [method, available]
+      additionalProperties: false
+      properties:
+        method: { $ref: '#/components/schemas/PaymentMethod' }
+        available: { type: boolean }
+        reason:
+          type: string
+          enum: [over-limit, too-many-refusals, too-many-open-orders, not-enabled]
+          description: 'Có khi `available = false`. `over-limit` = tổng > 5.000.000 ₫; `too-many-refusals` = SĐT có từ 2 đơn COD bị từ chối trong 6 tháng; `too-many-open-orders` = đang có 3 đơn COD chưa giao; `not-enabled` = QR chưa bật.'
+    Quote:
+      type: object
+      required: [lines, pricing, vouchers, rejectedVouchers, shipping, estimatedDelivery, paymentMethods, policy]
+      additionalProperties: false
+      properties:
+        lines: { type: array, items: { $ref: '#/components/schemas/RefreshedLine' } }
+        lineDiscounts:
+          type: array
+          description: 'Phần giảm chia cho từng dòng (BR-VOU-06): theo tỷ lệ giá trị, làm tròn xuống đồng, phần dư vào dòng giá trị lớn nhất (hoà: `variantId` nhỏ nhất). Chỉ các dòng có phần giảm > 0.'
+          items:
+            type: object
+            required: [variantId, amount]
+            additionalProperties: false
+            properties:
+              variantId: { type: string, format: uuid }
+              amount: { type: integer, minimum: 1 }
+        pricing: { $ref: '#/components/schemas/Pricing' }
+        vouchers: { type: array, maxItems: 2, items: { $ref: '#/components/schemas/VoucherApplied' } }
+        rejectedVouchers: { type: array, items: { $ref: '#/components/schemas/VoucherRejection' } }
+        shipping:
+          type: object
+          required: [fee, freeReason, addressRequired]
+          additionalProperties: false
+          properties:
+            fee: { type: integer, minimum: 0, description: 'Phí tiêu chuẩn (30.000), chưa trừ miễn phí.' }
+            freeReason: { type: [string, 'null'], enum: [threshold, voucher, null], description: 'Lý do miễn phí để hiện "Miễn phí (đơn từ 1.000.000₫ / mã free-ship)". Ngưỡng thắng mã (BR-VOU-03 mục 9).' }
+            addressRequired: { type: boolean, description: 'true khi request chưa có `address`.' }
+        estimatedDelivery:
+          type: object
+          required: [from, to]
+          additionalProperties: false
+          description: 'Giả định đơn vào `to_ship` ngay lúc báo giá (BR-CHK-11). Ngày ISO `YYYY-MM-DD`.'
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        paymentMethods: { type: array, items: { $ref: '#/components/schemas/PaymentOption' } }
+        policy: { $ref: '#/components/schemas/Policy' }
+    Recipient:
+      type: object
+      required: [name, phone, email]
+      additionalProperties: false
+      description: '`name`/`phone` là của người nhận, `email` là của người đặt (BR-CHK-04, 05). Server trim; `name` 2-50 ký tự, có ít nhất 1 chữ cái; `email` <= 100 ký tự, lưu chữ thường.'
+      properties:
+        name: { type: string, minLength: 2, maxLength: 50 }
+        phone: { $ref: '#/components/schemas/VnPhone' }
+        email: { $ref: '#/components/schemas/Email' }
+    OrderAddress:
+      type: object
+      required: [provinceCode, wardCode, street]
+      additionalProperties: false
+      properties:
+        provinceCode: { type: string, maxLength: 10 }
+        wardCode: { type: string, maxLength: 10, description: 'Phải thuộc `provinceCode`, sai -> `422 invalid-address`.' }
+        street: { type: string, minLength: 5, maxLength: 200 }
+    Invoice:
+      type: object
+      required: [companyName, taxCode, address, email]
+      additionalProperties: false
+      description: Hoá đơn công ty (BR-CHK-07); chỉ lưu, không sửa sau khi đặt.
+      properties:
+        companyName: { type: string, minLength: 2, maxLength: 200 }
+        taxCode: { type: string, pattern: '^[0-9]{10}(-[0-9]{3})?$' }
+        address: { type: string, minLength: 5, maxLength: 200 }
+        email: { $ref: '#/components/schemas/Email' }
+    ExpectedTotals:
+      type: object
+      required: [lines, pricing]
+      additionalProperties: false
+      description: 'Số khách đang thấy. Chỉ để đối chiếu (BR-CHK-12): khác bất kỳ giá dòng nào hoặc bất kỳ trường `pricing` nào -> `409 price-changed`.'
+      properties:
+        lines:
+          type: array
+          items:
+            type: object
+            required: [variantId, unitPrice]
+            additionalProperties: false
+            properties:
+              variantId: { type: string, format: uuid }
+              unitPrice: { type: integer, minimum: 0 }
+        pricing: { $ref: '#/components/schemas/Pricing' }
+    PlaceOrderRequest:
+      type: object
+      required: [items, contact, address, paymentMethod, invoice, acceptedTerms, expected]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 30
+          description: 'Mỗi `variantId` một lần; `quantity` 1..5; tổng quantity <= 20 (vượt -> `422 validation`, `field: items`).'
+          items:
+            type: object
+            required: [variantId, quantity]
+            additionalProperties: false
+            properties:
+              variantId: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1, maximum: 5 }
+        voucherCodes: { $ref: '#/components/schemas/VoucherCodes' }
+        contact: { $ref: '#/components/schemas/Recipient' }
+        address: { $ref: '#/components/schemas/OrderAddress' }
+        note: { type: string, maxLength: 250, description: Ghi chú cho shipper; trim; rỗng = không có. }
+        paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+        invoice: { oneOf: [{ $ref: '#/components/schemas/Invoice' }, { type: 'null' }], description: 'null = hoá đơn cá nhân.' }
+        acceptedTerms: { type: boolean, description: 'Phải `true`, nếu không `422 validation` `field: acceptedTerms`; máy chủ lưu thời điểm đồng ý (BR-CHK-08).' }
+        expected: { $ref: '#/components/schemas/ExpectedTotals' }
+        confirmDuplicate: { type: boolean, default: false, description: 'Should (BR-CHK-16): `true` khi khách đã xác nhận đặt tiếp sau `possible-duplicate`.' }
+    OrderStatus:
+      type: string
+      enum: [to_pay, to_ship, to_receive, completed, cancel_requested, cancelled]
+      description: 'Tên COMMON-01 `[giả định chờ Thắng]`. Ánh xạ FE: to_pay -> pending-payment; to_ship -> processing; to_receive -> shipping / delivering; completed -> completed; cancel_requested -> (FE thêm); cancelled -> cancelled.'
+    PaymentStatus:
+      type: string
+      enum: [pending, paid, failed, refunded, partially_refunded]
+    CancelledBy:
+      type: string
+      enum: [customer, shop, system]
+    OrderLine:
+      type: object
+      required: [variantId, productSlug, name, color, size, sku, quantity, unitPrice, mediaId, lineDiscount]
+      additionalProperties: false
+      description: Bản chụp tại lúc đặt; đổi giá / tên sau đó không ảnh hưởng (BR-CHK-18).
+      properties:
+        variantId: { type: string, format: uuid }
+        productSlug: { type: string }
+        name: { type: string }
+        color: { type: string }
+        size: { type: string }
+        sku: { type: string }
+        quantity: { type: integer, minimum: 1, maximum: 5 }
+        unitPrice: { type: integer, minimum: 0 }
+        compareAtPrice: { type: integer }
+        mediaId: { type: string }
+        lineDiscount: { type: integer, minimum: 0, description: 'Phần giảm voucher đã chia cho dòng này (BR-VOU-06).' }
+    OrderTimelineEntry:
+      type: object
+      required: [at, title]
+      additionalProperties: false
+      properties:
+        at: { type: string, format: date-time }
+        title: { type: string }
+        detail: { type: string }
+    Order:
+      type: object
+      required: [id, placedAt, status, paymentStatus, paymentMethod, items, pricing, vouchers, recipient, shippingAddress, estimatedDelivery, canCancel, timeline]
+      additionalProperties: false
+      description: 'Chi tiết đơn. Không có `userId`, UUID nội bộ hay dữ liệu thanh toán nhạy cảm. Nhất quán: `pricing` ở đây, ở email, ở trang thành công là cùng một bộ số.'
+      properties:
+        id: { $ref: '#/components/schemas/OrderCode' }
+        placedAt: { type: string, format: date-time }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        paymentStatus: { $ref: '#/components/schemas/PaymentStatus' }
+        paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+        paymentDueAt: { type: string, format: date-time, description: 'Chỉ khi `to_pay`.' }
+        paidAt: { type: string, format: date-time }
+        items: { type: array, items: { $ref: '#/components/schemas/OrderLine' } }
+        pricing: { $ref: '#/components/schemas/Pricing' }
+        vouchers:
+          type: array
+          items:
+            type: object
+            required: [code, kind, amount]
+            additionalProperties: false
+            properties:
+              code: { type: string }
+              kind: { $ref: '#/components/schemas/VoucherKind' }
+              amount: { type: integer, minimum: 0 }
+        recipient:
+          type: object
+          required: [name, phone, email]
+          additionalProperties: false
+          properties:
+            name: { type: string }
+            phone: { type: string }
+            email: { type: string }
+        shippingAddress:
+          type: object
+          required: [street, ward, province]
+          additionalProperties: false
+          description: 'Tên tỉnh / phường chụp tại lúc đặt.'
+          properties:
+            street: { type: string }
+            ward: { type: string }
+            province: { type: string }
+        note: { type: string }
+        invoice: { $ref: '#/components/schemas/Invoice' }
+        estimatedDelivery:
+          type: object
+          required: [from, to]
+          additionalProperties: false
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        cancelledBy: { $ref: '#/components/schemas/CancelledBy' }
+        cancelledAt: { type: string, format: date-time }
+        cancelReason: { type: string }
+        canCancel: { type: boolean, description: 'true khi `status` in (`to_pay`, `to_ship`).' }
+        willCallToConfirm: { type: boolean, description: 'COD cần CSKH gọi xác nhận trong 2 giờ làm việc (BR-CHK-20): false với thành viên đã có đơn `completed` và đơn < 1.000.000 ₫. Chỉ có ở đơn COD `to_ship`.' }
+        timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' }, description: 'Cũ nhất trước; mỗi lần đổi trạng thái một dòng (BR-CHK-22).' }
+    OrderReceipt:
+      type: object
+      required: [order]
+      additionalProperties: false
+      properties:
+        order: { $ref: '#/components/schemas/Order' }
+    OrderPage:
+      type: object
+      required: [items, total, page, limit]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Order' }, maxItems: 50 }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+    PaymentSession:
+      type: object
+      required: [orderId, amount, status, expiresAt, transferContent, account, qrImageUrl]
+      additionalProperties: false
+      description: '`[giả định chờ Thắng]` cần dịch vụ đối soát. `paidAt` có khi `status = paid`.'
+      properties:
+        orderId: { $ref: '#/components/schemas/OrderCode' }
+        amount: { type: integer, minimum: 1, description: Số tiền chính xác phải chuyển (= `pricing.total`). }
+        status: { type: string, enum: [awaiting, paid, expired] }
+        expiresAt: { type: string, format: date-time }
+        paidAt: { type: string, format: date-time }
+        transferContent: { type: string, description: 'Nội dung chuyển khoản = mã đơn.' }
+        account:
+          type: object
+          required: [bank, accountName, accountNumber]
+          additionalProperties: false
+          properties:
+            bank: { type: string }
+            accountName: { type: string }
+            accountNumber: { type: string }
+        qrImageUrl: { type: string, description: 'URL ảnh VietQR đã nhúng số tiền và nội dung.' }
+        shortfall: { type: integer, minimum: 1, description: 'Số còn thiếu khi đã chuyển thiếu (CHK-PAY-10).' }

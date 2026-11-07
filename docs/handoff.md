@@ -47,6 +47,11 @@
 ### Câu hỏi mở
 - 8 câu hỏi cho Thắng ở `docs/product/PRD.md` › Slice 1 › mục 7 (tuổi tối thiểu, email người gửi, trang đăng nhập admin, phiên bản điều khoản, thời hạn phiên, kênh liên hệ khi tài khoản bị khoá, dữ liệu/seed Supabase, đổi mật khẩu ở Profile). BR liên quan đánh dấu "chờ xác nhận".
 - Slice 3: có giữ voucher free-ship không (xem `backlog.md`).
+- Slice 3 (product-owner, 2026-11-07), chi tiết ở `docs/product/PRD.md` › Slice 3 › mục 7; BR liên quan đánh dấu "chờ xác nhận":
+  1. Nhóm COMMON-01..06 được `cart-checkout-business-rules.md` tham chiếu nhưng không có nội dung (trạng thái đơn/thanh toán, trừ/hoàn kho, làm tròn tiền, quyền khách và OTP tra cứu). Đề xuất: Thắng gửi nội dung; tạm dùng giả định ghi ở PRD (tên trạng thái COMMON + ánh xạ FE, làm tròn xuống tới 1.000 ₫, OTP theo BR-AUTH-04..09). Ảnh hưởng BR-CHK-22, 23, 26, BR-VOU-05.
+  2. Chuyển khoản QR tự đối soát cần tài khoản nhận + webhook. Đề xuất: SePay, Thắng mở tài khoản; chưa có thì ẩn QR ở HTTP (đơn > 5.000.000 ₫ chưa đặt online được). Ảnh hưởng BR-CHK-19, 21.
+  3. Phạm vi địa giới: đề xuất toàn quốc 34 tỉnh/thành, seed từ file công khai. Ảnh hưởng BR-CHK-06.
+  4. Huỷ ở `to_ship` trước khi có Admin: đề xuất huỷ thẳng, chuyển sang `cancel_requested` khi có Admin. Ảnh hưởng BR-CHK-23.
 
 ### Câu hỏi mở cho Backend (từ backend-dev, 2026-11-07)
 > Orchestrator 2026-11-07: #1, #2, #4, #6 đã chốt trong `decisions.md`. #3: Thắng chọn GIỮ LẠI, chỉ migration cộng thêm (xem decisions.md). #5 (Gmail App Password) Thắng cung cấp ở bước triển khai.

@@ -543,3 +543,279 @@ Sửa sau QA (2026-11-07, PO): AC-CAT-18 phần Then trước ghi "chỉ after-h
 | --- | --- | --- | --- |
 | 1 | Nội dung catalog hiện là dữ liệu demo (`material` là "Thông tin chất liệu sẽ được cập nhật.", giá và phân Nam/Nữ "cần xác nhận kinh doanh", ảnh là placeholder). Chấp nhận dùng để nghiệm thu Slice 2 và chặn go-live đến khi có nội dung thật? **Đề xuất PO:** chấp nhận cho Slice 2; thêm vào backlog "Nội dung catalog thật" (Thắng cung cấp giá, chất liệu, ảnh; nhập bằng file seed cho đến khi có Admin). | BR-CAT-05, go-live | Thắng | **Thắng: đồng ý (2026-11-07).**
 | 2 | Ở chế độ HTTP, ẩn đánh giá mẫu, điểm sao, form viết đánh giá và "Báo khi có hàng" (FE mất các phần này so với bản mock). **Đề xuất PO:** đồng ý ẩn; đánh giá thật làm sau Slice 3, "Báo khi có hàng" cùng slice thông báo. BR-CAT-17 **chờ xác nhận**. | BR-CAT-17, AC-CAT-43 | Thắng | **Thắng: đồng ý (2026-11-07).**
+
+---
+
+## Slice 3: Cart & Checkout
+
+Nguồn chính: `docs/product/cart-checkout-business-rules.md` (Thắng, 2026-11-04; 69 quy tắc CART-01..16, CHK-01..13, CHK-VC-01..13, CHK-PAY-01..14, CHK-CF-01..13 và bảng tham số vận hành). Mỗi BR dưới đây ghi "nguồn" = mã gốc; con số giữ theo nguồn; chỗ chọn khác nguồn ghi ở mục 3 kèm lý do. Nguồn tham chiếu nhóm **COMMON-01..06 nhưng không có nội dung**: PO không suy diễn; chỗ phụ thuộc COMMON ghi "giả định tạm, chờ xác nhận" và gom vào câu hỏi 1. Bổ sung: master plan mục 14–18, 33, 34, 36; FE `features/{cart,checkout,orders,tracking}`, `mocks/mock-checkout-api.ts`, `core/store-policy.ts`, `CHECKOUT_API`; BE hiện có auth + catalog (`Product.price`, `ProductVariant.inventory_qty`), mailer `backend/src/mail/mailer.ts`; quyết định 2026-11-07 giữ voucher free-ship. Mã BR: `BR-CART` (giỏ), `BR-CHK` (checkout, vận chuyển, thanh toán, xác nhận), `BR-VOU` (voucher). Tên endpoint/trường do Backend chốt trong `openapi.yaml`. Tiền là số nguyên đồng; múi giờ Asia/Ho_Chi_Minh. AC kế thừa mức của BR.
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** Giỏ và đặt hàng chỉ chạy mock: giá, tồn kho, voucher, phí vận chuyển tính trong trình duyệt; đơn không lưu ở máy chủ, không trừ tồn kho trong DB (backlog 2.14), khách không nhận xác nhận; checkout ở chế độ HTTP chặn đặt hàng ("Thanh toán hiện chưa khả dụng").
+
+**Mục tiêu (theo 5 nguyên tắc chung của nguồn).**
+1. Không bán quá số hàng có thật: tồn trừ khi tạo đơn, nguyên tử.
+2. Khách thấy đúng số tiền sẽ trả trước khi bấm Đặt hàng; mọi thay đổi phải báo lại và khách bấm lại.
+3. Lỗi không làm mất thông tin đã nhập và giỏ.
+4. Một lần bấm, một đơn (bấm lại, mạng chập, F5).
+5. Giá, voucher, phí ship, hạn mức COD là tham số máy chủ; thay đổi chỉ áp cho đơn mới.
+
+**Không phải mục tiêu.** Đổi giao diện giỏ/checkout (giữ visual), cổng thẻ/ví, xử lý đơn phía shop (slice Admin).
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Nguồn | Lý do |
+| --- | --- | --- | --- |
+| Giỏ khách (trình duyệt) + giỏ thành viên (máy chủ), gộp khi đăng nhập, lưu 30 ngày | Must | CART-12..15 | Thắng đã chốt giỏ theo tài khoản. |
+| Hạn mức 5/phiên bản, 20 sản phẩm/đơn, 30 dòng; làm tươi giá/tồn mỗi lần mở giỏ | Must | CART-02, 03, 09..11 | Chặn gom hàng, khách thấy giá đúng. |
+| Báo giá máy chủ, phí 30.000 ₫, miễn phí từ 1.000.000 ₫, ngày giao dự kiến | Must | CHK-PAY-02, 03 | Không tin tổng từ trình duyệt. |
+| Voucher: 1 mã giảm tiền + 1 mã free-ship, điều kiện, lượt, chống dò | Must | CHK-VC-01..07, 09..13 | Free-ship giữ (chốt 2026-11-07). |
+| Đặt hàng COD: kiểm lại, trừ tồn nguyên tử, chống trùng, mã đơn, hạn mức COD | Must | CHK-CF-01..05, 07; CHK-PAY-05, 06 | Cốt lõi bán hàng thật. |
+| Chuyển khoản QR tự đối soát, giữ đơn 30 phút | Must (chờ xác nhận) | CHK-PAY-01, 08..12 | Nguồn yêu cầu khi mở bán; cần dịch vụ đối soát thật (câu hỏi 2). |
+| Địa giới 2 cấp sau 2025 | Must (phạm vi chờ xác nhận) | CHK-03 | Máy chủ phải kiểm địa chỉ (câu hỏi 3). |
+| Trang đặt hàng thành công; tra cứu đơn khách bằng mã + email + OTP; huỷ đơn | Must | CHK-CF-05, 08, 09; CHK-PAY-11 | Khách không có tài khoản vẫn theo dõi được đơn. |
+| Đơn của thành viên: danh sách, chi tiết, huỷ | Must | — | `/account/orders` đang đọc mock; đơn thật phải thấy được. |
+| Email xác nhận / chờ thanh toán / đã nhận thanh toán / đã huỷ | Must | CHK-CF-10..12, phần CF-13 | Bằng chứng đặt hàng; mailer đã có. |
+| Nháp checkout 24 giờ; hỏi lại khi đơn trùng trong 10 phút; Hoàn tác xoá dòng 5 giây; voucher theo danh mục / loại trừ hàng đang giảm; "Đặt lại đơn này" | Should | CHK-02, CHK-CF-06, CART-02, CHK-VC-01/02(7), CHK-PAY-12 | Có ích nhưng không chặn mua đúng; FE chưa có. |
+| Sổ địa chỉ, tự điền/lưu địa chỉ ở checkout | Won't | CHK-07..09 | Slice Account (CRUD địa chỉ). |
+| Ví voucher, mã theo hạng / theo khách cụ thể | Won't | CHK-VC-08, VC-02(4) phần hạng | Slice Account (hạng thành viên). |
+| Gọi xác nhận COD, huỷ do không liên lạc, từ chối nhận, duyệt yêu cầu huỷ, bàn giao vận chuyển, email vận chuyển/giao | Won't | CHK-PAY-06 (phần vận hành), 07; CF-13 (phần còn lại) | Slice Admin. Slice 3 thử bằng SQL. |
+| Thẻ/ví điện tử; xuất hoá đơn điện tử thật; cộng ngày cho xã đảo/vùng sâu; trả hàng/hoàn tiền | Won't | CHK-PAY-13, CHK-11, PAY-03, VC-13 phần trả hàng | Giai đoạn sau / chưa có dữ liệu đánh dấu xã / cần Admin. |
+
+### 3. Hiện trạng FE, nguồn BR và hành vi được chọn
+
+| # | Điểm | FE hiện tại | Nguồn | Chọn | Lý do |
+| --- | --- | --- | --- | --- | --- |
+| K1 | Giỏ khách vs thành viên | Một giỏ `localStorage` chung | CART-12 | Theo nguồn: khách lưu trình duyệt, thành viên lưu máy chủ | — |
+| K2 | Gộp khi đăng nhập | Không có | CART-13 cộng, cắt theo hạn mức; vượt 30 dòng → Yêu thích | Theo nguồn; "Yêu thích" = danh sách yêu thích trên thiết bị (wishlist máy chủ là P1) | Không mất dòng. |
+| K3 | Đăng xuất / hết phiên | BR-AUTH-32: không xoá giỏ | CART-15: đăng xuất thì giỏ biến khỏi thiết bị | Đăng xuất chủ động theo nguồn (thay BR-AUTH-32 phần đăng xuất; giỏ còn ở tài khoản). Hết phiên/bị thu hồi giữ BR-AUTH-32 (giỏ vẫn hiện) | Hết phiên không do khách chọn; AC-AUTH-68 đòi giỏ còn. |
+| K4 | Chọn dòng | "Chế độ chọn": mặc định cả giỏ, chọn chỉ trong phiên | CART-07 ô tick mỗi dòng, dòng mới tick sẵn | **Khác nguồn về giao diện:** giữ chế độ chọn của FE; kết quả nghiệp vụ như nguồn (mặc định mọi dòng được tính; tạm tính, hạn mức, thanh free-ship và checkout chỉ theo dòng chọn) | Giữ visual (master plan 19–20). |
+| K5 | Dòng hết hàng | `applyStock` xoá dòng hết | CART-10 giữ dòng mờ | Theo nguồn | Khách đổi size được. |
+| K6 | Giá đổi | Bản chụp lúc thêm | CART-09, CF-03 | Theo nguồn; đặt hàng gửi giá/tổng đã thấy, lệch → không tạo đơn | **FE đổi contract.** |
+| K7 | Voucher | 1 mã; 3 mã cứng; "Mã của bạn" mock | VC-01 1 mã giảm + 1 mã free-ship; VC-08 ví | 2 ô mã theo nguồn; ví Won't; seed `N2FWELCOME15` (đơn đầu tiên), `N2FFREESHIP`; `N2FBDAY100` không seed (cần ngày sinh, slice Account) | **FE đổi contract** (`voucherCodes`). |
+| K8 | Làm tròn mã % | Làm tròn gần nhất 1.000 ₫ | VC-05 làm tròn xuống (COMMON-05.4) | Làm tròn **xuống** tới 1.000 ₫ (giả định tạm, câu hỏi 1) | COMMON-05 chưa có. |
+| K9 | Email ở checkout | Không bắt buộc | CHK-04 bắt buộc với khách, ≤ 100 | Theo nguồn | Kênh xác nhận và tra cứu OTP. |
+| K10 | Họ tên / SĐT / ghi chú | Tên ≥ 2; SĐT `0`/`+84` + 9 số; ghi chú không giới hạn | CHK-03 | Theo nguồn (2–50, đầu số 03/05/07/08/09, ghi chú ≤ 250) | — |
+| K11 | Thanh toán | COD + QR mô phỏng (tiền về sau 15 giây) | CHK-PAY-01, 08..12 | COD Must; QR Must nhưng chờ dịch vụ đối soát (câu hỏi 2); chưa có thì ẩn ở HTTP | Không có webhook ngân hàng thì "tự xác nhận" là giả. |
+| K12 | Hạn mức COD | Không có | CHK-PAY-05 | Theo nguồn; lịch sử "từ chối nhận" = 0 tới khi Admin ghi được | — |
+| K13 | Trạng thái đơn | 12 trạng thái FE (`processing`, `pending-payment`...) | CHK-PAY-14, COMMON-01/02 (`to_pay`, `to_ship`...) | API/DB dùng tên COMMON; FE mapper đổi sang `OrderStatus` hiện có (bảng BR-CHK-22). Chờ xác nhận nội dung COMMON-01 | Master plan 34 tách DTO khỏi domain. |
+| K14 | Huỷ ở `to_ship` | Khách huỷ thẳng (quyết định 2026-10-18) | PAY-14: `cancel_requested`, shop duyệt | Chờ câu hỏi 4; đề xuất huỷ thẳng tới khi có Admin | Chưa có ai duyệt yêu cầu. |
+| K15 | Mã đơn | `N2F` + YYMMDD + 3 số từ mili giây | CF-07 | Theo nguồn (4 số ngẫu nhiên, không trùng trong ngày) | — |
+| K16 | Tra cứu khách | Mã + SĐT/email, không OTP | CF-08 mã + email + OTP | Theo nguồn (FE thêm bước OTP); thông số OTP theo BR-AUTH-04..09 (giả định tạm vì COMMON-06.5 chưa có) | Mã 4 số đoán được, OTP chặn xem trộm. |
+| K17 | Trang thành công sau F5 / Back | Biên nhận trong bộ nhớ; F5 mất | CF-05 Back/F5 về đơn vừa đặt | Lưu biên nhận trong `sessionStorage` của tab; Back không mở lại form đặt | Không cần API công khai đọc đơn. |
+| K18 | Email | Không gửi | CF-10..13 | Theo nguồn phần xác nhận, chờ thanh toán, đã nhận tiền, đã huỷ; email vận chuyển → Admin | — |
+| K19 | Mã lỗi | Map theo HTTP status (422 → `invalid-address`) | — | Map theo `code` trong body | 422 có nhiều nghĩa. **FE đổi adapter.** |
+| K20 | Đơn thành viên | `ACCOUNT_API` mock | — | Phần đơn hàng theo cờ checkout, gọi API thật; phần còn lại Account vẫn mock | **FE tách adapter.** |
+| K21 | Điền sẵn thành viên | Profile/địa chỉ/voucher từ Account mock | CHK-04, 07 | Ở HTTP: họ tên, email lấy từ phiên; ẩn địa chỉ đã lưu và "Mã của bạn" | Account mock không có dữ liệu user thật. |
+| K22 | Cờ cấu hình | `mode`, `authMode`, `catalogMode`; chặn đặt khi không mock | — | Thêm `checkoutMode`; bỏ chặn khi = http | Bật độc lập như Slice 2. |
+| K23 | Id cũ trong giỏ (`01-0-S`) | — | CART-10 ngừng kinh doanh | Hiện "Sản phẩm không còn kinh doanh", chỉ còn nút Xoá | Không viết mã tương thích. |
+| K24 | Tồn kho (backlog 2.14) | `MockInventory` trong bộ nhớ | Nguyên tắc 1, CART-04, CF-04 | Trừ `inventory_qty` khi tạo đơn (kể cả đơn chờ chuyển khoản) = "hàng đang giữ"; `inventory` hiển thị = tồn khả dụng; hoàn khi huỷ | Không cần bảng giữ chỗ riêng. |
+
+### 4. Business Rules
+
+#### 4.1 Tham số vận hành (nguồn: bảng tham số)
+
+Lưu ở máy chủ, đổi bằng SQL cho tới khi có Cài đặt cửa hàng ở slice Admin; đổi chỉ áp cho đơn mới: tối đa **5** mỗi phiên bản/đơn; **20** sản phẩm/đơn; **30** dòng/giỏ; giỏ lưu **30 ngày** từ lần sửa cuối; phí giao **30.000 ₫** toàn quốc; miễn phí khi tiền hàng ≥ **1.000.000 ₫**; giao **2–4 ngày làm việc**; COD khi tổng ≤ **5.000.000 ₫**; giữ đơn chuyển khoản **30 phút**; **1** mã giảm tiền + **1** mã free-ship mỗi đơn; hoàn tiền **1–3 ngày làm việc**; múi giờ GMT+7.
+
+#### 4.2 Giỏ hàng
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-CART-01 | Must | CART-01 | Mỗi dòng là một phiên bản (sản phẩm + màu + size). Chỉ thêm khi đã chọn đủ màu và size; thêm lại phiên bản đã có thì cộng vào dòng cũ (cắt theo BR-CART-02). |
+| BR-CART-02 | Must | CART-02 | Số lượng mỗi dòng 1 đến min(5, tồn khả dụng). Giảm dưới 1 = xoá dòng. Chạm mức: khoá nút cộng và báo "Chỉ còn N sản phẩm cho màu, size này." (do tồn) hoặc "Mỗi đơn mua tối đa 5 sản phẩm cùng màu, size. Cần mua số lượng lớn, vui lòng gọi hotline." (do hạn mức). |
+| BR-CART-03 | Must | CART-03 | Giỏ tối đa 30 dòng; thêm dòng 31 bị chặn, báo "Giỏ hàng tối đa 30 sản phẩm khác nhau." (câu PO đề xuất, nguồn không ghi chữ). Mỗi đơn tối đa 20 sản phẩm tính trên dòng được chọn; vượt thì khoá Thanh toán, báo "Mỗi đơn tối đa 20 sản phẩm." (câu PO). Máy chủ kiểm lại cả hai mức khi báo giá/đặt (422 `validation`). |
+| BR-CART-04 | Must | CART-04 | Giỏ không giữ hàng, không trừ tồn. Hai khách cùng có món cuối trong giỏ: ai tạo đơn trước có hàng (BR-CHK-14). |
+| BR-CART-05 | Must | CART-05, 06 | Chỉ đổi màu/size trong cùng sản phẩm; phiên bản hết hàng bị khoá trong bộ chọn; giá theo phiên bản mới. Đổi sang phiên bản đã có dòng riêng: gộp, số lượng = tổng hai dòng cắt theo BR-CART-02; dòng gộp được chọn nếu một trong hai dòng đang chọn; báo "Đã gộp với sản phẩm cùng màu, size có sẵn trong giỏ.", bị cắt thì thêm "Số lượng được điều chỉnh còn N." |
+| BR-CART-06 | Must | CART-07 (khác giao diện, K4) | Mặc định mọi dòng được tính; khách chọn một phần bằng chế độ chọn hiện có. Tạm tính, hạn mức BR-CART-03, thanh free-ship chỉ tính trên dòng được chọn, và chỉ các dòng này sang checkout. Không dòng nào được chọn → khoá Thanh toán. |
+| BR-CART-07 | Must | CART-08 | Đặt đơn thành công chỉ xoá khỏi giỏ các dòng đã mua. |
+| BR-CART-08 | Must | CART-09..11 | Mỗi lần mở giỏ/checkout và sau mỗi thay đổi (chờ 300 ms sau thao tác cuối, đề xuất PO), lấy lại giá, tồn, trạng thái bán từ máy chủ. Giá đổi: tính giá mới, hiện "Giá đã thay đổi từ X₫ thành Y₫". Tồn < số đã chọn: tự giảm về số còn lại và báo "Chỉ còn N sản phẩm cho màu, size này.". Hết hàng: dòng mờ "Đã hết hàng", bỏ chọn, không chọn lại được, vẫn giữ trong giỏ. Ngừng kinh doanh (không `ACTIVE`, id không tồn tại): "Sản phẩm không còn kinh doanh", chỉ còn nút Xoá. Có dòng đổi giá/tình trạng: đầu giỏ báo "Một số sản phẩm đã thay đổi giá hoặc tình trạng hàng. Vui lòng kiểm tra trước khi thanh toán.". Lỗi mạng/5xx/429: hiện bản lưu, báo "Chưa cập nhật được giá mới nhất" (câu PO) + nút Thử lại, khoá Thanh toán. |
+| BR-CART-09 | Must | CART-12 | Khách: giỏ lưu trên trình duyệt. Thành viên: giỏ lưu máy chủ theo tài khoản, giống nhau trên mọi thiết bị (thấy thay đổi ở lần tải trang kế tiếp). Cả hai tự xoá sau 30 ngày kể từ lần sửa cuối. Khách chưa đăng nhập không gọi API giỏ. |
+| BR-CART-10 | Must | CART-13 | Đăng nhập/đăng ký khi đang có giỏ khách: gộp vào giỏ tài khoản, không ghi đè. Cùng phiên bản → cộng số lượng, cắt theo BR-CART-02; khác → thêm dòng. Chỉ các dòng vừa mang sang được chọn. Vượt 30 dòng → các dòng sửa lâu nhất chuyển vào Yêu thích trên thiết bị (không mất). Báo một lần "Đã thêm N sản phẩm từ giỏ hàng trước khi đăng nhập.". Dòng ngừng kinh doanh không mang sang. Gộp lỗi mạng: giữ giỏ khách, thử lại ở lần tải trang kế tiếp, không nhân đôi. |
+| BR-CART-11 | Must | CART-14 | Đăng nhập ngay tại checkout: chỉ các dòng khách đã chọn trước khi đăng nhập sang checkout; không tự thêm dòng cũ của tài khoản. |
+| BR-CART-12 | Must | CART-15 (+ BR-AUTH-32, K3) | Đăng xuất chủ động: giỏ không còn hiện trên thiết bị (vẫn ở tài khoản), giỏ khách mới rỗng. Hết phiên/bị thu hồi: giỏ trên thiết bị vẫn hiện; đăng nhập lại cùng tài khoản → giỏ = giỏ tài khoản + phần khách thêm sau khi hết phiên (không nhân đôi phần đã có). |
+| BR-CART-13 | Must | CART-16 | Giỏ chỉ hiện Tạm tính (giá sau khuyến mãi, đã gồm VAT) và thanh "Mua thêm X₫ để được miễn phí giao hàng" (X = ngưỡng − tạm tính dòng chọn, ngưỡng lấy từ máy chủ) hoặc "Đơn được miễn phí giao hàng" (câu PO). Voucher, phí giao, tổng chỉ ở checkout. |
+| BR-CART-14 | Should | CART-02 | Xoá dòng có "Hoàn tác" trong 5 giây; bấm thì dòng trở lại đúng số lượng và trạng thái chọn. |
+
+#### 4.3 Thông tin người nhận
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-CHK-01 | Must | CHK-01 | Checkout một trang: Liên hệ → Địa chỉ → Vận chuyển → Thanh toán, tóm tắt đơn luôn hiện. Chỉ nhận dòng được chọn ở giỏ; không có dòng → về `/cart`. |
+| BR-CHK-02 | Must | CHK-02 | Không bắt buộc đăng nhập. Đăng nhập giữa chừng giữ thông tin đã nhập. Cookie phiên sai/thu hồi/hết hạn lúc đặt: không 401, đơn tạo như đơn khách. Phiên staff/admin không gắn đơn. |
+| BR-CHK-03 | Should | CHK-02 | Lưu nháp thông tin đang nhập trên thiết bị 24 giờ; xoá khi đặt thành công hoặc đăng xuất. |
+| BR-CHK-04 | Must | CHK-03, 06 | Bỏ khoảng trắng hai đầu trước khi kiểm. Họ tên người nhận 2–50 ký tự, có ít nhất 1 chữ cái. SĐT người nhận: di động 10 số đầu 03/05/07/08/09, nhận dạng `+84` (lưu `0xxxxxxxxx`). Địa chỉ cụ thể 5–200 ký tự. Ghi chú không bắt buộc, ≤ 250 ký tự, chỉ cho shipper. Tên, SĐT là của người nhận; email là của người đặt. |
+| BR-CHK-05 | Must | CHK-04, 05 | Email bắt buộc với khách, ≤ 100 ký tự, đúng dạng, lưu chữ thường. Thành viên được điền sẵn email tài khoản, sửa được. Khách nhập email đã có tài khoản: vẫn đặt được, gợi ý đăng nhập; đơn không tự gắn vào tài khoản đó. |
+| BR-CHK-06 | Must (phạm vi chờ xác nhận) | CHK-03, CHK-10, PAY-02 | Tỉnh/Thành và Phường/Xã chọn từ danh mục 2 cấp sau sáp nhập 2025 do máy chủ cung cấp (công khai); đổi tỉnh xoá phường. Máy chủ kiểm `wardCode` thuộc `provinceCode`, sai → 422 `invalid-address`. Đổi địa chỉ thì phí giao, ngày giao, điều kiện COD tính lại ngay. Chưa có địa chỉ: "Phí giao hàng: tính sau khi nhập địa chỉ". Phạm vi danh mục theo câu hỏi 3. |
+| BR-CHK-07 | Must | CHK-11 | Mặc định hoá đơn cá nhân. Chọn "Xuất hóa đơn công ty" thì bắt buộc tên công ty (2–200 ký tự, đề xuất PO), mã số thuế (10 số hoặc 10 số + `-` + 3 số), địa chỉ (5–200), email nhận hoá đơn; không sửa sau khi đặt. Slice 3 chỉ lưu; xuất hoá đơn điện tử thật là Won't. |
+| BR-CHK-08 | Must | CHK-12 | Ô đồng ý Điều khoản mua bán, Chính sách đổi trả, Chính sách bảo mật không tick sẵn; chưa tick → không đặt được (máy chủ 422 `validation`, `field: acceptedTerms`); lưu thời điểm đồng ý. |
+| BR-CHK-09 | Must | CHK-13 | Lỗi hiện dưới trường khi rời trường; bấm Đặt hàng khi còn lỗi → cuộn tới trường lỗi đầu tiên. Máy chủ kiểm lại mọi trường, sai → 422 `validation` kèm `field`, FE hiện tại đúng ô. |
+
+#### 4.4 Voucher
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-VOU-01 | Must | CHK-VC-01 | Mỗi đơn tối đa 1 mã giảm tiền hàng (% hoặc số tiền) và 1 mã miễn phí giao hàng. Áp mã giảm thứ hai thay mã giảm cũ; áp mã free-ship thứ hai thay mã free-ship cũ. Voucher cộng dồn với giá khuyến mãi trên sản phẩm (trừ BR-VOU-13). |
+| BR-VOU-02 | Must | CHK-VC-01, 02, 05 | Thuộc tính mã: `code` (A–Z, 0–9, 4–20 ký tự, duy nhất, so không phân biệt hoa thường); loại `percent` (1–90 %, tuỳ chọn mức giảm tối đa) / `fixed` (số tiền > 0) / `free-shipping`; đơn tối thiểu; bật/tắt; `startsAt`–`endsAt` giờ Việt Nam; tổng lượt (trống = không giới hạn); lượt mỗi khách (mặc định 1); chỉ thành viên (có/không); chỉ đơn đầu tiên (có/không). Seed (đề xuất PO): `N2FWELCOME15` percent 15, đơn đầu tiên, tối thiểu 100.000; `N2FFREESHIP` free-shipping, tối thiểu 300.000; cả hai công khai, hiệu lực tới 31/12/2027 23:59:59, không giới hạn tổng, 1 lượt/khách. |
+| BR-VOU-03 | Must | CHK-VC-02 | Kiểm theo thứ tự, dừng ở điều kiện đầu tiên không đạt: (1) mã tồn tại; (2) đang bật và trong hiệu lực; (3) còn lượt chung (lượt đang giữ cho đơn chờ thanh toán tính là đã dùng); (4) mã "chỉ thành viên" cần đăng nhập; (5) khách còn lượt riêng — khách = tài khoản, hoặc với khách vãng lai: SĐT **hoặc** email trùng là cùng khách; (6) mã đơn đầu tiên chỉ cho khách chưa có đơn còn hiệu lực (đơn không ở `cancelled`); (7) danh mục / hàng đang giảm (Should, BR-VOU-13); (8) tiền hàng đủ điều kiện ≥ mức tối thiểu (bằng là đạt); (9) mã free-ship chỉ áp khi đơn đang phải trả phí giao. |
+| BR-VOU-04 | Must | CHK-VC-03 | Lý do hiện ngay dưới ô nhập, giữ nguyên mã khách gõ; mỗi lý do một câu, đúng chữ: "Mã giảm giá không tồn tại." / "Mã này áp dụng từ {ngày giờ}." / "Mã giảm giá đã hết hạn." / "Mã giảm giá đã hết lượt sử dụng." / "Đăng nhập để dùng mã này." / "Bạn đã dùng mã này đủ số lần cho phép." / "Mã chỉ áp dụng cho đơn hàng đầu tiên." / "Mua thêm {X}₫ để dùng mã này (đơn tối thiểu {Y}₫)." / "Đơn của bạn đã được miễn phí giao hàng." (thêm "Mã chỉ áp dụng cho {danh mục}." / "Mã không áp dụng cho sản phẩm đang giảm giá." khi làm BR-VOU-13). Máy chủ trả mã lý do ổn định; FE ghép câu. Mã bị từ chối không tính lượt. |
+| BR-VOU-05 | Must | CHK-VC-04, 05; PAY-02 | Tổng thanh toán = Tạm tính − Giảm giá + Phí vận chuyển. Mã free-ship đưa phí vận chuyển về 0, không tạo dòng giảm giá (API vẫn trả `shippingFee` và `shippingDiscount` như model FE). Ngưỡng miễn phí xét trên tiền hàng trước voucher. Mã %: tính trên tiền hàng đủ điều kiện, làm tròn xuống tới 1.000 ₫ (giả định tạm, K8), không vượt mức giảm tối đa. Mã số tiền: không vượt tiền hàng đủ điều kiện. Tiền hàng sau giảm không âm. |
+| BR-VOU-06 | Must | CHK-VC-06 | Số tiền giảm chia cho từng dòng theo tỷ lệ giá trị dòng, làm tròn xuống tới đồng, phần dư cộng vào dòng giá trị lớn nhất (đề xuất PO); tổng phần chia = Giảm giá; lưu trên đơn. |
+| BR-VOU-07 | Must | CHK-VC-07 | Tóm tắt đơn hiện: Tạm tính; Giảm giá kèm tên mã (dạng -58.000₫); Phí vận chuyển hoặc "Miễn phí" kèm lý do (đơn từ 1.000.000₫ / mã free-ship); Tổng thanh toán. |
+| BR-VOU-08 | Must | CHK-VC-09 | Mã đã áp được kiểm lại khi đơn thay đổi (số lượng, dòng chọn, địa chỉ, đăng nhập/đăng xuất); không còn đủ điều kiện → gỡ mã, tính lại tổng, báo lý do (BR-VOU-04). |
+| BR-VOU-09 | Must | CHK-VC-10 | Nhập mã không tồn tại 10 lần trong 15 phút (theo IP) → khoá kiểm mã 15 phút: 429 `rate-limited` kèm `retryAfterSeconds`; FE khoá ô nhập, báo "Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút." (câu PO). |
+| BR-VOU-10 | Must | CHK-VC-11 | Kiểm lại mã lúc bấm Đặt hàng, không ân hạn. Mã hết hạn, hết lượt, bị tắt giữa chừng (kể cả hai khách giành lượt cuối): không tạo đơn, gỡ mã, trả 409 `voucher-changed` kèm báo giá mới; FE báo "Mã X vừa hết hiệu lực. Tổng thanh toán mới là Y₫. Bấm Đặt hàng để tiếp tục.", giữ thông tin đã nhập. |
+| BR-VOU-11 | Must | CHK-VC-12 | Đơn tạo trước giờ mã hết hạn giữ nguyên giảm giá, kể cả khi khách chuyển khoản sau giờ đó trong thời gian giữ đơn. |
+| BR-VOU-12 | Must | CHK-VC-13 | Lượt bị trừ khi tạo đơn (kể cả đơn chờ chuyển khoản), trong cùng giao dịch tạo đơn; đồng thời không vượt tổng lượt. Đơn huỷ trước khi giao → trả lượt nếu mã còn hạn; mã đã hết hạn thì không trả. Trả hàng sau giao không trả lượt (slice sau). |
+| BR-VOU-13 | Should | CHK-VC-01, 02(7) | Mã giới hạn theo danh mục và tuỳ chọn "Không áp dụng cho sản phẩm đang giảm giá" (sản phẩm có `compareAtPrice` > `price`); tiền hàng đủ điều kiện chỉ tính các dòng hợp lệ. |
+
+#### 4.5 Vận chuyển, đặt hàng, tồn kho
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-CHK-10 | Must | CHK-PAY-02 | Phí giao 30.000 ₫ mọi tỉnh; miễn phí khi tiền hàng (dòng chọn, trước voucher) ≥ 1.000.000 ₫. Báo giá máy chủ trả tạm tính, giảm giá, phí, giảm phí, tổng, ngưỡng; giá gửi từ trình duyệt bị bỏ qua. |
+| BR-CHK-11 | Must | CHK-PAY-03 | Ngày giao dự kiến = khoảng 2–4 ngày làm việc tính từ khi đơn vào `to_ship`; không tính Chủ nhật và ngày lễ, Tết (danh sách ngày nghỉ là tham số máy chủ, seed lễ chính thức 2026–2027); vào `to_ship` sau 16:00 thì đếm từ ngày làm việc kế tiếp. Trước khi đặt, hiển thị theo giả định vào `to_ship` ngay lúc đó. Xã đảo/vùng sâu: Won't. |
+| BR-CHK-12 | Must | CHK-CF-01, 03 | Bấm Đặt hàng: máy chủ kiểm lại một lần còn bán, tồn, giá, voucher, phí giao, điều kiện phương thức thanh toán, địa chỉ, hạn mức BR-CART-02/03. Yêu cầu mang đơn giá từng dòng, phí giao và tổng khách đang thấy; có số khác (kể cả giảm) → 409 `price-changed` kèm báo giá mới, không tạo đơn; FE hiện số cũ, số mới, tổng mới và "Giá một số sản phẩm vừa thay đổi. Vui lòng xem lại tổng thanh toán và bấm Đặt hàng để xác nhận.", giữ thông tin. |
+| BR-CHK-13 | Must | CHK-CF-02 | Thiếu hàng ở bất kỳ dòng nào → không tạo đơn, không tạo đơn thiếu; 409 `stock-changed` kèm mọi dòng `{variantId, available}`; FE đánh dấu "Chỉ còn N sản phẩm" / "Đã hết hàng" và nút "Cập nhật theo số còn lại". |
+| BR-CHK-14 | Must | CHK-CF-04, CART-04, nguyên tắc 1, backlog 2.14 | Tạo đơn, trừ `inventory_qty` mọi dòng, trừ lượt voucher nằm trong **một** giao dịch; dòng chỉ trừ khi còn đủ; tồn không bao giờ âm kể cả khi đồng thời; người sau nhận BR-CHK-13. Huỷ/hết hạn cộng lại đúng số đã trừ, đúng một lần. Tồn mới hiện ở PLP/PDP theo BR-CAT-11. |
+| BR-CHK-15 | Must | CHK-CF-05 | Nút Đặt hàng khoá tới khi có kết quả. Mỗi lượt checkout có một khoá `Idempotency-Key` (16–64 ký tự `A-Za-z0-9-`; thiếu/sai → 422); gửi lại cùng khoá + cùng nội dung trong 24 giờ trả đúng đơn đã tạo (không trừ kho, không trừ lượt, không gửi thư lần nữa); cùng khoá khác nội dung → 409 `idempotency-conflict`; hai yêu cầu cùng khoá đồng thời → 1 đơn. Mất kết nối: không tự gửi lại, hiện nút Thử lại dùng cùng khoá. Sau khi đặt, Back hoặc F5 về trang đơn vừa đặt (K17), không mở lại form. |
+| BR-CHK-16 | Should | CHK-CF-06 | Cùng SĐT đặt đơn thứ hai giống hệt sản phẩm và số lượng trong 10 phút: máy chủ trả 409 `possible-duplicate` (kèm mã đơn trước), FE hỏi lại; khách xác nhận thì tạo đơn. |
+| BR-CHK-17 | Must | CHK-CF-07 | Mã đơn = `N2F` + YYMMDD (ngày đặt, giờ Việt Nam) + 4 chữ số ngẫu nhiên không trùng trong ngày (vd. `N2F2611040427`); không đổi, không tái sử dụng; tra cứu không phân biệt hoa thường, có hoặc không dấu `#`. |
+| BR-CHK-18 | Must | CHK-CF-04 | Đơn chốt bản chụp từng dòng (slug, tên, màu, size, SKU, đơn giá, giá gốc, `mediaId`, số lượng, phần giảm đã chia), tạm tính, giảm giá kèm mã, phí giao, tổng, người nhận, địa chỉ (tên tỉnh/phường), ghi chú, phương thức, hoá đơn; đổi giá/cấu hình sau đó không đổi đơn. |
+
+#### 4.6 Thanh toán và trạng thái
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-CHK-19 | Must | CHK-PAY-01, 05 | Phương thức: COD và chuyển khoản QR (QR theo BR-CHK-21). COD dùng được khi tổng ≤ 5.000.000 ₫, SĐT không có ≥ 2 đơn COD bị từ chối nhận trong 6 tháng và không đang có 3 đơn COD chưa giao. Phương thức không dùng được vẫn hiện, bị khoá kèm lý do. Mặc định chọn COD nếu đủ điều kiện; tổng đổi làm COD không còn hợp lệ → tự chuyển sang chuyển khoản và báo khách. Máy chủ kiểm lại (422 `validation`, `field: paymentMethod`). |
+| BR-CHK-20 | Must | CHK-PAY-06, 14 | Đơn COD tạo ở `to_ship` + thanh toán `pending`. Trang thành công và email ghi "nine2fine sẽ gọi xác nhận trong 2 giờ làm việc" trừ thành viên đã có ≥ 1 đơn `completed` và đơn này < 1.000.000 ₫. Gọi xác nhận và huỷ do không liên lạc được làm ở slice Admin. |
+| BR-CHK-21 | Must (chờ xác nhận, câu hỏi 2) | CHK-PAY-08..12, CF-12 | Chuyển khoản QR: đơn vào `to_pay` + `pending`; trang thanh toán có QR, số tiền chính xác, nội dung = mã đơn, đếm ngược 30 phút, không gia hạn; hàng và lượt voucher được giữ. Mở lại trang từ email, tra cứu đơn hoặc Đơn hàng của tôi (chỉ chủ đơn hoặc khách đã xác minh OTP). Nhận đủ tiền (dịch vụ đối soát báo) → `paid`, `to_pay` → `to_ship`, email "Đã nhận thanh toán". Thiếu: báo số còn thiếu; hết giờ vẫn thiếu → huỷ, hoàn số đã chuyển. Thừa: xác nhận bình thường, hoàn phần thừa. Tiền về sau khi huỷ: không khôi phục, hoàn 100%. Hoàn trong 1–3 ngày làm việc (kế toán làm tay). Hết 30 phút chưa đủ tiền → `cancelled`, hoàn kho, trả lượt, email báo huỷ, trong ≤ 2 phút sau hạn (đề xuất PO). Chưa có dịch vụ đối soát: ẩn QR ở HTTP. |
+| BR-CHK-22 | Must (tên trạng thái chờ xác nhận, câu hỏi 1) | CHK-PAY-14, COMMON-01/02 | Trạng thái đơn và thanh toán là hai trường riêng. Ánh xạ sang FE: `to_pay` → `pending-payment`; `to_ship` → `processing`; `to_receive` → `shipping`/`delivering`; `completed` → `completed`; `cancel_requested` → (FE chưa có, thêm khi làm); `cancelled` → `cancelled`. Thanh toán: `pending`, `paid`, `failed`, `refunded`, `partially_refunded`. Slice 3 chỉ phát sinh: COD `to_ship`+`pending`; QR `to_pay`+`pending` → `to_ship`+`paid` hoặc `cancelled`; huỷ → `cancelled`. Mọi chuyển khác qua slice Admin (thử bằng SQL). Mỗi lần đổi lưu thời điểm và người đổi (`customer`/`shop`/`system`); DB từ chối giá trị ngoài tập. |
+| BR-CHK-23 | Must (phần `to_ship` chờ xác nhận, câu hỏi 4) | CHK-PAY-11, 14 | Ở `to_pay` khách tự huỷ bất kỳ lúc nào, không cần duyệt. Ở `to_ship`: đề xuất PO huỷ thẳng như FE hiện tại cho tới khi có Admin. Khác → 409 `not-cancellable`. Huỷ: `cancelled`, `cancelledBy = customer`, hoàn kho và trả lượt (BR-VOU-12) trong cùng giao dịch, gửi email "đơn đã huỷ". Huỷ lần hai → 409, không hoàn thêm. Không đổi phương thức thanh toán trên đơn đã tạo. |
+| BR-CHK-24 | Should | CHK-PAY-11, 12 | "Đặt lại đơn này" ở đơn đã huỷ: đưa sản phẩm về giỏ, điền sẵn thông tin giao hàng; giá, tồn, voucher tính lại như đơn mới. |
+
+#### 4.7 Xác nhận, theo dõi, thông báo
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-CHK-25 | Must | CHK-CF-09 | Trang thành công hiện mã đơn, tổng thanh toán, phương thức, ngày giao dự kiến, email đã nhận xác nhận, "Theo dõi đơn hàng" (thành viên → `/account/orders/:id`; khách → `/track-order` điền sẵn mã) và "Tiếp tục mua sắm"; câu gọi xác nhận theo BR-CHK-20. Khách vãng lai được mời tạo tài khoản; đơn vừa đặt không tự gắn vào tài khoản mới. |
+| BR-CHK-26 | Must | CHK-CF-08 (+ COMMON-06.5 chờ) | Chỉ có mã đơn thì không xem được đơn. Khách tra cứu bằng mã đơn + email đặt hàng: máy chủ luôn trả cùng phản hồi "đã gửi mã" và chỉ gửi OTP khi khớp; nhập OTP đúng → xem chi tiết, huỷ, mở trang thanh toán của đơn đó trong 30 phút (đề xuất PO). Sai mã đơn/email/OTP → "Không tìm thấy đơn hàng phù hợp". Thông số OTP (độ dài, hạn, gửi lại, khoá sai) dùng như BR-AUTH-04..09 (giả định tạm). Mã, email, OTP gửi trong body, không đặt vào URL; phản hồi không có `userId`. |
+| BR-CHK-27 | Must | — (AC-AUTH-68) | Thành viên xem danh sách đơn của mình (mới nhất trước, 10 đơn mỗi lần "Xem thêm"), chi tiết, huỷ. Phiên hỏng → 401 `unauthorized`, FE chuyển `/auth/login?returnUrl=…` với "Phiên đăng nhập đã hết hạn…", giỏ còn nguyên. Đơn người khác hoặc không tồn tại → 404. Đơn khách trùng email/SĐT không tự gắn. |
+| BR-CHK-28 | Must | CHK-CF-10..12 | Gửi email trong 5 phút sau khi tạo đơn; lỗi thì thử lại tối đa 3 lần; vẫn lỗi → báo CSKH qua email hỗ trợ (phthang0872@gmail.com, chốt 2026-11-07); đơn không bao giờ bị huỷ vì email lỗi; log không chứa email đầy đủ. Tiêu đề "nine2fine – Xác nhận đơn hàng #{mã}" / "nine2fine – Đơn #{mã} đang chờ thanh toán". Nội dung: mã và trạng thái; sản phẩm (ảnh, tên, màu, size, số lượng, đơn giá); tạm tính, giảm giá kèm mã, phí giao, tổng; phương thức; người nhận, SĐT, địa chỉ; ngày giao dự kiến; hoá đơn công ty nếu có; nút tra cứu/xem đơn; cách huỷ và link chính sách đổi trả; hotline CSKH. Email chờ thanh toán thêm số tiền, hạn, nút "Thanh toán ngay", không in số tài khoản. Mọi email có câu: "nine2fine không yêu cầu chuyển khoản ngoài trang thanh toán của đơn và không hỏi mật khẩu hay mã OTP." |
+| BR-CHK-29 | Must | CHK-CF-13 (phần Slice 3) | Gửi 1 email cho mỗi sự kiện: đơn đã huỷ (kèm lý do, thông tin hoàn tiền nếu đã trả); đã nhận thanh toán (khi có QR). Email yêu cầu huỷ, bàn giao vận chuyển, giao thành công → slice Admin. |
+
+#### 4.8 Vận hành
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-CHK-30 | Must | — (đề xuất PO) | Giới hạn theo IP, tách bộ đếm catalog/auth: báo giá + API giỏ 120 yêu cầu/60 giây; đặt hàng 10/10 phút; tra cứu đơn khách (gửi mã + nhập OTP) 10/15 phút. Vượt → 429 `rate-limited` + `retryAfterSeconds`. Thao tác bình thường (đổi số lượng 20 lần, áp 3 mã, đặt 1 đơn) không chạm. |
+| BR-CHK-31 | Must | nguyên tắc 3 | Lỗi theo BR-AUTH-36 với mã ổn định: `validation` (+`field`), `invalid-address`, `stock-changed`, `price-changed`, `voucher-changed`, `idempotency-conflict`, `possible-duplicate` (nếu làm), `not-found`, `not-cancellable`, `unauthorized`, `rate-limited`, lỗi máy chủ; không stack trace/SQL. FE map theo `code` trong body. Mọi lỗi kể cả mất mạng: giữ form, giỏ, mã voucher; báo rõ việc cần làm. |
+| BR-CHK-32 | Must | — | Cờ `checkoutMode`. = http: giỏ (máy chủ + báo giá), checkout, trang thành công, `/track-order`, `/payment/:id` (nếu QR), địa giới, phần đơn hàng của tài khoản gọi API; phần còn lại Account và Admin vẫn mock; điền họ tên/email từ phiên, ẩn "Địa chỉ đã lưu", "Mã của bạn", ghi chú "Bản trải nghiệm". = mock: như trước Slice 3. |
+| BR-CHK-33 | Must | nguyên tắc 5 | Migration chỉ cộng thêm (như BR-CAT-23); bảng mới bật RLS; seed tham số, voucher, địa giới, ngày nghỉ idempotent (chạy lại không trùng, không đặt lại lượt đã dùng). |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu: giá seed Slice 2 (off-duty-top 390.000, weekend-shirt 550.000, city-vest 790.000, after-hours-dress 890.000, the-everyday-blazer 1.290.000); blazer Đen/S tồn 5. Voucher seed theo BR-VOU-02. "T" = dữ liệu thử do test tạo. SĐT thử `0912345678`, email `a@x.vn`. AC của BR Should là Should.
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-CART-01 | CART-01 | PDP blazer chưa chọn size | Bấm Thêm vào giỏ; chọn Đen/S rồi thêm 2 lần | Lần 1 không thêm, nhắc chọn size; sau đó giỏ có 1 dòng Đen/S số lượng 2. |
+| AC-CART-02 | CART-02 | Dòng off-duty-top số lượng 5 (tồn 6); dòng blazer Đen/S số lượng 3 nhưng DB tồn 3 | Bấm "+" ở từng dòng | Dòng 1 giữ 5, nút "+" khoá, câu "Mỗi đơn mua tối đa 5 sản phẩm cùng màu, size..."; dòng 2 giữ 3, câu "Chỉ còn 3 sản phẩm cho màu, size này.". |
+| AC-CART-03 | CART-02 | Dòng số lượng 1 | Bấm "−" | Dòng bị xoá. |
+| AC-CART-04 | CART-03 | Giỏ 30 dòng | Thêm phiên bản thứ 31 | Bị chặn, giỏ vẫn 30, câu "Giỏ hàng tối đa 30 sản phẩm khác nhau.". |
+| AC-CART-05 | CART-03 | 5 dòng × 5 = 25 sản phẩm | Chọn cả 5; bỏ chọn 1 dòng; gọi API báo giá 25 sản phẩm | Chọn 5: Thanh toán khoá, "Mỗi đơn tối đa 20 sản phẩm."; còn 20: mở; API 422 `validation`. |
+| AC-CART-06 | CART-05 | Giỏ: blazer Đen/S × 4 (chọn) và Đen/M × 3 (không chọn); tồn đủ | Đổi Đen/M sang Đen/S | 1 dòng Đen/S số lượng 5, được chọn; câu "Đã gộp..." và "Số lượng được điều chỉnh còn 5.". Size hết hàng trong bộ chọn bị khoá. |
+| AC-CART-07 | CART-06, 07 | Giỏ 3 dòng | Chọn 2 dòng, Thanh toán, đặt COD thành công | Tạm tính và thanh free-ship chỉ theo 2 dòng; checkout có 2 dòng; sau đặt giỏ còn 1 dòng. Bỏ chọn hết → Thanh toán khoá. |
+| AC-CART-08 | CART-08 | Giỏ off-duty-top (lưu 390.000); DB đổi 420.000 | Mở `/cart` | Dòng 420.000₫, "Giá đã thay đổi từ 390.000₫ thành 420.000₫", thông báo chung ở đầu giỏ. |
+| AC-CART-09 | CART-08 | Dòng A số lượng 4, DB tồn 2; dòng B tồn 0; dòng C sản phẩm chuyển `DRAFT`; dòng id `01-0-S` | Mở `/cart` | A tự giảm 2 kèm câu "Chỉ còn 2..."; B mờ "Đã hết hàng", bỏ chọn, không chọn lại được, vẫn trong giỏ; C và `01-0-S` hiện "Sản phẩm không còn kinh doanh", chỉ có nút Xoá. |
+| AC-CART-10 | CART-08 | Giỏ 2 dòng; chặn `*/api/*` | Mở `/cart`; bỏ chặn, bấm Thử lại | Khi chặn: giỏ hiện bản lưu, "Chưa cập nhật được giá mới nhất", Thanh toán khoá. Bỏ chặn: giá máy chủ, mở Thanh toán. Bấm "+" 5 lần trong 1 giây → 1 request báo giá. |
+| AC-CART-11 | CART-09 | Thành viên A thêm 2 dòng trên trình duyệt 1 | Đăng nhập A trên trình duyệt 2, tải lại | Có đủ 2 dòng. Khách chưa đăng nhập: không có request API giỏ. |
+| AC-CART-12 | CART-09 | Giỏ khách và giỏ của A sửa lần cuối 31 ngày trước (chỉnh thời gian bằng SQL/đồng hồ thử) | Mở giỏ | Cả hai rỗng. Mốc 29 ngày: còn nguyên. |
+| AC-CART-13 | CART-10 | Tài khoản: X × 2, Y × 1; khách: X × 2, Z × 1, dòng `01-0-S` | Đăng nhập | X = 4, Y = 1, Z = 1; chỉ X, Z được chọn; không có `01-0-S`; báo đúng 1 lần "Đã thêm 2 sản phẩm từ giỏ hàng trước khi đăng nhập.". |
+| AC-CART-14 | CART-10 | Tài khoản X × 4, khách X × 3, tồn 10; tài khoản 29 dòng, khách 3 dòng mới | Đăng nhập | X = 5 (cắt hạn mức). Giỏ 30 dòng; 2 dòng sửa lâu nhất nằm trong Yêu thích trên thiết bị. |
+| AC-CART-15 | CART-10 | Khách 2 dòng; chặn `*/api/*` khi đăng nhập xong | Bỏ chặn, tải lại 2 lần | Sau tải lại lần 1 giỏ gộp đúng; lần 2 không đổi (không nhân đôi). |
+| AC-CART-16 | CART-11 | Tài khoản có dòng Y; khách chọn X ở giỏ, vào checkout, đăng nhập tại đó | Quay lại checkout | Checkout chỉ có X; thông tin đã nhập còn nguyên. |
+| AC-CART-17 | CART-12 | A đăng nhập, giỏ 2 dòng | Đăng xuất; đăng nhập lại | Sau đăng xuất giỏ trống (badge 0); đăng nhập lại thấy 2 dòng, không nhân đôi. |
+| AC-CART-18 | CART-12 | A giỏ 2 dòng; phiên A bị thu hồi | Tải lại, thêm dòng Z, đăng nhập lại A | Sau thu hồi giỏ vẫn 2 dòng; sau đăng nhập: 3 dòng, số lượng 2 dòng cũ không đổi. |
+| AC-CART-19 | CART-13 | Giỏ off-duty-top × 1 rồi thêm blazer | Xem `/cart` | Không có phí giao/voucher/tổng; lần 1 "Mua thêm 610.000₫ để được miễn phí giao hàng"; lần 2 "Đơn được miễn phí giao hàng". |
+| AC-CART-20 | CART-14 | Giỏ 2 dòng | Xoá 1 dòng; bấm Hoàn tác trong 5 giây; xoá lại, chờ 6 giây | Lần 1 dòng trở lại đúng số lượng; lần 2 mất hẳn. |
+| AC-CHK-01 | 01, 02 | Khách chưa đăng nhập, chưa chọn dòng nào / có 1 dòng | Mở `/checkout` | Không dòng: về `/cart`. Có dòng: một trang đủ 4 phần, tóm tắt hiện; đặt COD thành công không bị đòi đăng nhập. |
+| AC-CHK-02 | 02 | A đăng nhập, sửa cookie `n2f_sid` thành `xxx` trước khi bấm đặt | Đặt hàng | 201 (không 401); đơn không có trong lịch sử A; tra cứu được bằng mã + email + OTP. |
+| AC-CHK-03 | 03 | Khách điền nửa form | Tải lại; sau 25 giờ mở lại; đặt thành công rồi mở checkout | Lần 1 còn dữ liệu; sau 25 giờ trống; sau khi đặt trống. |
+| AC-CHK-04 | 04 | Checkout | Họ tên "A", "12345", 51 ký tự; SĐT `0212345678`, `091234567`, `84912345678`; địa chỉ 4 ký tự, 201 ký tự; ghi chú 251 ký tự | Mỗi lần lỗi tại đúng ô (FE) và 422 `validation` đúng `field` (API); 0 đơn. `+84912345678` hợp lệ, lưu `0912345678`; tên 2 và 50 ký tự hợp lệ. |
+| AC-CHK-05 | 05 | Khách | Để trống email; email 101 ký tự; `a@`; email đã có tài khoản | 3 lần đầu lỗi `email`, 0 đơn. Email đã có tài khoản: có gợi ý đăng nhập, đặt thành công, đơn không vào lịch sử tài khoản đó. Thành viên: email điền sẵn, sửa được. |
+| AC-CHK-06 | 06 | Danh mục đã seed | Chọn tỉnh rồi phường, đổi tỉnh; API đặt với `provinceCode` lạ; `wardCode` của tỉnh khác | Đổi tỉnh xoá phường. API: 422 `invalid-address` kèm `field`; 0 đơn. Chưa nhập địa chỉ: "Phí giao hàng: tính sau khi nhập địa chỉ". |
+| AC-CHK-07 | 07 | Chọn hoá đơn công ty | MST `0123456789-001`; `012345678`; bỏ trống email nhận | Lần 1 lưu vào đơn; 2 lần sau lỗi đúng trường, 0 đơn. |
+| AC-CHK-08 | 08 | Ô điều khoản lúc mở trang | Bấm đặt khi chưa tick; gửi API `acceptedTerms: false` | Ô không tick sẵn; không đặt được; API 422 `field: acceptedTerms`. Đơn hợp lệ lưu thời điểm đồng ý. |
+| AC-CHK-09 | 09 | Form có lỗi ở SĐT và địa chỉ | Rời ô SĐT; bấm Đặt hàng | Lỗi hiện dưới SĐT khi rời ô; bấm đặt → cuộn tới SĐT (lỗi đầu tiên). |
+| AC-VOU-01 | VOU-01 | off-duty-top × 1 | Áp `N2FWELCOME15`, rồi `N2FFREESHIP`, rồi mã giảm T `T50K` | Sau 2 mã: giảm 58.000, phí "Miễn phí" (mã), tổng 332.000. Áp `T50K` thay `N2FWELCOME15`: giảm 50.000, tổng 340.000; free-ship vẫn còn. |
+| AC-VOU-02 | VOU-03, 04 | T: `TFUT` bắt đầu ngày mai 08:00; `TEXP` hết hạn 1 giây trước; `TOFF` bị tắt; `TOUT` tổng 1 đã dùng 1; `TMEM` chỉ thành viên | Khách áp `KHONGCO`, `TFUT`, `TEXP`, `TOFF`, `TOUT`, `TMEM` | Lần lượt: "Mã giảm giá không tồn tại."; "Mã này áp dụng từ 08:00 {ngày mai}."; "Mã giảm giá đã hết hạn." (`TEXP`, `TOFF`); "Mã giảm giá đã hết lượt sử dụng."; "Đăng nhập để dùng mã này."; ô vẫn giữ mã đã gõ; tổng không đổi. |
+| AC-VOU-03 | VOU-03 | Mã `TOUT` vừa hết hạn **và** hết lượt | Áp | Chỉ hiện lý do của điều kiện đầu (hết hạn). |
+| AC-VOU-04 | VOU-03 | Đơn D1 của khách (`0912345678`, `a@x.vn`) dùng `N2FWELCOME15`, chưa huỷ | Khách khác trình duyệt dùng cùng SĐT, email khác; rồi email `a@x.vn`, SĐT khác; huỷ D1 rồi áp lại | Hai lần đầu: "Bạn đã dùng mã này đủ số lần cho phép." (hoặc "Mã chỉ áp dụng cho đơn hàng đầu tiên."); sau huỷ D1: áp được. |
+| AC-VOU-05 | VOU-03 | Khách có 1 đơn COD còn hiệu lực không dùng mã | Áp `N2FWELCOME15` | "Mã chỉ áp dụng cho đơn hàng đầu tiên.". Khách có đơn duy nhất đã huỷ: áp được. |
+| AC-VOU-06 | VOU-03, 04 | — | `N2FFREESHIP` với T giá 290.000; với off-duty-top 390.000; với blazer | 290.000: "Mua thêm 10.000₫ để dùng mã này (đơn tối thiểu 300.000₫)."; 390.000: phí về 0, không có dòng giảm giá; blazer: "Đơn của bạn đã được miễn phí giao hàng.", lượt không tăng. |
+| AC-VOU-07 | VOU-05 | — | Báo giá T 999.000; T 1.000.000; blazer + `N2FWELCOME15`; T % 50 trần 100.000 trên 390.000; T số tiền 500.000 trên 390.000 | 999.000: phí 30.000, tổng 1.029.000. 1.000.000: miễn phí, tổng 1.000.000. Blazer: giảm 193.000 (làm tròn xuống), vẫn miễn phí (ngưỡng trước voucher), tổng 1.097.000. Trần: giảm 100.000. Số tiền: giảm 390.000, tạm tính sau giảm 0, tổng 30.000. |
+| AC-VOU-08 | VOU-06 | Đơn: off-duty-top 390.000 + weekend-shirt 550.000, `N2FWELCOME15` (giảm 141.000) | Đặt, xem DB | Phần giảm từng dòng lưu trên đơn, tổng hai phần = 141.000, dòng 550.000 nhận phần dư. |
+| AC-VOU-09 | VOU-07 | Đơn có mã giảm và free-ship | Xem tóm tắt | Có Tạm tính; "Giảm giá (N2FWELCOME15) -58.000₫"; "Phí vận chuyển: Miễn phí" kèm lý do; Tổng. |
+| AC-VOU-10 | VOU-08 | Áp `N2FFREESHIP` cho off-duty-top × 1 | Thêm blazer vào đơn; sau đó bỏ blazer | Thêm: mã bị gỡ, báo "Đơn của bạn đã được miễn phí giao hàng.", tổng tính lại. Đăng xuất khi đang áp `TMEM`: mã bị gỡ, báo "Đăng nhập để dùng mã này.". |
+| AC-VOU-11 | VOU-09 | Một IP | Nhập 10 mã không tồn tại trong 15 phút, rồi mã thứ 11 (kể cả mã đúng) | Lần 11: 429, ô nhập khoá, câu "Bạn đã nhập sai quá nhiều lần..."; sau 15 phút nhập lại được. 9 lần sai: chưa khoá. |
+| AC-VOU-12 | VOU-10 | off-duty-top × 1, đã áp mã giảm T `TEXP2` (hết hạn sau 1 phút), khách ở checkout | Chờ hết hạn, bấm Đặt hàng | 409 `voucher-changed`, 0 đơn, mã bị gỡ, câu "Mã TEXP2 vừa hết hiệu lực. Tổng thanh toán mới là 420.000₫. Bấm Đặt hàng để tiếp tục.", form giữ nguyên; bấm lại → 201. |
+| AC-VOU-13 | VOU-10, 12 | Mã T tổng 1 lượt | 2 khách đặt cùng lúc với mã (lặp 10 lần với mã mới) | Mỗi lần đúng 1 đơn có mã; người kia 409 `voucher-changed`, không có đơn, tồn không đổi. |
+| AC-VOU-14 | VOU-11 | Đơn D tạo lúc mã còn hạn | Mã hết hạn; xem đơn D | D giữ nguyên giảm giá và tổng. |
+| AC-VOU-15 | VOU-12 | Đơn D dùng mã T còn hạn; đơn E dùng mã T2 đã hết hạn sau khi đặt | Huỷ D; huỷ E | Lượt T của khách được trả (áp lại được); lượt T2 không trả. |
+| AC-VOU-16 | VOU-13 | Mã chỉ `tops`, loại trừ hàng giảm (Should) | Áp cho after-hours-dress | "Mã chỉ áp dụng cho Áo." hoặc "Mã không áp dụng cho sản phẩm đang giảm giá." theo thứ tự kiểm. |
+| AC-CHK-10 | 10 | off-duty-top × 1; body kèm `price: 1000` | Báo giá | Tạm tính 390.000, phí 30.000, tổng 420.000 (giá giả bị bỏ qua); ngưỡng 1.000.000. |
+| AC-CHK-11 | 11 | COD | Đặt thứ Hai 10:00; thứ Hai 16:30; thứ Sáu 10:00; thứ Sáu trước ngày lễ seed | Thứ Hai 10:00 → thứ Tư–thứ Sáu; 16:30 → thứ Năm–thứ Bảy; thứ Sáu 10:00 → thứ Hai–thứ Tư (bỏ Chủ nhật); trước lễ → lùi thêm đúng số ngày lễ. |
+| AC-CHK-12 | 12 | Checkout hiện tổng 420.000; DB đổi off-duty-top thành 420.000 (tổng 450.000); lần khác hạ còn 380.000 | Bấm Đặt hàng | Cả hai: 409 `price-changed`, 0 đơn; FE hiện giá cũ, giá mới, tổng mới và câu "Giá một số sản phẩm vừa thay đổi..."; form giữ; bấm lại → 201 với tổng mới. |
+| AC-CHK-13 | 13 | Đơn: off-duty-top × 1 (đủ), blazer Đen/S × 5 (DB còn 2) | Đặt; bấm "Cập nhật theo số còn lại"; đặt lại | 409 chỉ dòng blazer `available: 2`, tồn off-duty-top không đổi, 0 đơn; sau cập nhật blazer × 2; đặt lại → 201. |
+| AC-CHK-14 | 14 | Blazer Đen/S tồn 5 | Đặt 3 | DB tồn 2; PDP hiện "Chỉ còn 2" sau ≤ 30 giây. |
+| AC-CHK-15 | 14 | T biến thể tồn 1, hai khách cùng có trong giỏ | Gửi đồng thời 2 đơn × 1 (khác khoá), lặp 20 lần (đặt lại tồn 1) | Mỗi lần đúng 1 đơn 201 và 1 lần 409 `stock-changed`; tồn 0; không lần nào âm. |
+| AC-CHK-16 | 14, 23 | Đơn D blazer Đen/S × 2 (tồn sau đặt 3) | Huỷ D; huỷ D lần hai | Lần 1 `cancelled`, tồn 5, email "đơn đã huỷ". Lần 2 409 `not-cancellable`, tồn vẫn 5. |
+| AC-CHK-17 | 15 | Đặt hàng; chặn mạng ngay khi request đi (máy chủ đã tạo đơn) | Bỏ chặn, bấm Thử lại | Cùng mã đơn; DB 1 đơn; tồn trừ 1 lần; 1 email; không có request tự gửi lại trước khi bấm. |
+| AC-CHK-18 | 15 | — | Cùng khoá khác nội dung; không khoá; khoá 10 ký tự; 2 request cùng khoá cùng lúc; cùng khoá sau 25 giờ | 409 `idempotency-conflict`; 422; 422; 1 đơn, hai phản hồi cùng mã; sau 25 giờ coi là lượt mới (kiểm lại toàn bộ). |
+| AC-CHK-19 | 15 | Checkout hợp lệ | Bấm Đặt hàng 2 lần trong 300 ms; sau khi thành công bấm Back, F5 | 1 request `POST`; Back/F5 vẫn ở trang đơn vừa đặt, không mở lại form đặt. |
+| AC-CHK-20 | 16 | Khách vừa đặt đơn (SĐT `0912345678`, off-duty-top × 1) 5 phút trước | Đặt lại y hệt; xác nhận | Lần 1 hỏi lại kèm mã đơn trước, 0 đơn mới; xác nhận → 201. Sau 11 phút: không hỏi. |
+| AC-CHK-21 | 17 | 1.000 đơn thử trong một ngày | Kiểm mã; tra cứu với `n2f…` chữ thường và có `#` | Mọi mã khớp `^N2F\d{10}$`, 6 số đầu = ngày giờ Việt Nam, không trùng; tra cứu tìm đúng đơn. |
+| AC-CHK-22 | 18 | Đơn D đã đặt | Đổi tên, giá sản phẩm và phí giao trong DB, xem D | D giữ tên, đơn giá, phí giao, tổng cũ. |
+| AC-CHK-23 | 19 | T giá 5.000.000; T giá 5.001.000 | Vào checkout | 5.000.000: COD được chọn sẵn. 5.001.000: COD hiện nhưng khoá, có lý do; chọn được chuyển khoản (nếu bật); API gửi `cod` → 422 `field: paymentMethod`. |
+| AC-CHK-24 | 19 | SĐT có 3 đơn COD chưa giao; SĐT khác có 2 đơn COD đánh dấu từ chối nhận trong 6 tháng (SQL) | Vào checkout từng SĐT | Cả hai: COD khoá kèm lý do. Đổi sang SĐT sạch: COD mở. |
+| AC-CHK-25 | 19 | Đang chọn COD, tổng 4.900.000 | Tăng số lượng làm tổng > 5.000.000 | Tự chuyển sang chuyển khoản và báo khách (khi QR bật); khi QR chưa bật: không đặt được, báo lý do kèm hotline. |
+| AC-CHK-26 | 20, 22 | Khách đặt COD 390.000 | Xem DB và trang thành công | Đơn `to_ship` + `pending`; FE hiện "Đang chuẩn bị hàng"; có câu gọi xác nhận 2 giờ làm việc. Thành viên có 1 đơn `completed` (SQL), đơn mới 390.000: không có câu này. |
+| AC-CHK-27 | 21 (chờ xác nhận) | QR bật | Đặt chuyển khoản; giả lập đối soát báo đủ / thiếu / thừa; để quá 30 phút | Vào `to_pay`+`pending`, trang QR có số tiền, nội dung = mã đơn, đếm ngược 30:00. Đủ: `to_ship`+`paid`, email "Đã nhận thanh toán". Thiếu: hiện số còn thiếu. Thừa: `to_ship`, ghi cần hoàn phần thừa. Quá hạn: `cancelled` trong ≤ 2 phút, tồn và lượt được trả, email báo huỷ. QR chưa bật: lựa chọn không hiện, API 422. |
+| AC-CHK-28 | 22 | — | SQL ghi trạng thái `abc` | DB từ chối. Đơn `to_receive` hiện ở FE là "Đang vận chuyển". |
+| AC-CHK-29 | 23 | Đơn `to_pay`; đơn `to_ship`; đơn `to_receive` (SQL) | Khách huỷ từng đơn | `to_pay`: huỷ ngay. `to_ship`: theo câu hỏi 4 (đề xuất: huỷ ngay). `to_receive`: 409 `not-cancellable`, tồn không đổi. |
+| AC-CHK-30 | 25 | Khách đặt COD xong | Xem trang thành công | Có mã đơn, tổng, phương thức, ngày giao dự kiến, email đã gửi xác nhận, 2 nút, lời mời tạo tài khoản; tạo tài khoản bằng email đó → đơn không có trong lịch sử. |
+| AC-CHK-31 | 26 | Đơn D (`a@x.vn`) | Nhập mã D + `A@X.VN`, nhập OTP đúng; mã D + email sai; mã sai + email đúng; mã D + email đúng + OTP sai | Đúng: xem được chi tiết, huỷ được trong 30 phút. Ba trường hợp sai: bước 1 cùng phản hồi "đã gửi mã" (không có thư khi không khớp), cuối cùng "Không tìm thấy đơn hàng phù hợp". URL không chứa email/OTP; phản hồi không có `userId`. |
+| AC-CHK-32 | 27 | A có 12 đơn | Mở `/account/orders`, bấm "Xem thêm"; mở chi tiết đơn của B | 10 đơn mới nhất trước, rồi 12; đơn của B: 404. |
+| AC-CHK-33 | 27 (AC-AUTH-68) | A ở `/account/orders/<id>`, giỏ 2 món; phiên A bị thu hồi | Bấm Huỷ đơn | 401; FE chuyển `/auth/login?returnUrl=%2Faccount%2Forders%2F<id>` với "Phiên đăng nhập đã hết hạn…"; giỏ còn 2 món; đơn không đổi. |
+| AC-CHK-34 | 28 | Đơn có email Gmail thật | Đặt COD | Thư trong ≤ 5 phút, tiêu đề "nine2fine – Xác nhận đơn hàng #{mã}", đủ mục BR-CHK-28, có câu chống lừa đảo, tổng khớp đơn. |
+| AC-CHK-35 | 28 | SMTP lỗi | Đặt đơn | 201; hệ thống thử lại 3 lần; sau đó có thư báo CSKH tới email hỗ trợ (hoặc log nếu SMTP vẫn hỏng); đơn không bị huỷ; log không có email đầy đủ. |
+| AC-CHK-36 | 30 | Một IP | 121 báo giá/60 giây; 11 lần đặt/10 phút; 11 lần tra cứu/15 phút | Yêu cầu vượt: 429 + `retryAfterSeconds`; FE báo lỗi có thử lại, giữ dữ liệu; bộ đếm catalog/auth không đổi. |
+| AC-CHK-37 | 31 | Gây từng lỗi ở AC-CHK-04, 06, 12, 13, 18, 29, AC-VOU-12 và tắt DB | Xem phản hồi, FE | Mỗi lỗi `code` đúng BR-CHK-31, không stack trace/SQL; FE hiện đúng câu (không còn "Địa chỉ giao hàng chưa hợp lệ" cho lỗi khác). |
+| AC-CHK-38 | 31 | Checkout điền đủ, có 2 mã; chặn `*/api/*` | Bấm Đặt hàng; bỏ chặn, Thử lại | Khi chặn: báo lỗi, form/giỏ/mã còn nguyên. Thử lại dùng cùng `Idempotency-Key`, 201. |
+| AC-CHK-39 | 32 | `checkoutMode: http`, `mode: mock`, A đăng nhập | Mở `/cart`, `/checkout`, đặt, `/account/orders`, `/account/profile` | Có request API giỏ/báo giá/đơn; không còn "Thanh toán hiện chưa khả dụng"; họ tên/email từ phiên; không có "Địa chỉ đã lưu", "Mã của bạn", "Bản trải nghiệm"; Profile vẫn mock. |
+| AC-CHK-40 | 32 | `checkoutMode: mock` | Chạy Playwright `checkout`, `account`, `operations`, `commerce` | Số test pass không giảm so với trước Slice 3; không có request `/api/cart`, `/api/checkout`, `/api/orders`. |
+| AC-CHK-41 | 33 | DB Supabase ở schema Slice 2 | `migrate deploy` 2 lần; seed 2 lần sau khi có 1 đơn dùng `N2FFREESHIP` | Chỉ thêm đối tượng mới, không `DROP`/`TRUNCATE`/`DELETE`/đổi kiểu; lần 2 không đổi; voucher, địa giới, ngày nghỉ không trùng, lượt đã dùng giữ nguyên; bảng mới bật RLS. |
+
+Tổng: **60 BR** — BR-CART 14 (13 Must, 1 Should: 14), BR-CHK 33 (30 Must, 3 Should: 03, 16, 24), BR-VOU 13 (12 Must, 1 Should: 13); tức 55 Must, 5 Should. Must có phần chờ xác nhận: BR-CHK-06, 21, 22, 23, 26, BR-VOU-05. **77 AC** — AC-CART 20 (19 Must, 1 Should: 20), AC-CHK 41 (39 Must, 2 Should: 03, 20; AC-CHK-27 chạy khi câu hỏi 2 được trả lời), AC-VOU 16 (15 Must, 1 Should: 16); tức 73 Must, 4 Should. Nguồn không dùng thành BR: CHK-PAY-04 (quy tắc vận hành giao nhận, ghi ở chính sách), các mục Won't ở bảng phạm vi.
+
+### 6. Định nghĩa xong của Slice 3
+
+- Mọi AC Must đạt trong `docs/qa/report-slice-3-checkout.md`; AC Should ghi rõ làm hay hoãn; AC chờ xác nhận chạy theo câu trả lời của Thắng.
+- **AC-AUTH-68** kiểm bằng AC-CHK-33 (trang đòi đăng nhập đầu tiên có API thật). AC-AUTH-88 → Account; 75, 84, 85 → Admin.
+- Backlog 2.14 đóng khi AC-CHK-13..16 đạt.
+- `openapi.yaml` có giỏ, báo giá, đặt hàng (`Idempotency-Key`, giá/tổng đã thấy, `voucherCodes`), tra cứu OTP, huỷ, địa giới, đơn tài khoản, mã lỗi BR-CHK-31.
+- Tổng `subtotal − discount + shippingFee − shippingDiscount = total` do máy chủ tính, khớp ở checkout, trang thành công, email, chi tiết đơn.
+- FE chạy `checkoutMode: http` với BE thật trên Supabase; Account (trừ đơn) và Admin vẫn mock; Playwright mock pass nguyên.
+- Migration chỉ cộng thêm; quyết định ghi `decisions.md`; bàn giao ghi `handoff.md`.
+
+### 7. Câu hỏi mở
+
+| # | Câu hỏi | Ảnh hưởng | Trạng thái |
+| --- | --- | --- | --- |
+| 1 | Nguồn BR tham chiếu COMMON-01 (trạng thái và bước chuyển), 02 (trạng thái thanh toán), 03 (trừ/hoàn kho), 05 (hiển thị và tính tiền, làm tròn), 06 (quyền khách vãng lai, tra cứu OTP) nhưng file không có. **Đề xuất PO:** Thắng gửi nội dung COMMON; tới lúc đó dùng giả định tạm: (a) API/DB dùng tên trạng thái COMMON và ánh xạ BR-CHK-22; (b) mã % làm tròn xuống tới 1.000 ₫; (c) tồn trừ khi tạo đơn, hoàn khi huỷ (BR-CHK-14); (d) OTP tra cứu dùng thông số BR-AUTH-04..09, hiệu lực xem đơn 30 phút. | BR-CHK-22, 23, 26; BR-VOU-05 | Thắng — chờ xác nhận |
+| 2 | Chuyển khoản QR tự đối soát (CHK-PAY-08..12) cần tài khoản ngân hàng nhận và dịch vụ báo tiền về (webhook). **Đề xuất PO:** dùng SePay (gói miễn phí, webhook theo nội dung chuyển khoản), Thắng mở tài khoản và cấp khoá; làm ở lát 3.8 sau COD. Chưa có thì ẩn QR ở HTTP; hệ quả: đơn > 5.000.000 ₫ chưa đặt được online (báo hotline). Không đề xuất xác nhận tay vì không kịp hạn 30 phút. | BR-CHK-19, 21; AC-CHK-25, 27 | Thắng — chờ xác nhận |
+| 3 | Phạm vi giao hàng và danh mục địa giới: toàn quốc hay 3 thành phố như mock? **Đề xuất PO:** toàn quốc, 34 tỉnh/thành và phường/xã sau 01/07/2025, BE seed từ file công khai và ghi nguồn. | BR-CHK-06, AC-CHK-06 | Thắng — chờ xác nhận |
+| 4 | Nguồn (CHK-PAY-14) cho khách ở `to_ship` chỉ gửi yêu cầu huỷ, shop duyệt; quyết định 2026-10-18 và FE cho huỷ thẳng. Chưa có Admin để duyệt. **Đề xuất PO:** Slice 3 huỷ thẳng ở `to_ship`; khi có slice Admin chuyển sang `cancel_requested`. | BR-CHK-23, AC-CHK-29 | Thắng — chờ xác nhận |
+
+

@@ -167,21 +167,32 @@ M2 (test backend crash) nằm ở 1.21 / G8, không mở việc mới.
 
 ## Slice 3 — Cart & Checkout (P0)
 
-Đã có bộ **69 BR riêng** cho Cart & Checkout (PO chuyển vào PRD mục Slice 3 khi bắt đầu, đánh mã BR-CART / BR-CHK).
+PRD: `docs/product/PRD.md` › Slice 3 (BR-CART-01..14, BR-CHK-01..33, BR-VOU-01..13; AC-CART-01..20, AC-CHK-01..41, AC-VOU-01..16), dựa trên 69 quy tắc nguồn `docs/product/cart-checkout-business-rules.md`. Voucher free-ship: giữ (Thắng 2026-11-07).
 
-| # | Hạng mục | Mức |
-| --- | --- | --- |
-| 3.1 | Giỏ hàng phía máy chủ cho thành viên + quy tắc gộp giỏ khách khi đăng nhập (tiếp nối BR-AUTH-32) | Must |
-| 3.2 | Báo giá: tạm tính, voucher, phí vận chuyển, ngưỡng freeship — máy chủ quyết định | Must |
-| 3.3 | Đặt hàng có khoá chống trùng (Idempotency-Key), giữ tồn kho, COD + chuyển khoản | Must |
-| 3.4 | Order Success, tra cứu đơn khách (cùng 404 cho mã sai và liên hệ sai), huỷ đơn | Must |
-| 3.5 | Lịch sử đơn, chi tiết đơn, yêu cầu trả hàng trong Account | Must |
+Chia lát giao được (mỗi lát nghiệm thu riêng, theo thứ tự):
 
-Điều kiện bắt đầu (PO, 2026-11-07): viết PRD Slice 3 (BR-CART/BR-CHK) bắt đầu ngay được. Bắt đầu code Slice 3 khi 2.15, 2.16 xong và K1–K12 đạt, vì giỏ/đặt hàng đọc giá và tồn kho từ catalog thật (2.14).
+| # | Hạng mục | Mức | BR | AC | Người làm | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3.1 | Nền: migration cộng thêm (đơn, dòng đơn, voucher, lượt dùng, giỏ, tham số, địa giới, ngày nghỉ, khoá idempotency), seed; contract `openapi.yaml`; cờ `checkoutMode` | Must | CHK-06, 32, 33; VOU-02 | CHK-06, 41 | BE → FE | Chưa (phạm vi địa giới chờ câu hỏi 3) |
+| 3.2 | Báo giá máy chủ + voucher (1 mã giảm + 1 free-ship, điều kiện, lý do, làm tròn, chia dòng, chống dò, kiểm lại); FE 2 ô mã, tóm tắt | Must | CHK-10, 11; VOU-01..12 | CHK-10, 11; VOU-01..15 | BE, FE | Chưa |
+| 3.3 | Giỏ trên trình duyệt: hạn mức 5/20/30, đổi màu/size gộp, chọn dòng, làm tươi giá/tồn/ngừng kinh doanh, thanh free-ship, 30 ngày | Must | CART-01..08, 13 | CART-01..10, 19 | FE (+ BE báo giá) | Chưa |
+| 3.4 | Giỏ thành viên trên máy chủ, gộp khi đăng nhập, đăng nhập tại checkout, đăng xuất / hết phiên | Must | CART-09..12 | CART-11..18 | BE, FE | Chưa |
+| 3.5 | Đặt hàng COD: form người nhận, kiểm lại giá/tồn, trừ tồn nguyên tử, idempotency, mã đơn, chốt đơn, điều kiện COD, trạng thái, trang thành công, mã lỗi. **Đóng 2.14** | Must | CHK-01, 02, 04, 05, 07..09, 12..15, 17..20, 22, 25, 30, 31 | CHK-01, 02, 04, 05, 07..09, 12..19, 21..26, 28, 30, 36..40 | BE, FE | Chưa |
+| 3.6 | Email xác nhận, email đơn đã huỷ (thử lại 3 lần, báo CSKH) | Must | CHK-28, 29 | CHK-34, 35 | BE | Chưa |
+| 3.7 | Tra cứu đơn khách (mã + email + OTP), huỷ đơn; đơn của thành viên (danh sách, chi tiết, huỷ). Kiểm AC-AUTH-68 | Must | CHK-23, 26, 27 | CHK-16, 29, 31..33 | BE, FE | Chưa (huỷ ở `to_ship` chờ câu hỏi 4; OTP chờ câu hỏi 1) |
+| 3.8 | Chuyển khoản QR tự đối soát, giữ đơn 30 phút, hết hạn tự huỷ, email chờ thanh toán / đã nhận tiền | Must (chờ xác nhận) | CHK-21 | CHK-25, 27 | BE, FE, Thắng (tài khoản dịch vụ) | Chờ câu hỏi 2; chưa có thì ẩn QR ở HTTP |
+| 3.9 | Nháp checkout 24 giờ; hỏi lại đơn trùng 10 phút; Hoàn tác xoá dòng 5 giây; "Đặt lại đơn này"; voucher theo danh mục / loại trừ hàng đang giảm | Should | CART-14; CHK-03, 16, 24; VOU-13 | CART-20; CHK-03, 20; VOU-16 | BE, FE | Chưa |
+| 3.10 | Sổ địa chỉ ở checkout, ví voucher / mã theo hạng | Won't | — | — | slice Account | Nguồn CHK-07..09, CHK-VC-08 |
+| 3.11 | Gọi xác nhận COD, từ chối nhận, duyệt yêu cầu huỷ, vận chuyển, email giao hàng; trả hàng/hoàn tiền | Won't | — | — | slice Admin | Nguồn CHK-PAY-06 (vận hành), 07; CF-13 phần còn lại |
+| 3.12 | Thẻ/ví; xuất hoá đơn điện tử thật; cộng ngày xã đảo | Won't | — | — | — | Giai đoạn sau / chưa có dữ liệu |
 
-Câu hỏi mở của slice: **có giữ voucher free-ship (giảm phí vận chuyển) song song với ngưỡng freeship không?** — cần Thắng trả lời trước khi chốt BR báo giá.
+Điều kiện bắt đầu code (PO, 2026-11-07): 2.15, 2.16 xong và K1–K12 đạt. Lát 3.1 cần câu hỏi 3; 3.7 cần câu hỏi 1 (phần OTP) và 4; 3.8 cần câu hỏi 2 (PRD Slice 3 mục 7). Các lát khác làm được ngay với giả định tạm đã ghi.
 
-DoD: theo DoD chung; thêm: tổng tiền `subtotal − discount + shippingFee − shippingDiscount = total` do máy chủ tính và khớp ở giỏ, checkout, đơn.
+Câu hỏi mở (chi tiết ở PRD mục 7 và `docs/handoff.md`): (1) nội dung nhóm COMMON-01..06 chưa có; (2) dịch vụ đối soát chuyển khoản; (3) phạm vi địa giới; (4) huỷ ở `to_ship` trước khi có Admin.
+
+AC hoãn nhận về: AC-AUTH-68 (kiểm bằng AC-CHK-33).
+
+DoD: theo DoD chung; thêm: tổng tiền `subtotal − discount + shippingFee − shippingDiscount = total` do máy chủ tính và khớp ở checkout, trang thành công, email, chi tiết đơn; 2.14 đóng khi AC-CHK-13..16 đạt.
 
 ---
 
