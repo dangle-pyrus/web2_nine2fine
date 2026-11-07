@@ -6,7 +6,8 @@
 - Tích hợp thật cục bộ (BE + `start:local`): PLP 8 SP từ API, slug chữ hoa đổi về slug chuẩn, slug lạ hiện "Không tìm thấy sản phẩm", `/search?q=dam` ra 1 SP, bảng size `public, max-age=3600`, route lạ 404 `not-found` + `no-store`, giỏ localStorage không vỡ. Console chỉ có lỗi 404 mạng của slug lạ (mong đợi).
 - Chưa kiểm được: Xem thêm với 30 SP (AC-CAT-41, seed chỉ 8), ngắt mạng/Thử lại (AC-CAT-28, 49), p95 trên Supabase (AC-CAT-52).
 - Postgres cục bộ: cổng 54329 hiện là cụm tạm `C:/Users/ADMIN/AppData/Local/Temp/n2f-pg18` do agent BE dựng lại; dữ liệu auth cũ của `n2f_dev` không có trong cụm này. Bật lại: `"C:/Program Files/PostgreSQL/18/bin/pg_ctl" -D C:/Users/ADMIN/AppData/Local/Temp/n2f-pg18 -o "-p 54329 -c listen_addresses=127.0.0.1" start`.
-- Áp Supabase (chỉ khi Thắng xác nhận), trong `backend/` với `.env` Supabase: `npx prisma migrate deploy` rồi `npm run seed:catalog` (DIRECT_URL cổng 5432).
+- 2026-11-07 14:54Z Thắng đã chạy `migrate deploy` + `seed:catalog` lên Supabase. Kiểm chỉ đọc: `_prisma_migrations` 5 dòng (có `20261107000400_catalog_schema`), categories 4, products 8, variants 64, size_charts 4, RLS bật 4 bảng, users 6 (không đổi). BE cục bộ trỏ Supabase: list/search/chi tiết/bảng size 200, slug lạ 404. Thời gian từ máy Thắng tới pooler Tokyo: danh sách ~1,2–1,5 s, chi tiết ~0,8–1 s (chủ yếu độ trễ mạng; AC-CAT-52 đo ở máy chủ, chưa đo được).
+- Lệnh áp Supabase (đã chạy), trong `backend/` với `.env` Supabase: `npx prisma migrate deploy` rồi `npm run seed:catalog` (DIRECT_URL cổng 5432).
 
 ### Đề xuất đổi contract (Slice 2)
 - `gender` dài hơn `maxLength` 20: BE coi là giá trị lạ, trả trang rỗng thay vì 422. Cần xác nhận.
