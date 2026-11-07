@@ -6,6 +6,7 @@ import { canRequestReturn } from '../app/features/orders/order-returns';
 import { STORE_POLICY } from '../app/core/store-policy';
 import { MockInventory } from './mock-inventory';
 import { MockPersistence } from './mock-persistence';
+import { AuthUser } from '../app/features/auth/data-access/auth-api';
 import { MOCK_ACCOUNTS, MockAccount } from './accounts';
 import {
   demoAddresses,
@@ -196,6 +197,29 @@ export class MockAccountStore {
     this.guestOrders.splice(0, this.guestOrders.length, ...this.guestOrders.map(apply));
     for (const entry of this.data.values()) entry.orders = entry.orders.map(apply);
     return updated;
+  }
+
+  /**
+   * The mock account behind a signed-in user. A user that came from the real backend
+   * (`authMode: 'http'` while this store is still the account API) is not in the fixtures, so an
+   * empty account is created from the session profile; its addresses, orders and vouchers start
+   * empty through `dataFor`.
+   */
+  accountFor(user: AuthUser): MockAccount {
+    const known = this.findById(user.id) ?? this.accounts.get(user.email.toLowerCase());
+    if (known) return known;
+    const account: MockAccount = {
+      id: user.id,
+      email: user.email.toLowerCase(),
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      password: null,
+      birthDate: null,
+      phone: null,
+    };
+    this.accounts.set(account.email, account);
+    return account;
   }
 
   findById(id: string): MockAccount | undefined {

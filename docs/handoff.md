@@ -18,6 +18,7 @@
 - Supabase: Thắng đã chạy baseline, migrate deploy, seed (06:54Z); `_prisma_migrations` 4 dòng, users = 5. Đang chạy các luồng trên Supabase với Gmail thật, sau đó QA.
 
 ### Vấn đề đã biết
+- 2026-11-07 Thắng thử thủ công trên Supabase + Gmail thật: đăng ký, đăng nhập, quên mật khẩu chạy được; thư vào hộp thư chính (bằng chứng cho AC-AUTH-95). Lỗi: bấm avatar bị đăng xuất, đang sửa.
 - `npm test` backend: worker vitest thỉnh thoảng chết với mã `0xC0000409` trên Windows/Node 24 (5/11 lần), xảy ra cả với pool threads và forks. Prisma và các thư viện chạy riêng ngoài vitest không tái hiện (15 lần mỗi loại). Chưa rõ nguyên nhân. Khi crash, lệnh báo lỗi, không báo đạt giả.
 - Test dùng Postgres 18 cục bộ, Supabase là 17.
 

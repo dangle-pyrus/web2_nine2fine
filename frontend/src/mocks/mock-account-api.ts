@@ -186,8 +186,8 @@ export class MockAccountApi implements AccountApi {
 
   private withAccount<T>(run: (account: MockAccount) => Observable<T>): Observable<T> {
     const user = this.session.user();
-    const account = user && this.store.findById(user.id);
-    return account ? run(account) : failWith('unauthorized');
+    // No session is the only real `unauthorized`; a signed-in user always has an account.
+    return user ? run(this.store.accountFor(user)) : failWith('unauthorized');
   }
   private withData<T>(run: (data: MockAccountData) => Observable<T>): Observable<T> {
     return this.withAccount((account) => run(this.store.dataFor(account.id)));
