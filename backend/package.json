@@ -11,6 +11,7 @@
     "test": "vitest run",
     "seed": "prisma db seed",
     "seed:catalog": "tsx prisma/seed-catalog.ts",
+    "seed:checkout": "tsx prisma/seed-checkout.ts",
     "prisma:generate": "prisma generate"
   },
   "keywords": [],

@@ -9,7 +9,9 @@ import { requireAuth, requireRole } from '../src/middleware/auth';
 import { assertLocalTestDb } from './guard';
 import { clearCategoryCache } from '../src/modules/catalog/catalog.cache';
 import { resetCatalogRateLimit } from '../src/middleware/catalog-rate-limit';
+import { resetCheckoutRateLimits } from '../src/middleware/rate-limit';
 import { seedCatalog } from '../prisma/seed-catalog';
+import { seedCheckout } from '../prisma/seed-checkout';
 
 export const ORIGIN = 'http://localhost:4200';
 
@@ -50,6 +52,22 @@ export async function resetCatalog(): Promise<void> {
   clearCategoryCache();
   resetCatalogRateLimit();
   await seedCatalog(prisma);
+}
+
+let locationsSeeded = false;
+/**
+ * Xoá dữ liệu đơn / giỏ / voucher / tham số, seed lại catalog + tham số + voucher + ngày nghỉ.
+ * Địa giới (tỉnh, phường) chỉ nạp một lần mỗi tiến trình test, không TRUNCATE.
+ */
+export async function resetCheckout(): Promise<void> {
+  assertLocalTestDb();
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "idempotency_keys","order_access_grants","order_events","voucher_redemptions","order_items","orders","cart_lines","carts","vouchers","store_settings","holidays" RESTART IDENTITY CASCADE',
+  );
+  await resetCatalog();
+  await seedCheckout(prisma, { locations: !locationsSeeded });
+  locationsSeeded = true;
+  resetCheckoutRateLimits();
 }
 
 export const useClock = (iso: string) => {
