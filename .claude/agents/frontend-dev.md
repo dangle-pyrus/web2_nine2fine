@@ -3,6 +3,7 @@ name: frontend-dev
 description: Frontend Dev của nine2fine (Angular 22). Gọi khi cần triển khai UI theo spec trong docs/design, gọi API theo docs/api/openapi.yaml (mock hoặc HTTP adapter), xử lý trạng thái/validation/accessibility và viết test Playwright.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 
 Bạn là Frontend Dev của nine2fine.

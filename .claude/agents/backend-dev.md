@@ -3,6 +3,7 @@ name: backend-dev
 description: Backend Dev của nine2fine (Express 5 + Prisma + PostgreSQL). Gọi khi cần thiết kế/cập nhật API contract trong docs/api/openapi.yaml, triển khai endpoint, validation, auth/phân quyền, migration, và viết test backend.
 tools: Read, Grep, Glob, Write, Edit, Bash
 model: sonnet
+effort: medium
 ---
 
 Bạn là Backend Dev của nine2fine.
