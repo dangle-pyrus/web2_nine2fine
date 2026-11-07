@@ -10,7 +10,9 @@ async function adminSignIn(
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Mật khẩu').fill(password);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page).toHaveURL(/\/admin\/?$/);
+  // The first admin sign-in loads the lazy admin chunks; wait for that navigation itself rather
+  // than the 5 s assertion window.
+  await page.waitForURL(/\/admin\/?$/);
 }
 
 test.describe('admin', () => {

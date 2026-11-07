@@ -180,6 +180,6 @@ test('new member sees Figma empty states and creates a first password', async ({
     .getByRole('navigation', { name: 'Tài khoản' })
     .getByRole('button', { name: 'Đăng xuất' })
     .click();
-  await expect(page).toHaveURL(/\/new-in$/);
+  await expect(page).toHaveURL((url) => url.pathname === '/');
   await expect(page.getByRole('link', { name: 'Đăng nhập' }).first()).toBeVisible();
 });

@@ -8,10 +8,16 @@ Requires Node 24.15+ within the Node 24 release line (or another version support
 
 ```sh
 npm ci
-npm start
+npm run start:local
 ```
 
-Open http://127.0.0.1:4200. To use a different port: `npm start -- --port 4201`.
+Open http://localhost:4200 (not 127.0.0.1: the backend only allows the `localhost` origin, so sign-in
+would be refused with 403 from 127.0.0.1). `/api` is proxied to the backend on http://localhost:4000
+(`proxy.conf.json`), which must be running. To use a different port: `npm run start:local -- --port 4201`
+(and add that origin to the backend `CORS_ALLOWED_ORIGINS`).
+
+Playwright tests run on mock data without a backend: `npm test` starts its own server with
+`npm run start:e2e` (configuration `e2e`).
 
 ```sh
 npm run build

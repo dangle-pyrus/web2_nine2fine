@@ -64,6 +64,9 @@ test.describe('storefront sign-in', () => {
       .getByRole('navigation', { name: 'Tài khoản' })
       .getByRole('button', { name: 'Đăng xuất' })
       .click();
+    // Sign-out ends with a move to the home page (BR-AUTH-27); reload only after the request is
+    // done, otherwise the reload races the pending sign-out.
+    await expect(page).toHaveURL((url) => url.pathname === '/');
     await expect(page.getByRole('link', { name: 'Đăng nhập' }).first()).toBeVisible();
     // The session is gone on the server side too: a reload stays signed out (AC-AUTH-70).
     await page.reload();
@@ -179,6 +182,38 @@ test.describe('storefront sign-in', () => {
       'href',
       'mailto:phthang0872@gmail.com',
     );
+  });
+
+  test('N10: a twice-encoded backslash returnUrl is dropped', async ({ page }) => {
+    await submitEmail(page, member.email, '/auth/login?returnUrl=%2F%255Cevil.com');
+    await page.getByLabel(CODE_LABEL).fill(DEMO_VERIFICATION_CODE);
+    await page.getByRole('button', SIGN_IN).click();
+    await expect(page).toHaveURL(/\/new-in$/);
+  });
+
+  test('AC-AUTH-29/70 N3/N8: account area shows the full name; sign-out leaves the email field empty', async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, 'Uses the desktop header link (client-side navigation keeps app state).');
+    await submitEmail(page, member.email, '/auth/login?returnUrl=%2Faccount%2Fprofile');
+    await page.getByLabel(CODE_LABEL).fill(DEMO_VERIFICATION_CODE);
+    await page.getByRole('button', SIGN_IN).click();
+    await expect(page).toHaveURL(/\/account\/profile$/);
+    await expect(
+      page.getByText(`${member.lastName} ${member.firstName}`, { exact: true }).first(),
+    ).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Tài khoản' })
+      .getByRole('button', { name: 'Đăng xuất' })
+      .click();
+    await expect(page).toHaveURL((url) => url.pathname === '/');
+    // Client-side navigation: the in-memory flow state survives, so it must have been cleared.
+    await page
+      .getByRole('navigation', { name: 'Tiện ích' })
+      .getByRole('link', { name: 'Đăng nhập' })
+      .click();
+    await expect(page.getByLabel('Email')).toHaveValue('');
   });
 
   for (const bad of ['%2F%2Fevil.example', '%2Fauth%2Fregister', '%2Fadmin%2Flogin']) {

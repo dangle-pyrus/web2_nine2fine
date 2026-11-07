@@ -2,6 +2,7 @@ import {
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  computed,
   ElementRef,
   inject,
   Injector,
@@ -23,7 +24,7 @@ import { centerActive } from '../../shared/ui/center-active';
     <div class="container account">
       <aside>
         <div class="member">
-          <p class="handle">&#64;{{ session.user()?.firstName }}</p>
+          <p class="handle">{{ fullName() }}</p>
           @if (tier(); as tier) {
             <p class="tier">{{ tier }} Member</p>
           }
@@ -53,6 +54,7 @@ import { centerActive } from '../../shared/ui/center-active';
     }
     .handle {
       margin: 0;
+      overflow-wrap: anywhere;
       font-size: max(20px, calc(31 * var(--u)));
       font-weight: 700;
     }
@@ -171,7 +173,13 @@ export class AccountLayout {
     { path: '/policies', label: 'Chính sách', icon: 'reiconShieldCheck' },
   ];
 
+  /** "Họ Tên" as in the profile ("Nguyễn Văn Minh"); the header keeps the short first name. */
+  readonly fullName = computed(() => {
+    const user = this.session.user();
+    return user ? `${user.lastName} ${user.firstName}`.trim() : '';
+  });
+
   signOut(): void {
-    this.session.logout().subscribe(() => void this.router.navigateByUrl('/new-in'));
+    this.session.logout().subscribe(() => void this.router.navigateByUrl('/'));
   }
 }

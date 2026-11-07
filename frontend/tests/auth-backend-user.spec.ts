@@ -53,7 +53,7 @@ test.describe('signed-in user missing from the mock store', () => {
       .getByRole('navigation', { name: 'Tài khoản' })
       .getByRole('button', { name: 'Đăng xuất' })
       .click();
-    await expect(page).toHaveURL(/\/new-in$/);
+    await expect(page).toHaveURL((url) => url.pathname === '/');
     await page.reload();
     await expect(page.getByRole('link', { name: 'Đăng nhập' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: `Tài khoản của ${USER.firstName}` })).toHaveCount(

@@ -17,6 +17,7 @@ const RESTORE_TIMEOUT_MS = 10_000;
 export class AuthSession {
   private readonly api = inject(AUTH_API);
   private readonly settled = new ReplaySubject<void>(1);
+  private readonly flow = inject(AuthFlowState);
 
   readonly user = signal<AuthUser | null>(null);
   readonly signedIn = computed(() => this.user() !== null);
@@ -32,7 +33,8 @@ export class AuthSession {
       .subscribe((audience) => {
         if (audience !== 'storefront' || !this.user()) return;
         this.signOut();
-        if (router.url === '/account' || router.url.startsWith('/account/')) {
+        // Pages that need a session (account area, wishlist) go back to sign-in.
+        if (/^\/(account|wishlist)(?:[/?#]|$)/.test(router.url)) {
           void router.navigate(['/auth/login'], {
             queryParams: { returnUrl: router.url },
             state: { notice: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' },
@@ -69,6 +71,8 @@ export class AuthSession {
   /** Clears the local profile only (the server already ended the session). */
   signOut(): void {
     this.user.set(null);
+    // The next person at this browser must not see the previous email.
+    this.flow.email.set('');
   }
   /** Ends this session on the server, then locally. A failed call still clears local state. */
   logout(): Observable<void> {

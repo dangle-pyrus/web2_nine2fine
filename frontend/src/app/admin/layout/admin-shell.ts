@@ -267,12 +267,12 @@ export class AdminShell {
   }
 
   logout(): void {
-    this.auth.logout().subscribe({
-      complete: () => {
-        this.session.user.set(null);
-        void this.router.navigateByUrl('/admin/login');
-      },
-    });
+    // Also when the request fails (offline): the screen must not stay open as if signed in.
+    const leave = () => {
+      this.session.user.set(null);
+      void this.router.navigateByUrl('/admin/login');
+    };
+    this.auth.logout().subscribe({ complete: leave, error: leave });
   }
 
   private refreshCounts(): void {

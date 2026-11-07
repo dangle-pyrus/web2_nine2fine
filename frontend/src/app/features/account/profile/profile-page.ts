@@ -13,6 +13,7 @@ import { finalize, forkJoin } from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { OverlayService } from '../../../shared/ui/overlay.service';
 import { PricePipe } from '../../../shared/commerce/price.pipe';
+import { API_CONFIG } from '../../../core/api-config';
 import { ACCOUNT_API } from '../data-access/account-api';
 import {
   AccountProfile,
@@ -44,60 +45,72 @@ const PHONE_PATTERN = /^(?:0|\+84)\d{9}$/;
           <span class="legend">Email<span class="req" aria-hidden="true">*</span></span>
           <span class="value">{{ user.email }}</span>
         </div>
-        <div class="box">
-          <span class="legend">Mật khẩu<span class="req" aria-hidden="true">*</span></span>
-          <span class="value">{{ user.hasPassword ? '••••••••••••' : 'Chưa tạo mật khẩu' }}</span>
-          <button type="button" class="edit" (click)="openPasswordDialog(user)">
-            @if (user.hasPassword) {
-              Chỉnh sửa<span class="sr-only"> mật khẩu</span>
-            } @else {
-              Tạo mật khẩu
-            }
-          </button>
-        </div>
-        @for (field of editableFields; track field.key) {
-          @if (editing() === field.key) {
-            <form
-              class="box editing"
-              (submit)="$event.preventDefault(); save(field.key)"
-              novalidate
-            >
-              <label class="legend" [for]="'profile-' + field.key">{{ field.label }}</label>
-              <input
-                class="value"
-                [id]="'profile-' + field.key"
-                [type]="field.type"
-                [attr.autocomplete]="field.autocomplete"
-                [attr.inputmode]="field.key === 'phone' ? 'tel' : null"
-                [attr.max]="field.key === 'birthDate' ? today : null"
-                min="1900-01-01"
-                [formControl]="controls[field.key]"
-                [attr.aria-invalid]="controls[field.key].invalid && controls[field.key].touched"
-                [attr.aria-describedby]="'profile-' + field.key + '-error'"
-              />
-              <span class="edit-actions">
-                <button type="button" class="edit muted" (click)="cancelEdit()">Hủy</button>
-                <button type="submit" class="edit" [disabled]="saving()">
-                  {{ saving() ? 'Đang lưu…' : 'Lưu' }}
-                </button>
-              </span>
-            </form>
-            <p class="field-error" [id]="'profile-' + field.key + '-error'" aria-live="polite">
-              @if (controls[field.key].invalid && controls[field.key].touched) {
-                {{ field.error }}
+        @if (accountLive) {
+          <div class="box">
+            <span class="legend">Họ và tên</span>
+            <span class="value">{{ user.lastName }} {{ user.firstName }}</span>
+          </div>
+        } @else {
+          <div class="box">
+            <span class="legend">Mật khẩu<span class="req" aria-hidden="true">*</span></span>
+            <span class="value">{{ user.hasPassword ? '••••••••••••' : 'Chưa tạo mật khẩu' }}</span>
+            <button type="button" class="edit" (click)="openPasswordDialog(user)">
+              @if (user.hasPassword) {
+                Chỉnh sửa<span class="sr-only"> mật khẩu</span>
+              } @else {
+                Tạo mật khẩu
               }
-            </p>
-          } @else {
-            <div class="box">
-              <span class="legend">{{ field.label }}</span>
-              <span class="value">{{ display(user, field.key) }}</span>
-              <button type="button" class="edit" (click)="startEdit(field.key, user)">
-                Chỉnh sửa<span class="sr-only"> {{ field.label.toLowerCase() }}</span>
-              </button>
-            </div>
+            </button>
+          </div>
+          @for (field of editableFields; track field.key) {
+            @if (editing() === field.key) {
+              <form
+                class="box editing"
+                (submit)="$event.preventDefault(); save(field.key)"
+                novalidate
+              >
+                <label class="legend" [for]="'profile-' + field.key">{{ field.label }}</label>
+                <input
+                  class="value"
+                  [id]="'profile-' + field.key"
+                  [type]="field.type"
+                  [attr.autocomplete]="field.autocomplete"
+                  [attr.inputmode]="field.key === 'phone' ? 'tel' : null"
+                  [attr.max]="field.key === 'birthDate' ? today : null"
+                  min="1900-01-01"
+                  [formControl]="controls[field.key]"
+                  [attr.aria-invalid]="controls[field.key].invalid && controls[field.key].touched"
+                  [attr.aria-describedby]="'profile-' + field.key + '-error'"
+                />
+                <span class="edit-actions">
+                  <button type="button" class="edit muted" (click)="cancelEdit()">Hủy</button>
+                  <button type="submit" class="edit" [disabled]="saving()">
+                    {{ saving() ? 'Đang lưu…' : 'Lưu' }}
+                  </button>
+                </span>
+              </form>
+              <p class="field-error" [id]="'profile-' + field.key + '-error'" aria-live="polite">
+                @if (controls[field.key].invalid && controls[field.key].touched) {
+                  {{ field.error }}
+                }
+              </p>
+            } @else {
+              <div class="box">
+                <span class="legend">{{ field.label }}</span>
+                <span class="value">{{ display(user, field.key) }}</span>
+                <button type="button" class="edit" (click)="startEdit(field.key, user)">
+                  Chỉnh sửa<span class="sr-only"> {{ field.label.toLowerCase() }}</span>
+                </button>
+              </div>
+            }
           }
         }
       </div>
+      @if (accountLive) {
+        <p class="state">
+          Ngày sinh, số điện thoại và mật khẩu chưa thể chỉnh sửa ở phiên bản này.
+        </p>
+      }
       @if (notice()) {
         <p class="notice" role="status">{{ notice() }}</p>
       }
@@ -296,6 +309,11 @@ export class ProfilePage {
   private readonly overlay = inject(OverlayService);
   private readonly destroyRef = inject(DestroyRef);
 
+  /**
+   * With the real sign-in the profile editor is still the mock account API, whose saves would not
+   * reach the server. Show what the session knows and offer no edit that only looks saved.
+   */
+  readonly accountLive = inject(API_CONFIG).authMode === 'http';
   readonly profile = signal<AccountProfile | null>(null);
   readonly membership = signal<Membership | null>(null);
   readonly loadError = signal('');
