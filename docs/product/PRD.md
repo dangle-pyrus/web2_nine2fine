@@ -444,7 +444,7 @@ Nguồn: master plan mục 0, 31, 33, 52; FE `features/{catalog,product,search,h
 | BR-CAT-10 | Must | **Đủ nội dung PDP.** Phản hồi chi tiết có đủ `gallery`, `description`, `material`, `care`, `fit`, `looks`, `variants` (kèm `inventory`, `stockStatus`). Nội dung thiếu là chuỗi rỗng hoặc mảng rỗng, không `null`. |
 | BR-CAT-11 | Must | **Độ tươi và ý nghĩa của giá/tồn kho.** Giá và tồn kho hiển thị phản ánh thay đổi trong DB sau ≤ 30 giây (đề xuất PO). Tồn kho trên PDP chỉ để tham khảo, **không phải giữ hàng**; Slice 3 kiểm lại khi đặt hàng. |
 | BR-CAT-12 | Must | **Bảng size theo danh mục.** Mỗi danh mục trong BR-CAT-01 có đúng 1 bảng gồm `body`, `garment`, `bodyColumns`, `garmentColumns`, mỗi hàng ứng với S, M, L, XL (nội dung seed theo `SIZE_CHARTS`). Danh mục không có → 404 `not-found`. FE mở hộp thoại size ở PDP theo danh mục của sản phẩm; lỗi tải → thông báo lỗi và mở lại được. |
-| BR-CAT-17 | Must | **Đánh giá và báo hàng về ở chế độ HTTP (chờ xác nhận, câu hỏi 2).** Danh sách đánh giá của sản phẩm trả `[]` (200); thẻ sản phẩm không có điểm sao; FE không hiện đánh giá mẫu, form viết đánh giá và "Báo khi có hàng", không gọi `/stock-alerts` hay kiểm tra đủ điều kiện đánh giá. Chế độ mock giữ nguyên hành vi cũ. |
+| BR-CAT-17 | Must | **Đánh giá và báo hàng về ở chế độ HTTP (Thắng chốt 2026-11-07).** Danh sách đánh giá của sản phẩm trả `[]` (200); thẻ sản phẩm không có điểm sao; FE không hiện đánh giá mẫu, form viết đánh giá và "Báo khi có hàng", không gọi `/stock-alerts` hay kiểm tra đủ điều kiện đánh giá. Chế độ mock giữ nguyên hành vi cũ. |
 
 #### 4.4 Tìm kiếm
 
@@ -539,5 +539,5 @@ Tổng: 23 BR (20 Must, 3 Should; không đánh số BR cho mục Won't), 53 AC 
 
 | # | Câu hỏi | Ảnh hưởng | Cần ai / trạng thái |
 | --- | --- | --- | --- |
-| 1 | Nội dung catalog hiện là dữ liệu demo (`material` là "Thông tin chất liệu sẽ được cập nhật.", giá và phân Nam/Nữ "cần xác nhận kinh doanh", ảnh là placeholder). Chấp nhận dùng để nghiệm thu Slice 2 và chặn go-live đến khi có nội dung thật? **Đề xuất PO:** chấp nhận cho Slice 2; thêm vào backlog "Nội dung catalog thật" (Thắng cung cấp giá, chất liệu, ảnh; nhập bằng file seed cho đến khi có Admin). | BR-CAT-05, go-live | Thắng |
-| 2 | Ở chế độ HTTP, ẩn đánh giá mẫu, điểm sao, form viết đánh giá và "Báo khi có hàng" (FE mất các phần này so với bản mock). **Đề xuất PO:** đồng ý ẩn; đánh giá thật làm sau Slice 3, "Báo khi có hàng" cùng slice thông báo. BR-CAT-17 **chờ xác nhận**. | BR-CAT-17, AC-CAT-43 | Thắng |
+| 1 | Nội dung catalog hiện là dữ liệu demo (`material` là "Thông tin chất liệu sẽ được cập nhật.", giá và phân Nam/Nữ "cần xác nhận kinh doanh", ảnh là placeholder). Chấp nhận dùng để nghiệm thu Slice 2 và chặn go-live đến khi có nội dung thật? **Đề xuất PO:** chấp nhận cho Slice 2; thêm vào backlog "Nội dung catalog thật" (Thắng cung cấp giá, chất liệu, ảnh; nhập bằng file seed cho đến khi có Admin). | BR-CAT-05, go-live | Thắng | **Thắng: đồng ý (2026-11-07).**
+| 2 | Ở chế độ HTTP, ẩn đánh giá mẫu, điểm sao, form viết đánh giá và "Báo khi có hàng" (FE mất các phần này so với bản mock). **Đề xuất PO:** đồng ý ẩn; đánh giá thật làm sau Slice 3, "Báo khi có hàng" cùng slice thông báo. BR-CAT-17 **chờ xác nhận**. | BR-CAT-17, AC-CAT-43 | Thắng | **Thắng: đồng ý (2026-11-07).**
