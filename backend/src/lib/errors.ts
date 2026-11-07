@@ -12,6 +12,13 @@ export type ErrorCode =
   | 'forbidden'
   | 'origin-not-allowed'
   | 'not-found'
+  | 'invalid-address'
+  | 'stock-changed'
+  | 'price-changed'
+  | 'voucher-changed'
+  | 'idempotency-conflict'
+  | 'possible-duplicate'
+  | 'not-cancellable'
   | 'unavailable';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -28,12 +35,24 @@ const STATUS: Record<ErrorCode, number> = {
   forbidden: 403,
   'origin-not-allowed': 403,
   'not-found': 404,
+  'invalid-address': 422,
+  'stock-changed': 409,
+  'price-changed': 409,
+  'voucher-changed': 409,
+  'idempotency-conflict': 409,
+  'possible-duplicate': 409,
+  'not-cancellable': 409,
   unavailable: 500,
 };
 
 export interface AppErrorExtras {
   field?: string;
   retryAfterSeconds?: number;
+  /** Slice 3: báo giá mới nhất kèm lỗi 409 (kiểu `Quote` của contract). */
+  quote?: unknown;
+  stockIssues?: Array<{ variantId: string; available: number }>;
+  removedVoucherCodes?: string[];
+  existingOrderCode?: string;
 }
 
 export class AppError extends Error {
@@ -80,5 +99,28 @@ export const Errors = {
   forbidden: () => new AppError('forbidden', 'Bạn không có quyền thực hiện thao tác này.'),
   originNotAllowed: () => new AppError('origin-not-allowed', 'Yêu cầu không được chấp nhận.'),
   notFound: (message = 'Không tìm thấy tài nguyên.') => new AppError('not-found', message),
+  invalidAddress: (field = 'address.wardCode') =>
+    new AppError('invalid-address', 'Địa chỉ giao hàng không hợp lệ. Vui lòng chọn lại tỉnh / thành và phường / xã.', { field }),
+  stockChanged: (stockIssues: Array<{ variantId: string; available: number }>, quote?: unknown) =>
+    new AppError('stock-changed', 'Một số sản phẩm không còn đủ hàng. Vui lòng kiểm tra lại giỏ hàng.', {
+      stockIssues,
+      quote,
+    }),
+  priceChanged: (quote?: unknown) =>
+    new AppError(
+      'price-changed',
+      'Giá một số sản phẩm vừa thay đổi. Vui lòng xem lại tổng thanh toán và bấm Đặt hàng để xác nhận.',
+      { quote },
+    ),
+  voucherChanged: (removedVoucherCodes: string[], quote?: unknown) =>
+    new AppError('voucher-changed', 'Mã giảm giá vừa hết hiệu lực. Vui lòng xem lại tổng thanh toán.', {
+      removedVoucherCodes,
+      quote,
+    }),
+  idempotencyConflict: () =>
+    new AppError('idempotency-conflict', 'Yêu cầu này trùng khoá nhưng khác nội dung. Vui lòng tải lại trang và thử lại.'),
+  possibleDuplicate: (existingOrderCode: string) =>
+    new AppError('possible-duplicate', 'Bạn vừa đặt một đơn giống hệt. Bạn có chắc muốn đặt thêm?', { existingOrderCode }),
+  notCancellable: () => new AppError('not-cancellable', 'Đơn hàng này không thể huỷ.'),
   unavailable: () => new AppError('unavailable', 'Không thể kết nối. Vui lòng thử lại.'),
 };

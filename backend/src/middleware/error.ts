@@ -14,6 +14,10 @@ function body(e: AppError) {
       message: e.message,
       ...(e.extras.retryAfterSeconds !== undefined ? { retryAfterSeconds: e.extras.retryAfterSeconds } : {}),
       ...(e.extras.field ? { field: e.extras.field } : {}),
+      ...(e.extras.quote !== undefined ? { quote: e.extras.quote } : {}),
+      ...(e.extras.stockIssues ? { stockIssues: e.extras.stockIssues } : {}),
+      ...(e.extras.removedVoucherCodes ? { removedVoucherCodes: e.extras.removedVoucherCodes } : {}),
+      ...(e.extras.existingOrderCode ? { existingOrderCode: e.extras.existingOrderCode } : {}),
     },
   };
 }
