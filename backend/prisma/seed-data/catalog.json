@@ -1,0 +1,1314 @@
+{
+  "categories": [
+    {
+      "slug": "tops",
+      "name": "Áo",
+      "sortOrder": 1
+    },
+    {
+      "slug": "bottoms",
+      "name": "Quần & chân váy",
+      "sortOrder": 2
+    },
+    {
+      "slug": "dresses",
+      "name": "Đầm",
+      "sortOrder": 3
+    },
+    {
+      "slug": "outerwear",
+      "name": "Áo khoác",
+      "sortOrder": 4
+    }
+  ],
+  "products": [
+    {
+      "slug": "the-everyday-blazer",
+      "name": "The Everyday Blazer",
+      "typeLabel": "Áo blazer · Dáng suông",
+      "category": "outerwear",
+      "moments": [
+        "work",
+        "dinner"
+      ],
+      "genders": [
+        "nam",
+        "nu"
+      ],
+      "price": 1290000,
+      "compareAtPrice": null,
+      "badge": "NEW",
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Phom dáng thoải mái, dễ kết hợp cùng quần suông hoặc chân váy cho những cuộc hẹn sau giờ làm.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Đúng size · Dáng suông vừa, dài ngang hông",
+      "fitModel": "Người mẫu cao 168 cm, mặc size S",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-10-01",
+      "salesRank": 2,
+      "displayOrder": 1,
+      "variants": [
+        {
+          "sku": "N2F-01-0-S",
+          "size": "S",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-01-0-M",
+          "size": "M",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-01-0-L",
+          "size": "L",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-01-0-XL",
+          "size": "XL",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-01-1-S",
+          "size": "S",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-01-1-M",
+          "size": "M",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-01-1-L",
+          "size": "L",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-01-1-XL",
+          "size": "XL",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "nine-to-fine-shirt",
+      "name": "Nine-to-Fine Shirt",
+      "typeLabel": "Áo sơ mi · Dáng rộng nhẹ",
+      "category": "tops",
+      "moments": [
+        "work",
+        "weekend"
+      ],
+      "genders": [
+        "nam",
+        "nu"
+      ],
+      "price": 590000,
+      "compareAtPrice": null,
+      "badge": "BESTSELLER",
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Áo sơ mi phom thoải mái, một lựa chọn dễ phối cho ngày làm việc và cuối tuần.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Đúng size · Rộng nhẹ ở thân",
+      "fitModel": "Người mẫu cao 175 cm, mặc size M",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-09-27",
+      "salesRank": 1,
+      "displayOrder": 2,
+      "variants": [
+        {
+          "sku": "N2F-02-0-S",
+          "size": "S",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-02-0-M",
+          "size": "M",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-02-0-L",
+          "size": "L",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-02-0-XL",
+          "size": "XL",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-02-1-S",
+          "size": "S",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-02-1-M",
+          "size": "M",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-02-1-L",
+          "size": "L",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-02-1-XL",
+          "size": "XL",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "after-hours-dress",
+      "name": "After Hours Dress",
+      "typeLabel": "Đầm midi · Ôm nhẹ",
+      "category": "dresses",
+      "moments": [
+        "dinner",
+        "event"
+      ],
+      "genders": [
+        "nu"
+      ],
+      "price": 890000,
+      "compareAtPrice": 1090000,
+      "badge": null,
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Đường nét gọn gàng và tinh tế dành cho những buổi tối của riêng bạn.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Hơi nhỏ · Nên chọn lớn hơn một size nếu thích thoải mái",
+      "fitModel": "Người mẫu cao 167 cm, mặc size S",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-09-29",
+      "salesRank": 4,
+      "displayOrder": 3,
+      "variants": [
+        {
+          "sku": "N2F-03-0-S",
+          "size": "S",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-03-0-M",
+          "size": "M",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-03-0-L",
+          "size": "L",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-03-0-XL",
+          "size": "XL",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-03-1-S",
+          "size": "S",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-03-1-M",
+          "size": "M",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-03-1-L",
+          "size": "L",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-03-1-XL",
+          "size": "XL",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "the-straight-trousers",
+      "name": "The Straight Trousers",
+      "typeLabel": "Quần ống suông · Lưng cao",
+      "category": "bottoms",
+      "moments": [
+        "work",
+        "dinner"
+      ],
+      "genders": [
+        "nam",
+        "nu"
+      ],
+      "price": 690000,
+      "compareAtPrice": null,
+      "badge": "NEW",
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Quần ống suông với phom dáng dễ phối, đi cùng bạn từ văn phòng đến cuộc hẹn cuối ngày.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Đúng size · Ống suông, dài chạm mắt cá",
+      "fitModel": "Người mẫu cao 170 cm, mặc size S",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-10-02",
+      "salesRank": 3,
+      "displayOrder": 4,
+      "variants": [
+        {
+          "sku": "N2F-04-0-S",
+          "size": "S",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-04-0-M",
+          "size": "M",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-04-0-L",
+          "size": "L",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-04-0-XL",
+          "size": "XL",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-04-1-S",
+          "size": "S",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-04-1-M",
+          "size": "M",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-04-1-L",
+          "size": "L",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-04-1-XL",
+          "size": "XL",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "off-duty-top",
+      "name": "Off-Duty Top",
+      "typeLabel": "Áo kiểu · Dáng ngắn",
+      "category": "tops",
+      "moments": [
+        "weekend",
+        "dinner"
+      ],
+      "genders": [
+        "nu"
+      ],
+      "price": 390000,
+      "compareAtPrice": null,
+      "badge": null,
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Một thiết kế gọn nhẹ để phối cùng những món đồ bạn yêu thích.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Đúng size · Dáng lửng, ôm vừa",
+      "fitModel": "Người mẫu cao 165 cm, mặc size S",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-09-20",
+      "salesRank": 6,
+      "displayOrder": 5,
+      "variants": [
+        {
+          "sku": "N2F-05-0-S",
+          "size": "S",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-05-0-M",
+          "size": "M",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-05-0-L",
+          "size": "L",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-05-0-XL",
+          "size": "XL",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-05-1-S",
+          "size": "S",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-05-1-M",
+          "size": "M",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-05-1-L",
+          "size": "L",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-05-1-XL",
+          "size": "XL",
+          "colorName": "Đỏ",
+          "colorHex": "#a91e2c",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "the-midi-skirt",
+      "name": "The Midi Skirt",
+      "typeLabel": "Chân váy midi · Xếp ly",
+      "category": "bottoms",
+      "moments": [
+        "work",
+        "event"
+      ],
+      "genders": [
+        "nu"
+      ],
+      "price": 650000,
+      "compareAtPrice": null,
+      "badge": null,
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Chân váy midi với đường nét tối giản cho những ngày muốn thay đổi nhịp điệu.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Đúng size · Lưng chun phía sau",
+      "fitModel": "Người mẫu cao 168 cm, mặc size S",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-09-22",
+      "salesRank": 5,
+      "displayOrder": 6,
+      "variants": [
+        {
+          "sku": "N2F-06-0-S",
+          "size": "S",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-06-0-M",
+          "size": "M",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-06-0-L",
+          "size": "L",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-06-0-XL",
+          "size": "XL",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-06-1-S",
+          "size": "S",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-06-1-M",
+          "size": "M",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-06-1-L",
+          "size": "L",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-06-1-XL",
+          "size": "XL",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "weekend-shirt",
+      "name": "The Weekend Shirt",
+      "typeLabel": "Áo sơ mi · Dáng rộng",
+      "category": "tops",
+      "moments": [
+        "weekend"
+      ],
+      "genders": [
+        "nam"
+      ],
+      "price": 550000,
+      "compareAtPrice": null,
+      "badge": null,
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Phom áo thư thái cho một ngày không vội.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Hơi rộng · Có thể chọn nhỏ hơn một size",
+      "fitModel": "Người mẫu cao 178 cm, mặc size M",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-09-18",
+      "salesRank": 7,
+      "displayOrder": 7,
+      "variants": [
+        {
+          "sku": "N2F-07-0-S",
+          "size": "S",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-07-0-M",
+          "size": "M",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-07-0-L",
+          "size": "L",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-07-0-XL",
+          "size": "XL",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-07-1-S",
+          "size": "S",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-07-1-M",
+          "size": "M",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-07-1-L",
+          "size": "L",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-07-1-XL",
+          "size": "XL",
+          "colorName": "Xám",
+          "colorHex": "#96958f",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    },
+    {
+      "slug": "city-vest",
+      "name": "The City Vest",
+      "typeLabel": "Áo gile · Dáng đứng",
+      "category": "outerwear",
+      "moments": [
+        "work",
+        "event"
+      ],
+      "genders": [
+        "nam"
+      ],
+      "price": 790000,
+      "compareAtPrice": null,
+      "badge": "NEW",
+      "coverMediaId": "catalog-placeholder",
+      "galleryMediaIds": [
+        "catalog-placeholder",
+        "gallery-model",
+        "gallery-styling",
+        "gallery-detail"
+      ],
+      "colorMedia": {},
+      "description": "Áo gile dễ kết hợp với sơ mi hoặc mặc riêng cho buổi tối.",
+      "material": "Thông tin chất liệu sẽ được cập nhật.",
+      "care": [
+        "Giặt tay hoặc giặt máy chế độ nhẹ ở 30°C",
+        "Không dùng chất tẩy",
+        "Ủi ở nhiệt độ thấp"
+      ],
+      "fitSummary": "Đúng size · Vừa vai, mặc được bên ngoài sơ mi",
+      "fitModel": "Người mẫu cao 180 cm, mặc size M",
+      "looks": [
+        {
+          "time": "09:00",
+          "moment": "At work",
+          "tip": "Phối cùng sơ mi trắng và giày loafer cho buổi họp đầu ngày."
+        },
+        {
+          "time": "17:30",
+          "moment": "Off the clock",
+          "tip": "Mở một cúc, xắn tay áo và cất thẻ nhân viên khi rời văn phòng."
+        },
+        {
+          "time": "20:00",
+          "moment": "Dinner plans",
+          "tip": "Thêm trang sức bạc, đổi giày để bước vào bữa tối."
+        }
+      ],
+      "createdAt": "2026-09-30",
+      "salesRank": 8,
+      "displayOrder": 8,
+      "variants": [
+        {
+          "sku": "N2F-08-0-S",
+          "size": "S",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 0
+        },
+        {
+          "sku": "N2F-08-0-M",
+          "size": "M",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 1
+        },
+        {
+          "sku": "N2F-08-0-L",
+          "size": "L",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 5,
+          "sortOrder": 2
+        },
+        {
+          "sku": "N2F-08-0-XL",
+          "size": "XL",
+          "colorName": "Đen",
+          "colorHex": "#242323",
+          "inventoryQty": 0,
+          "sortOrder": 3
+        },
+        {
+          "sku": "N2F-08-1-S",
+          "size": "S",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 6,
+          "sortOrder": 10
+        },
+        {
+          "sku": "N2F-08-1-M",
+          "size": "M",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 6,
+          "sortOrder": 11
+        },
+        {
+          "sku": "N2F-08-1-L",
+          "size": "L",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 6,
+          "sortOrder": 12
+        },
+        {
+          "sku": "N2F-08-1-XL",
+          "size": "XL",
+          "colorName": "Trắng",
+          "colorHex": "#f5f4f0",
+          "inventoryQty": 0,
+          "sortOrder": 13
+        }
+      ]
+    }
+  ],
+  "sizeCharts": [
+    {
+      "category": "tops",
+      "data": {
+        "bodyColumns": [
+          "Ngực",
+          "Eo",
+          "Vai"
+        ],
+        "garmentColumns": [
+          "Rộng ngực",
+          "Dài áo",
+          "Dài tay"
+        ],
+        "body": [
+          {
+            "size": "S",
+            "values": {
+              "Ngực": "82–86",
+              "Eo": "64–68",
+              "Vai": "37"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Ngực": "86–90",
+              "Eo": "68–72",
+              "Vai": "38.5"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Ngực": "90–96",
+              "Eo": "72–78",
+              "Vai": "40"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Ngực": "96–102",
+              "Eo": "78–84",
+              "Vai": "41.5"
+            }
+          }
+        ],
+        "garment": [
+          {
+            "size": "S",
+            "values": {
+              "Rộng ngực": "96",
+              "Dài áo": "64",
+              "Dài tay": "58"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Rộng ngực": "100",
+              "Dài áo": "66",
+              "Dài tay": "59"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Rộng ngực": "106",
+              "Dài áo": "68",
+              "Dài tay": "60"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Rộng ngực": "112",
+              "Dài áo": "70",
+              "Dài tay": "61"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "category": "outerwear",
+      "data": {
+        "bodyColumns": [
+          "Ngực",
+          "Eo",
+          "Vai"
+        ],
+        "garmentColumns": [
+          "Rộng ngực",
+          "Dài áo",
+          "Rộng vai"
+        ],
+        "body": [
+          {
+            "size": "S",
+            "values": {
+              "Ngực": "82–86",
+              "Eo": "64–68",
+              "Vai": "37"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Ngực": "86–90",
+              "Eo": "68–72",
+              "Vai": "38.5"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Ngực": "90–96",
+              "Eo": "72–78",
+              "Vai": "40"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Ngực": "96–102",
+              "Eo": "78–84",
+              "Vai": "41.5"
+            }
+          }
+        ],
+        "garment": [
+          {
+            "size": "S",
+            "values": {
+              "Rộng ngực": "100",
+              "Dài áo": "70",
+              "Rộng vai": "39"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Rộng ngực": "104",
+              "Dài áo": "72",
+              "Rộng vai": "40.5"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Rộng ngực": "110",
+              "Dài áo": "74",
+              "Rộng vai": "42"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Rộng ngực": "116",
+              "Dài áo": "76",
+              "Rộng vai": "43.5"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "category": "dresses",
+      "data": {
+        "bodyColumns": [
+          "Ngực",
+          "Eo",
+          "Mông"
+        ],
+        "garmentColumns": [
+          "Rộng ngực",
+          "Rộng eo",
+          "Dài váy"
+        ],
+        "body": [
+          {
+            "size": "S",
+            "values": {
+              "Ngực": "82–86",
+              "Eo": "64–68",
+              "Mông": "88–92"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Ngực": "86–90",
+              "Eo": "68–72",
+              "Mông": "92–96"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Ngực": "90–96",
+              "Eo": "72–78",
+              "Mông": "96–102"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Ngực": "96–102",
+              "Eo": "78–84",
+              "Mông": "102–108"
+            }
+          }
+        ],
+        "garment": [
+          {
+            "size": "S",
+            "values": {
+              "Rộng ngực": "86",
+              "Rộng eo": "70",
+              "Dài váy": "112"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Rộng ngực": "90",
+              "Rộng eo": "74",
+              "Dài váy": "114"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Rộng ngực": "96",
+              "Rộng eo": "80",
+              "Dài váy": "116"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Rộng ngực": "102",
+              "Rộng eo": "86",
+              "Dài váy": "118"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "category": "bottoms",
+      "data": {
+        "bodyColumns": [
+          "Eo",
+          "Mông",
+          "Dài chân trong"
+        ],
+        "garmentColumns": [
+          "Vòng eo",
+          "Vòng mông",
+          "Dài"
+        ],
+        "body": [
+          {
+            "size": "S",
+            "values": {
+              "Eo": "64–68",
+              "Mông": "88–92",
+              "Dài chân trong": "74"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Eo": "68–72",
+              "Mông": "92–96",
+              "Dài chân trong": "75"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Eo": "72–78",
+              "Mông": "96–102",
+              "Dài chân trong": "76"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Eo": "78–84",
+              "Mông": "102–108",
+              "Dài chân trong": "77"
+            }
+          }
+        ],
+        "garment": [
+          {
+            "size": "S",
+            "values": {
+              "Vòng eo": "68",
+              "Vòng mông": "96",
+              "Dài": "98"
+            }
+          },
+          {
+            "size": "M",
+            "values": {
+              "Vòng eo": "72",
+              "Vòng mông": "100",
+              "Dài": "99"
+            }
+          },
+          {
+            "size": "L",
+            "values": {
+              "Vòng eo": "78",
+              "Vòng mông": "106",
+              "Dài": "100"
+            }
+          },
+          {
+            "size": "XL",
+            "values": {
+              "Vòng eo": "84",
+              "Vòng mông": "112",
+              "Dài": "101"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

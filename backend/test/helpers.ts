@@ -7,6 +7,7 @@ import { hashPassword } from '../src/lib/crypto';
 import { flushMail, MailMessage, setMailTransport } from '../src/mail/mailer';
 import { requireAuth, requireRole } from '../src/middleware/auth';
 import { assertLocalTestDb } from './guard';
+import { seedCatalog } from '../prisma/seed-catalog';
 
 export const ORIGIN = 'http://localhost:4200';
 
@@ -36,6 +37,15 @@ export async function resetState(): Promise<void> {
     },
   });
   vi.useRealTimers();
+}
+
+/** Xoá toàn bộ catalog rồi seed lại 8 sản phẩm chuẩn. Không nằm trong resetState() của auth. */
+export async function resetCatalog(): Promise<void> {
+  assertLocalTestDb();
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "product_variants", "products", "size_charts", "categories" RESTART IDENTITY CASCADE',
+  );
+  await seedCatalog(prisma);
 }
 
 export const useClock = (iso: string) => {
