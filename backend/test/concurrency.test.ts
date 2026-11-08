@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   freshIp, loginMember, makeVoucher, newKey, orderBody, post, prisma, resetCheckout, resetState, setStock, stockOf, submitOrder, vid,
+  withToShipCancelMode,
 } from './helpers';
 import { setEmailRetryDelays } from '../src/modules/order/order-email.service';
 
@@ -88,7 +89,8 @@ describe('T-CON-04 cùng khách hai đơn dùng mã per_user_limit 1', () => {
 });
 
 describe('T-CON-05 đặt hàng + huỷ đơn khác đồng thời', () => {
-  it('30 lần: không deadlock treo (< 5 giây mỗi yêu cầu), tồn cuối = ban đầu - tổng đơn chưa huỷ', async () => {
+  // Huỷ thẳng ở `to_ship` (cộng tồn, trả voucher) chỉ còn khi cờ S4-Q1 = 'direct'; đường duyệt yêu cầu huỷ: T-ADM-14.
+  it('30 lần: không deadlock treo (< 5 giây mỗi yêu cầu), tồn cuối = ban đầu - tổng đơn chưa huỷ', async () => withToShipCancelMode('direct', async () => {
     const owner = await loginMember('con5b@example.com');
     for (let i = 0; i < 30; i++) {
       await prisma.order.deleteMany();
@@ -112,11 +114,24 @@ describe('T-CON-05 đặt hàng + huỷ đơn khác đồng thời', () => {
       expect(await stockOf(top)).toBe(5 - sold);
       expect((await prisma.voucher.findUniqueOrThrow({ where: { code } })).usedCount).toBe(active.length);
     }
-  }, 180_000);
+  }), 180_000);
 });
 
 describe('T-CON-06 hai yêu cầu huỷ cùng đơn', () => {
-  it('một 200, một 409; tồn hoàn đúng một lần', async () => {
+  it('to_ship (S4-Q1 request): một 200 cancel_requested, một 409 not-cancellable; tồn không đổi, 1 sự kiện', async () => {
+    const m = await loginMember('con6r@example.com');
+    const o = await submitOrder(await orderBody([it1(top, 2)], { cookie: m.cookie, email: m.email }), { cookie: m.cookie });
+    const cancel = () => post(`/api/orders/${o.body.order.id}/cancel`, {}, { cookie: m.cookie, ip: freshIp() });
+    const rs = await Promise.all([cancel(), cancel()]);
+    expect(statuses(rs)).toEqual([200, 409]);
+    expect(rs.find((r) => r.status === 409)!.body.error.code).toBe('not-cancellable');
+    expect(rs.find((r) => r.status === 200)!.body.status).toBe('cancel_requested');
+    expect(await stockOf(top)).toBe(3);
+    const row = await prisma.order.findUniqueOrThrow({ where: { code: o.body.order.id }, include: { events: true } });
+    expect(row.events.filter((e) => e.kind === 'cancel_requested')).toHaveLength(1);
+  });
+
+  it('cờ direct: một 200, một 409; tồn hoàn đúng một lần', async () => withToShipCancelMode('direct', async () => {
     const m = await loginMember('con6@example.com');
     const o = await submitOrder(await orderBody([it1(top, 2)], { cookie: m.cookie, email: m.email }), { cookie: m.cookie });
     expect(await stockOf(top)).toBe(3);
@@ -125,7 +140,7 @@ describe('T-CON-06 hai yêu cầu huỷ cùng đơn', () => {
     expect(statuses(rs)).toEqual([200, 409]);
     expect(rs.find((r) => r.status === 409)!.body.error.code).toBe('not-cancellable');
     expect(await stockOf(top)).toBe(5);
-  });
+  }));
 });
 
 describe('T-CON-07 ba đơn cùng một biến thể', () => {

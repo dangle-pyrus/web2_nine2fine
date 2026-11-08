@@ -207,6 +207,37 @@ export function orderDeliveredMail(o: OrderDto, isMember: boolean): MailMessage 
   };
 }
 
+/** BR-ADM-30: yêu cầu huỷ đã được duyệt (đơn đã huỷ). COD / chưa thanh toán: không có đoạn hoàn tiền. */
+export function cancelApprovedMail(o: OrderDto, isMember: boolean): MailMessage {
+  const lines = ['Xin chào,', '', `nine2fine đã duyệt yêu cầu huỷ đơn #${o.id}. Đơn đã được huỷ.`];
+  if (o.paymentStatus === 'paid') lines.push('Số tiền đã thanh toán sẽ được hoàn lại trong 1-3 ngày làm việc.');
+  lines.push('');
+  return {
+    to: o.recipient.email,
+    subject: `nine2fine – Yêu cầu huỷ đơn #${o.id} đã được duyệt`,
+    text: [...lines, ...orderBlock(o, isMember), ...slice4Footer()].join('\n'),
+  };
+}
+
+/** BR-ADM-31: yêu cầu huỷ chưa được chấp nhận: lý do, đơn vẫn được giao, gọi hotline nếu vẫn muốn huỷ (S4-Q6). */
+export function cancelRejectedMail(o: OrderDto, isMember: boolean): MailMessage {
+  const reason = o.cancelRequest?.rejectReason;
+  const lines = [
+    'Xin chào,',
+    '',
+    `Yêu cầu huỷ đơn #${o.id} của bạn chưa được chấp nhận.`,
+    ...(reason ? [`Lý do: ${reason}`] : []),
+    'Đơn vẫn được tiếp tục xử lý và giao đến bạn như bình thường.',
+    `Nếu bạn vẫn muốn huỷ đơn, vui lòng gọi hotline ${HOTLINE} để được hỗ trợ.`,
+    '',
+  ];
+  return {
+    to: o.recipient.email,
+    subject: `nine2fine – Yêu cầu huỷ đơn #${o.id} chưa được chấp nhận`,
+    text: [...lines, ...orderBlock(o, isMember), ...slice4Footer()].join('\n'),
+  };
+}
+
 /** Báo CSKH khi thư của một sự kiện đơn lỗi 3 lần. KHÔNG kèm email khách. */
 export function eventEmailFailureSupportMail(to: string, orderCode: string): MailMessage {
   return {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   advance, flushMail, freshIp, get, lastCode, loginMember, makeAwaitingPayment, makeVoucher, mails, orderBody, post, prisma,
-  rawSetCookie, resetCheckout, resetState, setStock, stockOf, submitOrder, useClock, vid,
+  rawSetCookie, resetCheckout, resetState, setStock, stockOf, submitOrder, useClock, vid, withToShipCancelMode,
 } from './helpers';
 import { setEmailRetryDelays } from '../src/modules/order/order-email.service';
 import { expireDueOrders, purgeExpired } from '../src/modules/order/expiry.job';
@@ -31,7 +31,29 @@ const memberOrder = async (m: Awaited<ReturnType<typeof loginMember>>, items = [
 };
 
 describe('T-CAN-01 huỷ đơn (AC-CHK-16, AC-CHK-29)', () => {
-  it('to_ship: cancelled, cancelledBy customer, tồn hoàn đủ, email huỷ; huỷ lần hai 409, tồn không đổi', async () => {
+  // AC-CHK-29 dòng `to_ship` cập nhật theo S4-Q1 (AC-ADM-37): từ lát 4.5 khách ở `to_ship` chỉ gửi yêu cầu huỷ.
+  it('to_ship (toShipCancelMode request): cancel_requested, tồn / voucher / thanh toán giữ, không thư; lần hai 409', async () => {
+    const m = await loginMember('huy@example.com');
+    const o = await memberOrder(m, [it1(blazer, 3)]);
+    await flushMail();
+    expect(await stockOf(blazer)).toBe(2);
+    const res = await cancel(o.id, m.cookie, { reason: 'Đổi ý' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'cancel_requested', paymentStatus: 'pending', canCancel: false, cancelRequest: { outcome: 'pending' } });
+    expect(res.body.cancelledBy).toBeUndefined();
+    expect(res.body.cancelMode).toBeUndefined();
+    expect(res.body.timeline.map((t: { title: string }) => t.title)).toEqual(['Đã đặt hàng', 'Đã gửi yêu cầu huỷ']);
+    expect(await stockOf(blazer)).toBe(2);
+    await flushMail();
+    expect(mails.map((x) => x.subject)).toEqual([`nine2fine – Xác nhận đơn hàng #${o.id}`]);
+    const again = await cancel(o.id, m.cookie);
+    expect(again.status).toBe(409);
+    expect(again.body.error.code).toBe('not-cancellable');
+    expect(await stockOf(blazer)).toBe(2);
+  });
+
+  // Điểm lật S4-Q1 giữ trong code: 'direct' = hành vi Slice 3 nguyên vẹn.
+  it('to_ship (cờ toShipCancelMode = direct): cancelled, cancelledBy customer, tồn hoàn đủ, email huỷ; huỷ lần hai 409, tồn không đổi', async () => withToShipCancelMode('direct', async () => {
     const m = await loginMember('huy@example.com');
     const o = await memberOrder(m, [it1(blazer, 3)]);
     await flushMail(); // thư xác nhận gửi xong trước khi huỷ
@@ -49,7 +71,7 @@ describe('T-CAN-01 huỷ đơn (AC-CHK-16, AC-CHK-29)', () => {
     expect(again.status).toBe(409);
     expect(again.body.error.code).toBe('not-cancellable');
     expect(await stockOf(blazer)).toBe(5);
-  });
+  }));
 
   it('to_pay huỷ được; to_receive / completed / cancel_requested -> 409 không hoàn gì thêm', async () => {
     const m = await loginMember('huy2@example.com');
@@ -83,7 +105,8 @@ describe('T-CAN-01 huỷ đơn (AC-CHK-16, AC-CHK-29)', () => {
 });
 
 describe('T-VOU-10 trả lượt voucher khi huỷ (AC-CHK-16)', () => {
-  it('mã còn hạn: used_count giảm, released_at đặt, áp lại được', async () => {
+  // Khách huỷ thẳng ở `to_ship` chỉ còn khi lật cờ về 'direct' (S4-Q1); trả lượt khi duyệt yêu cầu huỷ: T-ADM-38.
+  it('mã còn hạn: used_count giảm, released_at đặt, áp lại được', async () => withToShipCancelMode('direct', async () => {
     const m = await loginMember('vou10@example.com');
     const o = await memberOrder(m, [it1(top)], { voucherCodes: ['N2FWELCOME15'] });
     expect((await prisma.voucher.findUniqueOrThrow({ where: { code: 'N2FWELCOME15' } })).usedCount).toBe(1);
@@ -92,9 +115,9 @@ describe('T-VOU-10 trả lượt voucher khi huỷ (AC-CHK-16)', () => {
     expect((await prisma.voucherRedemption.findFirstOrThrow()).releasedAt).not.toBeNull();
     const q = await post('/api/checkout/quote', { items: [it1(top)], voucherCodes: ['N2FWELCOME15'], contact: { email: m.email } }, { cookie: m.cookie, ip: freshIp() });
     expect(q.body.vouchers[0].code).toBe('N2FWELCOME15');
-  });
+  }));
 
-  it('mã đã hết hạn lúc huỷ: không trả lượt, vẫn tính lượt riêng của khách', async () => {
+  it('mã đã hết hạn lúc huỷ: không trả lượt, vẫn tính lượt riêng của khách', async () => withToShipCancelMode('direct', async () => {
     const m = await loginMember('vou10b@example.com');
     const o = await memberOrder(m, [it1(top)], { voucherCodes: ['N2FWELCOME15'] });
     await prisma.voucher.update({ where: { code: 'N2FWELCOME15' }, data: { endsAt: new Date(Date.now() - 1000) } });
@@ -104,7 +127,7 @@ describe('T-VOU-10 trả lượt voucher khi huỷ (AC-CHK-16)', () => {
     await prisma.voucher.update({ where: { code: 'N2FWELCOME15' }, data: { endsAt: new Date(Date.now() + 3600_000) } });
     const q = await post('/api/checkout/quote', { items: [it1(top)], voucherCodes: ['N2FWELCOME15'], contact: { email: m.email } }, { cookie: m.cookie, ip: freshIp() });
     expect(q.body.rejectedVouchers[0].reason).toBe('per-user-limit');
-  });
+  }));
 });
 
 describe('T-CAN-02 hết hạn thanh toán', () => {
@@ -249,10 +272,12 @@ describe('T-LKP tra cứu đơn khách bằng OTP (AC-CHK-31)', () => {
     expect((await get(`/api/orders/${code}`, { cookie })).status).toBe(401);
     expect((await cancel(code, cookie)).status).toBe(401);
     vi.useRealTimers();
+    // AC-ADM-37: khách vãng lai qua OTP ở `to_ship` -> gửi yêu cầu huỷ (S4-Q1), tồn giữ nguyên tới khi shop duyệt.
+    const stock = await stockOf(top);
     const c = await cancel(code, cookie);
     expect(c.status).toBe(200);
-    expect(c.body.status).toBe('cancelled');
-    expect(await stockOf(top)).toBe(5);
+    expect(c.body).toMatchObject({ status: 'cancel_requested', cancelRequest: { outcome: 'pending' } });
+    expect(await stockOf(top)).toBe(stock);
   });
 
   it('T-RL-01: 11 yêu cầu tra cứu / 15 phút / IP -> 429', async () => {

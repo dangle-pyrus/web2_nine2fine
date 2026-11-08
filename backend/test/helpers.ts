@@ -3,6 +3,7 @@ import type { Router } from 'express';
 import { vi } from 'vitest';
 import { createApp } from '../src/app';
 import prisma from '../src/config/prisma';
+import { ASSUMPTIONS } from '../src/config/assumptions';
 import { hashPassword } from '../src/lib/crypto';
 import { flushMail, MailMessage, setMailTransport } from '../src/mail/mailer';
 import { requireAuth, requireRole } from '../src/middleware/auth';
@@ -336,6 +337,18 @@ export async function makeOrder(o: MakeOrderOpts = {}): Promise<{ code: string; 
     data: { orderId: order.order_id, at, fromStatus: null, toStatus: status === 'to_pay' ? 'to_pay' : 'to_ship', paymentStatus: 'pending', actor: 'customer', kind: 'placed' },
   });
   return { code, id: order.order_id };
+}
+
+/** Điểm lật S4-Q1: chạy `fn` với `toShipCancelMode` tạm thời (khôi phục kể cả khi lỗi). 'direct' = hành vi Slice 3. */
+export async function withToShipCancelMode<T>(mode: 'direct' | 'request', fn: () => Promise<T>): Promise<T> {
+  const a = ASSUMPTIONS as { toShipCancelMode: 'direct' | 'request' };
+  const prev = a.toShipCancelMode;
+  a.toShipCancelMode = mode;
+  try {
+    return await fn();
+  } finally {
+    a.toShipCancelMode = prev;
+  }
 }
 
 export { prisma, flushMail };

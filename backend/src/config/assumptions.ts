@@ -5,7 +5,7 @@ import { HOUR, MINUTE } from '../lib/clock';
  * - Q1 COMMON: tên trạng thái nằm ở enum DB `order_status` / `payment_status` (đổi cần migration + contract).
  * - Q2 QR/SePay: mặc định chưa bật (cờ DB `store_settings.bank_transfer_enabled` = false, lát 3.8 không làm).
  * - Q3 địa giới: 34 tỉnh/thành, seed `prisma/seed-data/vn-locations.json`.
- * - Q4 huỷ `to_ship`: thay bởi S4-Q1 (xem `toShipCancelMode`); giữ 'direct' tới khi lát 4.5 phát hành.
+ * - Q4 huỷ `to_ship`: thay bởi S4-Q1 (xem `toShipCancelMode`); lát 4.5 đã phát hành với 'request'.
  */
 export const ASSUMPTIONS = {
   /** Q1: mã giảm % làm tròn xuống tới bội số này (đồng). */
@@ -16,9 +16,9 @@ export const ASSUMPTIONS = {
   orderAccessTtlMs: 30 * MINUTE,
   /**
    * S4-Q1 (thay Q4 Slice 3): khách ở `to_ship` -> 'direct' = huỷ thẳng (Slice 3), 'request' = gửi yêu cầu huỷ chờ shop duyệt.
-   * Giữ 'direct' tới khi lát 4.5 phát hành (khi đó đổi thành 'request').
+   * Phát hành 'request' cùng lát 4.5 (2026-11-08). Điểm lật: đổi về 'direct' = hành vi Slice 3 (contract đổi theo quy trình).
    */
-  toShipCancelMode: 'direct' as 'direct' | 'request',
+  toShipCancelMode: 'request' as 'direct' | 'request',
   /** Khách huỷ thẳng từ các trạng thái này (khi `toShipCancelMode = 'direct'` thì cả `to_ship`, xem `customerCancellableFrom()`). */
   customerDirectCancelFrom: ['to_pay'] as readonly string[],
   /** Hệ thống tự huỷ chỉ đơn chờ thanh toán quá hạn. */

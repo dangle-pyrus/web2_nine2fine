@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { order_event_kind, order_status, payment_status } from '@prisma/client';
 import prisma from '../../config/prisma';
-import { customerCancellableFrom } from '../../config/assumptions';
+import { ADMIN_ASSUMPTIONS, ASSUMPTIONS, customerCancellableFrom } from '../../config/assumptions';
 import { now as clockNow } from '../../lib/clock';
 import { Errors } from '../../lib/errors';
 import type { Db } from '../../lib/sql';
@@ -161,12 +161,51 @@ export function scheduleCancelEmail(orderId: string): void {
   });
 }
 
-/** Khách / chủ đơn huỷ (đã kiểm quyền). Trả `Errors.notCancellable()` nếu không huỷ được. */
-export async function cancelByCustomer(orderId: string, reason: string | null, at: Date = clockNow()): Promise<void> {
+/**
+ * C1 (plan mục 4, S4-Q1, S4-Q6): khách gửi yêu cầu huỷ đơn `to_ship` -> `cancel_requested`. Tồn, lượt voucher, thanh toán giữ
+ * nguyên; đúng 1 sự kiện `cancel_requested` (actor customer), KHÔNG có thư. Dòng đơn phải đã được khoá bởi người gọi.
+ * `cancel_requested_at` không bao giờ xoá về NULL nên cũng là dấu "đã dùng yêu cầu duy nhất". Trả null nếu không hợp lệ.
+ */
+export async function requestCancelTx(tx: Db, orderId: string, reason: string | null, at: Date): Promise<string | null> {
+  // S4-Q6: `cancelRequestResubmit = true` cần bảng yêu cầu riêng (không làm ở Slice 4); ở đây luôn một yêu cầu / đơn.
+  const once = ADMIN_ASSUMPTIONS.cancelRequestResubmit ? Prisma.sql`TRUE` : Prisma.sql`"cancel_requested_at" IS NULL`;
+  const [updated] = await tx.$queryRaw<Array<{ payment_status: string }>>(Prisma.sql`
+    UPDATE "orders" SET "status" = 'cancel_requested', "cancel_requested_at" = ${ts(at)}, "cancel_request_reason" = ${reason}
+    WHERE "order_id" = ${orderId}::uuid AND "status" = 'to_ship' AND ${once}
+    RETURNING "payment_status"::text AS "payment_status"`);
+  if (!updated) return null;
+  return insertOrderEvent(tx, {
+    orderId,
+    at,
+    fromStatus: 'to_ship',
+    toStatus: 'cancel_requested',
+    paymentStatus: updated.payment_status as payment_status,
+    actor: 'customer',
+    kind: 'cancel_requested',
+    detail: reason,
+  });
+}
+
+/**
+ * Khách / chủ đơn huỷ (đã kiểm quyền). `to_pay` -> huỷ thẳng + thư "đã huỷ"; `to_ship` -> theo `toShipCancelMode`:
+ * 'request' = yêu cầu huỷ (C1, không thư), 'direct' = huỷ thẳng như Slice 3. Khoá dòng đơn dùng chung với admin nên
+ * khách yêu cầu đua nhân viên bàn giao chỉ một bên thắng (AC-ADM-40). Không huỷ được -> `Errors.notCancellable()`.
+ */
+export async function cancelByCustomer(orderId: string, reason: string | null, at: Date = clockNow()): Promise<'cancelled' | 'requested'> {
+  const why = reason && reason.length > 0 ? reason : null;
   const done = await prisma.$transaction(
-    (tx) => cancelOrderTx(tx, orderId, 'customer', reason, customerCancellableFrom(), at),
+    async (tx): Promise<'cancelled' | 'requested' | null> => {
+      const [row] = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
+        SELECT "status"::text AS "status" FROM "orders" WHERE "order_id" = ${orderId}::uuid FOR UPDATE`);
+      if (!row) return null;
+      if (row.status === 'to_ship' && ASSUMPTIONS.toShipCancelMode === 'request') {
+        return (await requestCancelTx(tx, orderId, why, at)) ? 'requested' : null;
+      }
+      return (await cancelOrderTx(tx, orderId, 'customer', why, customerCancellableFrom(), at)) ? 'cancelled' : null;
+    },
     { timeout: 10_000, maxWait: 5_000 },
   );
   if (!done) throw Errors.notCancellable();
-  scheduleCancelEmail(orderId);
+  if (done === 'cancelled') scheduleCancelEmail(orderId);
+  return done;
 }

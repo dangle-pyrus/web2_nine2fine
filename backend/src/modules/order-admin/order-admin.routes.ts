@@ -9,7 +9,7 @@ import { ADMIN_ORDER_INCLUDE, toAdminOrder, toAdminSummary } from './order-admin
 import { countOrders, listOrders } from './order-admin.query';
 import { ActionInput, Actor, runAction } from './order-admin.service';
 import {
-  callAttemptSchema, cancelSchema, countsQuerySchema, expectedStatusSchema, listQuerySchema, returnedStockSchema, shipSchema,
+  callAttemptSchema, cancelSchema, countsQuerySchema, expectedStatusSchema, listQuerySchema, rejectCancelSchema, returnedStockSchema, shipSchema,
 } from './order-admin.schemas';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
@@ -74,7 +74,9 @@ async function respond(req: Request, res: Response, input: ActionInput): Promise
   const key = optionalIdempotencyKey(req);
   const code = normalizeOrderCode(String(req.params.orderCode));
   if (!code) throw Errors.notFound('Không tìm thấy đơn hàng.');
-  const r = await runAction({ code, actor: actorOf(req), input, key, path: `${req.baseUrl}/${code}/${req.path.split('/').pop()}` });
+  // Đường dẫn sau mã đơn (vd. `cancel`, `cancel-request/approve`) vào request_hash.
+  const action = req.path.split('/').slice(2).join('/');
+  const r = await runAction({ code, actor: actorOf(req), input, key, path: `${req.baseUrl}/${code}/${action}` });
   if (r.replayed) res.set('Idempotency-Replayed', 'true');
   res.json(r.order);
 }
@@ -114,4 +116,18 @@ orderAdminRouter.post(
 orderAdminRouter.post(
   '/:orderCode/returned-stock',
   wrap(async (req, res) => respond(req, res, { kind: 'returned-stock', body: parseBody(returnedStockSchema, req.body) })),
+);
+
+/**
+ * Lát 4.5 (T13, T14; S4-Q1): duyệt / từ chối yêu cầu huỷ của khách. Staff + admin. Giữ gắn cả khi `toShipCancelMode = 'direct'`
+ * (khi đó không có đơn `cancel_requested` mới nên chỉ trả 409; đơn còn treo từ trước khi lật vẫn xử lý được).
+ */
+orderAdminRouter.post(
+  '/:orderCode/cancel-request/approve',
+  wrap(async (req, res) => respond(req, res, { kind: 'approve-cancel', body: parseBody(expectedStatusSchema, req.body) })),
+);
+
+orderAdminRouter.post(
+  '/:orderCode/cancel-request/reject',
+  wrap(async (req, res) => respond(req, res, { kind: 'reject-cancel', body: parseBody(rejectCancelSchema, req.body) })),
 );

@@ -12,7 +12,7 @@ import { acquireIdempotency, completeIdempotency, requestHash } from '../order/i
 import { EventActorUser, insertOrderEvent, staffDisplayName } from '../order/order-event';
 import { scheduleEventEmail } from '../order/order-email.service';
 import { ADMIN_ORDER_INCLUDE, toAdminOrder } from './order-admin.mapper';
-import type { CallAttemptBody, CancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
+import type { CallAttemptBody, CancelBody, RejectCancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
 import {
   AdminAction, AdminCancelReason, callStatsOf, cancelActionOf, checkTransition, SHOP_CANCEL_REASON_TEXT, StateOrder,
 } from './order-state';
@@ -36,7 +36,9 @@ export type ActionInput =
   | { kind: 'ship'; body: ShipBody }
   | { kind: 'deliver'; body: { expectedStatus: order_status } }
   | { kind: 'cancel'; body: CancelBody }
-  | { kind: 'returned-stock'; body: ReturnedStockBody };
+  | { kind: 'returned-stock'; body: ReturnedStockBody }
+  | { kind: 'approve-cancel'; body: { expectedStatus: order_status } }
+  | { kind: 'reject-cancel'; body: RejectCancelBody };
 
 interface LockedOrder {
   order_id: string;
@@ -208,6 +210,47 @@ async function doReturnedStock(c: Ctx, b: ReturnedStockBody): Promise<Done> {
   return { eventId, emailTemplate: null };
 }
 
+/** T13: duyệt yêu cầu huỷ -> `cancelled` qua dịch vụ huỷ dùng chung (hoàn tồn + trả voucher đúng 1 lần), `cancelled_by = customer`. */
+async function doApproveCancel(c: Ctx): Promise<Done> {
+  const [req] = await c.tx.$queryRaw<Array<{ reason: string | null }>>(Prisma.sql`
+    SELECT "cancel_request_reason" AS "reason" FROM "orders" WHERE "order_id" = ${c.o.order_id}::uuid`);
+  const reason = req?.reason ?? null;
+  const r = await cancelOrderWith(c.tx, {
+    orderId: c.o.order_id,
+    at: c.at,
+    actor: 'shop',
+    cancelledBy: 'customer',
+    actorUser: c.user,
+    allowedFrom: ['cancel_requested'],
+    restoreStock: true,
+    reason,
+    eventKind: 'cancel_approved',
+    eventDetail: reason,
+    emailTemplate: 'cancel-approved',
+  });
+  if (!r) return stateChanged(c);
+  const n = await c.tx.$executeRaw(Prisma.sql`
+    UPDATE "orders" SET "cancel_request_outcome" = 'approved', "cancel_request_decided_at" = ${ts(c.at)},
+      "cancel_request_decided_by" = ${c.user.id}::uuid
+    WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'cancelled' AND "cancel_requested_at" IS NOT NULL AND "cancel_request_outcome" IS NULL`);
+  if (n !== 1) await stateChanged(c);
+  return { eventId: r.eventId, emailTemplate: 'cancel-approved' };
+}
+
+/** T14: từ chối -> về `to_ship` (giữ `confirmed_*`), tồn + voucher giữ; lý do khách thấy (email + DTO). */
+async function doRejectCancel(c: Ctx, b: RejectCancelBody): Promise<Done> {
+  const n = await c.tx.$executeRaw(Prisma.sql`
+    UPDATE "orders" SET "status" = 'to_ship', "cancel_request_outcome" = 'rejected', "cancel_request_decided_at" = ${ts(c.at)},
+      "cancel_request_decided_by" = ${c.user.id}::uuid, "cancel_request_reject_reason" = ${b.reason}
+    WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'cancel_requested' AND "cancel_request_outcome" IS NULL`);
+  if (n !== 1) await stateChanged(c);
+  const eventId = await insertOrderEvent(c.tx, {
+    orderId: c.o.order_id, at: c.at, fromStatus: 'cancel_requested', toStatus: 'to_ship', paymentStatus: c.o.payment_status,
+    actor: 'shop', actorUser: c.user, kind: 'cancel_rejected', detail: b.reason, emailTemplate: 'cancel-rejected',
+  });
+  return { eventId, emailTemplate: 'cancel-rejected' };
+}
+
 /* ---------------- Khuôn chung ---------------- */
 
 const isRetryable = (err: unknown): boolean => {
@@ -278,6 +321,8 @@ export async function runAction(p: {
             : i.kind === 'ship' ? await doShip(c, i.body)
             : i.kind === 'deliver' ? await doDeliver(c)
             : i.kind === 'cancel' ? await doCancel(c, i.body)
+            : i.kind === 'approve-cancel' ? await doApproveCancel(c)
+            : i.kind === 'reject-cancel' ? await doRejectCancel(c, i.body)
             : await doReturnedStock(c, i.body);
 
           // 9. Đọc lại (cùng tx); 8. lưu khoá idempotency với bản chụp.

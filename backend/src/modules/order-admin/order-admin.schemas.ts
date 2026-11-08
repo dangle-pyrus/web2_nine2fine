@@ -108,7 +108,18 @@ export const returnedStockSchema = z
     if (v.decision === 'written_off') requireNote(v.note, ctx);
   });
 
+const REJECT_MSG = 'Lý do từ chối bắt buộc, từ 5 đến 250 ký tự.';
+/** T14: lý do từ chối (khách thấy trong email + `Order.cancelRequest.rejectReason`), 5-250 ký tự sau trim. */
+export const rejectCancelSchema = z.object({
+  expectedStatus,
+  reason: z
+    .string({ error: REJECT_MSG })
+    .transform((v) => v.normalize('NFC').trim())
+    .refine((v) => len(v) >= 5 && len(v) <= 250, { error: REJECT_MSG }),
+});
+
 export type CallAttemptBody = z.output<typeof callAttemptSchema>;
 export type ShipBody = z.output<typeof shipSchema>;
 export type CancelBody = z.output<typeof cancelSchema>;
 export type ReturnedStockBody = z.output<typeof returnedStockSchema>;
+export type RejectCancelBody = z.output<typeof rejectCancelSchema>;

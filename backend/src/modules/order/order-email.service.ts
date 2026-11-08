@@ -7,7 +7,7 @@ import { ts } from '../../lib/sql';
 import { runInBackground, sendMail } from '../../mail/mailer';
 import type { MailMessage } from '../../mail/mailer';
 import {
-  emailFailureSupportMail, eventEmailFailureSupportMail, orderAwaitingPaymentMail, orderCancelledMail, orderConfirmedMail,
+  cancelApprovedMail, cancelRejectedMail, emailFailureSupportMail, eventEmailFailureSupportMail, orderAwaitingPaymentMail, orderCancelledMail, orderConfirmedMail,
   orderDeliveredMail, orderShippedMail,
 } from '../../mail/order-templates';
 import type { OrderDto } from './order.mapper';
@@ -105,6 +105,8 @@ const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean) => MailMe
   'order-shipped': orderShippedMail,
   'order-delivered': orderDeliveredMail,
   'order-cancelled-shop': orderCancelledMail,
+  'cancel-approved': cancelApprovedMail,
+  'cancel-rejected': cancelRejectedMail,
 };
 
 /** Một lần thử: CAS `email_attempts` (ai thắng mới gửi, nên gửi nền và job bù không trùng; mỗi sự kiện tối đa 1 thư). */
