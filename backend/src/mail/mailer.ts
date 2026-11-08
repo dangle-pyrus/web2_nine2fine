@@ -84,6 +84,11 @@ export function sendMailInBackground(msg: MailMessage): void {
   });
 }
 
+/** Gửi thư và CHỜ kết quả (ném lỗi nếu thất bại): dùng cho việc thử lại có đếm (email xác nhận đơn). */
+export async function sendMail(msg: MailMessage): Promise<void> {
+  await getTransport().send(msg);
+}
+
 /**
  * Chạy tác vụ nền (không chờ). Lỗi chỉ được log tên lỗi + nhãn, không log địa chỉ, nội dung hay mã.
  * Được theo dõi để flushMail() chờ xong (test ổn định, tắt máy chủ gọn).

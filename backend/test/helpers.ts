@@ -193,4 +193,62 @@ export async function loginMember(email = `member${++memberSeq}@example.com`) {
   return { user, email, cookie: cookieFrom(res, 'n2f_sid')! };
 }
 
+export interface OrderOpts {
+  voucherCodes?: string[];
+  phone?: string;
+  email?: string;
+  name?: string;
+  paymentMethod?: 'cod' | 'bank-transfer';
+  cookie?: string;
+  [k: string]: unknown;
+}
+
+let wardCache: string | undefined;
+export async function firstWard(): Promise<string> {
+  if (!wardCache) wardCache = (await prisma.ward.findFirstOrThrow({ where: { provinceCode: '01' }, orderBy: { code: 'asc' } })).code;
+  return wardCache;
+}
+
+/** Body đặt hàng hợp lệ; `expected` lấy từ chính báo giá của máy chủ (như FE). Ghi đè bằng `over`. */
+export async function orderBody(items: Array<{ variantId: string; quantity: number }>, o: OrderOpts = {}) {
+  const { voucherCodes = [], phone = '0912345678', email = 'khach@example.com', name = 'Nguyễn Văn A', paymentMethod = 'cod', cookie, ...rest } = o;
+  const q = await post('/api/checkout/quote', { items, voucherCodes, contact: { phone, email } }, { ip: freshIp(), cookie });
+  if (q.status !== 200) throw new Error(`quote ${q.status}`);
+  return {
+    items,
+    voucherCodes,
+    contact: { name, phone, email },
+    address: { provinceCode: '01', wardCode: await firstWard(), street: '12 Phố Huế' },
+    note: '',
+    paymentMethod,
+    invoice: null,
+    acceptedTerms: true,
+    expected: {
+      lines: (q.body.lines as Array<{ variantId: string; unitPrice: number }>).map((l) => ({ variantId: l.variantId, unitPrice: l.unitPrice })),
+      pricing: q.body.pricing,
+    },
+    ...rest,
+  } as Record<string, any>;
+}
+
+let keySeq = 0;
+export const newKey = () => `test-key-${Date.now()}-${++keySeq}-abcdefghij`;
+
+/** POST /api/orders (mỗi lần một IP và một khoá mới, trừ khi truyền vào). */
+export const submitOrder = (body: unknown, opts: { key?: string; ip?: string; cookie?: string; headers?: Record<string, string> } = {}) =>
+  post('/api/orders', body, {
+    ip: opts.ip ?? freshIp(),
+    cookie: opts.cookie,
+    headers: { 'Idempotency-Key': opts.key ?? newKey(), ...(opts.headers ?? {}) },
+  });
+
+export async function stockOf(variantId: string): Promise<number> {
+  return (await prisma.productVariant.findUniqueOrThrow({ where: { variant_id: variantId } })).inventoryQty;
+}
+
+/** Chuyển đơn COD đã tạo thành đơn chuyển khoản chờ thanh toán (QR chưa bật ở HTTP nên dựng bằng SQL). */
+export async function makeAwaitingPayment(code: string, dueAt: Date): Promise<void> {
+  await prisma.order.update({ where: { code }, data: { status: 'to_pay', paymentMethod: 'bank_transfer', paymentDueAt: dueAt } });
+}
+
 export { prisma, flushMail };

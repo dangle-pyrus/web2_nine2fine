@@ -9,6 +9,7 @@ import { catalogRouter } from './modules/catalog/catalog.routes';
 import { adminAuthRouter, authRouter } from './modules/auth/auth.routes';
 import { cartRouter } from './modules/cart/cart.routes';
 import { locationRouter } from './modules/location/location.routes';
+import { orderRouter } from './modules/order/order.routes';
 import { checkoutRouter, voucherRouter } from './modules/checkout/checkout.routes';
 
 export interface CreateAppOptions {
@@ -53,6 +54,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);
+  api.use('/orders', orderRouter);
   options.extraApiRoutes?.(api);
   app.use('/api', api);
 
