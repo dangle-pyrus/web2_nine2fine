@@ -144,7 +144,8 @@ test('AC-ADM-37 (FE): a to_pay order is still cancelled at once; a member to_shi
   await addBlazer(page);
   await page.goto('/checkout');
   await expect(page.getByRole('radio', { name: /Nguyễn Minh.*Mặc định/ })).toBeChecked();
-  await expect(page.getByText('Dự kiến giao:')).toBeVisible();
+  // Quote loaded. On mobile the summary is collapsed, so the ETA line is attached but hidden.
+  await expect(page.getByText('Dự kiến giao:').first()).toBeAttached();
   await page.getByRole('checkbox', { name: /Tôi đã đọc và đồng ý/ }).check();
   const submit = page.getByRole('button', { name: /Đặt đơn trải nghiệm/ });
   await expect(submit).toBeEnabled();
