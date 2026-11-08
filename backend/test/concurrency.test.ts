@@ -20,7 +20,7 @@ const it1 = (variantId: string, quantity = 1) => ({ variantId, quantity });
 const statuses = (rs: Array<{ status: number }>) => rs.map((r) => r.status).sort((a, b) => a - b);
 
 // T-CON-01 / AC-CHK-15: 2 người mua món cuối, lặp 20 lần.
-describe('T-CON-01 hai người mua món cuối', () => {
+describe('T-CON-01 hai người mua món cuối (AC-CHK-15)', () => {
   it('mỗi lần đúng 1 đơn 201 và 1 lần 409 stock-changed; tồn cuối 0; không âm', async () => {
     const a = await orderBody([it1(top)], { phone: '0911111111', email: 'a@example.com' });
     const b = await orderBody([it1(top)], { phone: '0922222222', email: 'b@example.com' });
@@ -62,7 +62,7 @@ describe('T-CON-02 hai đơn giành lượt voucher cuối', () => {
   }, 120_000);
 });
 
-describe('T-CON-03 cùng Idempotency-Key đồng thời', () => {
+describe('T-CON-03 cùng Idempotency-Key đồng thời (AC-CHK-18)', () => {
   it('1 đơn, cả hai phản hồi cùng mã (một 201, một 200)', async () => {
     const body = await orderBody([it1(top)]);
     const key = newKey();

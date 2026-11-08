@@ -20,7 +20,7 @@ beforeEach(async () => {
 
 const quote = (body: unknown, ip = freshIp(), cookie?: string) => post('/api/checkout/quote', body, { ip, cookie });
 
-describe('T-LOC-01 địa giới', () => {
+describe('T-LOC-01 địa giới (AC-CHK-06)', () => {
   it('34 tỉnh, >= 3000 phường, phường thuộc đúng 1 tỉnh, cache 86400, công khai', async () => {
     const res = await get('/api/locations/provinces', { cookie: 'n2f_sid=hong' });
     expect(res.status).toBe(200);
@@ -39,7 +39,7 @@ describe('T-LOC-01 địa giới', () => {
   });
 });
 
-describe('T-QUO báo giá', () => {
+describe('T-QUO báo giá (AC-CHK-10, AC-CHK-24)', () => {
   it('T-QUO-01: bỏ qua price giả; khách không phiên và phiên sai đều 200; no-store', async () => {
     const body = { items: [{ variantId: top, quantity: 1, unitPrice: 1 }], total: 1, pricing: { total: 1 } };
     const a = await quote(body);
@@ -135,7 +135,7 @@ describe('T-QUO báo giá', () => {
   });
 });
 
-describe('T-VOU voucher', () => {
+describe('T-VOU voucher (AC-VOU-01..06, AC-VOU-11)', () => {
   it('T-VOU-01: WELCOME15 + FREESHIP; thay bằng T50K', async () => {
     const a = await quote({ items: [{ variantId: top, quantity: 1 }], voucherCodes: ['n2fwelcome15', ' N2FFREESHIP '] });
     expect(a.body.pricing).toEqual({ subtotal: 390000, discount: 58000, shippingFee: 30000, shippingDiscount: 30000, total: 332000 });
@@ -278,7 +278,7 @@ describe('T-VOU voucher', () => {
   });
 });
 
-describe('T-RL-01 (phần quote)', () => {
+describe('T-RL-01 (phần quote) (AC-CHK-36)', () => {
   it('121 quote / 60 giây / IP -> 429 retryAfterSeconds; IP khác không bị', async () => {
     const ip = freshIp();
     const body = { items: [{ variantId: top, quantity: 1 }] };

@@ -30,7 +30,7 @@ const memberOrder = async (m: Awaited<ReturnType<typeof loginMember>>, items = [
   return res.body.order as { id: string };
 };
 
-describe('T-CAN-01 huỷ đơn', () => {
+describe('T-CAN-01 huỷ đơn (AC-CHK-16, AC-CHK-29)', () => {
   it('to_ship: cancelled, cancelledBy customer, tồn hoàn đủ, email huỷ; huỷ lần hai 409, tồn không đổi', async () => {
     const m = await loginMember('huy@example.com');
     const o = await memberOrder(m, [it1(blazer, 3)]);
@@ -82,7 +82,7 @@ describe('T-CAN-01 huỷ đơn', () => {
   });
 });
 
-describe('T-VOU-10 trả lượt voucher khi huỷ', () => {
+describe('T-VOU-10 trả lượt voucher khi huỷ (AC-CHK-16)', () => {
   it('mã còn hạn: used_count giảm, released_at đặt, áp lại được', async () => {
     const m = await loginMember('vou10@example.com');
     const o = await memberOrder(m, [it1(top)], { voucherCodes: ['N2FWELCOME15'] });
@@ -152,7 +152,7 @@ describe('T-CAN-02 hết hạn thanh toán', () => {
   });
 });
 
-describe('T-LKP tra cứu đơn khách bằng OTP', () => {
+describe('T-LKP tra cứu đơn khách bằng OTP (AC-CHK-31)', () => {
   const GUEST = 'khach.tracuu@example.com';
   const placeGuest = async () => {
     const res = await submitOrder(await orderBody([it1(top)], { email: GUEST }));
@@ -271,7 +271,7 @@ describe('T-LKP tra cứu đơn khách bằng OTP', () => {
   });
 });
 
-describe('T-LST-01 danh sách đơn thành viên', () => {
+describe('T-LST-01 danh sách đơn thành viên (AC-CHK-32, AC-CHK-33)', () => {
   it('12 đơn: trang 1 có 10 mới nhất trước, trang 2 có 2; đơn người khác 404; phiên thu hồi -> 401, đơn không đổi', async () => {
     const m = await loginMember('ds@example.com');
     await setStock(top, 100);

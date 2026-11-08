@@ -8,7 +8,7 @@ const settings = { shippingFee: 30000, freeShippingThreshold: 1_000_000 };
 const line = (id: string, unitPrice: number, quantity = 1) => ({ variantId: id, unitPrice, quantity });
 const pct15 = { kind: 'percent' as const, value: 15, maxDiscount: null };
 
-describe('T-CHK-01 pricing.ts', () => {
+describe('T-CHK-01 pricing.ts (AC-VOU-01, AC-VOU-07)', () => {
   it('999.000 chưa tới ngưỡng, 1.000.000 miễn phí giao (theo ngưỡng, trước voucher)', () => {
     const a = computePricing({ lines: [line('a', 999_000)], freeShipVoucher: false, settings });
     expect(a.pricing).toEqual({ subtotal: 999_000, discount: 0, shippingFee: 30000, shippingDiscount: 0, total: 1_029_000 });
@@ -53,7 +53,7 @@ describe('T-CHK-01 pricing.ts', () => {
 });
 
 describe('T-CHK-02 allocateByWeight', () => {
-  it('ví dụ AC-VOU-08: 390.000 + 550.000, giảm 141.000 -> 58.500 + 82.500 (chia hết, dư 0)', () => {
+  it('chia hết dư 0: 390.000 + 550.000, giảm 141.000 -> 58.500 + 82.500 (chia hết, dư 0)', () => {
     const r = computePricing({
       lines: [line('a-off', 390_000), line('b-weekend', 550_000)],
       discount: { voucher: pct15, eligibleVariantIds: new Set(['a-off', 'b-weekend']) },
@@ -65,6 +65,19 @@ describe('T-CHK-02 allocateByWeight', () => {
     expect(by['a-off']).toBe(58_500);
     expect(by['b-weekend']).toBe(82_500);
     expect(r.lineDiscounts.reduce((a, d) => a + d.amount, 0)).toBe(141_000);
+  });
+
+  it('AC-VOU-08: 390.000 + 550.000 + 790.000, giảm 259.000 -> 58.387 + 82.341 + 118.272 (dư 1 đ vào dòng lớn nhất)', () => {
+    const r = computePricing({
+      lines: [line('a-off', 390_000), line('b-weekend', 550_000), line('c-vest', 790_000)],
+      discount: { voucher: pct15, eligibleVariantIds: new Set(['a-off', 'b-weekend', 'c-vest']) },
+      freeShipVoucher: false,
+      settings,
+    });
+    expect(r.pricing.subtotal).toBe(1_730_000);
+    expect(r.pricing.discount).toBe(259_000);
+    const by = Object.fromEntries(r.lineDiscounts.map((d) => [d.variantId, d.amount]));
+    expect([by['a-off'], by['b-weekend'], by['c-vest']]).toEqual([58_387, 82_341, 118_272]);
   });
 
   it('có dư: 3 dòng 100.000 / 200.000 / 250.000 giảm 99.999 -> dư vào dòng 250.000', () => {
