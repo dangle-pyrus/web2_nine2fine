@@ -14,6 +14,7 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string }>
   'returned-to-sender': { label: 'Đã hoàn về shop', color: '#b91c1c' },
   completed: { label: 'Hoàn thành', color: '#15803d' },
   cancelled: { label: 'Đã hủy', color: '#b91c1c' },
+  'cancel-requested': { label: 'Chờ duyệt huỷ', color: '#b45309' },
   'return-requested': { label: 'Đang xử lý trả hàng', color: '#6d28d9' },
   returned: { label: 'Trả hàng/Hoàn tiền', color: '#6d28d9' },
 };
@@ -206,6 +207,8 @@ export function orderNote(
       };
     case 'returned-to-sender':
       return { text: 'Đơn không giao được và đã hoàn về nine2fine.', tone: 'muted' };
+    case 'cancel-requested':
+      return { text: 'Đã gửi yêu cầu huỷ, nine2fine sẽ phản hồi sớm.', tone: 'transit' };
     case 'pending-payment': {
       if (!order.paymentDueAt) return null;
       const left = formatRemaining(order.paymentDueAt, now);
@@ -353,6 +356,12 @@ export function orderHeadline(order: Order): { eyebrow: string; title: string; d
       return {
         eyebrow: 'Cập nhật đơn hàng',
         title: 'Đơn đã hoàn về shop',
+        detail: orderNote(order)?.text ?? '',
+      };
+    case 'cancel-requested':
+      return {
+        eyebrow: 'Cập nhật đơn hàng',
+        title: 'Đang chờ duyệt huỷ',
         detail: orderNote(order)?.text ?? '',
       };
     case 'shipping':

@@ -91,6 +91,12 @@ export function defaultMessage(code: AdminErrorCode): string {
       return 'Dữ liệu vừa được người khác thay đổi. Tải lại trang rồi thử lại.';
     case 'invalid-transition':
       return 'Đơn hàng đã chuyển sang trạng thái khác. Tải lại trang để xem trạng thái mới.';
+    case 'order-state-changed':
+      return 'Đơn vừa được cập nhật bởi người khác.';
+    case 'condition-not-met':
+      return 'Đơn chưa đủ điều kiện cho thao tác này. Tải lại đơn để xem trạng thái mới.';
+    case 'rate-limited':
+      return 'Bạn thao tác quá nhanh. Chờ một lát rồi thử lại.';
     case 'validation':
       return 'Một số trường chưa hợp lệ. Kiểm tra các trường được đánh dấu rồi lưu lại.';
     default:

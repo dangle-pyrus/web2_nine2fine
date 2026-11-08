@@ -1,0 +1,325 @@
+@switch (state().kind) { @case ('loading') {
+<adm-page-header heading="Đang tải đơn hàng" back="/admin/orders" />
+<div class="columns" role="status" aria-label="Đang tải đơn hàng">
+  <div class="col-main">
+    <div class="sk-block" aria-hidden="true"></div>
+    <div class="sk-block" aria-hidden="true"></div>
+  </div>
+  <div class="col-side"><div class="sk-block" aria-hidden="true"></div></div>
+</div>
+} @case ('not-found') {
+<adm-page-header heading="Không tìm thấy đơn hàng" back="/admin/orders" />
+<adm-empty
+  heading="Không tìm thấy đơn hàng"
+  description="Mã đơn không tồn tại hoặc sai dạng. Kiểm tra lại mã rồi tìm trong danh sách."
+>
+  <a class="adm-btn" routerLink="/admin/orders">Về danh sách đơn hàng</a>
+</adm-empty>
+} @case ('error') {
+<adm-page-header heading="Đơn hàng" back="/admin/orders" />
+<adm-empty kind="error" heading="Không tải được đơn hàng" [description]="errorText()">
+  <button type="button" class="adm-btn" (click)="retry()">Thử lại</button>
+</adm-empty>
+} @case ('ready') { @if (order(); as order) {
+<adm-page-header [heading]="'#' + order.id" back="/admin/orders">
+  <ng-container badges>
+    <adm-badge [spec]="paymentBadge(paymentState(order))" />
+    <adm-badge [spec]="statusBadge(order)" />
+  </ng-container>
+  <p subtitle class="secondary small subtitle">
+    <adm-copy [value]="order.id" label="mã đơn" /> Đặt lúc {{ order.placedAt | admDateTime }}
+  </p>
+</adm-page-header>
+
+<div class="columns">
+  <div class="col-main">
+    @if (order.needsCall) {
+    <div class="banner banner--warning" role="status">
+      <adm-icon name="reiconPhone" />
+      <div class="banner-body">
+        <p class="banner-title">Gọi khách xác nhận đơn COD</p>
+        <p>
+          Chưa xác nhận. Cuộc gọi không liên lạc được trong 24 giờ: {{ order.callAttempts.inFirstDay
+          | admNum }}/3.
+        </p>
+      </div>
+    </div>
+    } @for (flag of order.overdue; track flag) {
+    <div class="banner banner--critical" role="status">
+      <adm-icon name="reiconAlertTriangle" />
+      <div class="banner-body">
+        <p class="banner-title">{{ overdueLabels[flag] }}</p>
+      </div>
+    </div>
+    }
+
+    <section class="section" aria-labelledby="actions-title">
+      <header><h2 id="actions-title">Thao tác</h2></header>
+      @if (actions().length) {
+      <ul class="actions">
+        @for (action of actions(); track action) {
+        <li>
+          <button
+            type="button"
+            class="adm-btn"
+            disabled
+            [attr.data-action]="action"
+            title="Thao tác này mở ở bản cập nhật tới"
+          >
+            {{ actionLabels[action] }}
+          </button>
+        </li>
+        }
+      </ul>
+      <p class="small secondary">
+        Chỉ hiện thao tác máy chủ cho phép ở bước này. Các thao tác xử lý đơn sẽ mở ở bản cập nhật
+        tới.
+      </p>
+      } @else {
+      <p class="secondary">Không có thao tác nào cho đơn này.</p>
+      }
+    </section>
+
+    <section class="section" aria-labelledby="items-title">
+      <header><h2 id="items-title">Sản phẩm ({{ order.items.length }})</h2></header>
+      <ul class="items">
+        @for (item of order.items; track item.variantId) {
+        <li>
+          <div class="item-main">
+            <span class="cell-title">{{ item.name }}</span>
+            <p class="small secondary">
+              {{ item.color }} / {{ item.size }}<span class="sku-tag mono">{{ item.sku }}</span>
+            </p>
+          </div>
+          <p class="num secondary">{{ item.unitPrice | admMoney }} × {{ item.quantity }}</p>
+          <p class="num line-total">{{ item.unitPrice * item.quantity | admMoney }}</p>
+        </li>
+        }
+      </ul>
+    </section>
+
+    <section class="section" aria-labelledby="pay-title">
+      <header>
+        <h2 id="pay-title">Thanh toán</h2>
+        <adm-badge [spec]="paymentBadge(paymentState(order))" />
+      </header>
+      <dl class="totals">
+        <div>
+          <dt>Tạm tính</dt>
+          <dd class="num">{{ order.pricing.subtotal | admMoney }}</dd>
+        </div>
+        @if (order.pricing.discount) {
+        <div>
+          <dt>
+            Giảm giá @for (voucher of order.vouchers; track voucher.code) {
+            <span class="chip chip--static mono">{{ voucher.code }}</span>
+            }
+          </dt>
+          <dd class="num">−{{ order.pricing.discount | admMoney }}</dd>
+        </div>
+        }
+        <div>
+          <dt>Phí vận chuyển</dt>
+          <dd class="num">
+            {{ freeShipping(order) ? 'Miễn phí' : (order.pricing.shippingFee -
+            order.pricing.shippingDiscount | admMoney) }}
+          </dd>
+        </div>
+        <div class="grand">
+          <dt>Tổng cộng</dt>
+          <dd class="num">{{ order.pricing.total | admMoney }}</dd>
+        </div>
+        <div>
+          <dt>Phương thức</dt>
+          <dd>{{ methods[order.paymentMethod] }}</dd>
+        </div>
+        @if (order.paymentDueAt) {
+        <div>
+          <dt>Hạn thanh toán</dt>
+          <dd>{{ order.paymentDueAt | admDateTime }}</dd>
+        </div>
+        } @if (order.paidAt) {
+        <div>
+          <dt>Đã thanh toán lúc</dt>
+          <dd>{{ order.paidAt | admDateTime }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+
+    <section class="section" aria-labelledby="ship-title">
+      <header><h2 id="ship-title">Vận chuyển</h2></header>
+      <dl class="dl two">
+        @if (order.shipment; as shipment) {
+        <div>
+          <dt>Đơn vị vận chuyển</dt>
+          <dd>{{ shipment.carrier }}</dd>
+        </div>
+        <div>
+          <dt>Mã vận đơn</dt>
+          <dd class="mono">{{ shipment.trackingNumber }}</dd>
+        </div>
+        <div>
+          <dt>Bàn giao lúc</dt>
+          <dd>{{ shipment.handedOverAt | admDateTime }} bởi {{ staff(shipment.handedOverBy) }}</dd>
+        </div>
+        } @else {
+        <div class="span-2">
+          <dd class="secondary">Chưa bàn giao cho đơn vị vận chuyển.</dd>
+        </div>
+        } @if (order.deliveredAt) {
+        <div>
+          <dt>Giao xong lúc</dt>
+          <dd>{{ order.deliveredAt | admDateTime }}</dd>
+        </div>
+        }
+        <div>
+          <dt>Dự kiến giao</dt>
+          <dd>{{ order.estimatedDelivery.from }} đến {{ order.estimatedDelivery.to }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    @if (order.confirmation; as confirmation) {
+    <section class="section" aria-labelledby="confirm-title">
+      <header><h2 id="confirm-title">Xác nhận</h2></header>
+      <p>
+        Khách xác nhận lúc {{ confirmation.confirmedAt | admDateTime }}, ghi bởi {{
+        staff(confirmation.confirmedBy) }}.
+      </p>
+    </section>
+    } @if (order.cancelRequest; as request) {
+    <section class="section" aria-labelledby="request-title">
+      <header><h2 id="request-title">Yêu cầu huỷ</h2></header>
+      <dl class="dl two">
+        <div>
+          <dt>Gửi lúc</dt>
+          <dd>{{ request.requestedAt | admDateTime }}</dd>
+        </div>
+        <div>
+          <dt>Kết quả</dt>
+          <dd>
+            {{ request.outcome === 'pending' ? 'Chờ duyệt' : request.outcome === 'approved' ? 'Đã
+            duyệt' : 'Đã từ chối' }}
+          </dd>
+        </div>
+        @if (request.reason) {
+        <div class="span-2">
+          <dt>Lý do của khách</dt>
+          <dd>{{ request.reason }}</dd>
+        </div>
+        } @if (request.decidedBy && request.decidedAt) {
+        <div class="span-2">
+          <dt>Quyết định</dt>
+          <dd>
+            {{ request.decidedAt | admDateTime }} bởi {{ staff(request.decidedBy) }}@if
+            (request.rejectReason) {: {{ request.rejectReason }}}
+          </dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (order.cancellation; as cancellation) {
+    <section class="section" aria-labelledby="cancel-title">
+      <header><h2 id="cancel-title">Huỷ đơn</h2></header>
+      <dl class="dl two">
+        <div>
+          <dt>Huỷ lúc</dt>
+          <dd>{{ cancellation.at | admDateTime }}</dd>
+        </div>
+        <div>
+          <dt>Người huỷ</dt>
+          <dd>
+            {{ cancellation.by === 'customer' ? 'Khách' : cancellation.by === 'shop' ? 'Cửa hàng' :
+            'Hệ thống' }}
+          </dd>
+        </div>
+        @if (cancellation.reasonCode) {
+        <div>
+          <dt>Lý do</dt>
+          <dd>{{ cancelReasons[cancellation.reasonCode] }}</dd>
+        </div>
+        } @if (cancellation.reason) {
+        <div class="span-2">
+          <dt>Câu hiển thị cho khách</dt>
+          <dd>{{ cancellation.reason }}</dd>
+        </div>
+        } @if (cancellation.note) {
+        <div class="span-2">
+          <dt>Ghi chú nội bộ</dt>
+          <dd>{{ cancellation.note }}</dd>
+        </div>
+        }
+      </dl>
+    </section>
+    } @if (order.returnHandling; as handling) {
+    <section class="section" aria-labelledby="return-title">
+      <header><h2 id="return-title">Hàng hoàn</h2></header>
+      <p>
+        @switch (handling.state) { @case ('pending') {Hàng hoàn chờ xử lý: cộng lại tồn kho hoặc
+        loại bỏ.} @case ('restocked') {Đã cộng lại tồn kho.} @default {Đã loại bỏ, không cộng tồn
+        kho.} } @if (handling.decidedAt && handling.decidedBy) { ({{ handling.decidedAt |
+        admDateTime }} bởi {{ staff(handling.decidedBy) }}) } @if (handling.note) {: {{
+        handling.note }} }
+      </p>
+    </section>
+    }
+
+    <section class="section" aria-labelledby="history-title">
+      <header>
+        <h2 id="history-title">Lịch sử đơn hàng</h2>
+        <span class="small secondary">Mới nhất trước</span>
+      </header>
+      <ol class="timeline">
+        @for (entry of order.timeline; track $index) {
+        <li>
+          <span class="marker" aria-hidden="true"></span>
+          <div>
+            <p class="title">{{ entry.title }}</p>
+            <p class="meta">
+              {{ entry.at | admDateTime }} · {{ actorLabel(entry.actor) }} @if (entry.fromStatus &&
+              entry.fromStatus !== entry.toStatus) { · {{ statusLabel(entry.fromStatus) }} → {{
+              statusLabel(entry.toStatus) }} } @else { · {{ statusLabel(entry.toStatus) }} }
+            </p>
+            @if (entry.detail) {
+            <p class="detail">{{ entry.detail }}</p>
+            } @if (entry.note) {
+            <p class="note-line">Ghi chú nội bộ: {{ entry.note }}</p>
+            }
+          </div>
+        </li>
+        }
+      </ol>
+    </section>
+  </div>
+
+  <div class="col-side">
+    <section class="section" aria-labelledby="customer-title">
+      <header><h2 id="customer-title">Người nhận</h2></header>
+      <p class="cell-title">{{ order.recipient.name }}</p>
+      <p>
+        <a class="link" [href]="'tel:' + order.recipient.phone">{{ order.recipient.phone }}</a>
+        <adm-copy [value]="order.recipient.phone" label="số điện thoại" />
+      </p>
+      <p>{{ order.recipient.email }}</p>
+    </section>
+    <section class="section" aria-labelledby="address-title">
+      <header><h2 id="address-title">Địa chỉ giao hàng</h2></header>
+      <p>{{ order.shippingAddress.street }}</p>
+      <p>{{ order.shippingAddress.ward }}, {{ order.shippingAddress.province }}</p>
+      @if (order.note) {
+      <p class="note secondary">Ghi chú của khách: “{{ order.note }}”</p>
+      }
+    </section>
+    @if (order.invoice; as invoice) {
+    <section class="section" aria-labelledby="invoice-title">
+      <header><h2 id="invoice-title">Hoá đơn công ty</h2></header>
+      <p class="cell-title">{{ invoice.companyName }}</p>
+      <p>MST {{ invoice.taxCode }}</p>
+      <p>{{ invoice.address }}</p>
+      <p>{{ invoice.email }}</p>
+    </section>
+    }
+  </div>
+</div>
+} } }

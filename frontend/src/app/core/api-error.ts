@@ -25,6 +25,10 @@ export const API_ERROR_CODES = [
   'idempotency-conflict',
   'possible-duplicate',
   'not-cancellable',
+  // Slice 4 (admin orders).
+  'invalid-transition',
+  'order-state-changed',
+  'condition-not-met',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 

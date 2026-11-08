@@ -1,6 +1,7 @@
 /**
  * Fixed role × permission matrix (guideline 6.13, Phụ lục A.4: roles match the backend `Role` enum).
- * Hidden, not disabled: UI checks these to hide menus and buttons (8.2); the backend must enforce
+ * Slice 4: staff may cancel with the five fixed reasons (`orders.cancel`); only admin has
+ * `orders.cancel-other`. The server is the real gate (BR-ADM-04). Hidden, not disabled: UI checks these to hide menus and buttons (8.2); the backend must enforce
  * the same matrix.
  */
 import type { StaffRole } from '../data-access/models';
@@ -10,6 +11,7 @@ export type Permission =
   | 'orders.view'
   | 'orders.process'
   | 'orders.cancel'
+  | 'orders.cancel-other'
   | 'orders.export'
   | 'returns.process'
   | 'products.view'
@@ -32,6 +34,7 @@ const ALL: readonly Permission[] = [
   'orders.view',
   'orders.process',
   'orders.cancel',
+  'orders.cancel-other',
   'orders.export',
   'returns.process',
   'products.view',
@@ -55,6 +58,7 @@ export const ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> = {
   staff: new Set<Permission>([
     'orders.view',
     'orders.process',
+    'orders.cancel',
     'returns.process',
     'products.view',
     'inventory.view',
@@ -82,8 +86,12 @@ export const PERMISSION_MATRIX: {
     module: 'Đơn hàng',
     items: [
       { permission: 'orders.view', label: 'Xem' },
-      { permission: 'orders.process', label: 'Xử lý (xác nhận, giao hàng)' },
-      { permission: 'orders.cancel', label: 'Hủy đơn' },
+      {
+        permission: 'orders.process',
+        label: 'Xử lý (ghi cuộc gọi, xác nhận, bàn giao, giao xong, hàng hoàn, duyệt huỷ)',
+      },
+      { permission: 'orders.cancel', label: 'Hủy đơn (năm lý do cố định)' },
+      { permission: 'orders.cancel-other', label: 'Hủy đơn với lý do khác' },
       { permission: 'orders.export', label: 'Xuất file' },
       { permission: 'returns.process', label: 'Duyệt trả hàng' },
     ],

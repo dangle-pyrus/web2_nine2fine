@@ -1,9 +1,10 @@
 import { inject, InjectionToken, Provider, Type } from '@angular/core';
-import { API_CONFIG } from '../core/api-config';
+import { API_CONFIG, apiConfig } from '../core/api-config';
 import * as ports from './data-access/admin-apis';
 import * as mocks from '../../mocks/admin/mock-admin-apis';
 import { MockAdminReportsApi } from '../../mocks/admin/mock-admin-reports';
 import * as storefrontMocks from '../../mocks/admin/mock-admin-storefront';
+import { adminOrderAdapterProviders } from './admin-order-adapters';
 import { AdminDialogs } from './ui/dialogs';
 import { provideAdminIcons } from './ui/icons';
 
@@ -28,9 +29,18 @@ function bind<T>(
  * includes admin code, mocks or icons.
  */
 export function provideAdmin(): Provider[] {
+  // BR-ADM-36: the real orders API needs the real admin session (cookie `n2f_asid`).
+  const config = apiConfig;
+  if (config.adminOrdersMode === 'http' && config.authMode !== 'http') {
+    console.warn(
+      "adminOrdersMode 'http' needs authMode 'http': without the admin session cookie every order request answers 401.",
+    );
+  }
   return [
     provideAdminIcons(),
     AdminDialogs,
+    // Slice 4 orders desk: the HTTP adapter, or the contract mock in the e2e build.
+    ...adminOrderAdapterProviders,
     // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
     ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),
     ...bind(ports.ADMIN_DASHBOARD_API, mocks.MockAdminDashboardApi, ports.HttpAdminDashboardApi),

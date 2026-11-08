@@ -15,7 +15,7 @@ import { AdmIcon } from './icon';
         <label class="row small">
           <span class="secondary">Số dòng</span>
           <select class="select select--sm" (change)="sizeChange.emit(+$any($event.target).value)">
-            @for (size of sizes; track size) {
+            @for (size of sizes(); track size) {
               <option [value]="size" [selected]="size === pageSize()">{{ size }}</option>
             }
           </select>
@@ -48,7 +48,8 @@ export class AdmPager {
   readonly pageSize = input.required<number>();
   readonly pageChange = output<number>();
   readonly sizeChange = output<number>();
-  protected readonly sizes = PAGE_SIZES;
+  /** Rows-per-page options; the orders desk caps them at 50 (contract `limit`). */
+  readonly sizes = input<readonly number[]>(PAGE_SIZES);
   readonly pages = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
   readonly range = computed(() => {
     const total = this.total();

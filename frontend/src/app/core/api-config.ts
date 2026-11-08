@@ -15,6 +15,13 @@ export interface ApiConfig {
    * account (Slice 3). Independent of `mode`: profile, addresses and admin stay on `mode`.
    */
   checkoutMode: 'mock' | 'http';
+  /**
+   * Admin orders (Slice 4), independent of `mode`. `http`: the order desk (`/api/admin/orders`,
+   * only the "Đơn hàng" menu, other admin routes say "Chưa khả dụng"; needs `authMode: 'http'`).
+   * `mock`: the earlier mock back office, unchanged. `contract-mock`: the order desk on the
+   * contract-faithful mock (e2e only, picked by the Playwright specs).
+   */
+  adminOrdersMode: 'mock' | 'http' | 'contract-mock';
   baseUrl: string;
 }
 /**
@@ -30,5 +37,6 @@ export const apiConfig: ApiConfig = {
   authMode: 'http',
   catalogMode: 'http',
   checkoutMode: 'http',
+  adminOrdersMode: 'http',
   baseUrl: '/api',
 };

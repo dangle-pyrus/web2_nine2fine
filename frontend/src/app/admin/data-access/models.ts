@@ -44,6 +44,9 @@ export type AdminErrorCode =
   | 'not-found'
   | 'conflict'
   | 'invalid-transition'
+  // Slice 4 (admin orders):
+  | 'order-state-changed'
+  | 'condition-not-met'
   | 'validation'
   | 'unavailable'
   // Sign-in only (docs/api/openapi.yaml):

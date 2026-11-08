@@ -12,6 +12,8 @@ export type OrderStatus =
   | 'returned-to-sender'
   | 'completed'
   | 'cancelled'
+  /** Shopper asked to cancel a `to_ship` order; the shop decides (Slice 4). */
+  | 'cancel-requested'
   /** The shopper asked to return items; nine2fine is collecting and inspecting them. */
   | 'return-requested'
   | 'returned';

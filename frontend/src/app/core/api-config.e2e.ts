@@ -16,7 +16,22 @@ export interface ApiConfig {
    * account (Slice 3). Independent of `mode`: profile, addresses and admin stay on `mode`.
    */
   checkoutMode: 'mock' | 'http';
+  /** See `api-config.ts`. */
+  adminOrdersMode: 'mock' | 'http' | 'contract-mock';
   baseUrl: string;
+}
+/**
+ * Playwright picks the order desk with `localStorage['n2f.e2e.adminOrdersMode'] = 'contract-mock'`;
+ * every other spec keeps the earlier mock back office.
+ */
+function readAdminOrdersMode(): ApiConfig['adminOrdersMode'] {
+  try {
+    return localStorage.getItem('n2f.e2e.adminOrdersMode') === 'contract-mock'
+      ? 'contract-mock'
+      : 'mock';
+  } catch {
+    return 'mock';
+  }
 }
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
 export const apiConfig: ApiConfig = {
@@ -24,5 +39,6 @@ export const apiConfig: ApiConfig = {
   authMode: 'mock',
   catalogMode: 'mock',
   checkoutMode: 'mock',
+  adminOrdersMode: readAdminOrdersMode(),
   baseUrl: '/api',
 };

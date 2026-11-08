@@ -53,6 +53,10 @@
                 {
                   "replace": "src/app/core/storefront-adapters.ts",
                   "with": "src/app/core/storefront-adapters.e2e.ts"
+                },
+                {
+                  "replace": "src/app/admin/admin-order-adapters.ts",
+                  "with": "src/app/admin/admin-order-adapters.e2e.ts"
                 }
               ]
             }

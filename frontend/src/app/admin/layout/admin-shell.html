@@ -12,6 +12,7 @@
   </button>
   <img src="/assets/brand/logo-typho.svg" alt="nine2fine" height="18" />
   <span class="spacer"></span>
+  @if (!deskMode) {
   <button
     type="button"
     class="adm-btn adm-btn--icon adm-btn--ghost"
@@ -20,6 +21,7 @@
   >
     <adm-icon name="reiconSearch" />
   </button>
+  }
 </header>
 } @if (compact() && drawerOpen()) {
 <div class="scrim" (click)="drawerOpen.set(false)" aria-hidden="true"></div>
@@ -65,6 +67,7 @@
     <adm-icon name="reiconExport" [size]="14" class="trail" />
   </a>
 
+  @if (!deskMode) {
   <button
     type="button"
     class="search-pill"
@@ -75,6 +78,7 @@
     <span class="label">Tìm kiếm</span>
     <kbd class="trail">Ctrl K</kbd>
   </button>
+  }
 
   <p class="group">Menu</p>
   <ul class="menu-list">
@@ -126,8 +130,8 @@
         <span class="role">{{ roleLabels[user.role] }}</span>
       </span>
     </div>
-    } @if (session.can('settings.store') || session.can('settings.staff') ||
-    session.can('settings.audit')) {
+    } @if (!deskMode && (session.can('settings.store') || session.can('settings.staff') ||
+    session.can('settings.audit'))) {
     <a
       class="item"
       routerLink="/admin/settings"

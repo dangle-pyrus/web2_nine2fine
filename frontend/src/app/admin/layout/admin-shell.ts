@@ -12,10 +12,12 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, interval, map } from 'rxjs';
 import { Title } from '@angular/platform-browser';
+import { API_CONFIG } from '../../core/api-config';
 import { AdminSession } from '../core/admin-session';
 import type { Permission } from '../core/permissions';
 import { ROLE_LABELS } from '../core/permissions';
 import { ADMIN_AUTH_API, ADMIN_ORDERS_API, ADMIN_RETURNS_API } from '../data-access/admin-apis';
+import { ADMIN_ORDER_DESK_API } from '../data-access/order-desk-api';
 import { AdminDialogs } from '../ui/dialogs';
 import { AdmIcon } from '../ui/icon';
 import { isShortcutEvent } from '../ui/keyboard';
@@ -70,8 +72,11 @@ export class AdminShell {
   protected readonly session = inject(AdminSession);
   private readonly router = inject(Router);
   private readonly auth = inject(ADMIN_AUTH_API);
-  private readonly ordersApi = inject(ADMIN_ORDERS_API);
-  private readonly returnsApi = inject(ADMIN_RETURNS_API);
+  /** Orders desk (Slice 4): only "Đơn hàng", no mock API is touched (BR-ADM-36). */
+  protected readonly deskMode = inject(API_CONFIG).adminOrdersMode !== 'mock';
+  private readonly ordersApi = this.deskMode ? null : inject(ADMIN_ORDERS_API);
+  private readonly returnsApi = this.deskMode ? null : inject(ADMIN_RETURNS_API);
+  private readonly deskApi = this.deskMode ? inject(ADMIN_ORDER_DESK_API) : null;
   private readonly dialogs = inject(AdminDialogs);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -156,7 +161,12 @@ export class AdminShell {
   /** Modules the role may not see are hidden, not disabled (8.2). */
   protected readonly items = computed(() => {
     this.session.user();
-    return this.nav.filter((item) => this.session.can(item.permission));
+    const visible = this.deskMode
+      ? this.nav
+          .filter((item) => item.link === '/admin/orders')
+          .map((item) => ({ ...item, children: undefined }))
+      : this.nav;
+    return visible.filter((item) => this.session.can(item.permission));
   });
   protected readonly initials = computed(() =>
     (this.session.user()?.name ?? '')
@@ -224,11 +234,13 @@ export class AdminShell {
   }
 
   openSearch(): void {
+    if (this.deskMode) return;
     this.drawerOpen.set(false);
     this.dialogs.modal(CommandPalette, null, 'adm-palette-panel');
   }
 
   onKey(event: KeyboardEvent): void {
+    if (this.deskMode) return;
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
       this.openSearch();
@@ -277,8 +289,22 @@ export class AdminShell {
 
   private refreshCounts(): void {
     if (!this.session.can('orders.view')) return;
-    this.ordersApi
-      .counts()
+    if (this.deskApi) {
+      // Work waiting for the team: calls to make, cancel requests, returned parcels.
+      this.deskApi
+        .counts({ q: '', payment: '', from: '', to: '' })
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (counts) =>
+            this.counts.set({
+              toFulfil: counts['to-confirm'] + counts['cancel-requests'] + counts['returning'],
+              returns: 0,
+            }),
+          error: () => undefined,
+        });
+      return;
+    }
+    this.ordersApi!.counts()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (counts) =>
@@ -289,8 +315,14 @@ export class AdminShell {
           })),
         error: () => undefined,
       });
-    this.returnsApi
-      .list({ state: 'pending', page: 1, pageSize: 1, search: '', sort: '', dir: 'desc' })
+    this.returnsApi!.list({
+      state: 'pending',
+      page: 1,
+      pageSize: 1,
+      search: '',
+      sort: '',
+      dir: 'desc',
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (page) => this.counts.update((value) => ({ ...value, returns: page.total })),

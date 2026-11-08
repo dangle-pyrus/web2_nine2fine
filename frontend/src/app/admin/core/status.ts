@@ -32,6 +32,7 @@ const ORDER_TONES: Record<OrderStatus, Tone> = {
   'returned-to-sender': 'neutral',
   completed: 'success',
   cancelled: 'neutral',
+  'cancel-requested': 'warning',
   'return-requested': 'warning',
   returned: 'neutral',
 };
