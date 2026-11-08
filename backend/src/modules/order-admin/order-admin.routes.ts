@@ -7,7 +7,10 @@ import { adminRateLimit } from '../../middleware/rate-limit';
 import { normalizeOrderCode } from '../order/order-code';
 import { ADMIN_ORDER_INCLUDE, toAdminOrder, toAdminSummary } from './order-admin.mapper';
 import { countOrders, listOrders } from './order-admin.query';
-import { countsQuerySchema, listQuerySchema } from './order-admin.schemas';
+import { ActionInput, Actor, runAction } from './order-admin.service';
+import {
+  callAttemptSchema, cancelSchema, countsQuerySchema, expectedStatusSchema, listQuerySchema, returnedStockSchema, shipSchema,
+} from './order-admin.schemas';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
 const wrap =
@@ -51,17 +54,49 @@ orderAdminRouter.get(
   }),
 );
 
-/**
- * Lát 4.1: chỉ có cổng phân quyền theo `reason` (BR-ADM-02, AC-ADM-02/03): lý do chỉ admin mà người gọi không phải admin
- * -> 403 TRƯỚC khi đọc đơn. Thực thi huỷ thuộc lát 4.3 (tới đó trả 404 not-found).
- */
+/* ---------------- Hành động (lát 4.3, 4.4). Thứ tự kiểm: 403 theo reason -> 422 -> 404 -> khoá đơn -> 409 -> 200. ---------------- */
+
+const KEY_RE = /^[A-Za-z0-9-]{16,64}$/;
+/** `Idempotency-Key` tuỳ chọn ở admin; có mà sai dạng -> 422. */
+function optionalIdempotencyKey(req: Request): string | undefined {
+  const v = req.get('idempotency-key');
+  if (v === undefined) return undefined;
+  if (!KEY_RE.test(v)) throw Errors.validation('Idempotency-Key sai dạng.', 'Idempotency-Key');
+  return v;
+}
+
+const actorOf = (req: Request): Actor => {
+  const u = req.auth!.user;
+  return { id: u.user_id, role: u.role, firstName: u.firstName, lastName: u.lastName };
+};
+
+async function respond(req: Request, res: Response, input: ActionInput): Promise<void> {
+  const key = optionalIdempotencyKey(req);
+  const code = normalizeOrderCode(String(req.params.orderCode));
+  if (!code) throw Errors.notFound('Không tìm thấy đơn hàng.');
+  const r = await runAction({ code, actor: actorOf(req), input, key, path: `${req.baseUrl}/${code}/${req.path.split('/').pop()}` });
+  if (r.replayed) res.set('Idempotency-Replayed', 'true');
+  res.json(r.order);
+}
+
+orderAdminRouter.post(
+  '/:orderCode/call-attempts',
+  wrap(async (req, res) => respond(req, res, { kind: 'call-attempt', body: parseBody(callAttemptSchema, req.body) })),
+);
+
+orderAdminRouter.post(
+  '/:orderCode/confirm',
+  wrap(async (req, res) => respond(req, res, { kind: 'confirm', body: parseBody(expectedStatusSchema, req.body) })),
+);
+
+/** Quyền theo `reason` kiểm TRƯỚC Zod và trước khi đọc đơn (BR-ADM-02, AC-ADM-02/03); lặp lại trong máy trạng thái. */
 orderAdminRouter.post(
   '/:orderCode/cancel',
-  wrap(async (req, _res) => {
+  wrap(async (req, res) => {
     const reason = (req.body as { reason?: unknown } | undefined)?.reason;
     if (typeof reason === 'string' && ADMIN_ASSUMPTIONS.adminOnlyCancelReasons.includes(reason) && req.auth!.user.role !== 'admin') {
       throw Errors.forbidden();
     }
-    throw Errors.notFound();
+    await respond(req, res, { kind: 'cancel', body: parseBody(cancelSchema, req.body) });
   }),
 );

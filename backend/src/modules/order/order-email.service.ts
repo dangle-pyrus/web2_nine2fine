@@ -5,7 +5,11 @@ import { now as clockNow } from '../../lib/clock';
 import { logger } from '../../lib/logger';
 import { ts } from '../../lib/sql';
 import { runInBackground, sendMail } from '../../mail/mailer';
-import { emailFailureSupportMail, orderAwaitingPaymentMail, orderConfirmedMail } from '../../mail/order-templates';
+import type { MailMessage } from '../../mail/mailer';
+import {
+  emailFailureSupportMail, eventEmailFailureSupportMail, orderAwaitingPaymentMail, orderCancelledMail, orderConfirmedMail,
+} from '../../mail/order-templates';
+import type { OrderDto } from './order.mapper';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
 
 /**
@@ -88,6 +92,82 @@ export async function retryPendingEmails(at: Date = clockNow()): Promise<number>
     if (result === 'failed') {
       const o = await prisma.order.findUnique({ where: { order_id: r.order_id }, select: { emailAttempts: true } });
       if ((o?.emailAttempts ?? 0) >= MAX_ATTEMPTS) await notifySupport(r.order_id);
+    }
+  }
+  return sent;
+}
+
+/* ---------------- Thư theo sự kiện (Slice 4, BR-ADM-35; plan mục 8) ---------------- */
+
+/** Tên thư lưu ở `order_events.email_template` -> nội dung. */
+const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean) => MailMessage> = {
+  'order-cancelled-shop': orderCancelledMail,
+};
+
+/** Một lần thử: CAS `email_attempts` (ai thắng mới gửi, nên gửi nền và job bù không trùng; mỗi sự kiện tối đa 1 thư). */
+async function attemptEventOnce(eventId: string, at: Date): Promise<Attempt> {
+  const claimed = await prisma.$queryRaw<Array<{ order_id: string; email_template: string | null }>>(Prisma.sql`
+    UPDATE "order_events" SET "email_attempts" = "email_attempts" + 1
+    WHERE "event_id" = ${eventId}::uuid AND "email_sent_at" IS NULL AND "email_template" IS NOT NULL AND "email_attempts" < ${MAX_ATTEMPTS}
+    RETURNING "order_id", "email_template"`);
+  const c = claimed[0];
+  if (!c || !c.email_template) return 'skipped';
+  const build = EVENT_TEMPLATES[c.email_template];
+  const order = await prisma.order.findUnique({ where: { order_id: c.order_id }, include: ORDER_INCLUDE });
+  if (!build || !order) {
+    // Mẫu lạ / đơn mất: đánh dấu để khỏi thử lại (không có thư).
+    await prisma.$executeRaw(Prisma.sql`UPDATE "order_events" SET "email_sent_at" = ${ts(at)} WHERE "event_id" = ${eventId}::uuid`);
+    return 'skipped';
+  }
+  try {
+    await sendMail(build(toOrderDto(order), order.userId !== null));
+  } catch (err) {
+    logger.error('order-event-email-failed', { order: order.code, eventId, reason: err instanceof Error ? err.name : 'unknown' });
+    return 'failed';
+  }
+  await prisma.$executeRaw(Prisma.sql`UPDATE "order_events" SET "email_sent_at" = ${ts(at)} WHERE "event_id" = ${eventId}::uuid`);
+  return 'sent';
+}
+
+async function notifySupportForEvent(eventId: string): Promise<void> {
+  const rows = await prisma.$queryRaw<Array<{ code: string }>>(Prisma.sql`
+    SELECT o."code" FROM "order_events" e JOIN "orders" o ON o."order_id" = e."order_id" WHERE e."event_id" = ${eventId}::uuid`);
+  const code = rows[0]?.code;
+  if (!code) return;
+  try {
+    await sendMail(eventEmailFailureSupportMail(getConfig().supportEmail, code));
+  } catch (err) {
+    logger.error('order-event-email-support-failed', { order: code, reason: err instanceof Error ? err.name : 'unknown' });
+  }
+}
+
+/** Gọi SAU commit của hành động admin: lần 1 ngay, lần 2 +10 giây, lần 3 +60 giây; vẫn lỗi -> báo CSKH. Không chờ. */
+export function scheduleEventEmail(eventId: string): void {
+  runInBackground('order-event-email', async () => {
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await sleep(retryDelaysMs[i] ?? 0);
+      const r = await attemptEventOnce(eventId, clockNow());
+      if (r !== 'failed') return; // 'skipped': đã gửi / người khác đang giữ lượt
+    }
+    await notifySupportForEvent(eventId);
+  });
+}
+
+/** Job nền: bù thư của sự kiện chưa gửi (tiến trình chết sau commit): 2 phút đến 1 giờ tuổi, chưa đủ 3 lần. */
+export async function retryPendingEventEmails(at: Date = clockNow()): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ event_id: string }>>(Prisma.sql`
+    SELECT "event_id" FROM "order_events"
+    WHERE "email_template" IS NOT NULL AND "email_sent_at" IS NULL AND "email_attempts" < ${MAX_ATTEMPTS}
+      AND "at" BETWEEN ${ts(new Date(at.getTime() - 3_600_000))} AND ${ts(new Date(at.getTime() - 120_000))}
+    ORDER BY "at" LIMIT 50`);
+  let sent = 0;
+  for (const r of rows) {
+    const result = await attemptEventOnce(r.event_id, at);
+    if (result === 'sent') sent++;
+    if (result === 'failed') {
+      const [e] = await prisma.$queryRaw<Array<{ email_attempts: number }>>(Prisma.sql`
+        SELECT "email_attempts" FROM "order_events" WHERE "event_id" = ${r.event_id}::uuid`);
+      if ((e?.email_attempts ?? 0) >= MAX_ATTEMPTS) await notifySupportForEvent(r.event_id);
     }
   }
   return sent;

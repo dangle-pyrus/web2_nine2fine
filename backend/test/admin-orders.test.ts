@@ -73,11 +73,15 @@ describe('T-ADM-02 phân quyền theo hành động (AC-ADM-02)', () => {
     expect(await snapshot(code)).toBe(before);
   });
 
-  it('admin không bị chặn bởi cổng quyền (thực thi huỷ thuộc lát 4.3)', async () => {
+  it('admin huỷ other 200; staff huỷ customer_request 200 (lát 4.3)', async () => {
     const admin = await loginAdmin();
+    const staff = await loginStaff();
     const { code } = await makeOrder();
     const r = await adminPost(`/${code}/cancel`, { expectedStatus: 'to_ship', reason: 'other', note: 'lệch kho' }, admin.cookie);
-    expect(r.status).not.toBe(403);
+    expect(r.status).toBe(200);
+    expect(r.body.cancellation).toMatchObject({ by: 'shop', reasonCode: 'other' });
+    const c = await makeOrder();
+    expect((await adminPost(`/${c.code}/cancel`, { expectedStatus: 'to_ship', reason: 'customer_request', note: 'Khách gọi hotline' }, staff.cookie)).status).toBe(200);
   });
 
   it('allowedActions: staff không có cancel-other, admin có (T-ADM-04)', async () => {

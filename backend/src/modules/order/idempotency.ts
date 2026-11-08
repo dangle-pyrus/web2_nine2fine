@@ -8,7 +8,7 @@ import { ts } from '../../lib/sql';
 
 /** Idempotency-Key (BR-CHK-15, plan mục 4.4 bước 1). Khoá chỉ tồn tại khi giao dịch commit, nên lỗi 4xx/5xx không "đốt" khoá. */
 
-export type IdempotencyScope = 'order-create' | 'cart-merge';
+export type IdempotencyScope = 'order-create' | 'cart-merge' | 'admin-action';
 
 /** JSON chuẩn hoá (khoá đối tượng được sắp) để băm ổn định. */
 export function canonicalJson(value: unknown): string {

@@ -151,3 +151,12 @@ export function emailFailureSupportMail(to: string, orderCode: string): MailMess
     text: `Hệ thống không gửi được email xác nhận cho đơn ${orderCode} sau 3 lần thử. Vui lòng liên hệ khách hàng qua kênh khác.`,
   };
 }
+
+/** Báo CSKH khi thư của một sự kiện đơn lỗi 3 lần. KHÔNG kèm email khách. */
+export function eventEmailFailureSupportMail(to: string, orderCode: string): MailMessage {
+  return {
+    to,
+    subject: `Không gửi được email đơn ${orderCode}`,
+    text: `Hệ thống không gửi được email cập nhật cho đơn ${orderCode} sau 3 lần thử. Vui lòng liên hệ khách hàng qua kênh khác.`,
+  };
+}
