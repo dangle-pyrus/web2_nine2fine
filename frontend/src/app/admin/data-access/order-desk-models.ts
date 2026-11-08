@@ -203,6 +203,8 @@ export type DeskCommand =
       note?: string;
     }
   | { action: 'approve-cancel'; expectedStatus: DeskOrderStatus }
+  /** Internal note (BR-ADM-38): valid in every status, so it carries no `expectedStatus`. */
+  | { action: 'add-note'; note: string }
   | { action: 'reject-cancel'; expectedStatus: DeskOrderStatus; reason: string }
   | {
       action: 'returned-stock';
@@ -239,5 +241,7 @@ export const DESK_TRACKING_MAX = 40;
 export const DESK_TRACKING_PATTERN = /^[A-Za-z0-9-]+$/;
 export const DESK_NOTE_MIN = 5;
 export const DESK_NOTE_MAX = 250;
+/** `AdminNoteRequest.note`: 1-500 characters after trim (BR-ADM-38). */
+export const DESK_INTERNAL_NOTE_MAX = 500;
 /** Names offered first when handing over; the field stays free text (S4-Q5). */
 export const DESK_CARRIER_SUGGESTIONS = ['GHN', 'GHTK', 'Viettel Post', 'J&T'] as const;

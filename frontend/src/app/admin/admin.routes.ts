@@ -45,6 +45,15 @@ export const ADMIN_ROUTES: Routes = [
         ],
       },
       {
+        // Print view of the delivery slip (BR-ADM-39): outside the shell so only the slip prints.
+        path: 'orders/:id/slip',
+        canMatch: [deskMode],
+        canActivate: [adminAuthGuard],
+        title: T('Phiếu giao hàng'),
+        loadComponent: () =>
+          import('./features/order-desk/order-slip-page').then((m) => m.OrderSlipPage),
+      },
+      {
         path: '',
         component: AdminShell,
         canActivate: [adminAuthGuard],

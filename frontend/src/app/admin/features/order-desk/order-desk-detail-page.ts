@@ -8,7 +8,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap, tap } from 'rxjs';
 import { AdminSession } from '../../core/admin-session';
 import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
@@ -19,6 +19,7 @@ import {
   CANCEL_REASON_LABELS,
   DESK_TABS,
   entryStatusLabel,
+  OVERDUE_HINTS,
   OVERDUE_LABELS,
   paymentState,
   statusBadge,
@@ -59,6 +60,7 @@ function kindOf(action: DeskAction): DeskActionKind | null {
     case 'write-off':
     case 'approve-cancel':
     case 'reject-cancel':
+    case 'add-note':
       return action;
     default:
       return null;
@@ -68,8 +70,8 @@ function kindOf(action: DeskAction): DeskActionKind | null {
 /**
  * Order detail of the orders desk (Slice 4, BR-ADM-09, 10): customer, shipping and payment blocks,
  * the history newest first, and the buttons the server allows right now (`allowedActions`).
- * Lát 4.3-4.5 act on them (call attempt, confirm, ship, deliver, cancel, returned stock, approve or reject a cancel request); the
- * remaining buttons (notes, print) stay disabled until their lát.
+ * Lát 4.3-4.6 act on them (call attempt, confirm, ship, deliver, cancel, returned stock, approve or
+ * reject a cancel request, internal note); "In phiếu giao" opens the print view of the slip.
  */
 @Component({
   selector: 'adm-order-desk-detail-page',
@@ -92,6 +94,7 @@ export class OrderDeskDetailPage {
   private readonly api = inject(ADMIN_ORDER_DESK_API);
   protected readonly session = inject(AdminSession);
   private readonly dialogs = inject(AdminDialogs);
+  private readonly router = inject(Router);
   private readonly code = routeParam('id');
   private readonly tick = signal(0);
 
@@ -107,6 +110,7 @@ export class OrderDeskDetailPage {
   protected readonly actorLabel = actorLabel;
   protected readonly statusLabel = entryStatusLabel;
   protected readonly overdueLabels = OVERDUE_LABELS;
+  protected readonly overdueHints = OVERDUE_HINTS;
   protected readonly cancelReasons = CANCEL_REASON_LABELS;
   protected readonly methods = PAYMENT_METHODS;
   protected readonly actionLabels = ACTION_LABELS;
@@ -117,21 +121,21 @@ export class OrderDeskDetailPage {
   });
   /** Only what the server lists (`allowedActions`), in the server's order. */
   protected readonly actions = computed<DeskAction[]>(() => this.order()?.allowedActions ?? []);
-  /** Buttons that act now (the cancel reasons share one) and the ones that wait for a later lát. */
+  /** Buttons that open a dialog (the cancel reasons share one). */
   protected readonly buttons = computed(() => {
     const seen = new Set<DeskActionKind>();
     const live: { action: DeskAction; kind: DeskActionKind }[] = [];
-    const waiting: DeskAction[] = [];
     for (const action of this.actions()) {
       const kind = kindOf(action);
-      if (!kind) waiting.push(action);
-      else if (!seen.has(kind)) {
+      if (kind && !seen.has(kind)) {
         seen.add(kind);
         live.push({ action, kind });
       }
     }
-    return { live, waiting };
+    return { live };
   });
+  /** BR-ADM-39: only when the server lists `print-slip` (`to_ship` / `to_receive`). */
+  protected readonly canPrint = computed(() => this.actions().includes('print-slip'));
   /** Result of the last action: polite for success, assertive when the server said no. */
   protected readonly notice = signal<{ tone: 'success' | 'warning'; text: string } | null>(null);
   private readonly live = viewChild<ElementRef<HTMLElement>>('live');
@@ -166,6 +170,11 @@ export class OrderDeskDetailPage {
       .closed.subscribe((outcome) => this.settle(outcome));
   }
 
+  printSlip(): void {
+    const order = this.order();
+    if (order) void this.router.navigate(['/admin/orders', order.id, 'slip']);
+  }
+
   dismissNotice(): void {
     this.notice.set(null);
   }
@@ -175,7 +184,11 @@ export class OrderDeskDetailPage {
     if (!outcome) return;
     if (outcome.kind === 'done') {
       this.state.set({ kind: 'ready', order: outcome.order });
-      this.announceTab(outcome.order, outcome.message);
+      // A note changes no status, so there is no tab to announce.
+      if (outcome.order.timeline[0]?.kind === 'note') {
+        this.notice.set({ tone: 'success', text: outcome.message });
+        this.focusNotice();
+      } else this.announceTab(outcome.order, outcome.message);
     } else {
       this.notice.set({ tone: 'warning', text: outcome.message });
       if (outcome.order) this.state.set({ kind: 'ready', order: outcome.order });

@@ -49,6 +49,7 @@
       <adm-icon name="reiconAlertTriangle" />
       <div class="banner-body">
         <p class="banner-title">{{ overdueLabels[flag] }}</p>
+        <p>{{ overdueHints[flag] }}</p>
       </div>
     </div>
     }
@@ -83,7 +84,10 @@
             type="button"
             class="adm-btn"
             [class.adm-btn--primary]="
-              button.kind !== 'cancel' && button.kind !== 'write-off' && button.kind !== 'reject-cancel'
+              button.kind !== 'cancel' &&
+            button.kind !== 'write-off' &&
+            button.kind !== 'reject-cancel' &&
+            button.kind !== 'add-note'
             "
             [attr.data-action]="button.kind"
             (click)="open(button.kind)"
@@ -91,16 +95,10 @@
             {{ button.kind === 'cancel' ? 'Huỷ đơn' : actionLabels[button.action] }}
           </button>
         </li>
-        } @for (action of buttons().waiting; track action) {
+        } @if (canPrint()) {
         <li>
-          <button
-            type="button"
-            class="adm-btn"
-            disabled
-            [attr.data-action]="action"
-            title="Thao tác này mở ở bản cập nhật tới"
-          >
-            {{ actionLabels[action] }}
+          <button type="button" class="adm-btn" data-action="print-slip" (click)="printSlip()">
+            {{ actionLabels['print-slip'] }}
           </button>
         </li>
         }
@@ -327,7 +325,11 @@
             @if (entry.detail) {
             <p class="detail">{{ entry.detail }}</p>
             } @if (entry.note) {
-            <p class="note-line">Ghi chú nội bộ: {{ entry.note }}</p>
+            <p class="note-line" [attr.data-kind]="entry.kind === 'note' ? 'note' : null">
+              @if (entry.kind === 'note') { {{ entry.note }}
+              <span class="chip chip--static">Chỉ nhân viên thấy</span>
+              } @else { Ghi chú nội bộ: {{ entry.note }} }
+            </p>
             }
           </div>
         </li>

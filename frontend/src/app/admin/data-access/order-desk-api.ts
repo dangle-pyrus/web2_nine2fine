@@ -53,6 +53,11 @@ export class DeskApiError extends AdminApiError {
   }
 }
 
+/** BR-ADM-41: what a `429 rate-limited` says on screen (the wait is `retryAfterSeconds`). */
+export function rateLimitedText(seconds: number): string {
+  return `Bạn thao tác quá nhanh. Chờ ${seconds} giây rồi thử lại.`;
+}
+
 const KNOWN: readonly ApiErrorCode[] = [
   'unauthenticated',
   'forbidden',
@@ -77,12 +82,15 @@ export function deskError(error: unknown): DeskApiError {
         : 'unavailable'
   ) as AdminErrorCode;
   const fields = detail.field ? { [detail.field]: detail.message } : {};
+  const wait = detail.retryAfterSeconds;
   const raw = (error as { error?: { error?: Record<string, unknown> } } | null)?.error?.error;
   const order = raw?.['order'] as DeskOrder | undefined;
   const status = raw?.['currentStatus'];
   return new DeskApiError(
     code,
-    detail.message || defaultMessage(code),
+    code === 'rate-limited' && wait
+      ? rateLimitedText(wait)
+      : detail.message || defaultMessage(code),
     fields,
     detail.retryAfterSeconds,
     order && typeof order === 'object' && typeof order.id === 'string' ? order : undefined,
@@ -103,6 +111,7 @@ const WRITE_PATHS = {
   'returned-stock': 'returned-stock',
   'approve-cancel': 'cancel-request/approve',
   'reject-cancel': 'cancel-request/reject',
+  'add-note': 'notes',
 } as const;
 
 @Injectable({ providedIn: 'root' })

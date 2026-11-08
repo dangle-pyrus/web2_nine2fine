@@ -2,11 +2,16 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { AdminSession } from '../../app/admin/core/admin-session';
 import { defaultMessage } from '../../app/admin/data-access/http-support';
-import { DeskApiError, type AdminOrderDeskApi } from '../../app/admin/data-access/order-desk-api';
+import {
+  DeskApiError,
+  rateLimitedText,
+  type AdminOrderDeskApi,
+} from '../../app/admin/data-access/order-desk-api';
 import {
   DESK_BUCKETS,
   DESK_CARRIER_MAX,
   DESK_CARRIER_MIN,
+  DESK_INTERNAL_NOTE_MAX,
   DESK_MAX_SEARCH,
   DESK_NOTE_MAX,
   DESK_NOTE_MIN,
@@ -24,6 +29,7 @@ import {
   type DeskOrderPage,
   type DeskOrderQuery,
   type DeskOrderSummary,
+  type DeskOverdueFlag,
   type DeskStaffRef,
   type DeskTimelineEntry,
 } from '../../app/admin/data-access/order-desk-models';
@@ -33,13 +39,21 @@ import { buildDeskOrders } from './order-desk-fixtures';
 /** `localStorage[FAIL_KEY]`: `list`, `detail` (every call) or `list-once`, `detail-once`. */
 export const DESK_FAIL_KEY = 'n2f.e2e.orderDeskFail';
 /**
+ * `localStorage[CLOCK_KEY]`: ISO instant the mock treats as "now" when it works out the overdue
+ * flags (BR-ADM-40); empty = the real clock. Events it writes still carry the real time.
+ */
+export const DESK_CLOCK_KEY = 'n2f.e2e.orderDeskNow';
+/**
  * `localStorage[ACTION_FAIL_KEY]`, one write only (the flag is removed when it fires):
  * - `conflict-once`: another staff member changes the order first (ship / deliver / restock), so
  *   the write meets `order-state-changed` (or `invalid-transition` when the status did not move);
  * - `network-before-once`: the request never reaches the server (nothing changes);
  * - `network-after-once`: the server does the work, the answer is lost;
  * - `condition-once`: the server answers `condition-not-met` (a condition drifted meanwhile);
- * - `forbidden-once`, `rate-limited-once`.
+ * - `forbidden-once`;
+ * - `rate-limited-once` (BR-ADM-41): `429 rate-limited`, `retryAfterSeconds` 30; `rate-limited-once:<n>`
+ *   sets the seconds. The write changes nothing; the next one goes through.
+ * Reads: `DESK_FAIL_KEY` = `list-rate-limited-once` / `detail-rate-limited-once` (`retryAfterSeconds` 30).
  */
 export const DESK_ACTION_FAIL_KEY = 'n2f.e2e.orderDeskActionFail';
 /** `localStorage[CALLS_KEY]`: JSON list of every write that reached the mock `{ code, action, key, body }`. */
@@ -58,6 +72,66 @@ function failing(kind: 'list' | 'detail'): boolean {
   } catch {
     return false;
   }
+}
+
+function limited(kind: 'list' | 'detail'): boolean {
+  try {
+    const flag = localStorage.getItem(DESK_FAIL_KEY);
+    if (flag === `${kind}-rate-limited-once`) {
+      localStorage.removeItem(DESK_FAIL_KEY);
+      return true;
+    }
+  } catch {
+    /* storage unavailable: no forced answer */
+  }
+  return false;
+}
+
+function mockNow(): number {
+  try {
+    const value = Date.parse(localStorage.getItem(DESK_CLOCK_KEY) ?? '');
+    if (Number.isFinite(value)) return value;
+  } catch {
+    /* storage unavailable: real clock */
+  }
+  return Date.now();
+}
+
+const HOUR = 3600_000;
+const DAY = 24 * HOUR;
+const GMT7 = 7 * HOUR;
+
+/** Milliseconds of working time (08:00-18:00 GMT+7, Monday to Saturday) between two instants. */
+export function workingMillis(from: number, to: number): number {
+  let total = 0;
+  for (let day = Math.floor((from + GMT7) / DAY) * DAY - GMT7; day < to; day += DAY) {
+    if (new Date(day + GMT7).getUTCDay() === 0) continue;
+    total += Math.max(0, Math.min(to, day + 18 * HOUR) - Math.max(from, day + 8 * HOUR));
+  }
+  return total;
+}
+
+/** BR-ADM-40 (S4-Q3): only flags; nothing here ever changes a status. */
+function overdueOf(order: DeskOrder, now: number): DeskOverdueFlag[] {
+  const flags: DeskOverdueFlag[] = [];
+  if (
+    order.status === 'to_ship' &&
+    order.needsCall &&
+    workingMillis(Date.parse(order.placedAt), now) > 2 * HOUR
+  )
+    flags.push('confirm-call');
+  if (
+    order.status === 'cancel_requested' &&
+    order.cancelRequest &&
+    now - Date.parse(order.cancelRequest.requestedAt) > DAY
+  )
+    flags.push('cancel-request');
+  if (
+    order.status === 'to_receive' &&
+    vnDay(new Date(now).toISOString()) > order.estimatedDelivery.to
+  )
+    flags.push('delivery');
+  return flags;
 }
 
 function takeActionFlag(): string {
@@ -104,6 +178,7 @@ function matches(order: DeskOrder, raw: string): boolean {
 }
 
 function summary(order: DeskOrder): DeskOrderSummary {
+  const overdue = overdueOf(order, mockNow());
   return {
     id: order.id,
     placedAt: order.placedAt,
@@ -116,7 +191,7 @@ function summary(order: DeskOrder): DeskOrderSummary {
     needsCall: order.needsCall,
     hasCancelRequest: order.status === 'cancel_requested',
     tab: order.tab,
-    overdue: order.overdue,
+    overdue,
   };
 }
 
@@ -213,6 +288,7 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
   }
 
   list(query: DeskOrderQuery): Observable<DeskOrderPage> {
+    if (limited('list')) return fail(new DeskApiError('rate-limited', rateLimitedText(30), {}, 30));
     if (failing('list'))
       return fail(new DeskApiError('unavailable', defaultMessage('unavailable')));
     const problem = this.check(query);
@@ -241,6 +317,8 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
   }
 
   get(orderCode: string): Observable<DeskOrder> {
+    if (limited('detail'))
+      return fail(new DeskApiError('rate-limited', rateLimitedText(30), {}, 30));
     if (failing('detail'))
       return fail(new DeskApiError('unavailable', defaultMessage('unavailable')));
     const found = this.find(orderCode);
@@ -255,8 +333,10 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
       return fail(new DeskApiError('unavailable', defaultMessage('unavailable')));
     if (flag === 'forbidden-once')
       return fail(new DeskApiError('forbidden', defaultMessage('forbidden')));
-    if (flag === 'rate-limited-once')
-      return fail(new DeskApiError('rate-limited', defaultMessage('rate-limited'), {}, 30));
+    if (flag.startsWith('rate-limited-once')) {
+      const seconds = Number(flag.split(':')[1]) || 30;
+      return fail(new DeskApiError('rate-limited', rateLimitedText(seconds), {}, seconds));
+    }
     if (flag === 'conflict-once') this.otherStaffActs(orderCode);
     if (flag === 'condition-once')
       return fail(
@@ -300,7 +380,7 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
         );
       return seen.order;
     }
-    if (command.expectedStatus !== order.status)
+    if (command.action !== 'add-note' && command.expectedStatus !== order.status)
       throw new DeskApiError(
         'order-state-changed',
         'Đơn vừa được cập nhật bởi người khác.',
@@ -352,6 +432,12 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
           throw invalid('note', range);
         if (tooLong) throw invalid('note', `Ghi chú tối đa ${DESK_NOTE_MAX} ký tự.`);
         break;
+      case 'add-note': {
+        const length = command.note.trim().length;
+        if (length < 1 || length > DESK_INTERNAL_NOTE_MAX)
+          throw invalid('note', `Ghi chú từ 1 đến ${DESK_INTERNAL_NOTE_MAX} ký tự.`);
+        break;
+      }
       case 'reject-cancel': {
         const length = command.reason.trim().length;
         if (length < DESK_NOTE_MIN || length > DESK_NOTE_MAX)
@@ -553,6 +639,16 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
         );
         break;
       }
+      case 'add-note':
+        entry = this.event(
+          order,
+          'note',
+          'Ghi chú nội bộ',
+          { note: command.note.trim() },
+          order,
+          staff,
+        );
+        break;
       case 'approve-cancel':
         next = {
           ...next,
@@ -705,6 +801,7 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
     return {
       ...order,
       callAttempts: attemptsOf(order),
+      overdue: overdueOf(order, mockNow()),
       allowedActions: allowedFor(order, admin),
     };
   }

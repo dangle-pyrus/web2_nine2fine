@@ -90,6 +90,13 @@ export const OVERDUE_LABELS = {
   delivery: 'Quá hạn giao',
 } as const;
 
+/** BR-ADM-40 in plain words; the flag is only a reminder, the status never changes by itself. */
+export const OVERDUE_HINTS = {
+  'confirm-call': 'Đơn chờ gọi xác nhận quá 2 giờ làm việc (08:00-18:00, thứ Hai đến thứ Bảy).',
+  'cancel-request': 'Yêu cầu huỷ của khách chưa được duyệt hoặc từ chối sau 24 giờ.',
+  delivery: 'Đơn đang vận chuyển đã quá ngày giao dự kiến muộn nhất.',
+} as const;
+
 /** Buttons driven by `allowedActions` (the FE never works the list out itself, BR-ADM-04). */
 export const ACTION_LABELS: Record<DeskAction, string> = {
   'call-attempt': 'Ghi không liên lạc được',

@@ -19,6 +19,7 @@ import {
   DESK_CARRIER_MAX,
   DESK_CARRIER_MIN,
   DESK_CARRIER_SUGGESTIONS,
+  DESK_INTERNAL_NOTE_MAX,
   DESK_NOTE_MAX,
   DESK_NOTE_MIN,
   DESK_TRACKING_MAX,
@@ -30,7 +31,7 @@ import {
   type DeskOrder,
 } from '../../data-access/order-desk-models';
 
-/** The nine buttons of lát 4.3-4.5 (the six cancel reasons share one picker). */
+/** The ten buttons of lát 4.3-4.6 (the six cancel reasons share one picker). */
 export type DeskActionKind =
   | 'call-attempt'
   | 'confirm'
@@ -40,7 +41,8 @@ export type DeskActionKind =
   | 'restock'
   | 'write-off'
   | 'approve-cancel'
-  | 'reject-cancel';
+  | 'reject-cancel'
+  | 'add-note';
 
 export interface DeskActionDialogData {
   order: DeskOrder;
@@ -92,6 +94,7 @@ const TITLES: Record<DeskActionKind, string> = {
   'write-off': 'Loại bỏ hàng hoàn?',
   'approve-cancel': 'Duyệt yêu cầu huỷ?',
   'reject-cancel': 'Từ chối yêu cầu huỷ?',
+  'add-note': 'Thêm ghi chú nội bộ',
 };
 
 const SUBMIT_LABELS: Record<DeskActionKind, string> = {
@@ -104,6 +107,7 @@ const SUBMIT_LABELS: Record<DeskActionKind, string> = {
   'write-off': 'Loại bỏ hàng hoàn',
   'approve-cancel': 'Duyệt huỷ',
   'reject-cancel': 'Từ chối huỷ',
+  'add-note': 'Lưu ghi chú',
 };
 
 /** Where a failure of the write ends up (BR-ADM-13..15, 34). */
@@ -225,11 +229,18 @@ function refuseMessage(code: string, kind: DeskActionKind): string {
                   : 'Chỉ nhân viên thấy ghi chú này, khách không thấy.'
               }}
               {{
-                noteRequired()
-                  ? 'Bắt buộc ' + noteMin + '-' + noteMax + ' ký tự.'
-                  : 'Tối đa ' + noteMax + ' ký tự.'
+                kind === 'add-note'
+                  ? 'Bắt buộc 1-' + noteLimit() + ' ký tự.'
+                  : noteRequired()
+                    ? 'Bắt buộc ' + noteMin + '-' + noteMax + ' ký tự.'
+                    : 'Tối đa ' + noteMax + ' ký tự.'
               }}
             </p>
+            @if (kind === 'add-note') {
+              <p class="hint" data-testid="note-count">
+                {{ note().trim().length }}/{{ noteLimit() }}
+              </p>
+            }
             @if (errors()['note']; as message) {
               <p class="error" id="desk-note-error">{{ message }}</p>
             }
@@ -237,6 +248,11 @@ function refuseMessage(code: string, kind: DeskActionKind): string {
         }
         @if (failure(); as message) {
           <p class="error failure" role="alert">{{ message }}</p>
+        }
+        @if (wait() > 0) {
+          <p class="failure" data-testid="cooldown">
+            Chờ <strong>{{ wait() }}</strong> giây rồi bấm Thử lại.
+          </p>
         }
       </div>
       <div class="dialog-actions">
@@ -249,7 +265,7 @@ function refuseMessage(code: string, kind: DeskActionKind): string {
           [class.adm-btn--primary]="!danger"
           [class.adm-btn--danger]="danger"
           [class.is-busy]="busy()"
-          [disabled]="busy()"
+          [disabled]="busy() || wait() > 0"
           [attr.aria-busy]="busy()"
         >
           {{ retrying() ? 'Thử lại' : submitLabel }}
@@ -301,6 +317,9 @@ export class DeskActionDialog {
   protected readonly failure = signal('');
   /** The last try failed on the network (or 5xx / 429): the next press retries. */
   protected readonly retrying = signal(false);
+  /** Seconds left of a `rate-limited` answer (`retryAfterSeconds`); the retry waits for 0. */
+  protected readonly wait = signal(0);
+  private timer: ReturnType<typeof setInterval> | undefined;
 
   protected readonly noteShown = computed(() => {
     switch (this.kind) {
@@ -309,6 +328,7 @@ export class DeskActionDialog {
       case 'restock':
       case 'write-off':
       case 'reject-cancel':
+      case 'add-note':
         return this.kind !== 'cancel' || !!this.reason();
       default:
         return false;
@@ -319,24 +339,31 @@ export class DeskActionDialog {
     return (
       this.kind === 'write-off' ||
       this.kind === 'reject-cancel' ||
+      this.kind === 'add-note' ||
       (this.kind === 'cancel' && !!reason && NOTE_REQUIRED_REASONS.includes(reason))
     );
   });
+  protected readonly noteLimit = computed(() => DESK_INTERNAL_NOTE_MAX);
   protected readonly noteLabel = computed(() =>
-    this.kind === 'write-off'
-      ? 'Lý do loại bỏ (hỏng / mất)'
-      : this.kind === 'reject-cancel'
-        ? 'Lý do từ chối'
-        : this.noteRequired()
-          ? 'Ghi chú nội bộ'
-          : 'Ghi chú nội bộ (tuỳ chọn)',
+    this.kind === 'add-note'
+      ? 'Ghi chú nội bộ'
+      : this.kind === 'write-off'
+        ? 'Lý do loại bỏ (hỏng / mất)'
+        : this.kind === 'reject-cancel'
+          ? 'Lý do từ chối'
+          : this.noteRequired()
+            ? 'Ghi chú nội bộ'
+            : 'Ghi chú nội bộ (tuỳ chọn)',
   );
 
   private key = newKey();
   private sentJson = '';
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => (this.ref.disableClose = false));
+    inject(DestroyRef).onDestroy(() => {
+      this.ref.disableClose = false;
+      clearInterval(this.timer);
+    });
   }
 
   protected description(): string {
@@ -359,6 +386,8 @@ export class DeskActionDialog {
         return 'đơn được huỷ theo yêu cầu của khách, cộng lại tồn kho và khách nhận email. Không hoàn tác được.';
       case 'reject-cancel':
         return 'đơn trở về “Đang chuẩn bị” và khách nhận email kèm lý do. Khách không gửi lại được yêu cầu thứ hai.';
+      case 'add-note':
+        return 'ghi chú hiện trong lịch sử đơn cho nhân viên. Không đổi trạng thái, khách không thấy, không gửi email.';
     }
   }
 
@@ -389,7 +418,8 @@ export class DeskActionDialog {
     const command = this.validated();
     if (!command) return;
     this.failure.set('');
-    if (this.retrying()) this.reloadThenSend(command);
+    // A note has no status to compare and the same key replays the same answer: send it as is.
+    if (this.retrying() && command.action !== 'add-note') this.reloadThenSend(command);
     else this.send(command);
   }
 
@@ -405,6 +435,12 @@ export class DeskActionDialog {
       case 'call-attempt':
         if (note.length > DESK_NOTE_MAX) errors['note'] = `Ghi chú tối đa ${DESK_NOTE_MAX} ký tự.`;
         command = { action: 'call-attempt', expectedStatus, ...(note ? { note } : {}) };
+        break;
+      case 'add-note':
+        if (!note.length) errors['note'] = 'Nhập nội dung ghi chú.';
+        else if (note.length > DESK_INTERNAL_NOTE_MAX)
+          errors['note'] = `Ghi chú tối đa ${DESK_INTERNAL_NOTE_MAX} ký tự.`;
+        command = { action: 'add-note', note };
         break;
       case 'confirm':
         command = { action: 'confirm', expectedStatus };
@@ -485,7 +521,7 @@ export class DeskActionDialog {
   }
 
   /** BR-ADM-15: after a lost answer look at the order first; send again only if it still fits. */
-  private reloadThenSend(command: DeskCommand): void {
+  private reloadThenSend(command: Exclude<DeskCommand, { action: 'add-note' }>): void {
     this.setBusy(true);
     this.api.get(this.order.id).subscribe({
       next: (order) => {
@@ -514,7 +550,10 @@ export class DeskActionDialog {
     });
   }
 
-  private stillAllowed(order: DeskOrder, command: DeskCommand): boolean {
+  private stillAllowed(
+    order: DeskOrder,
+    command: Exclude<DeskCommand, { action: 'add-note' }>,
+  ): boolean {
     const allowed: DeskAction[] = order.allowedActions;
     switch (command.action) {
       case 'call-attempt':
@@ -583,11 +622,9 @@ export class DeskActionDialog {
         this.failure.set('Thao tác này bị trùng khoá với một thao tác khác. Bấm lại để gửi.');
         return;
       case 'rate-limited': {
-        const seconds = (error as AdminApiError).retryAfterSeconds;
         this.retrying.set(true);
-        this.failure.set(
-          `Bạn thao tác quá nhanh. Chờ ${seconds ?? 'một lát'}${seconds ? ' giây' : ''} rồi bấm Thử lại. Dữ liệu đã nhập vẫn được giữ.`,
-        );
+        this.failure.set('Bạn thao tác quá nhanh nên chưa gửi được. Dữ liệu đã nhập vẫn được giữ.');
+        this.countDown((error as AdminApiError).retryAfterSeconds ?? 5);
         return;
       }
       default:
@@ -596,6 +633,15 @@ export class DeskActionDialog {
           'Không kết nối được máy chủ nên chưa biết thao tác đã xong chưa. Dữ liệu đã nhập vẫn được giữ; bấm Thử lại (đơn sẽ được tải lại trước, không gửi trùng).',
         );
     }
+  }
+
+  private countDown(seconds: number): void {
+    clearInterval(this.timer);
+    this.wait.set(Math.max(1, Math.ceil(seconds)));
+    this.timer = setInterval(() => {
+      this.wait.update((value) => Math.max(0, value - 1));
+      if (this.wait() === 0) clearInterval(this.timer);
+    }, 1000);
   }
 
   private setBusy(busy: boolean): void {
@@ -628,6 +674,8 @@ export class DeskActionDialog {
         return 'Đã duyệt yêu cầu huỷ. Đơn đã huỷ và tồn kho được cộng lại.';
       case 'reject-cancel':
         return 'Đã từ chối yêu cầu huỷ. Đơn trở về “Đang chuẩn bị”.';
+      case 'add-note':
+        return 'Đã thêm ghi chú nội bộ. Chỉ nhân viên thấy ghi chú này.';
     }
   }
 }
