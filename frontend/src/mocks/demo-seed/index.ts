@@ -97,7 +97,15 @@ export const DEMO_SEED_VOUCHER_RULES: Readonly<Record<string, SeedVoucherRule>> 
 
 /** Called from `main.ts` before bootstrap so `CartState`/`WishlistState` read the seeded values. */
 export function seedDemoBrowserState(): void {
-  if (DEMO_SEED_ENABLED && DEMO_SEED_BROWSER_STATE && apiConfig.mode === 'mock') {
+  // The seeded lines use mock variant ids: once cart/catalog are served by the real API they
+  // would show up as "no longer sold" lines (and the wishlist ids would point at nothing).
+  if (
+    DEMO_SEED_ENABLED &&
+    DEMO_SEED_BROWSER_STATE &&
+    apiConfig.mode === 'mock' &&
+    apiConfig.checkoutMode === 'mock' &&
+    apiConfig.catalogMode === 'mock'
+  ) {
     writeDemoBrowserState();
   }
 }

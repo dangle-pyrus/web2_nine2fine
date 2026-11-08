@@ -5,6 +5,11 @@
 - Giả định chờ Thắng gom ở `backend/src/config/assumptions.ts` (làm tròn mã % 1.000 ₫, OTP tra cứu, cookie 30 phút, huỷ `to_ship`, khoá idempotency 24 giờ). Tên trạng thái nằm ở enum DB.
 - Dữ liệu cần Thắng đối chiếu trước go-live: `backend/prisma/seed-data/holidays-vn.json` (2026 theo lịch đã công bố, 2027 chỉ ước tính Tết 5-9/2; thiếu Giỗ Tổ 2027) và `vn-locations.json` (nguồn provinces.open-api.vn v2, mã tỉnh 2 số, mã phường 5 số).
 
+## Slice 3 — bước 9 tích hợp thật (2026-11-08, đã kiểm trên BE + Postgres cục bộ)
+- Đã chạy qua trình duyệt thật (Playwright Node, Edge) trên `http://localhost:4200`: giỏ khách (không gọi API giỏ), đăng nhập + gộp giỏ (không nhân đôi sau tải lại), báo giá + `N2FWELCOME15` + `N2FFREESHIP`, đặt COD (đơn N2F2611080017: 390.000 − 58.000 + 30.000 − 30.000 = 332.000), bấm đôi = 1 đơn, danh sách/chi tiết đơn thành viên, đơn khách N2F2611081801 + tra cứu OTP (sai email: không gửi thư; sai OTP: 404; đúng: cookie `n2f_oa`), huỷ đơn (tồn 4 -> 5, hoàn đúng 1 lần, lần huỷ 2 trả 409), email xác nhận/huỷ khớp tổng, `price-changed` 409 hiện đúng, lỗi mạng rồi Thử lại không tạo đơn thứ hai, `n2f_sid` hỏng -> `/auth/login?returnUrl=...`, đơn người khác -> "Không tìm thấy đơn hàng".
+- Lỗi đã sửa: dữ liệu demo seed (giỏ 4 dòng id mock) vẫn được ghi vào localStorage khi `checkoutMode`/`catalogMode` là http, làm giỏ khách có dòng "không còn kinh doanh". Nay chỉ seed khi cả ba chế độ là mock (`src/mocks/demo-seed/index.ts`).
+- Còn lại: toast thông báo gộp giỏ chưa bắt được trong script (không xác nhận có hiển thị); budget bundle initial vẫn 616 kB > 600 kB.
+
 ## Slice 3 FE — bước 7, 8 (2026-11-08, mock xong, chưa tích hợp thật)
 - Commit 1ea60b7 (bước 7), 65b2e7c, 391342e (bước 8). `checkoutMode` (http mặc định, e2e mock), adapter HTTP + mock cho giỏ/báo giá/voucher/đặt hàng/địa giới/tra cứu OTP/đơn thành viên (`ORDERS_API`), `CartState` hai nguồn lưu (khoá v2, gộp sau đăng nhập, đăng xuất xoá giỏ máy, làm tươi giá debounce 300 ms, Hoàn tác), checkout 2 ô voucher + Idempotency-Key + xử lý 409, trang thành công (biên nhận sessionStorage), tra cứu mã đơn + email + OTP, danh sách đơn phân trang.
 - Giả định Q1-Q4 gom ở `features/orders/order-status-map.ts` (`SLICE3_ASSUMPTIONS`, ánh xạ trạng thái) và `core/commerce-policy.ts`; QR ẩn khi `policy.bankTransferEnabled` false (HTTP).
