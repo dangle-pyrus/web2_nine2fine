@@ -9,6 +9,8 @@
 - 2026-11-07 14:54Z Thắng đã chạy `migrate deploy` + `seed:catalog` lên Supabase. Kiểm chỉ đọc: `_prisma_migrations` 5 dòng (có `20261107000400_catalog_schema`), categories 4, products 8, variants 64, size_charts 4, RLS bật 4 bảng, users 6 (không đổi). BE cục bộ trỏ Supabase: list/search/chi tiết/bảng size 200, slug lạ 404. Thời gian từ máy Thắng tới pooler Tokyo: danh sách ~1,2–1,5 s, chi tiết ~0,8–1 s (chủ yếu độ trễ mạng; AC-CAT-52 đo ở máy chủ, chưa đo được).
 - Lệnh áp Supabase (đã chạy), trong `backend/` với `.env` Supabase: `npx prisma migrate deploy` rồi `npm run seed:catalog` (DIRECT_URL cổng 5432).
 
+- 2.15 xong (commit e236e57): ô tìm kiếm cắt 100 ký tự (maxlength + validator + cắt khi dán; URL `?q=` dài cũng bị cắt; `toParams` không bao giờ gửi `q` > 100). Test `2.15` trong `catalog.spec.ts`; đã đổi tên AC-CAT-41, AC-CAT-44 thành (mock only, no API call).
+- 2.16 (2026-11-07, mock, `--trace off`, trên e236e57): toàn bộ Playwright **178 pass, 1 fail, 7 skip** (186 test). Fail duy nhất: `admin.spec.ts:24 admin opens every section` (desktop), timeout 5s ở trang Khách hàng khi dev server biên dịch lười lần đầu. Chạy riêng test đó: pass ở e236e57 và pass ở `dc488d3^` (b4c0d4a), bản mobile cũng pass trong cùng lần chạy; kết luận: flaky lúc khởi động nguội, từ trước, không do Slice 2. Lần chạy đầu (bị dừng giữa chừng) còn gặp `commerce.spec.ts:144` fail một lần rồi pass ở lần chạy đầy đủ: cũng flaky. 7 skip là skip có chủ ý trong code test (mobile/desktop only).
 ### Đề xuất đổi contract (Slice 2)
 - `gender` dài hơn `maxLength` 20: BE coi là giá trị lạ, trả trang rỗng thay vì 422. Cần xác nhận.
 
