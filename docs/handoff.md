@@ -1,5 +1,10 @@
 # Handoff
 
+## Slice 3 — QA vòng 2 (2026-11-08)
+- Must 71/73 Pass, 0 Fail, 0 KKĐ, 2 hoãn Q2 (CHK-25, 27); Should 4/4. Minor m-1..m-5, m-7 đóng (commit 552e3a3, 78b83eb + commit tài liệu). Chi tiết: `docs/qa/report-slice-3-checkout.md` › "Cập nhật vòng 2".
+- Còn chặn DoD: M-1 crash worker vitest trên Windows (không assertion fail). Đề xuất thử Node 22 LTS hoặc Thắng ghi chấp nhận.
+- Còn mở: flaky khi tải nặng AC-CART-18 (desktop) và `home.spec.ts:56` (mobile); m-6 ngày nghỉ 2027; PO xem chữ AC-CART-06 (dòng gộp "được chọn") và AC-CHK-05 (gợi ý đăng nhập tĩnh).
+
 ## Slice 3 — bước 11 QA (2026-11-08, chưa đạt DoD, 0 Blocker)
 - Báo cáo: `docs/qa/report-slice-3-checkout.md`. AC Must 73: 61 Pass, 1 Fail do chữ AC sai (AC-VOU-08), 9 chưa kiểm được, 2 hoãn Q2 (AC-CHK-25, 27). Should 4: 3 Pass, 1 chưa kiểm.
 - Lệnh: BE typecheck/build qua; `npm test` toàn bộ 5/5 lần crash M2 (0xC0000409), không assertion fail; chạy từng file: 17/17 file, 262 test pass. FE lint/format/build qua (initial 577,81 kB); Playwright 5 spec liên quan 81 pass / 0 fail / 1 skip.

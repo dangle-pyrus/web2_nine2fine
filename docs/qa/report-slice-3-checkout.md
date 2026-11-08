@@ -197,9 +197,34 @@ Không có.
 - Đơn thật qua FE trên Supabase (Thắng duyệt): đơn khách COD N2F2611082686, 1.290.000 ₫. Thư xác nhận gửi qua SMTP (1 lần thử), Thắng xác nhận vào hộp thư chính Gmail, tổng đúng. **AC-CHK-34: Pass.** Tra cứu OTP qua Gmail thật mở đúng đơn; huỷ: tồn 4 -> 5, `stock_restored_at` có. **M-2 đóng.**
 - Tổng sau cập nhật: AC Must 73: **63 Pass**, 1 Fail (AC-VOU-08, chữ AC), **7 KKĐ**, 2 hoãn Q2. Còn chưa đạt DoD vì M-1 và 7 AC KKĐ.
 
+## Cập nhật vòng 2 (2026-11-08, sau sửa Minor và bổ sung test)
+
+Commit: `552e3a3` (test BE), `78b83eb` (FE sửa m-1..m-4 + test), cộng sửa test AC-CART-05 và PRD AC-VOU-08 trong commit tài liệu này.
+
+- m-1 đóng: mock Account nạp lười (`mocks/lazy-account-api.ts`), demo-seed nạp động; `main-*.js` không còn `demo@nine2fine`, `Nine2fine1`, `12345678`, `demo-member` (qa-runner grep: 0). Initial 544,44 kB.
+- m-2 đóng (phòng ngừa): `CartState.announceMerge` chờ rời `/auth/*` rồi mới quyết định toast. Test returnUrl=/cart pass nhưng cũng pass khi bỏ sửa (mock không tái hiện race).
+- m-3 đóng: `saveBaseline()` trước khi gửi request; test tải lại ngay sau khi thêm fail khi bỏ sửa, pass khi có sửa.
+- m-4 đóng: chú thích `api-config.ts` sửa; `storefront-adapter-tokens.ts` (`StorefrontBindings` là `Record` đủ token) để thiếu token thì không biên dịch.
+- m-5 đóng: AC-VOU-08 viết lại: 390.000 + 550.000 + 790.000, `N2FWELCOME15` giảm 259.000 -> 58.387 + 82.341 + 118.272 (dư 1 ₫ vào dòng lớn nhất). Orchestrator kiểm số bằng `allocateByWeight` (PO tính tay ra 58.386/118.273, đã sửa). Test BE mức pricing và đặt đơn + DB `lineDiscount`.
+- m-7 đóng: BE AC-CHK-04 (email 101 ký tự, `0212345678`, `84912345678`), AC-CHK-37 (DB lỗi P1001 -> 500 `unavailable`, không lộ stack/SQL, 0 đơn, tồn không đổi); FE AC-CHK-04/05/37, AC-CHK-03, AC-CHK-20.
+- Test FE mới cho các AC KKĐ: AC-CART-03, 05, 06, 10, 12; AC-CHK-05, 37. Test AC-CART-05 ban đầu fail ổn định (locator `/^Chọn /` trùng ô "Chọn tất cả"); orchestrator giới hạn trong `.cart-line`, chạy lại 6/6 pass.
+- Ghi chú chữ AC cho PO: AC-CART-06 nói dòng gộp "được chọn" nhưng ở chế độ chọn nút đổi size bị ẩn nên nhánh đó không tới được từ UI (test kiểm "Thanh toán (5)"); AC-CHK-05 gợi ý đăng nhập là câu tĩnh vì contract không có API tra email.
+
+Số liệu (qa-runner độc lập, haiku, HEAD 78b83eb): lint 0 lỗi 0 cảnh báo; format pass; build pass 544,44 kB, không cảnh báo budget; Playwright toàn bộ 254 lượt: 244 pass, 3 fail, 7 skip. 3 fail: AC-CART-05 (lỗi test, đã sửa), AC-CART-18 desktop và `home.spec.ts:56` mobile (pass khi chạy riêng, flaky khi tải nặng). `cart-checkout.spec.ts --repeat-each=2`: chỉ AC-CART-05 fail. BE (backend-dev): typecheck/build pass; `npm test` toàn bộ: 1 lần 269/269 pass, 1 lần crash M2; thử `maxWorkers: 1` + `isolate: false` còn tệ hơn, đã hoàn tác.
+
+| Nhóm | Pass | Fail | KKĐ | Hoãn (Q2) |
+| --- | --- | --- | --- | --- |
+| **Must (73)** | **71** | 0 | 0 | 2 (CHK-25, CHK-27) |
+| Should (4) | 4 | 0 | 0 | 0 |
+
+**Kết luận vòng 2: chưa đạt DoD chỉ vì M-1** (bộ test BE chưa có 3 lần pass liền do crash worker Windows, không có assertion fail). Nếu Thắng chấp nhận M-1 (ghi vào `decisions.md`) hoặc chạy được trên Node LTS, Slice 3 đạt DoD trừ lát 3.8 QR/SePay (hoãn Q2).
+
 ## Việc còn lại
 
 1. (Đã xong) Đơn thật trên Supabase với Gmail thật.
+2. M-1: thử Node LTS (22) cho `npm test`, hoặc Thắng ghi chấp nhận.
+3. Flaky khi tải nặng: AC-CART-18 (desktop), `home.spec.ts:56` (mobile).
+4. m-6 ngày nghỉ 2027 (Thắng).
 2. Sáu đề xuất đổi contract trong `docs/handoff.md` còn mở, chờ duyệt (không tính là lỗi).
 3. Q1-Q4 đang chạy theo giả định. Lát 3.8 QR/SePay chưa làm, chờ Thắng (Q2); khi làm xong chạy lại AC-CHK-25, AC-CHK-27.
 4. Xử lý M2, hoặc ghi chấp nhận trong `decisions.md`, để đóng DoD lệnh kiểm tra.

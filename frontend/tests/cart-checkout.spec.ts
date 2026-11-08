@@ -614,7 +614,8 @@ test('AC-CART-05: more than 20 pieces lock checkout with the sentence; 20 unlock
   await expect(page.getByText('Mỗi đơn tối đa 20 sản phẩm.')).toBeVisible();
   // Pick 4 of the 5 lines: 20 pieces, checkout opens.
   await page.getByRole('button', { name: 'Chọn sản phẩm để xóa' }).click();
-  const boxes = page.getByRole('checkbox', { name: /^Chọn / });
+  // Per-line boxes only: /^Chọn / would also match the "Chọn tất cả" box and shift the indexes.
+  const boxes = page.locator('.cart-line').getByRole('checkbox', { name: /^Chọn / });
   for (let i = 0; i < 5; i++) await boxes.nth(i).setChecked(i < 4);
   await expect(page.getByRole('link', { name: 'Thanh toán (20)' })).toBeVisible();
   await expect(page.getByText('Mỗi đơn tối đa 20 sản phẩm.')).toHaveCount(0);
