@@ -691,7 +691,7 @@ Lưu ở máy chủ, đổi bằng SQL cho tới khi có Cài đặt cửa hàng
 | BR-CHK-20 | Must | CHK-PAY-06, 14 | Đơn COD tạo ở `to_ship` + thanh toán `pending`. Trang thành công và email ghi "nine2fine sẽ gọi xác nhận trong 2 giờ làm việc" trừ thành viên đã có ≥ 1 đơn `completed` và đơn này < 1.000.000 ₫. Gọi xác nhận và huỷ do không liên lạc được làm ở slice Admin. |
 | BR-CHK-21 | Must (chờ xác nhận, câu hỏi 2) | CHK-PAY-08..12, CF-12 | Chuyển khoản QR: đơn vào `to_pay` + `pending`; trang thanh toán có QR, số tiền chính xác, nội dung = mã đơn, đếm ngược 30 phút, không gia hạn; hàng và lượt voucher được giữ. Mở lại trang từ email, tra cứu đơn hoặc Đơn hàng của tôi (chỉ chủ đơn hoặc khách đã xác minh OTP). Nhận đủ tiền (dịch vụ đối soát báo) → `paid`, `to_pay` → `to_ship`, email "Đã nhận thanh toán". Thiếu: báo số còn thiếu; hết giờ vẫn thiếu → huỷ, hoàn số đã chuyển. Thừa: xác nhận bình thường, hoàn phần thừa. Tiền về sau khi huỷ: không khôi phục, hoàn 100%. Hoàn trong 1–3 ngày làm việc (kế toán làm tay). Hết 30 phút chưa đủ tiền → `cancelled`, hoàn kho, trả lượt, email báo huỷ, trong ≤ 2 phút sau hạn (đề xuất PO). Chưa có dịch vụ đối soát: ẩn QR ở HTTP. |
 | BR-CHK-22 | Must (tên trạng thái chờ xác nhận, câu hỏi 1) | CHK-PAY-14, COMMON-01/02 | Trạng thái đơn và thanh toán là hai trường riêng. Ánh xạ sang FE: `to_pay` → `pending-payment`; `to_ship` → `processing`; `to_receive` → `shipping`/`delivering`; `completed` → `completed`; `cancel_requested` → (FE chưa có, thêm khi làm); `cancelled` → `cancelled`. Thanh toán: `pending`, `paid`, `failed`, `refunded`, `partially_refunded`. Slice 3 chỉ phát sinh: COD `to_ship`+`pending`; QR `to_pay`+`pending` → `to_ship`+`paid` hoặc `cancelled`; huỷ → `cancelled`. Mọi chuyển khác qua slice Admin (thử bằng SQL). Mỗi lần đổi lưu thời điểm và người đổi (`customer`/`shop`/`system`); DB từ chối giá trị ngoài tập. |
-| BR-CHK-23 | Must (phần `to_ship` chờ xác nhận, câu hỏi 4) | CHK-PAY-11, 14 | Ở `to_pay` khách tự huỷ bất kỳ lúc nào, không cần duyệt. Ở `to_ship`: đề xuất PO huỷ thẳng như FE hiện tại cho tới khi có Admin. Khác → 409 `not-cancellable`. Huỷ: `cancelled`, `cancelledBy = customer`, hoàn kho và trả lượt (BR-VOU-12) trong cùng giao dịch, gửi email "đơn đã huỷ". Huỷ lần hai → 409, không hoàn thêm. Không đổi phương thức thanh toán trên đơn đã tạo. |
+| BR-CHK-23 | Must (phần `to_ship` chờ xác nhận, câu hỏi 4) | CHK-PAY-11, 14 | Ở `to_pay` khách tự huỷ bất kỳ lúc nào, không cần duyệt. Ở `to_ship`: đề xuất PO huỷ thẳng như FE hiện tại cho tới khi có Admin. Khác → 409 `not-cancellable`. Huỷ: `cancelled`, `cancelledBy = customer`, hoàn kho và trả lượt (BR-VOU-12) trong cùng giao dịch, gửi email "đơn đã huỷ". Huỷ lần hai → 409, không hoàn thêm. Không đổi phương thức thanh toán trên đơn đã tạo. **Từ Slice 4 (chờ Q1 của Slice 4):** khách ở `to_ship` chỉ gửi yêu cầu huỷ (`cancel_requested`, BR-ADM-29); phần `to_pay` giữ nguyên. |
 | BR-CHK-24 | Should | CHK-PAY-11, 12 | "Đặt lại đơn này" ở đơn đã huỷ: đưa sản phẩm về giỏ, điền sẵn thông tin giao hàng; giá, tồn, voucher tính lại như đơn mới. |
 
 #### 4.7 Xác nhận, theo dõi, thông báo
@@ -816,6 +816,242 @@ Tổng: **60 BR** — BR-CART 14 (13 Must, 1 Should: 14), BR-CHK 33 (30 Must, 3 
 | 1 | Nguồn BR tham chiếu COMMON-01 (trạng thái và bước chuyển), 02 (trạng thái thanh toán), 03 (trừ/hoàn kho), 05 (hiển thị và tính tiền, làm tròn), 06 (quyền khách vãng lai, tra cứu OTP) nhưng file không có. **Đề xuất PO:** Thắng gửi nội dung COMMON; tới lúc đó dùng giả định tạm: (a) API/DB dùng tên trạng thái COMMON và ánh xạ BR-CHK-22; (b) mã % làm tròn xuống tới 1.000 ₫; (c) tồn trừ khi tạo đơn, hoàn khi huỷ (BR-CHK-14); (d) OTP tra cứu dùng thông số BR-AUTH-04..09, hiệu lực xem đơn 30 phút. | BR-CHK-22, 23, 26; BR-VOU-05 | Thắng — chờ xác nhận |
 | 2 | Chuyển khoản QR tự đối soát (CHK-PAY-08..12) cần tài khoản ngân hàng nhận và dịch vụ báo tiền về (webhook). **Đề xuất PO:** dùng SePay (gói miễn phí, webhook theo nội dung chuyển khoản), Thắng mở tài khoản và cấp khoá; làm ở lát 3.8 sau COD. Chưa có thì ẩn QR ở HTTP; hệ quả: đơn > 5.000.000 ₫ chưa đặt được online (báo hotline). Không đề xuất xác nhận tay vì không kịp hạn 30 phút. | BR-CHK-19, 21; AC-CHK-25, 27 | Thắng — chờ xác nhận |
 | 3 | Phạm vi giao hàng và danh mục địa giới: toàn quốc hay 3 thành phố như mock? **Đề xuất PO:** toàn quốc, 34 tỉnh/thành và phường/xã sau 01/07/2025, BE seed từ file công khai và ghi nguồn. | BR-CHK-06, AC-CHK-06 | Thắng — chờ xác nhận |
-| 4 | Nguồn (CHK-PAY-14) cho khách ở `to_ship` chỉ gửi yêu cầu huỷ, shop duyệt; quyết định 2026-10-18 và FE cho huỷ thẳng. Chưa có Admin để duyệt. **Đề xuất PO:** Slice 3 huỷ thẳng ở `to_ship`; khi có slice Admin chuyển sang `cancel_requested`. | BR-CHK-23, AC-CHK-29 | Thắng — chờ xác nhận |
+| 4 | Nguồn (CHK-PAY-14) cho khách ở `to_ship` chỉ gửi yêu cầu huỷ, shop duyệt; quyết định 2026-10-18 và FE cho huỷ thẳng. Chưa có Admin để duyệt. **Đề xuất PO:** Slice 3 huỷ thẳng ở `to_ship`; khi có slice Admin chuyển sang `cancel_requested`. | BR-CHK-23, AC-CHK-29 | Thắng — chờ xác nhận (Slice 4 đề xuất đổi, xem Slice 4 câu hỏi 1) |
+
+---
+
+## Slice 4: Admin đơn hàng
+
+Nguồn chính: `docs/product/cart-checkout-business-rules.md` (CHK-PAY-05, 06, 07, 11, 14; CHK-CF-13; bảng "Vai trò xử lý ngoại lệ"; nguyên tắc 1 và 5), Slice 3 (BR-CHK-14, 19, 20, 22, 23, 28, 29; BR-VOU-12), Slice 1 (BR-AUTH-33, 34; AC-AUTH-75, 84, 85). Thắng chốt Slice 4 = Admin đơn hàng (decisions 2026-11-08). Hiện trạng đã đọc: BE `backend/prisma/schema.prisma` (`orders`, `order_items`, `order_events`, `product_variants`, `store_settings`), `backend/src/modules/order/{cancel-order.service,expiry.job,order.mapper}.ts`, `backend/src/config/assumptions.ts`, `backend/src/modules/auth/*` (đã có `/admin/auth`, cookie `n2f_asid`, vai trò `staff`/`admin`); FE `frontend/src/app/admin/**` (mock, commit 181ea57) và `frontend/src/app/features/orders/**`. **Nguồn tham chiếu COMMON-01..03 (bước chuyển trạng thái, hoàn kho) vẫn chưa có nội dung** (Slice 3 câu hỏi 1): mọi bước chuyển dưới đây là đề xuất PO bám CHK-PAY-14 và đánh dấu ở câu hỏi 8. Mã BR: `BR-ADM`. Tên endpoint/trường/cột do Backend chốt trong `openapi.yaml`; BR chỉ nêu dữ liệu phải lưu và hành vi quan sát được. Tiền là số nguyên đồng; múi giờ Asia/Ho_Chi_Minh. AC kế thừa mức của BR.
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** Đơn thật được tạo ở `to_ship` rồi dừng: không ai xác nhận, bàn giao, đánh dấu giao xong hay huỷ; khách không có đường biết đơn đi đâu; "từ chối nhận hàng" chưa ghi nhận được nên giới hạn COD (BR-CHK-19) chưa có dữ liệu; khách huỷ thẳng ở `to_ship` (giả định tạm Q4 Slice 3) trái nguồn; Admin FE chỉ chạy mock với 11 trạng thái khác DB (6 trạng thái).
+
+**Mục tiêu.**
+1. Mọi đơn COD đi hết vòng đời tới `completed` hoặc `cancelled` bằng thao tác của nhân viên, qua giao diện admin hiện có.
+2. Mỗi thay đổi có người làm, giờ làm, từ trạng thái nào sang trạng thái nào; không sửa, không xoá được.
+3. Tồn kho và lượt voucher được hoàn đúng một lần, bất kể đường huỷ nào (khách, shop, hết hạn).
+4. Hai nhân viên cùng thao tác một đơn không để lại trạng thái sai, không gửi thư hay hoàn kho hai lần.
+5. Khách biết đơn đang ở đâu (timeline, mã vận đơn, email) và yêu cầu huỷ ở `to_ship` được shop quyết định.
+
+**Không phải mục tiêu.** Đổi giao diện admin (giữ visual guideline admin v1.3); quản lý sản phẩm, tồn kho thủ công, khách hàng, khuyến mãi, báo cáo, nhân viên; hoàn tiền; chuyển khoản QR; trả hàng sau giao.
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Nguồn | Lý do |
+| --- | --- | --- | --- |
+| Quyền truy cập API admin (phiên `n2f_asid`, staff vs admin, kiểm lại vai trò mỗi yêu cầu) | Must | BR-AUTH-33, 34; AC-AUTH-84, 85 | API admin đầu tiên; không có thì mọi thao tác dưới đây không an toàn. |
+| Danh sách đơn: tab theo việc cần làm, đếm, tìm theo mã/SĐT/email/tên, lọc phương thức và ngày | Must | — | Staff phải tìm đúng đơn cần xử lý. |
+| Chi tiết đơn + timeline (ai, giờ nào, từ đâu sang đâu) | Must | CHK-PAY-14 | Vết kiểm toán; khách và CSKH cùng hỏi "đơn đang ở đâu". |
+| Ghi nhận cuộc gọi xác nhận COD; xác nhận; huỷ do không liên lạc / khách báo không nhận trên điện thoại | Must | CHK-PAY-06 | Nguồn giao bước này cho Admin ở Slice 3. |
+| Bàn giao vận chuyển (đơn vị + mã vận đơn) → `to_receive`; giao xong → `completed` + đã thu tiền | Must | CHK-PAY-14, CF-13 | Hoàn tất vòng đời; mở khoá Reviews (P1). |
+| Giao không thành / khách từ chối nhận → `cancelled`; ghi `delivery_refused_at`; xử lý hàng hoàn về kho | Must | CHK-PAY-07, CHK-PAY-05 | Cấp dữ liệu cho giới hạn COD; hoàn kho đúng lúc hàng về. |
+| Huỷ do shop (lý do cố định; lý do "khác" chỉ admin); hoàn kho + lượt voucher đúng một lần | Must | CHK-PAY-06, nguyên tắc 1 | Một quy tắc hoàn kho cho mọi đường huỷ. |
+| Duyệt / từ chối yêu cầu huỷ; đổi Q4: khách ở `to_ship` chỉ gửi yêu cầu | Must (chờ Q1) | CHK-PAY-14, CF-13 | Trả đúng nguồn; cần người duyệt nên đi cùng Slice 4. |
+| Email: đã bàn giao (kèm mã vận đơn), giao thành công, yêu cầu huỷ được duyệt / bị từ chối, huỷ do shop | Must | CHK-CF-13 | Đúng danh sách sự kiện của nguồn (phần còn lại sau Slice 3). |
+| Chống hai người cùng thao tác: kiểm trạng thái hiện tại, một hiệu ứng phụ mỗi lần chuyển | Must | nguyên tắc 4 (tinh thần) | Yêu cầu của Thắng. |
+| Timeline phía khách: mã vận đơn, "chờ duyệt huỷ", hoàn thành (không lộ tên nhân viên) | Must | — | Order Tracking là P0. |
+| Cờ `adminOrdersMode`; menu admin ở HTTP chỉ còn "Đơn hàng" | Must | — | Không để màn hình mock lẫn dữ liệu thật. |
+| Ghi chú nội bộ; in phiếu giao; cờ quá hạn (gọi, duyệt huỷ, giao); giới hạn tần suất | Should | CHK-PAY-06 (2 giờ) | Có ích, không chặn vòng đời. |
+| Sửa địa chỉ / đổi dòng hàng của đơn | Won't | — | Đụng giá, tồn, phí giao, voucher; CSKH huỷ và hướng dẫn đặt lại. |
+| Hoàn tiền, đơn `to_pay` / chuyển khoản QR, `partially_refunded` | Won't | CHK-PAY-10, 12 | QR chưa bật (Slice 3 câu hỏi 2): chưa có đơn đã thu tiền để hoàn. |
+| Trả hàng / đổi hàng sau giao (`returns`), `delivering`, `delivery-failed`, `returned-to-sender` làm trạng thái riêng | Won't | VC-13 | Slice sau; DB chỉ có 6 trạng thái, không thêm. |
+| Điều chỉnh tồn kho thủ công, lịch sử kho, ngưỡng sắp hết | Won't | — | Slice Admin kho & sản phẩm; Slice 4 chỉ đụng tồn qua đơn. Hệ quả: `search_text` (backlog 2.19) chưa thành Must. |
+| Sản phẩm, bộ sưu tập, bảng size, nội dung, đánh giá, khuyến mãi, khách hàng, báo cáo, tổng quan, tham số cửa hàng, quản lý nhân viên, nhật ký hoạt động toàn hệ thống, xuất file | Won't | — | Slice sau; ở HTTP các màn này bị ẩn. Nhật ký đơn nằm ở timeline. |
+| Vô hiệu hoá / đổi vai trò tài khoản bằng giao diện | Won't | AC-AUTH-75 | Slice Admin người dùng; xem mục 6. |
+
+### 3. Hiện trạng và hành vi được chọn
+
+| # | Điểm | Hiện trạng | Chọn | Lý do |
+| --- | --- | --- | --- | --- |
+| K1 | Trạng thái | DB: 6 (`to_pay`, `to_ship`, `to_receive`, `completed`, `cancel_requested`, `cancelled`). Admin FE mock: 11 (`pending-confirmation`, `processing`, `shipping`, `delivering`, `delivery-failed`, `returned-to-sender`, `return-requested`, `returned`...). | API và DB giữ 6 trạng thái. Admin FE ánh xạ: `to_ship` + cần gọi + chưa xác nhận → "Chờ xác nhận" (`pending-confirmation`); `to_ship` còn lại → "Đang chuẩn bị" (`processing`); `to_receive` → "Đang vận chuyển" (`shipping`); thêm nhãn "Chờ duyệt huỷ" cho `cancel_requested`. Các trạng thái mock còn lại bỏ ở HTTP. | Master plan 34: DTO tách domain; không migration đổi enum. |
+| K2 | Trạng thái thanh toán | Admin FE `PaymentState`: `paid/unpaid/cod/refunded/void`. DB: `pending/paid/failed/refunded/partially_refunded`. | FE ánh xạ: COD + `pending` → "Thu khi giao" (`cod`); `paid` → "Đã thanh toán"; `cancelled` + COD → "Không thu tiền" (`void`). | Giữ nhãn FE. |
+| K3 | Dữ liệu chưa có | `order_events` không có người thực hiện (chỉ `actor` = customer/shop/system); không có thời điểm xác nhận, đơn vị vận chuyển, mã vận đơn, thời điểm giao, đếm lần gọi, thời điểm yêu cầu huỷ; không có cờ chống ghi chồng. | Backend thêm bằng migration **cộng thêm** (BR-ADM-37); BR dưới đây chỉ nêu dữ liệu cần lưu. | Không chọn công nghệ, không phá dữ liệu. |
+| K4 | Quyền | FE `permissions.ts`: staff không có `orders.cancel`; admin có tất cả. Nguồn (CHK-PAY-06, 07): "admin/staff huỷ". | Staff huỷ được với 4 lý do cố định và duyệt/từ chối yêu cầu huỷ; chỉ admin huỷ với lý do "khác" (BR-ADM-24). FE đổi ma trận cho khớp. | Đúng nguồn, vẫn giữ một quyền chỉ của admin. |
+| K5 | Gửi vận chuyển | FE mock `ShipInput`: đơn vị, mã vận đơn, `estimatedAt`. | Chỉ đơn vị + mã vận đơn; ngày giao dự kiến giữ giá trị đã chốt khi đặt (BR-CHK-11). | Không để staff hứa ngày khác với khách đã thấy. |
+| K6 | Huỷ ở `to_ship` | `ASSUMPTIONS.customerCancellableFrom = ['to_pay','to_ship']`; `cancel-order.service` dùng `allowedFrom`, `stock_restored_at`. | Bỏ `to_ship` khỏi danh sách (BR-ADM-29) cùng lúc với màn duyệt (lát 4.5). Dùng một quy tắc hoàn kho cho mọi đường huỷ. | Slice 3 BR-CHK-23, Q4. |
+| K7 | Giới hạn COD | `quote.service` đã đọc `delivery_refused_at` nhưng chưa có nơi nào ghi. | Slice 4 ghi cột này khi khách từ chối nhận (BR-ADM-26); AC-CHK-24 lần đầu kiểm được dữ liệu thật. | Đóng vòng Slice 3. |
+| K8 | Màn hình admin khác | Tổng quan, Sản phẩm, Tồn kho, Khách hàng, Khuyến mãi, Báo cáo, Nội dung, Cài đặt chỉ có mock. | Ở HTTP chỉ hiện "Đơn hàng"; `/admin` → `/admin/orders`; route khác → trang "Chưa khả dụng", không chứa dữ liệu mock. | Doanh thu/tồn giả cạnh đơn thật gây nhầm. |
+| K9 | Tài khoản | Mock dùng `@nine2fine.vn`; BE seed `admin@nine2fine.test`, `staff@nine2fine.test`. | Dùng tài khoản seed BE. | decisions 2026-11-07. |
+| K10 | Mã lỗi `unauthorized` | PRD Slice 3 BR-CHK-27 ghi `unauthorized`; contract đã chốt `unauthenticated`, `forbidden`. | Dùng `unauthenticated` (401), `forbidden` (403). | Bám contract. |
+| K11 | Đơn cũ (Slice 3) | Đơn tạo trước migration Slice 4 không có người xử lý. | Hiển thị đúng, người = "Khách" / "Hệ thống" theo `actor` (BR-ADM-37). | Không backfill. |
+
+### 4. Business Rules
+
+Trạng thái "cần gọi" = đơn COD `to_ship`, `needs_confirm_call` = true, chưa được xác nhận (BR-ADM-17). "Hàng hoàn chờ xử lý" = đơn `cancelled` từ `to_receive` mà hàng chưa được xử lý (BR-ADM-27).
+
+#### 4.1 Truy cập và quyền
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-01 | Must | BR-AUTH-33, 34; AC-AUTH-84 | Mọi API admin đơn hàng chỉ nhận phiên admin (`n2f_asid`). Không có cookie, hết hạn, bị thu hồi, hoặc chỉ có cookie storefront `n2f_sid` → 401 `unauthenticated`, không có dữ liệu đơn trong phản hồi. Phản hồi `Cache-Control: no-store`. |
+| BR-ADM-02 | Must | BR-AUTH-33; AC-AUTH-85; K4 | Máy chủ kiểm quyền ở **mọi** yêu cầu theo bảng: **staff**: xem; ghi cuộc gọi; xác nhận; bàn giao; giao xong; huỷ với lý do `unreachable`, `declined_on_call`, `refused`, `undeliverable`; xử lý hàng hoàn; duyệt/từ chối yêu cầu huỷ; ghi chú. **admin**: mọi việc của staff + huỷ với lý do `other`. Phiên hợp lệ nhưng thiếu quyền → 403 `forbidden`; đơn không đổi, không có sự kiện. |
+| BR-ADM-03 | Must | BR-AUTH-29, AC-AUTH-75 (một phần) | Vai trò và trạng thái hoạt động của tài khoản đọc từ DB ở mỗi yêu cầu, không tin cookie hay FE. Tài khoản bị vô hiệu hoặc hạ vai trò (qua SQL cho tới khi có giao diện) có hiệu lực ở yêu cầu kế tiếp, không chờ phiên hết hạn (admin/staff: 8 giờ không hoạt động, tối đa 24 giờ — chốt 2026-11-07). |
+| BR-ADM-04 | Must | BR-AUTH-33 | FE ẩn nút/hành động không đủ quyền (trải nghiệm, không phải bảo vệ). Danh sách hành động hợp lệ (`allowedActions`) do máy chủ tính theo vai trò và trạng thái; FE chỉ hiện các hành động trong danh sách. |
+
+#### 4.2 Danh sách và tìm kiếm
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-05 | Must | — | Danh sách đơn mới nhất trước (`createdAt` giảm dần, hoà thì mã đơn giảm dần). `pageSize` mặc định 20, từ 1 đến 50; ngoài khoảng → 422 `validation` (`field: pageSize`); trang quá cuối → `items` rỗng, `total` đúng. Mỗi dòng: mã, thời điểm đặt, trạng thái, thanh toán, phương thức, tên người nhận, tổng tiền, số sản phẩm, cờ "cần gọi", cờ "có yêu cầu huỷ". |
+| BR-ADM-06 | Must | — | Ô tìm `q` (cắt khoảng trắng hai đầu, ≤ 100 ký tự, dài hơn → 422): khớp mã đơn (không phân biệt hoa thường, có hoặc không `#`, tiền tố ≥ 6 ký tự), SĐT người nhận (chuẩn hoá `+84`/`84` → `0`, chứa ≥ 4 chữ số liên tiếp), email đặt hàng (chứa, không phân biệt hoa thường), tên người nhận (chứa, không phân biệt hoa thường và dấu). `%` và `_` được hiểu là ký tự thường. `q` rỗng = không lọc. |
+| BR-ADM-07 | Must | — | Tab (view): `all`; `pending-payment` (`to_pay`); `to-confirm` (cần gọi); `to-fulfil` (`to_ship` còn lại); `in-transit` (`to_receive`); `cancel-requests` (`cancel_requested`); `returning` (hàng hoàn chờ xử lý); `completed`; `cancelled` (còn lại). Mỗi đơn thuộc đúng 1 tab (trừ `all`), tổng số các tab = số của `all`. API đếm trả đủ số của mọi tab, khớp danh sách. |
+| BR-ADM-08 | Must | — | Bộ lọc: phương thức (`cod`/`bank_transfer`); khoảng ngày đặt `from`–`to` (YYYY-MM-DD, GMT+7, gồm cả hai đầu); `from` > `to` → 422 `validation`. Kết hợp với tab và `q` theo AND. |
+
+#### 4.3 Chi tiết, timeline, kiểm toán
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-09 | Must | BR-CHK-18 | Chi tiết đơn (theo mã, không phân biệt hoa thường/`#`): bản chụp từng dòng, số tiền, voucher, người nhận, địa chỉ, ghi chú giao hàng, phương thức, trạng thái đơn + thanh toán, đơn vị vận chuyển + mã vận đơn (nếu có), thời điểm/người xác nhận (nếu có), `allowedActions`. Mã không có → 404 `not-found`. SĐT và email hiện đầy đủ cho cả staff và admin (cần để gọi và đối chiếu). |
+| BR-ADM-10 | Must | CHK-PAY-14 | Timeline lấy từ sự kiện đơn: mỗi dòng có thời điểm (GMT+7), trạng thái trước → sau, trạng thái thanh toán, người thực hiện (tên và vai trò staff/admin, hoặc "Khách", "Hệ thống"), lý do/ghi chú; mới nhất trước. Sự kiện không sửa, không xoá được qua API. |
+| BR-ADM-11 | Must | nguyên tắc 4 | Một thao tác thành công = đúng 1 sự kiện (kể cả thao tác không đổi trạng thái như ghi cuộc gọi, ghi chú), ghi **cùng giao dịch** với thay đổi dữ liệu liên quan (trạng thái, tồn kho, lượt voucher). Thao tác thất bại giữa chừng → không đổi dữ liệu nào, không có sự kiện. |
+| BR-ADM-12 | Must | nguyên tắc 2 (quyền riêng tư) | Timeline khách thấy (đơn của tôi, tra cứu OTP) chỉ gồm các lần đổi trạng thái và, khi có, mã vận đơn; người thực hiện hiện là "nine2fine", không có tên nhân viên, ghi chú nội bộ, lần gọi, lý do nội bộ. Phản hồi không có mã người dùng của nhân viên. |
+
+#### 4.4 Chuyển trạng thái và đồng thời
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-13 | Must | CHK-PAY-14 | Chỉ các bước chuyển sau hợp lệ; bước khác → 409 `invalid-transition` kèm trạng thái hiện tại, không đổi dữ liệu, không sự kiện, không thư. `to_ship`: ghi cuộc gọi, xác nhận (giữ `to_ship`); bàn giao → `to_receive`; huỷ → `cancelled`. `to_receive`: giao xong → `completed`; huỷ (giao không thành) → `cancelled`. `cancel_requested`: duyệt → `cancelled`; từ chối → `to_ship`. `cancelled` từ `to_receive`: xử lý hàng hoàn (không đổi trạng thái). `to_pay`, `completed`, các `cancelled` còn lại: chỉ xem. |
+| BR-ADM-14 | Must | Yêu cầu Thắng | Mỗi hành động mang trạng thái đơn mà người thao tác đang thấy; khác trạng thái hiện tại → 409 `order-state-changed` kèm đơn hiện tại. Khi hai yêu cầu cùng đơn chạy đồng thời, đúng một yêu cầu thành công, yêu cầu kia nhận 409; mỗi hiệu ứng phụ (cộng tồn, trả lượt voucher, gửi thư) xảy ra tối đa 1 lần cho mỗi lần chuyển trạng thái. Khách yêu cầu huỷ và nhân viên bàn giao cùng lúc: một bên thắng, bên kia 409. |
+| BR-ADM-15 | Must | nguyên tắc 3 | FE không cập nhật trạng thái "lạc quan": chỉ đổi sau khi máy chủ trả 2xx. Nút hành động khoá tới khi có kết quả (một lần bấm, một yêu cầu). Mất mạng/5xx: giữ dữ liệu đã nhập (lý do, mã vận đơn), báo lỗi; "Thử lại" luôn tải lại đơn trước và chỉ hiện hành động còn hợp lệ. Nhận 409 `order-state-changed`: tải lại đơn, báo "Đơn vừa được cập nhật bởi người khác." |
+
+#### 4.5 Gọi xác nhận COD
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-16 | Must | CHK-PAY-06 | "Ghi nhận không liên lạc được" chỉ cho đơn cần gọi: ghi 1 sự kiện (thời điểm, người) kèm ghi chú tuỳ chọn ≤ 250 ký tự; trạng thái không đổi. Số lần ghi không giới hạn. Đơn không cần gọi hoặc đã xác nhận → 409 `invalid-transition`. |
+| BR-ADM-17 | Must | CHK-PAY-06 | "Khách xác nhận" chỉ cho đơn cần gọi: lưu thời điểm và người xác nhận; trạng thái vẫn `to_ship`; đơn sang tab `to-fulfil`. Lần hai → 409 `invalid-transition`. |
+| BR-ADM-18 | Must | CHK-PAY-06 | Huỷ lý do `unreachable` chỉ khi đơn cần gọi và có ≥ 3 lần "không liên lạc được" nằm trong 24 giờ tính từ lần đầu tiên (không bắt buộc cách nhau bao lâu); chưa đủ → 409 `condition-not-met`. Kết quả: `cancelled`, `cancelledBy = shop`, hoàn kho và lượt voucher (BR-ADM-25). |
+| BR-ADM-19 | Must | PO bổ sung (nguồn không nêu) | Huỷ lý do `declined_on_call` (khách báo trên điện thoại không muốn nhận) chỉ khi đơn cần gọi; đơn đã xác nhận → 409 `invalid-transition`. Kết quả như BR-ADM-18. |
+
+#### 4.6 Bàn giao và giao xong
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-20 | Must | CHK-PAY-14 | Bàn giao chỉ cho đơn `to_ship` và, nếu đơn cần gọi, đã xác nhận (chưa → 409 `condition-not-met`). Đầu vào: đơn vị vận chuyển 2–50 ký tự; mã vận đơn 4–40 ký tự gồm chữ, số, `-` (lưu chữ hoa), không trùng mã vận đơn của đơn khác chưa huỷ; sai → 422 `validation` kèm `field`. Kết quả: `to_receive`, lưu thời điểm bàn giao, đơn vị, mã; tồn không đổi (đã trừ từ lúc đặt); thanh toán giữ `pending`. Ngày giao dự kiến giữ nguyên. |
+| BR-ADM-21 | Must | CHK-CF-13 | Gửi email "đã bàn giao vận chuyển", tiêu đề "nine2fine – Đơn #{mã} đã được giao cho đơn vị vận chuyển"; nội dung: mã đơn, đơn vị, mã vận đơn, ngày giao dự kiến, tổng thanh toán (COD: số tiền shipper thu), người nhận và địa chỉ, nút xem/tra cứu đơn, hotline CSKH, câu chống lừa đảo của BR-CHK-28 (đề xuất PO). |
+| BR-ADM-22 | Must | CHK-PAY-14 | "Giao thành công" chỉ cho đơn `to_receive`: `completed`, thanh toán `paid`, lưu thời điểm thu tiền; không hoàn tác. `completed` là trạng thái cuối: mọi hành động admin và hành động huỷ của khách đều bị từ chối (409). |
+| BR-ADM-23 | Must | CHK-CF-13 | Gửi email "giao thành công", tiêu đề "nine2fine – Đơn #{mã} đã giao thành công" (đề xuất PO): mã đơn, ngày giao, sản phẩm, tổng; link chính sách đổi trả; hotline. Không có lời mời đánh giá (Reviews là P1). |
+
+#### 4.7 Huỷ do shop và tồn kho
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-24 | Must (phân quyền chờ Q4) | CHK-PAY-06, 07; K4 | Lý do huỷ là mã cố định, đặt ở trạng thái cho phép: `unreachable` (`to_ship`, BR-ADM-18); `declined_on_call` (`to_ship`, BR-ADM-19); `refused` khách từ chối nhận, `undeliverable` giao không thành (`to_receive`); `other` (`to_ship` hoặc `to_receive`, **chỉ admin**, ghi chú bắt buộc 5–250 ký tự). Ghi chú nội bộ tuỳ chọn ≤ 250 ký tự cho các lý do còn lại. Tổ hợp sai trạng thái/lý do → 409 `invalid-transition`; thiếu ghi chú → 422. Huỷ do shop lưu `cancelledBy = shop`. |
+| BR-ADM-25 | Must | BR-CHK-14, 23; BR-VOU-12; nguyên tắc 1 | Mọi đường huỷ từ `to_ship`, `cancel_requested` (và `to_pay` do khách/hết hạn) dùng **một** quy tắc: trong cùng giao dịch cộng lại đúng số lượng đã trừ của từng dòng, đúng **một lần**; trả lượt voucher nếu mã còn hạn (mã đã hết hạn không trả); thanh toán COD giữ `pending`. Huỷ lần hai (từ bất kỳ đường nào) không hoàn thêm. |
+| BR-ADM-26 | Must | CHK-PAY-07, CHK-PAY-05 | Huỷ từ `to_receive` (`refused`, `undeliverable`, `other`) chuyển `cancelled` ngay và trả lượt voucher như BR-ADM-25, **chưa** cộng tồn: hàng chưa về kho. Lý do `refused` lưu thêm thời điểm từ chối vào `delivery_refused_at` (tính vào giới hạn COD 2 lần / 6 tháng theo SĐT, BR-CHK-19); `undeliverable` và `other` không tính. Đơn vào tab `returning`. |
+| BR-ADM-27 | Must (cách làm chờ Q2) | CHK-PAY-07; COMMON-03.4 | Với đơn `returning`, nhân viên xử lý đúng một lần: `restocked` (hàng về kho, cộng lại đúng số lượng từng dòng, lưu thời điểm hoàn kho) hoặc `written_off` (hàng hỏng/mất, không cộng tồn, ghi chú bắt buộc 5–250 ký tự). Xử lý lần hai → 409 `invalid-transition`. Đơn không ở `returning` (kể cả đã hoàn kho do BR-ADM-25) → 409. Trạng thái đơn không đổi. |
+| BR-ADM-28 | Must | CHK-CF-13 | Huỷ do shop gửi email "đơn đã huỷ" (cùng khuôn BR-CHK-29) kèm lý do cho khách bằng câu chuẩn, không lộ ghi chú nội bộ: `unreachable` → "Chúng tôi không liên lạc được với bạn để xác nhận đơn."; `declined_on_call` → "Bạn đã báo không muốn nhận đơn."; `refused` → "Đơn không được nhận khi giao hàng."; `undeliverable` → "Giao hàng không thành công."; `other` → "nine2fine không thể thực hiện đơn này." (câu do PO đề xuất). COD: không có thông tin hoàn tiền. |
+
+#### 4.8 Yêu cầu huỷ của khách
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-29 | Must (chờ Q1) | CHK-PAY-14; thay BR-CHK-23 | Khách (thành viên hoặc khách đã qua OTP) bấm Huỷ ở `to_ship` → đơn sang `cancel_requested`, **không** huỷ ngay: lưu thời điểm và lý do tuỳ chọn ≤ 250 ký tự (dài hơn → 422); tồn, lượt voucher, thanh toán giữ nguyên. Đang `cancel_requested` yêu cầu lần nữa → 409 `not-cancellable`. Ở `to_pay` khách vẫn huỷ thẳng; ở `to_receive`, `completed`, `cancelled` → 409 `not-cancellable` (BR-CHK-23). Việc đổi chỉ có hiệu lực cùng lúc màn duyệt phát hành. |
+| BR-ADM-30 | Must | CHK-CF-13 | Duyệt: `cancelled`, `cancelledBy = customer`, sự kiện ghi nhân viên duyệt; hoàn kho + voucher theo BR-ADM-25; gửi email tiêu đề "nine2fine – Yêu cầu huỷ đơn #{mã} đã được duyệt" (đề xuất PO). |
+| BR-ADM-31 | Must (gửi lại chờ Q6) | CHK-CF-13 | Từ chối: lý do bắt buộc 5–250 ký tự (thiếu/ngắn → 422), đơn trở về `to_ship` giữ nguyên trạng thái xác nhận; gửi email "nine2fine – Yêu cầu huỷ đơn #{mã} chưa được chấp nhận" kèm lý do và hotline (đề xuất PO). Mỗi đơn khách chỉ gửi **một** yêu cầu: sau khi bị từ chối, yêu cầu mới → 409 `not-cancellable` và FE hướng dẫn gọi hotline. |
+| BR-ADM-32 | Must | nguyên tắc 4 | Khi `cancel_requested`, chỉ có duyệt và từ chối; ghi cuộc gọi, xác nhận, bàn giao, giao xong, huỷ lý do khác → 409 `invalid-transition`. Tồn không đổi trong thời gian chờ. |
+| BR-ADM-33 | Must | BR-CHK-22 | Storefront FE (đơn của tôi, tra cứu): `cancel_requested` → "Đang chờ duyệt huỷ", ẩn nút Huỷ và hiện "Đã gửi yêu cầu huỷ"; `to_receive` → "Đang vận chuyển" kèm đơn vị và mã vận đơn; `completed` → "Hoàn thành"; câu hướng dẫn huỷ ở `to_ship` đổi thành "gửi yêu cầu huỷ". Timeline theo BR-ADM-12. |
+
+#### 4.9 Vận hành
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ADM-34 | Must | BR-AUTH-36 | Mã lỗi ổn định: `unauthenticated` 401, `forbidden` 403, `not-found` 404, `validation` 422 (+`field`), `invalid-transition` 409, `order-state-changed` 409, `condition-not-met` 409, `not-cancellable` 409 (phía khách), `rate-limited` 429, lỗi máy chủ; không stack trace, SQL. FE map theo `code` trong body. |
+| BR-ADM-35 | Must | BR-CHK-28 | Email của Slice 4 gửi trong 5 phút sau thao tác, lỗi thử lại tối đa 3 lần, vẫn lỗi → báo CSKH (phthang0872@gmail.com); thao tác nghiệp vụ không bao giờ bị huỷ vì email lỗi; mỗi sự kiện gửi tối đa 1 thư (hai nhân viên bấm cùng lúc vẫn 1 thư); log không chứa email đầy đủ. Mọi thư có câu chống lừa đảo của BR-CHK-28. |
+| BR-ADM-36 | Must | — | Cờ `adminOrdersMode` (`http`/`mock`), độc lập các cờ khác. `http`: đăng nhập admin thật, danh sách, chi tiết, hành động qua API; menu chỉ "Đơn hàng"; route admin khác → trang "Chưa khả dụng" không chứa dữ liệu mock; `/admin` → `/admin/orders`. `mock`: như trước Slice 4. |
+| BR-ADM-37 | Must | BR-CHK-33 | Migration chỉ cộng thêm (không `DROP`/`TRUNCATE`/đổi kiểu); bảng mới bật RLS. Cần lưu thêm: người thực hiện sự kiện (nhân viên), thời điểm/người xác nhận, số lần/thời điểm gọi, đơn vị + mã vận đơn + thời điểm bàn giao, thời điểm giao/thu tiền, thời điểm + lý do yêu cầu huỷ, quyết định xử lý hàng hoàn, dấu chống ghi chồng. Đơn và sự kiện Slice 3 sẵn có vẫn hiển thị đúng ("Khách"/"Hệ thống") và xử lý được theo BR-ADM-13. |
+| BR-ADM-38 | Should | — | Ghi chú nội bộ ≤ 500 ký tự trên đơn: 1 sự kiện, hiện trong timeline admin, không hiện cho khách. |
+| BR-ADM-39 | Should | — | In phiếu giao từ chi tiết đơn `to_ship`/`to_receive`: mã, người nhận, SĐT, địa chỉ, dòng hàng (tên, màu, size, số lượng), ghi chú giao hàng, số tiền shipper thu (COD = tổng thanh toán). |
+| BR-ADM-40 | Should | CHK-PAY-06 (2 giờ) | Cờ "quá hạn": cần gọi quá 2 giờ làm việc kể từ lúc đặt; `cancel_requested` quá 24 giờ chưa quyết định; `to_receive` quá ngày giao dự kiến muộn nhất. Giờ làm việc 08:00–18:00, thứ Hai đến thứ Bảy (đề xuất PO, câu hỏi 3). Chỉ là cờ, không tự đổi trạng thái. |
+| BR-ADM-41 | Should | BR-AUTH-35 | Giới hạn theo tài khoản admin: đọc 120 yêu cầu/60 giây, ghi 60 yêu cầu/60 giây; vượt → 429 `rate-limited` + `retryAfterSeconds`. Thao tác bình thường (duyệt 20 đơn liên tiếp) không chạm. |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu: tài khoản seed `admin@nine2fine.test` (AD), `staff@nine2fine.test` (NV), `member@nine2fine.test` (M). **Đơn A**: khách `a@x.vn`, SĐT `0912345678`, COD, blazer Đen/S × 2 (tổng 2.580.000, tồn trước đặt 5, sau đặt 3), `to_ship`, cần gọi. **Đơn B**: M đã có 1 đơn `completed` (SQL), COD off-duty-top × 1 (tổng 420.000), `to_ship`, không cần gọi. "T" = dữ liệu thử. Giả mất mạng bằng "Block request URL" `*/api/*`. Sửa thời gian bằng SQL.
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-ADM-01 | 01 | Không cookie; cookie `n2f_asid` hết hạn / bị thu hồi; chỉ có `n2f_sid` của M | `GET` danh sách, `GET` chi tiết, `POST` một hành động | Cả ba trường hợp: 401 `unauthenticated`, không có dữ liệu đơn, `Cache-Control: no-store`; đơn không đổi (AC-AUTH-84). |
+| AC-ADM-02 | 02 | NV đăng nhập; đơn T ở `to_ship` | NV huỷ lý do `other`; NV bàn giao; AD huỷ `other` đơn T khác | NV `other`: 403 `forbidden`, đơn không đổi, không sự kiện. NV bàn giao: 200. AD `other`: 200 (AC-AUTH-85, diễn đạt lại theo mục 6). |
+| AC-ADM-03 | 03 | AD đăng nhập (cookie còn hạn) | SQL hạ AD thành staff, AD gọi huỷ `other`; SQL đặt `is_active = false`, AD gọi danh sách | Lần 1: 403 `forbidden`. Lần 2: 401 `unauthenticated`, phiên bị xoá; cả hai ở yêu cầu kế tiếp, không chờ hết phiên. |
+| AC-ADM-04 | 04 | `adminOrdersMode: http`; NV ở chi tiết đơn `to_ship` đã xác nhận | Xem hành động; mở menu; mở `/admin/products`; đăng nhập AD xem cùng đơn | NV không thấy "Huỷ với lý do khác"; AD thấy. Menu chỉ "Đơn hàng"; `/admin/products` hiện "Chưa khả dụng", không có dữ liệu mock, không request tới API khác ngoài đơn/đăng nhập. FE chỉ hiện hành động có trong `allowedActions`. |
+| AC-ADM-05 | 05 | 45 đơn T | Danh sách mặc định; `page=3`; `page=9`; `pageSize=51`; `pageSize=0` | 20 đơn mới nhất trước, `total` 45; trang 3: 5 đơn; trang 9: `items` rỗng, `total` 45; hai lần sau: 422 `validation` `field: pageSize`. |
+| AC-ADM-06 | 06 | Đơn A (mã `N2F2611081801`, người nhận "Nguyễn Văn A") và các đơn khác | `q` = `n2f2611081801`, `#N2F2611081801`, `N2F26110`; `0912345678`, `+84912345678`, `5678`; `A@X.VN`; `nguyen van`; `%`; chuỗi 101 ký tự; rỗng | Mã (đủ và có `#`): đơn A; `N2F26110` (8 ký tự): các đơn đầu mã đó; SĐT: đơn A; `5678`: đơn A (≥ 4 số); email, tên không dấu: đơn A; `%`: 0 đơn (không phải tất cả); 101 ký tự: 422; rỗng: tất cả. |
+| AC-ADM-07 | 07 | 10 đơn T: 1 `to_pay`, 2 cần gọi, 1 `to_ship` đã xác nhận + 1 không cần gọi, 1 `to_receive`, 1 `cancel_requested`, 1 `returning`, 1 `completed`, 1 `cancelled` thường | Gọi đếm; mở từng tab; xác nhận một đơn cần gọi | Đếm: `all` 10, `pending-payment` 1, `to-confirm` 2, `to-fulfil` 2, `in-transit` 1, `cancel-requests` 1, `returning` 1, `completed` 1, `cancelled` 1 (tổng 8 tab con = 10); mỗi tab liệt kê đúng đơn của nó. Sau xác nhận: `to-confirm` 1, `to-fulfil` 3. |
+| AC-ADM-08 | 08 | Đơn lúc 2026-11-08 00:30 (GMT+7) và đơn lúc 2026-11-07 23:59 (GMT+7); đơn COD và `bank_transfer` (SQL) | `from=to=2026-11-08`; `payment=cod`; `from=2026-11-09&to=2026-11-08`; kết hợp tab + `q` | Lần 1 chỉ đơn 00:30; `payment=cod` loại đơn chuyển khoản; lần 3: 422 `validation`; kết hợp theo AND. |
+| AC-ADM-09 | 09 | Đơn A; NV rồi AD | Mở chi tiết theo mã `n2f2611081801` và `#N2F2611081801`; mã lạ | Đủ: 2 dòng blazer Đen/S (tên, SKU, đơn giá, số lượng), tổng 2.580.000, địa chỉ, ghi chú giao hàng, `to_ship` + `pending`, voucher (nếu có), cần gọi; `allowedActions` NV không có `cancel-other`, AD có; SĐT, email đầy đủ. Mã lạ: 404 `not-found`. |
+| AC-ADM-10 | 10 | Đơn A; NV ghi cuộc gọi, xác nhận, bàn giao | Xem timeline; thử `PUT`/`DELETE` một sự kiện | Mỗi thao tác đúng 1 dòng, mới nhất trước: giờ GMT+7, `to_ship` → `to_ship`/`to_receive`, người "tên NV (Nhân viên)", dòng đặt hàng đầu tiên là "Khách"; `PUT`/`DELETE` không tồn tại (404/405), số sự kiện không đổi. |
+| AC-ADM-11 | 11 | Đơn A đã xác nhận; chèn lỗi giữa bước cộng tồn khi huỷ `declined_on_call`/`other` | AD huỷ | Lỗi 5xx; trạng thái vẫn `to_ship`, tồn blazer Đen/S vẫn 3, lượt voucher không đổi, không có sự kiện, không có thư. Bỏ lỗi, huỷ lại: thành công, đủ 1 sự kiện. |
+| AC-ADM-12 | 12 | Đơn A có cuộc gọi, ghi chú nội bộ, xác nhận, bàn giao (mã `GHTK-12345`) | Khách mở tra cứu OTP; thành viên mở `/account/orders/<id>` (đơn B tương tự) | Timeline khách có: đặt hàng, đang vận chuyển kèm đơn vị + `GHTK-12345`; không có lần gọi, ghi chú, tên nhân viên; người = "nine2fine"; JSON không có mã người dùng nhân viên. |
+| AC-ADM-13 | 13 | Đơn `completed`, `cancelled`, `to_receive`, `to_ship`, `to_pay` | `completed` → huỷ `other`; `cancelled` → bàn giao; `to_receive` → xác nhận; `to_ship` → giao xong; `to_pay` → bàn giao | Cả 5: 409 `invalid-transition` kèm trạng thái hiện tại; DB, tồn, voucher không đổi; không sự kiện, không thư. |
+| AC-ADM-14 | 14 | Đơn T `cancel_requested`, tồn biến thể 3 (đã trừ 2) | Hai NV bấm Duyệt cùng lúc; lặp 20 lần (đơn mới mỗi lần) | Mỗi lần đúng 1 yêu cầu 200 và 1 yêu cầu 409 `order-state-changed`; tồn 5, không bao giờ 7; 1 sự kiện duyệt; 1 email; lượt voucher trả 1 lần. |
+| AC-ADM-15 | 14 | Đơn T `cancel_requested` | NV1 Duyệt và NV2 Từ chối cùng lúc; lặp 20 lần | Mỗi lần đúng 1 bên thắng; trạng thái cuối khớp bên thắng (`cancelled` + tồn cộng, hoặc `to_ship` + tồn không đổi), không lẫn; đúng 1 email, đúng loại. |
+| AC-ADM-16 | 15 | NV1 mở đơn A `to_ship` đã xác nhận; NV2 đã bàn giao đơn đó | NV1 bấm Bàn giao; NV1 bấm đúp trong 300 ms trên đơn khác | NV1: 409 `order-state-changed`, FE tải lại hiện `to_receive` và "Đơn vừa được cập nhật bởi người khác."; không sự kiện trùng, không thư thứ hai. Bấm đúp: 1 request `POST`. |
+| AC-ADM-17 | 15 | NV bấm Bàn giao, đã nhập `GHTK-12345` | (a) chặn mạng trước khi gửi; (b) chặn mạng ngay sau khi gửi (máy chủ đã xử lý); bỏ chặn, bấm Thử lại | (a) báo lỗi, giữ dữ liệu nhập, trạng thái vẫn `to_ship`. (b) báo lỗi; "Thử lại" tải lại đơn trước, hiện `to_receive`, không gửi bàn giao lần hai, 1 sự kiện, 1 thư. |
+| AC-ADM-18 | 16 | Đơn A (cần gọi); đơn B (không cần gọi); đơn `completed` | Ghi "không liên lạc được" cho A (ghi chú 250 và 251 ký tự); cho B; cho `completed` | A: 1 sự kiện mỗi lần hợp lệ, vẫn `to_ship`, vẫn tab `to-confirm`; 251 ký tự: 422. B và `completed`: 409 `invalid-transition`. |
+| AC-ADM-19 | 17 | Đơn A | "Khách xác nhận"; lần hai; kiểm tab | Lần 1: lưu giờ + người, vẫn `to_ship`, sang `to-fulfil`; lần 2: 409 `invalid-transition`. |
+| AC-ADM-20 | 18 | Đơn A có 2 lần "không liên lạc được"; đơn A2 có lần 1 lúc t, lần 2 lúc t+23 giờ, lần 3 lúc t+25 giờ (SQL); đơn A3 có 3 lần trong 2 giờ | Huỷ `unreachable` từng đơn | A: 409 `condition-not-met`. A2: 409 (chỉ 2 lần trong 24 giờ từ lần đầu). A3: 200. |
+| AC-ADM-21 | 18, 25, 28 | Đơn A3 (blazer × 2, tồn 3, dùng `N2FWELCOME15` còn hạn) | Huỷ `unreachable` thành công | `cancelled`, `cancelledBy = shop`, thanh toán `pending`, tồn 5, lượt voucher được trả; email chứa "Chúng tôi không liên lạc được với bạn để xác nhận đơn."; `delivery_refused_at` rỗng. |
+| AC-ADM-22 | 19 | Đơn A chưa xác nhận; đơn A đã xác nhận; đơn B | Huỷ `declined_on_call` từng đơn | Chưa xác nhận: 200 `cancelled`, tồn hoàn, email "Bạn đã báo không muốn nhận đơn."; đã xác nhận: 409 `invalid-transition`; B (không cần gọi): 409. |
+| AC-ADM-23 | 20 | Đơn B `to_ship` | Bàn giao: đơn vị 1 / 51 ký tự; mã `abc` (3), `ab c!`, 41 ký tự; mã trùng đơn T khác chưa huỷ | Mỗi lần 422 `validation` đúng `field`; đơn không đổi. Mã trùng đơn **đã huỷ**: hợp lệ. |
+| AC-ADM-24 | 20 | Đơn A chưa xác nhận; đơn A đã xác nhận; đơn B | Bàn giao đơn vị `GHTK`, mã `ghtk-12345` | Chưa xác nhận: 409 `condition-not-met`. Đã xác nhận và B: 200 `to_receive`, mã lưu `GHTK-12345`, có giờ bàn giao, tồn không đổi (3), thanh toán `pending`, ngày giao dự kiến không đổi; bàn giao lần hai: 409. |
+| AC-ADM-25 | 21, 35 | Đơn B có email Gmail thật | Bàn giao | Thư trong ≤ 5 phút, tiêu đề "nine2fine – Đơn #{mã} đã được giao cho đơn vị vận chuyển", có đơn vị, mã vận đơn, ngày giao dự kiến, tổng, địa chỉ, câu chống lừa đảo. Hai NV bàn giao cùng lúc: 1 thư. |
+| AC-ADM-26 | 22 | Đơn `to_receive`; đơn `to_ship` | Giao thành công; lần hai; giao đơn `to_ship` | `completed` + `paid`, có giờ thu tiền (GMT+7), 1 sự kiện; lần hai: 409; `to_ship`: 409 `invalid-transition`. |
+| AC-ADM-27 | 22 | Đơn `completed` | NV/AD huỷ `other`, bàn giao, duyệt; khách huỷ qua API khách | Admin: 409 `invalid-transition`; khách: 409 `not-cancellable`; không đổi gì. |
+| AC-ADM-28 | 23, 35 | Đơn COD có email Gmail thật | Giao thành công | Thư trong ≤ 5 phút, tiêu đề "nine2fine – Đơn #{mã} đã giao thành công", đủ mục BR-ADM-23, không có lời mời đánh giá. |
+| AC-ADM-29 | 24 | Đơn `to_ship` cần gọi; đơn `to_receive` | NV: `refused`, `undeliverable`, `unreachable` ở trạng thái sai; AD: `other` với ghi chú rỗng / 4 / 5 / 251 ký tự | `refused`/`undeliverable` ở `to_ship` và `unreachable` ở `to_receive`: 409 `invalid-transition`. `other`: 422 với rỗng, 4, 251; 200 với 5 ký tự, ở cả `to_ship` và `to_receive`; `cancelledBy = shop`. |
+| AC-ADM-30 | 25 | Đơn 3 dòng (blazer Đen/S × 2, off-duty-top × 1, weekend-shirt × 1) dùng mã T còn hạn; đơn khác dùng mã `TEXP` hết hạn sau khi đặt | AD huỷ từng đơn; huỷ lần hai (bất kỳ đường nào) | Mỗi biến thể được cộng đúng số lượng đã trừ (blazer Đen/S +2, off-duty-top +1, weekend-shirt +1; đơn `TEXP` cộng đúng số đã trừ của nó); `stock_restored_at` có; lượt mã T trả, lượt `TEXP` không trả; lần hai 409, tồn không đổi. |
+| AC-ADM-31 | 26 | Đơn A đã bàn giao (`to_receive`), voucher còn hạn; SĐT `0912345678` chưa có từ chối | Huỷ `refused` | `cancelled`, `delivery_refused_at` có, tồn vẫn 3 (chưa hoàn), lượt voucher trả, vào tab `returning`, email "Đơn không được nhận khi giao hàng.". |
+| AC-ADM-32 | 26 | Hai đơn của SĐT `0912345678` bị `refused` trong 6 tháng; đơn thứ ba của SĐT khác bị `undeliverable` và `other` | Vào checkout bằng `0912345678`; bằng SĐT thứ hai | `0912345678`: COD khoá kèm lý do (AC-CHK-24, dữ liệu thật). SĐT thứ hai: COD mở, `delivery_refused_at` rỗng. |
+| AC-ADM-33 | 27 | Đơn `returning` (blazer × 2, tồn 3) | `restocked`; lần hai; đồng thời 2 NV (lặp 20 lần) | Tồn 5, có giờ hoàn kho, 1 sự kiện, trạng thái vẫn `cancelled`; lần hai 409; đồng thời: đúng 1 thành công, tồn không bao giờ 7. |
+| AC-ADM-34 | 27 | Đơn `returning` A; đơn đã hoàn kho do huỷ từ `to_ship` | `written_off` với ghi chú rỗng / 4 / 5 ký tự; `restocked` đơn đã hoàn kho | Rỗng/4: 422; 5: 200, tồn không đổi, 1 sự kiện, rời tab `returning` sang `cancelled`; đơn đã hoàn kho: 409 `invalid-transition`; `written_off` xong thì `restocked`: 409. |
+| AC-ADM-35 | 28, 35 | Đơn có email Gmail thật huỷ do shop lý do `other` ghi chú "nội bộ: lệch kho" | AD huỷ | Thư "đơn đã huỷ" trong ≤ 5 phút, lý do "nine2fine không thể thực hiện đơn này.", không chứa "lệch kho"; không có thông tin hoàn tiền. |
+| AC-ADM-36 | 29 | M có đơn B `to_ship` (đã xác nhận) | M bấm Huỷ (lý do 250 ký tự; 251 ký tự); bấm Huỷ lần hai | 251: 422. 250: đơn `cancel_requested` (không `cancelled`), tồn và lượt voucher không đổi, thanh toán `pending`, lưu giờ + lý do; lần hai: 409 `not-cancellable`; tab `cancel-requests` có đơn. |
+| AC-ADM-37 | 29 | Đơn `to_pay` (SQL); đơn `to_receive`; khách vãng lai đơn A qua OTP | Huỷ từng đơn | `to_pay`: huỷ ngay (BR-CHK-23); `to_receive`: 409 `not-cancellable`; đơn A qua OTP: `cancel_requested`. Cập nhật AC-CHK-29 dòng `to_ship`. |
+| AC-ADM-38 | 30 | Đơn `cancel_requested` của M, dùng mã còn hạn | NV duyệt | `cancelled`, `cancelledBy = customer`, sự kiện ghi tên NV duyệt, tồn cộng, lượt voucher trả, thanh toán không đổi, email "nine2fine – Yêu cầu huỷ đơn #{mã} đã được duyệt". Duyệt lần hai: 409. |
+| AC-ADM-39 | 31 | Đơn `cancel_requested` (B đã xác nhận) | NV từ chối với lý do rỗng, 4, 5 ký tự; khách gửi yêu cầu mới | 422, 422, 200: `to_ship`, vẫn đã xác nhận, tồn không đổi, email có lý do và hotline. Yêu cầu mới: 409 `not-cancellable`, FE hiện hướng dẫn gọi hotline. |
+| AC-ADM-40 | 32, 14 | Đơn `cancel_requested`; đơn `to_ship` | NV ghi cuộc gọi, xác nhận, bàn giao, giao xong, huỷ `other` trên đơn đầu; đồng thời khách yêu cầu huỷ và NV bàn giao đơn sau (lặp 20 lần) | 5 thao tác đầu: 409 `invalid-transition`. Đồng thời: mỗi lần đúng 1 bên thắng (`to_receive` và yêu cầu huỷ 409, hoặc `cancel_requested` và bàn giao 409), không có đơn vừa `to_receive` vừa có yêu cầu huỷ. |
+| AC-ADM-41 | 33 | Đơn M ở `cancel_requested`, `to_receive` (mã `GHTK-12345`), `completed`, `to_ship` | Xem `/account/orders/<id>` và trang tra cứu từng đơn | "Đang chờ duyệt huỷ" + "Đã gửi yêu cầu huỷ" không có nút Huỷ; "Đang vận chuyển" + đơn vị + mã vận đơn; "Hoàn thành"; `to_ship`: nút Huỷ ghi "gửi yêu cầu huỷ". |
+| AC-ADM-42 | 34 | Gây từng lỗi của AC-ADM-01, 02, 05, 09, 13, 14, 20, 23, 36 và tắt DB | Xem phản hồi và FE | Mỗi lỗi đúng `code` và HTTP của BR-ADM-34; không stack trace/SQL; FE hiện đúng câu, không trang trắng. |
+| AC-ADM-43 | 35 | SMTP lỗi | Bàn giao một đơn | 200 `to_receive`; hệ thống thử lại 3 lần, sau đó có thư báo CSKH (hoặc log nếu SMTP vẫn hỏng); đơn không bị đổi lại; log không có email đầy đủ. |
+| AC-ADM-44 | 36 | `adminOrdersMode: http`, `mode: mock`; rồi `adminOrdersMode: mock` | Đăng nhập admin, mở `/admin`, `/admin/orders`, một đơn; chạy Playwright `admin` | `http`: có request `/api/admin/...`, `/admin` → `/admin/orders`, không còn menu mock. `mock`: không có request `/api/admin/orders`; số test pass của `admin.spec.ts` không giảm so với trước Slice 4. |
+| AC-ADM-45 | 37 | DB Supabase ở schema Slice 3 có đơn thật (vd. N2F2611082686 đã huỷ) | `migrate deploy` 2 lần; mở đơn cũ trong admin; thử huỷ lại | Chỉ thêm đối tượng, không `DROP`/`TRUNCATE`/`DELETE`/đổi kiểu; lần 2 không đổi; bảng mới bật RLS; đơn cũ hiện timeline "Khách"/"Hệ thống"; huỷ lại đơn đã `cancelled`: 409. |
+| AC-ADM-46 | 38 (Should) | Đơn A | NV ghi chú 500 và 501 ký tự | 500: 1 sự kiện trong timeline admin, không hiện cho khách; 501: 422. |
+| AC-ADM-47 | 39 (Should) | Đơn `to_receive` COD | Bấm In phiếu giao | Phiếu có đủ mục BR-ADM-39, số tiền thu = tổng thanh toán; đơn `cancelled`: không có nút. |
+| AC-ADM-48 | 40 (Should) | Đơn cần gọi tạo cách đây 3 giờ làm việc; `cancel_requested` 25 giờ; `to_receive` quá ngày dự kiến | Mở danh sách | Cả ba có cờ "quá hạn"; đơn trong hạn không có cờ; trạng thái không tự đổi. |
+| AC-ADM-49 | 41 (Should) | Một tài khoản admin | 121 yêu cầu đọc/60 giây; 61 yêu cầu ghi/60 giây; duyệt 20 đơn liên tiếp | Yêu cầu thứ 121 / 61: 429 `rate-limited` + `retryAfterSeconds`; 20 lần duyệt không bị chặn. |
+
+Tổng: **41 BR** — 37 Must, 4 Should (BR-ADM-38..41); Must có phần chờ xác nhận: BR-ADM-24 (Q4), 27 (Q2), 29 (Q1), 31 (Q6). **49 AC** — 45 Must, 4 Should (AC-ADM-46..49). Nguồn không dùng thành BR: CHK-PAY-04 (xem hàng khi nhận, chính sách giao nhận), hoàn tiền (CHK-PAY-10, 12; QR chưa bật), COMMON-01..03 (không có nội dung).
+
+### 6. Định nghĩa xong của Slice 4
+
+- Mọi AC Must đạt trong `docs/qa/report-slice-4-admin-orders.md`; AC Should ghi rõ làm hay hoãn; AC chờ xác nhận chạy theo câu trả lời của Thắng.
+- **AC hoãn từ Slice 1 (decisions 2026-11-07: slice được giao không đóng nếu chưa kiểm):**
+  - **AC-AUTH-84 → Slice 4**, kiểm bằng AC-ADM-01 (đây là API admin đầu tiên).
+  - **AC-AUTH-85 → Slice 4 theo tinh thần, diễn đạt lại:** Slice 4 chưa có API "cài đặt nhân viên", nên kiểm bằng AC-ADM-02 (staff gọi hành động chỉ admin → `forbidden`, admin → được). Phần chữ nguyên văn "API cài đặt nhân viên" chuyển sang slice Admin người dùng cùng AC-AUTH-75.
+  - **AC-AUTH-75 → slice Admin người dùng** (cần giao diện vô hiệu hoá / đổi vai trò, Slice 4 không có). Slice 4 chỉ kiểm phần cốt lõi bằng SQL ở AC-ADM-03 (vai trò/trạng thái đọc lại mỗi yêu cầu). Backlog G4 cập nhật tương ứng; **cần Orchestrator ghi `decisions.md`** vì đổi nơi nhận AC đã chốt ngày 2026-11-07.
+- AC-AUTH-88 vẫn → Account; AC-AUTH-89, 95a, 95b → trước go-live (xem backlog).
+- Một đơn COD thật trên Supabase chạy đủ hai nhánh (đặt → gọi xác nhận → bàn giao → giao xong; đặt → khách yêu cầu huỷ → duyệt), mỗi nhánh có thư Gmail thật khớp nội dung (như AC-CHK-34 của Slice 3).
+- `openapi.yaml` có API admin đơn hàng (danh sách, đếm, chi tiết, mọi hành động, mã lỗi BR-ADM-34) và thay đổi huỷ phía khách (`cancel_requested`); `assumptions.ts` bỏ `to_ship` khỏi `customerCancellableFrom`.
+- FE chạy `adminOrdersMode: http` với BE thật; Playwright mock pass nguyên (AC-ADM-44); phần storefront đổi (BR-ADM-33) có test.
+- Migration chỉ cộng thêm; quyết định ghi `decisions.md`; bàn giao ghi `handoff.md`. M-1 (vitest crash, Slice 3) vẫn là điều kiện chung của DoD.
+
+### 7. Câu hỏi mở
+
+Mỗi câu có mặc định để làm trước; trả lời khác thì sửa BR liên quan.
+
+| # | Câu hỏi | Ảnh hưởng | Cần ai / trạng thái |
+| --- | --- | --- | --- |
+| 1 | Chuyển Q4 của Slice 3: từ khi Slice 4 phát hành, khách ở `to_ship` chỉ **gửi yêu cầu huỷ** (shop duyệt) thay vì huỷ thẳng? **Mặc định PO: có**, đổi cùng lát có màn duyệt (4.5) để không có yêu cầu mồ côi; hệ quả: tồn của đơn bị yêu cầu huỷ giữ cho tới khi shop quyết định. | BR-ADM-29..33, BR-CHK-23, AC-CHK-29 | Thắng — chờ xác nhận; chặn lát 4.5 |
+| 2 | Đơn bị từ chối nhận/giao không thành: tồn cộng ngay khi huỷ, hay chỉ khi nhân viên xác nhận hàng đã về kho? **Mặc định PO: hai bước** (huỷ ngay, cộng tồn khi hàng về, có tuỳ chọn "hàng hỏng/mất, không cộng") vì CHK-PAY-07 nói "hoàn kho khi hàng về kho"; phương án một bước đơn giản hơn nhưng có thể bán hàng chưa về. | BR-ADM-26, 27; AC-ADM-31, 33, 34 | Thắng — chờ xác nhận; chặn phần hàng hoàn của lát 4.4 |
+| 3 | Giờ làm việc và hạn cho cờ quá hạn (Should): "2 giờ làm việc" gọi xác nhận tính trong khung nào; hạn duyệt yêu cầu huỷ? **Mặc định PO:** 08:00–18:00, thứ Hai đến thứ Bảy; duyệt huỷ trong 24 giờ; chỉ cờ, không tự đổi trạng thái, không tự duyệt. | BR-ADM-40 | Thắng — không chặn; chỉ lát 4.6 |
+| 4 | Phân quyền: staff huỷ được 4 lý do cố định và duyệt/từ chối yêu cầu huỷ; chỉ admin huỷ lý do "khác". Đúng ý? **Mặc định PO:** như BR-ADM-02 (nguồn CHK-PAY-06, 07 cho "admin/staff"; FE hiện đang cấm staff huỷ). | BR-ADM-02, 24; ma trận FE | Thắng — chờ xác nhận; làm theo mặc định được |
+| 5 | Đơn vị vận chuyển: nhập tự do (2–50 ký tự) hay chọn từ danh mục cố định (GHN, GHTK, Viettel Post, J&T...)? **Mặc định PO:** nhập tự do, FE gợi ý các tên hay dùng. | BR-ADM-20 | Thắng — không chặn |
+| 6 | Khách bị từ chối yêu cầu huỷ có được gửi yêu cầu thứ hai? **Mặc định PO: không** (1 yêu cầu/đơn, sau đó gọi hotline) để tránh vòng lặp; đơn vẫn giao bình thường. | BR-ADM-31; AC-ADM-39 | Thắng — không chặn |
+| 7 | Nội dung email mới (4 loại: bàn giao, giao xong, yêu cầu huỷ duyệt/từ chối) và 5 câu lý do huỷ do shop (BR-ADM-28): đúng giọng nine2fine? **Mặc định PO:** dùng chữ ở BR; Thắng sửa chữ khi đọc thư thật ở bước nghiệm thu. | BR-ADM-21, 23, 28, 30, 31 | Thắng — không chặn |
+| 8 | Nội dung COMMON-01 (bước chuyển trạng thái), COMMON-03 (trừ/hoàn kho) vẫn chưa có (Slice 3 câu hỏi 1). Slice 4 xây trên bảng chuyển của BR-ADM-13 do PO suy ra từ CHK-PAY-14. **Mặc định PO:** dùng bảng này; Thắng gửi COMMON nếu có điểm khác thì PO sửa. | BR-ADM-13, 25..27 | Thắng — chờ xác nhận; không chặn làm |
+| 9 | Hạng mục PO tự bổ sung ngoài nguồn: huỷ `declined_on_call`; kiểm "3 lần trong 24 giờ" tính từ lần gọi đầu; mã vận đơn không trùng; staff thấy SĐT/email đầy đủ. Đồng ý? **Mặc định PO: đồng ý.** | BR-ADM-09, 18, 19, 20 | Thắng — không chặn |
 
 
