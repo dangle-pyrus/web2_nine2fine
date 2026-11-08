@@ -206,29 +206,29 @@ Chia lát giao được (mỗi lát nghiệm thu riêng, theo thứ tự):
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 4.1 | Nền: kiểm quyền API admin (phiên `n2f_asid`, staff/admin, đọc lại vai trò mỗi yêu cầu), mã lỗi mới, migration cộng thêm (người thực hiện sự kiện, xác nhận, vận chuyển, giờ giao, yêu cầu huỷ, hàng hoàn, dấu chống ghi chồng), contract `openapi.yaml`, cờ `adminOrdersMode`, FE: đăng nhập HTTP, menu rút gọn, trang "Chưa khả dụng", ma trận quyền | Must | 01..04, 34, 36, 37 | 01..04, 42, 44, 45 | BE → FE | Slice 3 xong (QA đạt) | Chưa |
 | 4.2 | Đọc: danh sách, tìm, lọc, tab + đếm, chi tiết, timeline admin, timeline phía khách (không lộ nhân viên), đơn cũ Slice 3 | Must | 05..12 | 05..12 | BE, FE | 4.1 | Chưa |
-| 4.3 | COD gọi xác nhận (ghi không liên lạc được, khách xác nhận) + **dịch vụ huỷ dùng chung** (hoàn kho một lần, trả lượt voucher, thư huỷ do shop) + huỷ `unreachable`/`declined_on_call`/`other`; chống ghi chồng, nút khoá, thử lại tải lại đơn | Must | 11, 13..19, 24, 25, 28, 35 | 10, 11, 13..22, 29, 30, 35, 43 | BE, FE | 4.2; Q4 (phân quyền, làm theo mặc định được) | Chưa |
-| 4.4 | Bàn giao (đơn vị + mã vận đơn) + email; giao xong → `completed` + `paid` + email; giao không thành/từ chối nhận (`delivery_refused_at`) + xử lý hàng hoàn (`restocked`/`written_off`) | Must | 20..23, 26, 27 | 23..28, 31..34 | BE, FE | 4.3; Q2 chặn phần hàng hoàn | Chưa |
-| 4.5 | Yêu cầu huỷ: storefront `to_ship` → `cancel_requested` (sửa `assumptions.ts`, FE khách đổi chữ/nút/trạng thái) + admin duyệt/từ chối + email + khoá hành động khi chờ duyệt + đua bàn giao/yêu cầu | Must (chờ Q1) | 29..33 | 14 (đua), 15, 36..41 | BE, FE (storefront + admin) | 4.3 (dịch vụ huỷ), 4.4 (đua bàn giao); Q1 chặn; Q6 làm theo mặc định | Chưa |
-| 4.6 | Ghi chú nội bộ; in phiếu giao; cờ quá hạn (gọi, duyệt huỷ, giao); giới hạn tần suất admin | Should | 38..41 | 46..49 | BE, FE | 4.2..4.5; Q3 cho giờ làm việc | Chưa |
+| 4.3 | COD gọi xác nhận (ghi không liên lạc được, khách xác nhận) + **dịch vụ huỷ dùng chung** (hoàn kho một lần, trả lượt voucher, thư huỷ do shop) + huỷ `unreachable`/`declined_on_call`/`other`; chống ghi chồng, nút khoá, thử lại tải lại đơn | Must | 11, 13..19, 24, 25, 28, 35 | 10, 11, 13..22, 29, 30, 35, 43 | BE, FE | 4.2; Q4 đã chốt (2026-11-08) | Chưa |
+| 4.4 | Bàn giao (đơn vị + mã vận đơn) + email; giao xong → `completed` + `paid` + email; giao không thành/từ chối nhận (`delivery_refused_at`) + xử lý hàng hoàn (`restocked`/`written_off`) | Must | 20..23, 26, 27 | 23..28, 31..34 | BE, FE | 4.3; Q2 đã chốt (hai bước) | Chưa |
+| 4.5 | Yêu cầu huỷ: storefront `to_ship` → `cancel_requested` (sửa `assumptions.ts`, FE khách đổi chữ/nút/trạng thái) + admin duyệt/từ chối + email + khoá hành động khi chờ duyệt + đua bàn giao/yêu cầu | Must | 29..33 | 14 (đua), 15, 36..41 | BE, FE (storefront + admin) | 4.3 (dịch vụ huỷ), 4.4 (đua bàn giao); Q1, Q6 đã chốt | Chưa |
+| 4.6 | Ghi chú nội bộ; in phiếu giao; cờ quá hạn (gọi, duyệt huỷ, giao); giới hạn tần suất admin | Should | 38..41 | 46..49 | BE, FE | 4.2..4.5; Q3 đã chốt (08:00–18:00, T2–T7) | Chưa |
 | 4.7 | Nghiệm thu thật: 1 đơn COD thật trên Supabase chạy hai nhánh (đặt → gọi → bàn giao → giao xong; đặt → yêu cầu huỷ → duyệt), thư Gmail thật đúng nội dung; migrate 2 lần | Must | 21, 23, 28, 30, 35, 37 | 25, 28, 35, 45 | Thắng, qa-reviewer | 4.1..4.5 | Chưa |
 | 4.8 | Sửa/đổi hành vi, hoàn tiền, đơn `to_pay`/QR, trả hàng, trạng thái `delivering`/`delivery-failed`/`returned-to-sender`, sửa địa chỉ/dòng hàng đơn | Won't | — | — | slice sau | Lý do: QR chưa bật, cần COMMON, giá/tồn/phí đụng nhau |
 | 4.9 | Sản phẩm, tồn kho thủ công, khách hàng, khuyến mãi, báo cáo/tổng quan, nội dung, cài đặt, nhân viên, nhật ký toàn hệ thống, xuất file; vô hiệu hoá/đổi vai trò bằng giao diện (AC-AUTH-75) | Won't | — | — | slice Admin kho & sản phẩm, slice Admin người dùng | Slice 4 chỉ đụng tồn qua đơn; `search_text` (2.19) chưa thành Must |
 
-Câu hỏi mở (chi tiết, mặc định ở PRD Slice 4 mục 7) và lát bị chặn:
+Câu hỏi mở (chi tiết ở PRD Slice 4 mục 7). Ngày 2026-11-08 Thắng nhận mặc định Q1–Q7: không còn câu nào chặn lát; chỉ Q8 còn mở (cần nội dung COMMON, không chặn):
 
 | # | Câu hỏi | Chặn lát | Làm trước theo mặc định? |
 | --- | --- | --- | --- |
-| Q1 | Đổi Q4: khách ở `to_ship` chỉ gửi yêu cầu huỷ, shop duyệt (mặc định: có, cùng lát 4.5) | 4.5 (phần storefront và duyệt) | Không: chờ Thắng; 4.1–4.4 làm song song, giữ khách huỷ thẳng tới khi 4.5 phát hành |
-| Q2 | Hoàn kho đơn bị từ chối nhận: hai bước (mặc định) hay một bước | 4.4 (phần hàng hoàn) | Có, theo mặc định; đổi thì sửa BR-ADM-26, 27 |
-| Q3 | Giờ làm việc, hạn duyệt huỷ cho cờ quá hạn | 4.6 | Có |
-| Q4 | Phân quyền staff/admin (mặc định như BR-ADM-02) | 4.3 (ma trận) | Có |
-| Q5 | Đơn vị vận chuyển nhập tự do hay danh mục | — | Có |
-| Q6 | Gửi lại yêu cầu huỷ sau khi bị từ chối (mặc định: không) | 4.5 (chữ và quy tắc) | Có |
-| Q7 | Chữ email mới và câu lý do huỷ | — | Có; Thắng sửa chữ ở 4.7 |
-| Q8 | COMMON-01..03 vẫn chưa có (bước chuyển, hoàn kho) | — | Có; rủi ro sửa bảng chuyển |
+| Q1 | Đổi Q4: khách ở `to_ship` chỉ gửi yêu cầu huỷ, shop duyệt (mặc định: có, cùng lát 4.5) | 4.5 (phần storefront và duyệt) | Đã chốt 2026-11-08 (nhận mặc định); giữ khách huỷ thẳng tới khi 4.5 phát hành |
+| Q2 | Hoàn kho đơn bị từ chối nhận: hai bước (mặc định) hay một bước | 4.4 (phần hàng hoàn) | Đã chốt 2026-11-08 (hai bước) |
+| Q3 | Giờ làm việc, hạn duyệt huỷ cho cờ quá hạn | 4.6 | Đã chốt 2026-11-08 |
+| Q4 | Phân quyền staff/admin (mặc định như BR-ADM-02) | 4.3 (ma trận) | Đã chốt 2026-11-08 |
+| Q5 | Đơn vị vận chuyển nhập tự do hay danh mục | — | Đã chốt 2026-11-08 (nhập tự do) |
+| Q6 | Gửi lại yêu cầu huỷ sau khi bị từ chối (mặc định: không) | 4.5 (chữ và quy tắc) | Đã chốt 2026-11-08 |
+| Q7 | Chữ email mới và câu lý do huỷ | — | Đã chốt 2026-11-08; Thắng sửa chữ sau khi đọc thư thật ở 4.7 |
+| Q8 | COMMON-01..03 vẫn chưa có (bước chuyển, hoàn kho) | — | Còn mở; không chặn, rủi ro sửa bảng chuyển |
 | Q9 | Bổ sung ngoài nguồn: `declined_on_call`, "3 lần trong 24 giờ", mã vận đơn không trùng, staff thấy SĐT/email | — | Có |
 
-Điều kiện bắt đầu code (PO): Slice 3 nghiệm thu (QA vòng 2 đạt, M-1 theo ghi chú handoff) và Thắng không phản đối bảng quyền Q4. 4.1–4.4 không phụ thuộc Q1; 4.5 chỉ bắt đầu sau khi Q1 được trả lời.
+Điều kiện bắt đầu code (PO): Slice 3 nghiệm thu (QA vòng 2 đạt, M-1 theo ghi chú handoff) (Q4 và Q1 đã được Thắng chốt 2026-11-08). Không lát nào bị chặn bởi câu hỏi mở; 4.5 vẫn đi sau 4.3 và 4.4 vì phụ thuộc kỹ thuật.
 
 AC hoãn nhận về: AC-AUTH-84 (kiểm bằng AC-ADM-01), AC-AUTH-85 (kiểm bằng AC-ADM-02, đã diễn đạt lại). AC-AUTH-75 không nhận (→ slice Admin người dùng); Slice 4 kiểm phần cốt lõi bằng AC-ADM-03. Cần Orchestrator ghi `decisions.md` về việc đổi nơi nhận AC-AUTH-75/85.
 
