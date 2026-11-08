@@ -112,7 +112,7 @@ describe('T-QUO báo giá (AC-CHK-10, AC-CHK-24)', () => {
     expect(open.body.paymentMethods[0]).toEqual({ method: 'cod', available: false, reason: 'too-many-open-orders' });
     await prisma.$executeRawUnsafe(`UPDATE orders SET status='completed'`);
     expect((await quote({ items: [{ variantId: top, quantity: 1 }], contact: { phone } })).body.paymentMethods[0].available).toBe(true);
-    await prisma.$executeRawUnsafe(`UPDATE orders SET delivery_refused_at = now() WHERE code IN ('N2F2611040001','N2F2611040002')`);
+    await prisma.$executeRawUnsafe(`UPDATE orders SET status='cancelled', cancelled_at = now(), cancelled_by = 'shop', delivery_refused_at = now() WHERE code IN ('N2F2611040001','N2F2611040002')`);
     expect((await quote({ items: [{ variantId: top, quantity: 1 }], contact: { phone } })).body.paymentMethods[0]).toEqual({
       method: 'cod', available: false, reason: 'too-many-refusals',
     });

@@ -1,12 +1,14 @@
 import { Prisma } from '@prisma/client';
+import type { order_status, payment_status } from '@prisma/client';
 import prisma from '../../config/prisma';
-import { ASSUMPTIONS } from '../../config/assumptions';
+import { customerCancellableFrom } from '../../config/assumptions';
 import { now as clockNow } from '../../lib/clock';
 import { Errors } from '../../lib/errors';
 import type { Db } from '../../lib/sql';
 import { ts } from '../../lib/sql';
 import { runInBackground, sendMail } from '../../mail/mailer';
 import { orderCancelledMail } from '../../mail/order-templates';
+import { insertOrderEvent } from './order-event';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
 
 /**
@@ -70,10 +72,16 @@ export async function cancelOrderTx(
       WHERE "variant_id" = ${i.variant_id}::uuid`);
   }
 
-  await tx.$executeRaw(Prisma.sql`
-    INSERT INTO "order_events" ("order_id", "at", "from_status", "to_status", "payment_status", "actor", "detail")
-    VALUES (${orderId}::uuid, ${ts(at)}, ${row.status}::"order_status", 'cancelled', ${updated.payment_status}::"payment_status",
-            ${actor}::"order_actor", ${reason})`);
+  await insertOrderEvent(tx, {
+    orderId,
+    at,
+    fromStatus: row.status as order_status,
+    toStatus: 'cancelled',
+    paymentStatus: updated.payment_status as payment_status,
+    actor,
+    kind: 'cancelled',
+    detail: reason,
+  });
   return { orderId };
 }
 
@@ -89,7 +97,7 @@ export function scheduleCancelEmail(orderId: string): void {
 /** Khách / chủ đơn huỷ (đã kiểm quyền). Trả `Errors.notCancellable()` nếu không huỷ được. */
 export async function cancelByCustomer(orderId: string, reason: string | null, at: Date = clockNow()): Promise<void> {
   const done = await prisma.$transaction(
-    (tx) => cancelOrderTx(tx, orderId, 'customer', reason, ASSUMPTIONS.customerCancellableFrom, at),
+    (tx) => cancelOrderTx(tx, orderId, 'customer', reason, customerCancellableFrom(), at),
     { timeout: 10_000, maxWait: 5_000 },
   );
   if (!done) throw Errors.notCancellable();

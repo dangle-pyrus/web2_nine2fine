@@ -20,25 +20,31 @@ model MembershipTier {
 }
 
 model User {
-  user_id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  membership_tier_id String?   @db.Uuid
-  email              String    @unique @db.VarChar(255)
-  passwordHash       String?   @map("password_hash") @db.VarChar(255)
-  firstName          String    @map("first_name") @db.VarChar(100)
-  lastName           String    @map("last_name") @db.VarChar(100)
-  dateOfBirth        DateTime? @map("date_of_birth") @db.Date
-  phone_number       String?   @db.VarChar(20)
-  gender             String?   @db.VarChar(20)
-  loyal_points       Int       @default(0)
-  role               user_role @default(member)
-  isActive           Boolean   @default(true) @map("is_active")
-  marketingOptIn     Boolean   @default(false) @map("marketing_opt_in")
-  marketingOptInAt   DateTime? @map("marketing_opt_in_at") @db.Timestamp(6)
-  terms_accepted_at  DateTime  @db.Timestamp(6)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  cart               Cart?
-  orders             Order[]
+  user_id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  membership_tier_id  String?      @db.Uuid
+  email               String       @unique @db.VarChar(255)
+  passwordHash        String?      @map("password_hash") @db.VarChar(255)
+  firstName           String       @map("first_name") @db.VarChar(100)
+  lastName            String       @map("last_name") @db.VarChar(100)
+  dateOfBirth         DateTime?    @map("date_of_birth") @db.Date
+  phone_number        String?      @db.VarChar(20)
+  gender              String?      @db.VarChar(20)
+  loyal_points        Int          @default(0)
+  role                user_role    @default(member)
+  isActive            Boolean      @default(true) @map("is_active")
+  marketingOptIn      Boolean      @default(false) @map("marketing_opt_in")
+  marketingOptInAt    DateTime?    @map("marketing_opt_in_at") @db.Timestamp(6)
+  terms_accepted_at   DateTime     @db.Timestamp(6)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  cart                Cart?
+  orders              Order[]
+  confirmedOrders     Order[]      @relation("OrderConfirmer")
+  handedOverOrders    Order[]      @relation("OrderHandover")
+  deliveredOrders     Order[]      @relation("OrderDeliverer")
+  cancelDecidedOrders Order[]      @relation("OrderCancelDecider")
+  returnHandledOrders Order[]      @relation("OrderReturnHandler")
+  orderEvents         OrderEvent[] @relation("OrderEventActor")
 
   @@map("users")
 }
@@ -247,6 +253,22 @@ model SizeChart {
 // Slice 3: Cart & Checkout (chỉ cộng thêm). Tiền là Int (VND). CHECK thêm tay trong migration.
 // ---------------------------------------------------------------------------
 
+enum order_event_kind {
+  placed
+  payment_received
+  call_attempt
+  confirmed
+  shipped
+  delivered
+  cancel_requested
+  cancel_approved
+  cancel_rejected
+  cancelled
+  stock_restocked
+  stock_written_off
+  note
+}
+
 enum order_status {
   to_pay
   to_ship
@@ -403,55 +425,82 @@ model VoucherRedemption {
 }
 
 model Order {
-  order_id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code                    String              @unique @db.VarChar(13)
-  userId                  String?             @map("user_id") @db.Uuid
-  status                  order_status
-  paymentStatus           payment_status      @default(pending) @map("payment_status")
-  paymentMethod           payment_method      @map("payment_method")
-  email                   String              @db.VarChar(254)
-  recipientName           String              @map("recipient_name") @db.VarChar(50)
-  recipientPhone          String              @map("recipient_phone") @db.VarChar(10)
-  provinceCode            String              @map("province_code") @db.VarChar(10)
-  wardCode                String              @map("ward_code") @db.VarChar(10)
-  provinceName            String              @map("province_name") @db.VarChar(100)
-  wardName                String              @map("ward_name") @db.VarChar(100)
-  street                  String              @db.VarChar(200)
-  note                    String?             @db.VarChar(250)
-  invoiceCompany          String?             @map("invoice_company") @db.VarChar(200)
-  invoiceTaxCode          String?             @map("invoice_tax_code") @db.VarChar(14)
-  invoiceAddress          String?             @map("invoice_address") @db.VarChar(200)
-  invoiceEmail            String?             @map("invoice_email") @db.VarChar(254)
-  subtotal                Int
-  discount                Int
-  shippingFee             Int                 @map("shipping_fee")
-  shippingDiscount        Int                 @map("shipping_discount")
-  total                   Int
-  discountVoucherCode     String?             @map("discount_voucher_code") @db.VarChar(20)
-  shippingVoucherCode     String?             @map("shipping_voucher_code") @db.VarChar(20)
-  paymentDueAt            DateTime?           @map("payment_due_at") @db.Timestamp(6)
-  paidAt                  DateTime?           @map("paid_at") @db.Timestamp(6)
-  estimatedFrom           DateTime            @map("estimated_from") @db.Date
-  estimatedTo             DateTime            @map("estimated_to") @db.Date
-  needsConfirmCall        Boolean             @default(false) @map("needs_confirm_call")
-  termsAcceptedAt         DateTime            @map("terms_accepted_at") @db.Timestamp(6)
-  itemsFingerprint        String              @map("items_fingerprint") @db.Char(64)
-  cancelledAt             DateTime?           @map("cancelled_at") @db.Timestamp(6)
-  cancelledBy             order_actor?        @map("cancelled_by")
-  cancelReason            String?             @map("cancel_reason") @db.VarChar(250)
-  stockRestoredAt         DateTime?           @map("stock_restored_at") @db.Timestamp(6)
-  deliveryRefusedAt       DateTime?           @map("delivery_refused_at") @db.Timestamp(6)
-  confirmationEmailSentAt DateTime?           @map("confirmation_email_sent_at") @db.Timestamp(6)
-  emailAttempts           Int                 @default(0) @map("email_attempts") @db.SmallInt
-  createdAt               DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
-  user                    User?               @relation(fields: [userId], references: [user_id], onDelete: SetNull)
-  province                Province            @relation(fields: [provinceCode], references: [code], onDelete: Restrict)
-  ward                    Ward                @relation(fields: [wardCode], references: [code], onDelete: Restrict)
-  items                   OrderItem[]
-  events                  OrderEvent[]
-  redemptions             VoucherRedemption[]
-  grants                  OrderAccessGrant[]
-  idempotencyKeys         IdempotencyKey[]
+  order_id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                      String              @unique @db.VarChar(13)
+  userId                    String?             @map("user_id") @db.Uuid
+  status                    order_status
+  paymentStatus             payment_status      @default(pending) @map("payment_status")
+  paymentMethod             payment_method      @map("payment_method")
+  email                     String              @db.VarChar(254)
+  recipientName             String              @map("recipient_name") @db.VarChar(50)
+  recipientPhone            String              @map("recipient_phone") @db.VarChar(10)
+  provinceCode              String              @map("province_code") @db.VarChar(10)
+  wardCode                  String              @map("ward_code") @db.VarChar(10)
+  provinceName              String              @map("province_name") @db.VarChar(100)
+  wardName                  String              @map("ward_name") @db.VarChar(100)
+  street                    String              @db.VarChar(200)
+  note                      String?             @db.VarChar(250)
+  invoiceCompany            String?             @map("invoice_company") @db.VarChar(200)
+  invoiceTaxCode            String?             @map("invoice_tax_code") @db.VarChar(14)
+  invoiceAddress            String?             @map("invoice_address") @db.VarChar(200)
+  invoiceEmail              String?             @map("invoice_email") @db.VarChar(254)
+  subtotal                  Int
+  discount                  Int
+  shippingFee               Int                 @map("shipping_fee")
+  shippingDiscount          Int                 @map("shipping_discount")
+  total                     Int
+  discountVoucherCode       String?             @map("discount_voucher_code") @db.VarChar(20)
+  shippingVoucherCode       String?             @map("shipping_voucher_code") @db.VarChar(20)
+  paymentDueAt              DateTime?           @map("payment_due_at") @db.Timestamp(6)
+  paidAt                    DateTime?           @map("paid_at") @db.Timestamp(6)
+  estimatedFrom             DateTime            @map("estimated_from") @db.Date
+  estimatedTo               DateTime            @map("estimated_to") @db.Date
+  needsConfirmCall          Boolean             @default(false) @map("needs_confirm_call")
+  termsAcceptedAt           DateTime            @map("terms_accepted_at") @db.Timestamp(6)
+  itemsFingerprint          String              @map("items_fingerprint") @db.Char(64)
+  cancelledAt               DateTime?           @map("cancelled_at") @db.Timestamp(6)
+  cancelledBy               order_actor?        @map("cancelled_by")
+  cancelReason              String?             @map("cancel_reason") @db.VarChar(250)
+  stockRestoredAt           DateTime?           @map("stock_restored_at") @db.Timestamp(6)
+  deliveryRefusedAt         DateTime?           @map("delivery_refused_at") @db.Timestamp(6)
+  confirmationEmailSentAt   DateTime?           @map("confirmation_email_sent_at") @db.Timestamp(6)
+  emailAttempts             Int                 @default(0) @map("email_attempts") @db.SmallInt
+  createdAt                 DateTime            @default(now()) @map("created_at") @db.Timestamp(6)
+  confirmedAt               DateTime?           @map("confirmed_at") @db.Timestamp(6)
+  confirmedBy               String?             @map("confirmed_by") @db.Uuid
+  carrier                   String?             @db.VarChar(50)
+  trackingNumber            String?             @map("tracking_number") @db.VarChar(40)
+  activeTrackingNumber      String?             @unique @map("active_tracking_number") @db.VarChar(40)
+  handedOverAt              DateTime?           @map("handed_over_at") @db.Timestamp(6)
+  handedOverBy              String?             @map("handed_over_by") @db.Uuid
+  deliveredAt               DateTime?           @map("delivered_at") @db.Timestamp(6)
+  deliveredBy               String?             @map("delivered_by") @db.Uuid
+  cancelRequestedAt         DateTime?           @map("cancel_requested_at") @db.Timestamp(6)
+  cancelRequestReason       String?             @map("cancel_request_reason") @db.VarChar(250)
+  cancelRequestOutcome      String?             @map("cancel_request_outcome") @db.VarChar(8)
+  cancelRequestDecidedAt    DateTime?           @map("cancel_request_decided_at") @db.Timestamp(6)
+  cancelRequestDecidedBy    String?             @map("cancel_request_decided_by") @db.Uuid
+  cancelRequestRejectReason String?             @map("cancel_request_reject_reason") @db.VarChar(250)
+  cancelReasonCode          String?             @map("cancel_reason_code") @db.VarChar(20)
+  cancelNote                String?             @map("cancel_note") @db.VarChar(250)
+  returnedFromTransit       Boolean             @default(false) @map("returned_from_transit")
+  returnHandledAt           DateTime?           @map("return_handled_at") @db.Timestamp(6)
+  returnHandledBy           String?             @map("return_handled_by") @db.Uuid
+  returnDecision            String?             @map("return_decision") @db.VarChar(12)
+  returnNote                String?             @map("return_note") @db.VarChar(250)
+  user                      User?               @relation(fields: [userId], references: [user_id], onDelete: SetNull)
+  confirmer                 User?               @relation("OrderConfirmer", fields: [confirmedBy], references: [user_id], onDelete: SetNull)
+  handoverStaff             User?               @relation("OrderHandover", fields: [handedOverBy], references: [user_id], onDelete: SetNull)
+  deliverer                 User?               @relation("OrderDeliverer", fields: [deliveredBy], references: [user_id], onDelete: SetNull)
+  cancelDecider             User?               @relation("OrderCancelDecider", fields: [cancelRequestDecidedBy], references: [user_id], onDelete: SetNull)
+  returnHandler             User?               @relation("OrderReturnHandler", fields: [returnHandledBy], references: [user_id], onDelete: SetNull)
+  province                  Province            @relation(fields: [provinceCode], references: [code], onDelete: Restrict)
+  ward                      Ward                @relation(fields: [wardCode], references: [code], onDelete: Restrict)
+  items                     OrderItem[]
+  events                    OrderEvent[]
+  redemptions               VoucherRedemption[]
+  grants                    OrderAccessGrant[]
+  idempotencyKeys           IdempotencyKey[]
 
   @@index([userId, createdAt(sort: Desc), order_id], map: "idx_orders_user_created")
   @@index([status, paymentDueAt], map: "idx_orders_status_due")
@@ -459,6 +508,9 @@ model Order {
   @@index([email, createdAt], map: "idx_orders_email_created")
   @@index([recipientPhone, itemsFingerprint, createdAt], map: "idx_orders_dup")
   @@index([confirmationEmailSentAt, createdAt], map: "idx_orders_email_pending")
+  @@index([createdAt(sort: Desc), order_id(sort: Desc)], map: "idx_orders_created")
+  @@index([status, createdAt(sort: Desc), order_id(sort: Desc)], map: "idx_orders_status_created")
+  @@index([returnedFromTransit, returnHandledAt], map: "idx_orders_return_pending")
   @@map("orders")
 }
 
@@ -486,17 +538,28 @@ model OrderItem {
 }
 
 model OrderEvent {
-  event_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderId       String         @map("order_id") @db.Uuid
-  at            DateTime       @default(now()) @db.Timestamp(6)
-  fromStatus    order_status?  @map("from_status")
-  toStatus      order_status   @map("to_status")
-  paymentStatus payment_status @map("payment_status")
+  event_id      String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId       String            @map("order_id") @db.Uuid
+  at            DateTime          @default(now()) @db.Timestamp(6)
+  fromStatus    order_status?     @map("from_status")
+  toStatus      order_status      @map("to_status")
+  paymentStatus payment_status    @map("payment_status")
   actor         order_actor
-  detail        String?        @db.VarChar(250)
-  order         Order          @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
+  detail        String?           @db.VarChar(250)
+  kind          order_event_kind?
+  actorUserId   String?           @map("actor_user_id") @db.Uuid
+  actorName     String?           @map("actor_name") @db.VarChar(100)
+  actorRole     user_role?        @map("actor_role")
+  reasonCode    String?           @map("reason_code") @db.VarChar(20)
+  internalNote  String?           @map("internal_note") @db.VarChar(500)
+  emailTemplate String?           @map("email_template") @db.VarChar(30)
+  emailAttempts Int               @default(0) @map("email_attempts") @db.SmallInt
+  emailSentAt   DateTime?         @map("email_sent_at") @db.Timestamp(6)
+  order         Order             @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
+  actorUser     User?             @relation("OrderEventActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
 
   @@index([orderId, at], map: "idx_order_events_order_at")
+  @@index([emailSentAt, emailAttempts, at], map: "idx_order_events_email_pending")
   @@map("order_events")
 }
 

@@ -37,3 +37,13 @@ export function addWorkingDays(startIso: string, n: number, holidays: ReadonlySe
 }
 
 export { addDays as addCalendarDays };
+
+/** Đầu ngày VN `YYYY-MM-DD` (00:00 GMT+7) thành thời điểm UTC. */
+export const vnStartOfDay = (iso: string): Date => new Date(parseISO(iso).getTime() - VN_OFFSET_MS);
+/** Khoảng [from 00:00, to + 1 ngày 00:00) theo giờ VN, bao gồm cả hai đầu ngày; thiếu đầu nào thì để trống. */
+export function vnDayRange(from?: string, to?: string): { gte?: Date; lt?: Date } {
+  return {
+    ...(from ? { gte: vnStartOfDay(from) } : {}),
+    ...(to ? { lt: vnStartOfDay(addDays(to, 1)) } : {}),
+  };
+}

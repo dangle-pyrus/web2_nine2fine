@@ -1,3 +1,4 @@
+import { insertOrderEvent } from './order-event';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
@@ -315,8 +316,14 @@ async function runPlaceOrder(
       data: claims.map((v) => ({ voucherId: v.voucher_id, orderId: orderId!, userId: ctx.userId ?? null, phone, email, createdAt: at })),
     });
   }
-  await tx.orderEvent.create({
-    data: { orderId, at, fromStatus: null, toStatus: isBank ? 'to_pay' : 'to_ship', paymentStatus: 'pending', actor: 'customer' },
+  await insertOrderEvent(tx, {
+    orderId: orderId!,
+    at,
+    fromStatus: null,
+    toStatus: isBank ? 'to_pay' : 'to_ship',
+    paymentStatus: 'pending',
+    actor: 'customer',
+    kind: 'placed',
   });
 
   // 9. Kiểm cuối: tổng phần giảm theo dòng = giảm giá đơn; tổng dòng = tạm tính. Lệch là bug -> rollback + 500.

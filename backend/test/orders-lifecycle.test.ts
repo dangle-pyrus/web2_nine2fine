@@ -59,7 +59,7 @@ describe('T-CAN-01 huỷ đơn (AC-CHK-16, AC-CHK-29)', () => {
     expect(await stockOf(top)).toBe(5);
     for (const st of ['to_receive', 'completed', 'cancel_requested'] as const) {
       const o = await memberOrder(m, [it1(shirt)], { phone: `09${Math.floor(Math.random() * 1e8).toString().padStart(8, '0')}` });
-      await prisma.order.update({ where: { code: o.id }, data: { status: st } });
+      await prisma.order.update({ where: { code: o.id }, data: { status: st, ...(st === 'cancel_requested' ? { cancelRequestedAt: new Date() } : {}) } });
       const r = await cancel(o.id, m.cookie);
       expect(r.status).toBe(409);
       expect(r.body.error.code).toBe('not-cancellable');

@@ -18,6 +18,8 @@ function body(e: AppError) {
       ...(e.extras.stockIssues ? { stockIssues: e.extras.stockIssues } : {}),
       ...(e.extras.removedVoucherCodes ? { removedVoucherCodes: e.extras.removedVoucherCodes } : {}),
       ...(e.extras.existingOrderCode ? { existingOrderCode: e.extras.existingOrderCode } : {}),
+      ...(e.extras.currentStatus ? { currentStatus: e.extras.currentStatus } : {}),
+      ...(e.extras.order !== undefined ? { order: e.extras.order } : {}),
     },
   };
 }

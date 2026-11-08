@@ -39,7 +39,7 @@ describe('T-ORD-01 đặt COD (AC-CHK-02, AC-CHK-26, AC-CHK-30)', () => {
     expect(o.items[0]).toMatchObject({ variantId: blazer, quantity: 3, unitPrice: 1_290_000, sku: expect.any(String), productSlug: 'the-everyday-blazer' });
     expect(o.recipient).toEqual({ name: 'Nguyễn Văn A', phone: '0912345678', email: 'khach@example.com' });
     expect(JSON.stringify(res.body)).not.toMatch(/userId|user_id|order_id/);
-    expect(o.timeline).toEqual([{ at: expect.any(String), title: 'Đã đặt hàng' }]);
+    expect(o.timeline).toEqual([{ at: expect.any(String), title: 'Đã đặt hàng', actor: 'customer' }]);
     expect(await stockOf(blazer)).toBe(2);
     const db = await prisma.order.findUniqueOrThrow({ where: { code: o.id } });
     expect(db.userId).toBeNull();

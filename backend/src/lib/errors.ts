@@ -19,6 +19,9 @@ export type ErrorCode =
   | 'idempotency-conflict'
   | 'possible-duplicate'
   | 'not-cancellable'
+  | 'invalid-transition'
+  | 'order-state-changed'
+  | 'condition-not-met'
   | 'unavailable';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -42,6 +45,9 @@ const STATUS: Record<ErrorCode, number> = {
   'idempotency-conflict': 409,
   'possible-duplicate': 409,
   'not-cancellable': 409,
+  'invalid-transition': 409,
+  'order-state-changed': 409,
+  'condition-not-met': 409,
   unavailable: 500,
 };
 
@@ -53,6 +59,10 @@ export interface AppErrorExtras {
   stockIssues?: Array<{ variantId: string; available: number }>;
   removedVoucherCodes?: string[];
   existingOrderCode?: string;
+  /** Slice 4: trạng thái đơn hiện tại (`invalid-transition`, `order-state-changed`, `condition-not-met`). */
+  currentStatus?: string;
+  /** Slice 4: `AdminOrder` hiện tại kèm `order-state-changed`. */
+  order?: unknown;
 }
 
 export class AppError extends Error {
@@ -122,5 +132,11 @@ export const Errors = {
   possibleDuplicate: (existingOrderCode: string) =>
     new AppError('possible-duplicate', 'Bạn vừa đặt một đơn giống hệt. Bạn có chắc muốn đặt thêm?', { existingOrderCode }),
   notCancellable: () => new AppError('not-cancellable', 'Đơn hàng này không thể huỷ.'),
+  invalidTransition: (currentStatus: string) =>
+    new AppError('invalid-transition', 'Thao tác này không hợp lệ với trạng thái hiện tại của đơn.', { currentStatus }),
+  orderStateChanged: (order: unknown, currentStatus: string) =>
+    new AppError('order-state-changed', 'Đơn vừa được cập nhật bởi người khác.', { order, currentStatus }),
+  conditionNotMet: (message: string, currentStatus: string) =>
+    new AppError('condition-not-met', message, { currentStatus }),
   unavailable: () => new AppError('unavailable', 'Không thể kết nối. Vui lòng thử lại.'),
 };
