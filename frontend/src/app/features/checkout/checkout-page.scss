@@ -390,3 +390,26 @@ summary h2 {
     grid-template-columns: 1fr;
   }
 }
+.dim {
+  opacity: 0.55;
+}
+.voucher-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.voucher-applied .minus {
+  color: var(--brand);
+}
+.free-reason,
+.muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.option.disabled {
+  opacity: 0.6;
+}
+.messages .hint {
+  margin: 8px 0;
+}

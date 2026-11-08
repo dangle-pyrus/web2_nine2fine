@@ -14,6 +14,9 @@ import { PricePipe } from '../../shared/commerce/price.pipe';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { formatDateTime } from '../orders/order-status';
 import { CHECKOUT_API, PAYMENT_SIMULATOR, PaymentSession } from './checkout-api';
+import { API_CONFIG } from '../../core/api-config';
+import { STORE_INFO } from '../../core/store-info';
+import { CartState } from '../cart/cart-state';
 
 const POLL_MS = 3000;
 
@@ -29,7 +32,17 @@ const POLL_MS = 3000;
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="container payment">
-      @if (session(); as pay) {
+      @if (unavailable()) {
+        <p class="eyebrow">Thanh toán đơn hàng #{{ orderId }}</p>
+        <h1>Thanh toán chuyển khoản chưa khả dụng</h1>
+        <p class="lead">
+          Hiện chưa thanh toán qua mã QR được. Bạn có thể xem đơn hàng hoặc gọi hotline
+          {{ hotline }} để được hỗ trợ.
+        </p>
+        <div class="actions">
+          <a class="pill" [routerLink]="orderLink()" [queryParams]="orderQuery()">Xem đơn hàng</a>
+        </div>
+      } @else if (session(); as pay) {
         @switch (pay.status) {
           @case ('awaiting') {
             <p class="eyebrow">Thanh toán đơn hàng #{{ pay.orderId }}</p>
@@ -108,7 +121,7 @@ const POLL_MS = 3000;
             }
 
             <div class="actions">
-              <a class="text-link" [routerLink]="orderLink()" [state]="orderState()"
+              <a class="text-link" [routerLink]="orderLink()" [queryParams]="orderQuery()"
                 >Xem chi tiết đơn hàng</a
               >
             </div>
@@ -125,7 +138,7 @@ const POLL_MS = 3000;
                 }
               </p>
               <div class="actions">
-                <a class="button dark" [routerLink]="orderLink()" [state]="orderState()"
+                <a class="button dark" [routerLink]="orderLink()" [queryParams]="orderQuery()"
                   >Theo dõi đơn hàng</a
                 >
                 <a class="button" routerLink="/shop">Tiếp tục mua sắm</a>
@@ -384,6 +397,8 @@ export class PaymentPage {
   private readonly api = inject(CHECKOUT_API);
   private readonly auth = inject(AuthSession);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly cart = inject(CartState);
+  private readonly isMock = inject(API_CONFIG).checkoutMode === 'mock';
   readonly simulator = inject(PAYMENT_SIMULATOR, { optional: true });
   readonly orderId = inject(ActivatedRoute).snapshot.paramMap.get('orderId') ?? '';
 
@@ -404,12 +419,16 @@ export class PaymentPage {
   readonly orderLink = computed(() =>
     this.auth.signedIn() ? ['/account/orders', this.orderId] : ['/track-order'],
   );
-  readonly orderState = computed(() => (this.auth.signedIn() ? {} : { orderId: this.orderId }));
+  readonly orderQuery = computed(() => (this.auth.signedIn() ? null : { orderCode: this.orderId }));
+  readonly hotline = STORE_INFO.hotline;
+  /** HTTP without the QR service (assumption Q2): no payment call is made, the page says so. */
+  readonly unavailable = computed(() => !this.isMock && !this.cart.policy().bankTransferEnabled);
 
   constructor() {
     // Poll until the backend reports a final state (paid or expired).
     timer(0, POLL_MS)
       .pipe(
+        takeWhile(() => !this.unavailable()),
         switchMap(() =>
           this.api.paymentSession(this.orderId).pipe(
             catchError(() => {

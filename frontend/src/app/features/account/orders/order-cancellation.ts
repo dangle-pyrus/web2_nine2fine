@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { filter, Observable, switchMap } from 'rxjs';
 import { OverlayService } from '../../../shared/ui/overlay.service';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/ui/confirm-dialog';
-import { ACCOUNT_API } from '../data-access/account-api';
+import { ORDERS_API } from '../data-access/orders-api';
 import { Order } from '../../orders/order-models';
 import { storeSettings } from '../../../core/store-settings';
 
@@ -10,7 +10,7 @@ import { storeSettings } from '../../../core/store-settings';
 @Injectable({ providedIn: 'root' })
 export class OrderCancellation {
   private readonly overlay = inject(OverlayService);
-  private readonly api = inject(ACCOUNT_API);
+  private readonly api = inject(ORDERS_API);
 
   /** Emits the cancelled order only when the shopper confirms. */
   cancel(order: Order): Observable<Order> {
@@ -23,7 +23,7 @@ export class OrderCancellation {
     };
     return this.overlay.open(ConfirmDialog, data.title, 'modal', data).closed.pipe(
       filter((confirmed) => confirmed === true),
-      switchMap(() => this.api.cancelOrder(order.id)),
+      switchMap(() => this.api.cancel(order.id)),
     );
   }
 }

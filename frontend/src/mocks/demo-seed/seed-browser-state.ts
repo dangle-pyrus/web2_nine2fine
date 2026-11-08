@@ -1,8 +1,8 @@
 import type { CartLine } from '../../app/features/cart/cart-state';
 import { PRODUCTS } from '../products';
 
-/** Same keys and schema as `CartState` (`n2f.cart.v1`) and `WishlistState` (`n2f.wishlist.v1`). */
-const CART_KEY = 'n2f.cart.v1';
+/** Same keys and schema as `CartState` (`n2f.cart.v2`) and `WishlistState` (`n2f.wishlist.v1`). */
+const CART_KEY = 'n2f.cart.v2';
 const WISHLIST_KEY = 'n2f.wishlist.v1';
 
 function cartLine(slug: string, colorIndex: number, size: string, quantity: number): CartLine {

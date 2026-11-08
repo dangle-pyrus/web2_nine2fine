@@ -5,7 +5,13 @@ import { reiconDelivery, reiconPackage } from '@ng-icons/reicon';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { PricePipe } from '../../../shared/commerce/price.pipe';
 import { Order } from '../../orders/order-models';
-import { canBuyAgain, canPay, formatDateTime, orderNote } from '../../orders/order-status';
+import {
+  canBuyAgain,
+  canCancel,
+  canPay,
+  formatDateTime,
+  orderNote,
+} from '../../orders/order-status';
 import { OrderStatusBadge } from '../../orders/order-status-badge';
 import { OrderItems } from '../../orders/order-items';
 
@@ -50,6 +56,23 @@ import { OrderItems } from '../../orders/order-items';
           @switch (current.status) {
             @case ('pending-payment') {
               @if (payable()) {
+                @if (cancellable()) {
+                  <button
+                    type="button"
+                    class="pill outline"
+                    [disabled]="busy()"
+                    (click)="cancelRequested.emit(current)"
+                  >
+                    {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
+                  </button>
+                }
+                <button type="button" class="pill" (click)="payRequested.emit(current)">
+                  Thanh toán ngay
+                </button>
+              }
+            }
+            @case ('processing') {
+              @if (cancellable()) {
                 <button
                   type="button"
                   class="pill outline"
@@ -58,20 +81,7 @@ import { OrderItems } from '../../orders/order-items';
                 >
                   {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
                 </button>
-                <button type="button" class="pill" (click)="payRequested.emit(current)">
-                  Thanh toán ngay
-                </button>
               }
-            }
-            @case ('processing') {
-              <button
-                type="button"
-                class="pill outline"
-                [disabled]="busy()"
-                (click)="cancelRequested.emit(current)"
-              >
-                {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
-              </button>
             }
             @case ('shipping') {
               <a class="pill" [routerLink]="['/account/orders', current.id]">Theo dõi đơn hàng</a>
@@ -269,6 +279,7 @@ export class OrderCard {
 
   readonly placedAt = computed(() => formatDateTime(this.order().placedAt));
   readonly payable = computed(() => canPay(this.order()));
+  readonly cancellable = computed(() => canCancel(this.order()));
   readonly rebuyable = computed(() => canBuyAgain(this.order()));
   readonly note = computed(() => orderNote(this.order()));
   /** Packing and transit notes carry a small icon; other tones are text only. */

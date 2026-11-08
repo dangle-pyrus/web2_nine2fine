@@ -19,7 +19,11 @@
         <div class="section-head">
           <h2 id="contact-title"><span class="step">1</span>Thông tin liên hệ</h2>
           @if (!session.signedIn()) {
-          <a class="link" routerLink="/auth/login" [queryParams]="{ returnUrl: '/checkout' }"
+          <a
+            class="link"
+            routerLink="/auth/login"
+            [queryParams]="{ returnUrl: '/checkout' }"
+            (click)="rememberForLogin()"
             >Đăng nhập để dùng địa chỉ đã lưu</a
           >
           }
@@ -41,13 +45,26 @@
               [attr.aria-describedby]="invalid(field.key) ? 'checkout-' + field.key + '-error' : null"
             />
             @if (invalid(field.key)) {
-            <p class="field-error" [id]="'checkout-' + field.key + '-error'">{{ field.error }}</p>
+            <p class="field-error" [id]="'checkout-' + field.key + '-error'">
+              {{ serverError(field.key) || field.error }}
+            </p>
             } @else if (field.hint) {
             <p class="hint">{{ field.hint }}</p>
             }
           </div>
           }
         </div>
+        @if (!session.signedIn()) {
+        <p class="hint">
+          Đã có tài khoản với email này?
+          <a
+            routerLink="/auth/login"
+            [queryParams]="{ returnUrl: '/checkout' }"
+            (click)="rememberForLogin()"
+            >Đăng nhập</a
+          >
+        </p>
+        }
       </section>
 
       <section aria-labelledby="shipping-title">
@@ -93,7 +110,7 @@
               }
             </select>
             @if (invalid('provinceCode')) {
-            <p class="field-error">Chọn Tỉnh/Thành phố.</p>
+            <p class="field-error">{{ serverError('provinceCode') || 'Chọn Tỉnh/Thành phố.' }}</p>
             }
           </div>
           <div class="field">
@@ -114,8 +131,15 @@
               <option [value]="ward.code">{{ ward.name }}</option>
               }
             </select>
-            @if (invalid('wardCode')) {
-            <p class="field-error">Chọn Phường/Xã.</p>
+            @if (wardsLoading()) {
+            <p class="hint" role="status">Đang tải danh sách phường/xã…</p>
+            } @else if (wardsFailed()) {
+            <p class="field-error" role="alert">
+              Chưa tải được phường/xã.
+              <button type="button" class="link" (click)="retryWards()">Thử lại</button>
+            </p>
+            } @else if (invalid('wardCode')) {
+            <p class="field-error">{{ serverError('wardCode') || 'Chọn Phường/Xã.' }}</p>
             }
           </div>
           <div class="field wide">
@@ -131,13 +155,19 @@
               [attr.aria-invalid]="invalid('street')"
             />
             @if (invalid('street')) {
-            <p class="field-error">Nhập địa chỉ cụ thể (ít nhất 5 ký tự).</p>
+            <p class="field-error">Nhập địa chỉ cụ thể (5–200 ký tự).</p>
             }
           </div>
         </div>
         <div class="field">
           <label for="checkout-note">Ghi chú (không bắt buộc)</label>
-          <textarea id="checkout-note" formControlName="note" rows="2"></textarea>
+          <textarea
+            id="checkout-note"
+            formControlName="note"
+            rows="2"
+            maxlength="250"
+            [attr.aria-invalid]="invalid('note')"
+          ></textarea>
         </div>
       </section>
 
@@ -145,13 +175,26 @@
         <h2 id="payment-title"><span class="step">3</span>Phương thức thanh toán</h2>
         <fieldset class="options">
           <legend class="sr-only">Chọn phương thức thanh toán</legend>
-          @for (option of paymentOptions; track option.value) {
-          <label class="option">
-            <input type="radio" formControlName="paymentMethod" [value]="option.value" />
-            <span><strong>{{ option.label }}</strong><small>{{ option.hint }}</small></span>
+          @for (option of paymentChoices(); track option.value) {
+          <label class="option" [class.disabled]="option.disabled">
+            <input
+              type="radio"
+              formControlName="paymentMethod"
+              [value]="option.value"
+              [attr.disabled]="option.disabled ? true : null"
+            />
+            <span
+              ><strong>{{ option.label }}</strong
+              ><small>{{ option.disabled ? option.reason : option.hint }}</small></span
+            >
           </label>
           }
         </fieldset>
+        @if (paymentBlocked()) {
+        <p class="form-error" role="alert">
+          Đơn hàng này chưa đặt được online. Vui lòng gọi hotline {{ hotline }} để được hỗ trợ.
+        </p>
+        }
         <label class="check">
           <input type="checkbox" formControlName="wantsInvoice" />
           <span>Xuất hóa đơn công ty (VAT)</span>
@@ -204,12 +247,45 @@
       </label>
       @if (invalid('acceptedTerms')) {
       <p class="field-error" id="terms-error">Vui lòng đồng ý để đặt hàng.</p>
-      } @if (error()) {
-      <p class="form-error" role="alert">{{ error() }}</p>
       }
-      <button class="pill submit" type="submit" [disabled]="submitting()">
-        {{ submitting() ? 'Đang xử lý…' : isMock ? 'Đặt đơn trải nghiệm' : 'Đặt hàng' }} @if
-        (quote(); as current) { · {{ current.pricing.total | vnd }} }
+      <div class="messages" aria-live="polite">
+        @if (info()) {
+        <p class="hint">{{ info() }}</p>
+        }
+      </div>
+      @if (error()) {
+      <p class="form-error" role="alert">{{ error() }}</p>
+      } @if (duplicateOf() !== null) {
+      <div class="form-error" role="alertdialog" aria-label="Đơn hàng trùng">
+        <p>Bạn vừa đặt đơn giống hệt ({{ duplicateOf() }}). Bạn vẫn muốn đặt thêm?</p>
+        <button type="button" class="pill" (click)="confirmDuplicateOrder()">
+          Vẫn đặt đơn mới
+        </button>
+        @if (duplicateOf()) {
+        <a
+          class="pill outline"
+          [routerLink]="session.signedIn() ? ['/account/orders', duplicateOf()] : ['/track-order']"
+          [queryParams]="session.signedIn() ? null : { orderCode: duplicateOf() }"
+          >Xem đơn trước</a
+        >
+        }
+      </div>
+      } @if (canRetry()) {
+      <button type="submit" class="pill outline" [disabled]="submitting()">Thử lại</button>
+      } @if (quoteFailed()) {
+      <p class="form-error" role="alert">
+        Chưa tính được tổng thanh toán.
+        <button type="button" class="link" (click)="retryQuote()">Thử lại</button>
+      </p>
+      }
+      <button
+        class="pill submit"
+        type="submit"
+        [disabled]="submitting() || quoting() || quoteFailed() || waitSeconds() > 0 || paymentBlocked()"
+      >
+        {{ submitting() ? 'Đang xử lý…' : waitSeconds() > 0 ? 'Thử lại sau ' + waitSeconds() + '
+        giây' : isMock ? 'Đặt đơn trải nghiệm' : 'Đặt hàng' }} @if (quote(); as current) { · {{
+        current.pricing.total | vnd }} }
       </button>
     </form>
 
@@ -226,11 +302,15 @@
           <img [src]="media(line.mediaId).src" alt="" width="56" height="70" />
           <div>
             {{ line.name }}<small>{{ line.color }} / {{ line.size }} × {{ line.quantity }}</small>
-            @if (stockIssue(line.variantId); as issue) {
+            @if (priceNotes()[line.variantId]; as note) {
+            <small class="stock-issue" role="status"
+              >Giá {{ note.from | vnd }} → {{ note.to | vnd }}</small
+            >
+            } @if (stockIssue(line.variantId); as issue) {
             <small class="stock-issue" role="alert">{{ issue }}</small>
             }
           </div>
-          <span>{{ line.price * line.quantity | vnd }}</span>
+          <span>{{ lineTotal(line.variantId, line.price * line.quantity) | vnd }}</span>
         </div>
         } @if (stockIssues().length) {
         <button type="button" class="pill outline fix-stock" (click)="fixStock()">
@@ -238,64 +318,96 @@
         </button>
         }
 
-        <div class="voucher">
-          @if (quote()?.voucher; as voucher) {
-          <p class="voucher-applied">
-            <span><strong>{{ voucher.code }}</strong> · {{ voucher.label }}</span
-            ><button type="button" class="link" (click)="removeVoucher()">Gỡ mã</button>
-          </p>
-          } @else {
-          <label for="voucher-code">Mã giảm giá</label>
-          <div class="voucher-row">
-            <input
-              id="voucher-code"
-              [formControl]="voucherInput"
-              autocomplete="off"
-              (keydown.enter)="$event.preventDefault(); applyVoucher()"
-              [attr.aria-describedby]="quote()?.voucherError ? 'voucher-error' : null"
-            />
-            <button type="button" class="pill outline" (click)="applyVoucher()">Áp dụng</button>
+        <div class="voucher" [class.dim]="quoting()" aria-live="polite">
+          @for (item of voucherSlots; track item.slot) {
+          <div class="voucher-box">
+            @if (item.slot === 'discount' ? discountChip() : shippingChip(); as chip) {
+            <p class="voucher-applied">
+              <span><strong>{{ chip.code }}</strong> · {{ chip.label }}</span>@if (chip.kind ===
+              'discount') {<span class="minus">−{{ chip.amount | vnd }}</span> } @else {<span
+                >Miễn phí giao hàng</span
+              >}
+              <button type="button" class="link" (click)="removeVoucher(chip.kind)">Gỡ mã</button>
+            </p>
+            } @else {
+            <label [for]="'voucher-' + item.slot">{{ item.label }}</label>
+            <div class="voucher-row">
+              <input
+                [id]="'voucher-' + item.slot"
+                [formControl]="voucherInputs[item.slot]"
+                autocomplete="off"
+                maxlength="40"
+                [attr.disabled]="voucherLock() ? true : null"
+                (keydown.enter)="$event.preventDefault(); applyVoucher(item.slot)"
+                [attr.aria-invalid]="voucherErrors()[item.slot] ? 'true' : null"
+                [attr.aria-describedby]="voucherErrors()[item.slot] ? 'voucher-error-' + item.slot : null"
+              />
+              <button
+                type="button"
+                class="pill outline"
+                [attr.aria-label]="item.button"
+                [disabled]="voucherChecking() || !!voucherLock()"
+                (click)="applyVoucher(item.slot)"
+              >
+                {{ voucherChecking() ? '…' : 'Áp dụng' }}
+              </button>
+            </div>
+            } @if (voucherErrors()[item.slot]) {
+            <p class="field-error" [id]="'voucher-error-' + item.slot" role="alert">
+              {{ voucherErrors()[item.slot] }}
+            </p>
+            }
           </div>
-          @if (quote()?.voucherError) {
-          <p class="field-error" id="voucher-error" role="alert">{{ quote()?.voucherError }}</p>
+          } @if (voucherLock()) {
+          <p class="field-error" role="alert">{{ voucherLock() }}</p>
           } @if (memberVouchers().length) {
           <div class="chips" aria-label="Phiếu giảm giá của bạn">
             @for (voucher of memberVouchers(); track voucher.id) {
-            <button type="button" class="chip" (click)="applyVoucher(voucher.code)">
+            <button type="button" class="chip" (click)="applyVoucher('discount', voucher.code)">
               {{ voucher.headline }} · {{ voucher.code }}
             </button>
             }
           </div>
-          } }
+          }
         </div>
 
         @if (quote(); as current) {
-        <dl class="totals">
+        <dl class="totals" [class.dim]="quoting()">
           <div>
             <dt>Tạm tính</dt>
             <dd>{{ current.pricing.subtotal | vnd }}</dd>
           </div>
           @if (current.pricing.discount) {
           <div>
-            <dt>Giảm giá</dt>
+            <dt>Giảm giá@if (discountChip(); as chip) { ({{ chip.code }}) }</dt>
             <dd class="minus">−{{ current.pricing.discount | vnd }}</dd>
           </div>
           }
           <div>
             <dt>Phí vận chuyển</dt>
-            <dd>{{ current.pricing.shippingFee | vnd }}</dd>
+            <dd>
+              @if (current.shipping.addressRequired) {
+              <span class="muted">Tính sau khi nhập địa chỉ</span>
+              } @else if (current.shipping.freeReason) { Miễn phí } @else { {{
+              current.pricing.shippingFee | vnd }} }
+            </dd>
           </div>
-          @if (current.pricing.shippingDiscount) {
-          <div>
-            <dt>Giảm phí vận chuyển</dt>
-            <dd class="minus">−{{ current.pricing.shippingDiscount | vnd }}</dd>
-          </div>
+          @if (current.shipping.freeReason && !current.shipping.addressRequired) {
+          <p class="free-reason">
+            {{ current.shipping.freeReason === 'threshold' ? 'Đơn từ ' +
+            (current.policy.freeShippingThreshold | vnd) : 'Mã miễn phí giao hàng' }}
+          </p>
           }
           <div class="grand">
             <dt>Tổng thanh toán</dt>
             <dd>{{ current.pricing.total | vnd }}</dd>
           </div>
         </dl>
+        @if (previousTotal(); as before) { @if (before !== current.pricing.total) {
+        <p class="eta" role="status">
+          Tổng cũ {{ before | vnd }} → tổng mới {{ current.pricing.total | vnd }}
+        </p>
+        } }
         <p class="eta">Giá đã bao gồm VAT.</p>
         <p class="eta">
           Dự kiến giao: {{ date(current.estimatedDelivery.from) }} – {{
@@ -303,8 +415,8 @@
         </p>
         } @else if (quoteFailed()) {
         <p class="field-error" role="alert">
-          {{ stockIssues().length ? 'Một số sản phẩm không còn đủ số lượng, vui lòng cập nhật đơn.'
-          : 'Chưa tính được tổng tiền. Vui lòng kiểm tra lại giỏ hàng.' }}
+          Chưa tính được tổng thanh toán.
+          <button type="button" class="link" (click)="retryQuote()">Thử lại</button>
         </p>
         } @else {
         <p class="eta" role="status">Đang tính tổng tiền…</p>

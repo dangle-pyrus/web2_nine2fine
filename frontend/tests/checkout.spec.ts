@@ -21,7 +21,7 @@ test('cart survives reload (versioned local storage)', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Mở giỏ hàng' }).locator('.bag-count')).toHaveText(
     '1',
   );
-  await page.evaluate(() => localStorage.setItem('n2f.cart.v1', '[{"broken":true}]'));
+  await page.evaluate(() => localStorage.setItem('n2f.cart.v2', '[{"broken":true}]'));
   await page.reload();
   await expect(page.getByRole('button', { name: 'Mở giỏ hàng' }).locator('.bag-count')).toHaveText(
     '0',
@@ -48,8 +48,8 @@ test('member checkout: saved address, voucher rules, QR payment, account order',
   // Mobile keeps the summary collapsed by default (plan 16.3).
   if (isMobile) await page.locator('aside summary').click();
   await page.getByRole('textbox', { name: 'Mã giảm giá' }).fill('nope');
-  await page.getByRole('button', { name: 'Áp dụng' }).click();
-  await expect(page.getByText('Mã giảm giá không tồn tại hoặc đã hết hạn.')).toBeVisible();
+  await page.getByRole('button', { name: 'Áp dụng mã giảm giá' }).click();
+  await expect(page.getByText('Mã giảm giá không tồn tại.')).toBeVisible();
   await page.getByRole('button', { name: /N2FBDAY100/ }).click();
   await expect(page.getByText('N2FBDAY100 · Giảm 100K tháng sinh nhật')).toBeVisible();
   // Subtotal 1.290.000 qualifies for free shipping (mock rule): 1.290.000 − 100.000 = 1.190.000.
@@ -79,14 +79,20 @@ test('member checkout: saved address, voucher rules, QR payment, account order',
   await expect(page.getByText('Đang chờ thanh toán')).toHaveCount(0);
 });
 
-test('guest tracking verifies contact and shows a new COD order', async ({ page }) => {
+test('guest tracking verifies the email with a code and shows a new COD order', async ({
+  page,
+}) => {
   await page.goto('/track-order');
   await page.getByRole('textbox', { name: 'Mã đơn hàng' }).fill('N2F260928010');
-  await page.getByRole('textbox', { name: 'Số điện thoại hoặc email' }).fill('0900000000');
-  await page.getByRole('button', { name: 'Tra cứu' }).click();
-  await expect(page.getByRole('alert')).toContainText('Không tìm thấy đơn hàng');
-  await page.getByRole('textbox', { name: 'Số điện thoại hoặc email' }).fill('+84909000111');
-  await page.getByRole('button', { name: 'Tra cứu' }).click();
+  await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('sai@example.com');
+  await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
+  // The same answer whether or not the order matches (AC-CHK-31).
+  await expect(page.getByRole('status').filter({ hasText: 'Nếu thông tin khớp' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Mã xác minh (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
+  await expect(page.getByRole('alert')).toContainText('Không tìm thấy đơn hàng phù hợp.');
+  await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('khach.demo@example.com');
+  await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByRole('heading', { name: 'Đơn #N2F260928010' })).toBeVisible();
   await expect(
     page.getByRole('list', { name: 'Tiến trình đơn hàng' }).locator('[aria-current="step"]'),
@@ -113,8 +119,10 @@ test('guest tracking verifies contact and shows a new COD order', async ({ page 
 
   await page.getByRole('link', { name: 'Theo dõi đơn hàng' }).click();
   await expect(page.getByRole('textbox', { name: 'Mã đơn hàng' })).toHaveValue(/^N2F/);
-  await page.getByRole('textbox', { name: 'Số điện thoại hoặc email' }).fill('BINH@example.com');
-  await page.getByRole('button', { name: 'Tra cứu' }).click();
+  await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('BINH@example.com');
+  await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
+  await page.getByRole('textbox', { name: 'Mã xác minh (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByText('Đang chuẩn bị hàng').first()).toBeVisible();
   await expect(
     page.getByRole('list', { name: 'Tiến trình đơn hàng' }).getByText('Xác nhận'),

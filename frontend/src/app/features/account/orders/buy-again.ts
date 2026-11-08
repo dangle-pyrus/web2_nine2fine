@@ -23,9 +23,12 @@ export class BuyAgain {
         this.catalog.get(line.productSlug).pipe(
           catchError(() => of(undefined)),
           map((product) => {
-            const variant = product?.variants.find(
-              (candidate) => candidate.color.name === line.color && candidate.size === line.size,
-            );
+            // The exact variant when the order knows it (API orders), else colour + size.
+            const variant =
+              product?.variants.find((candidate) => candidate.id === line.variantId) ??
+              product?.variants.find(
+                (candidate) => candidate.color.name === line.color && candidate.size === line.size,
+              );
             if (!product || !variant) return 0;
             let added = 0;
             while (added < line.quantity && this.cart.add(product, variant)) added++;

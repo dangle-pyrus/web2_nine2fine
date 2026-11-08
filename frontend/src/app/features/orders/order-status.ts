@@ -122,7 +122,8 @@ export function canPay(order: Order, now = Date.now()): boolean {
  * held, or a confirmed order still being packed (COD, or paid and refunded on cancel).
  */
 export function canCancel(order: Order, now = Date.now()): boolean {
-  return canPay(order, now) || order.status === 'processing';
+  // API orders carry the server's answer; the mock uses the local rule.
+  return order.canCancel ?? (canPay(order, now) || order.status === 'processing');
 }
 
 /** Orders whose items can be put back in the bag in one click. */
@@ -187,6 +188,13 @@ export function orderNote(
         tone: 'transit',
       };
     case 'processing':
+      if (order.statusNote) return { text: order.statusNote, tone: 'transit' };
+      if (order.willCallToConfirm) {
+        return {
+          text: 'nine2fine sẽ gọi xác nhận đơn trong 2 giờ làm việc.',
+          tone: 'transit',
+        };
+      }
       return {
         text: 'Đơn hàng đã được xác nhận, nine2fine đang đóng gói.',
         tone: 'transit',

@@ -16,9 +16,8 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { finalize, map } from 'rxjs';
 import { getMedia } from '../../../../media/media-manifest';
 import { ToastService } from '../../../shared/ui/toast';
-import { ACCOUNT_API } from '../data-access/account-api';
+import { ORDERS_API, orderErrorMessage } from '../data-access/orders-api';
 import { Order } from '../../orders/order-models';
-import { accountErrorMessage } from '../account-messages';
 import { findOrderTab, inTab, ORDER_TABS, OrderTab } from '../../orders/order-status';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { OrderCard } from './order-card';
@@ -36,7 +35,10 @@ const PAGE_SIZE = 10;
   template: `
     <h1>Lịch sử mua hàng</h1>
     @if (error()) {
-      <p class="form-error" role="alert">{{ error() }}</p>
+      <p class="form-error" role="alert">
+        {{ error() }}
+        <button type="button" class="link" (click)="load()">Thử lại</button>
+      </p>
     }
     @if (orders(); as all) {
       @if (!all.length) {
@@ -110,11 +112,16 @@ const PAGE_SIZE = 10;
               />
             }
           </div>
-          @if (visible().length > page().length) {
+          @if (hasMore()) {
             <div class="more">
-              <p>Đang xem {{ page().length }}/{{ visible().length }} đơn</p>
-              <button type="button" class="pill outline" (click)="limit.set(limit() + pageSize)">
-                Xem thêm đơn hàng
+              <p>Đang xem {{ orders()?.length }}/{{ total() }} đơn</p>
+              <button
+                type="button"
+                class="pill outline"
+                [disabled]="loadingMore()"
+                (click)="load()"
+              >
+                {{ loadingMore() ? 'Đang tải…' : 'Xem thêm đơn hàng' }}
               </button>
             </div>
           }
@@ -288,6 +295,10 @@ export class OrdersPage {
   private readonly injector = inject(Injector);
   private readonly tabBar = viewChild<ElementRef<HTMLElement>>('tabBar');
   readonly orders = signal<Order[] | null>(null);
+  /** Orders the account has in total (the list loads 10 at a time). */
+  readonly total = signal(0);
+  readonly loadingMore = signal(false);
+  private nextPage = 1;
   readonly error = signal('');
   readonly busyId = signal<string | null>(null);
   readonly query = signal('');
@@ -309,21 +320,16 @@ export class OrdersPage {
           order.items.some((line) => normalize(line.name).includes(term))),
     );
   });
-  readonly page = computed(() => this.visible().slice(0, this.limit()));
+  readonly page = computed(() => this.visible());
+  readonly hasMore = computed(() => (this.orders()?.length ?? 0) < this.total());
 
-  private readonly api = inject(ACCOUNT_API);
+  private readonly api = inject(ORDERS_API);
   private readonly cancellation = inject(OrderCancellation);
   private readonly buyer = inject(BuyAgain);
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
-    this.api
-      .listOrders()
-      .pipe(takeUntilDestroyed())
-      .subscribe({
-        next: (orders) => this.orders.set(orders),
-        error: (error: unknown) => this.error.set(accountErrorMessage(error)),
-      });
+    this.load();
     // New filter: start from the first page and keep the chosen tab in view on narrow screens.
     effect(() => {
       this.status();
@@ -333,6 +339,28 @@ export class OrdersPage {
         injector: this.injector,
       });
     });
+  }
+
+  /** First page, or the next one ("Xem thêm"): pages are appended, newest first. */
+  load(): void {
+    const first = this.nextPage === 1;
+    if (this.loadingMore()) return;
+    this.error.set('');
+    this.loadingMore.set(!first);
+    this.api
+      .list({ page: this.nextPage, limit: PAGE_SIZE })
+      .pipe(
+        finalize(() => this.loadingMore.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (result) => {
+          this.nextPage = result.page + 1;
+          this.total.set(result.total);
+          this.orders.update((list) => [...(list ?? []), ...result.items]);
+        },
+        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
+      });
   }
 
   count(tab: OrderTab): number {
@@ -362,7 +390,7 @@ export class OrdersPage {
           );
           this.toast.show({ title: 'Đã hủy đơn hàng', detail: `Đơn #${cancelled.id}` });
         },
-        error: (error: unknown) => this.error.set(accountErrorMessage(error)),
+        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
       });
   }
 

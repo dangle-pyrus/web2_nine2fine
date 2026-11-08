@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { API_CONFIG } from '../../core/api-config';
@@ -75,12 +75,24 @@ import { CheckoutSession } from './checkout-session';
         </p>
         @if (isMock) {
           <p class="note">Bản trải nghiệm không gửi email hoặc tin nhắn xác nhận.</p>
+        } @else if (maskedEmail(); as email) {
+          <p class="note">Chúng tôi đã gửi email xác nhận tới {{ email }}.</p>
+        }
+        @if (order.willCallToConfirm) {
+          <p class="note">nine2fine sẽ gọi xác nhận đơn trong 2 giờ làm việc.</p>
+        }
+        @if (!session.signedIn()) {
+          <p class="note">
+            Đơn này chưa gắn với tài khoản.
+            <a routerLink="/auth/login">Tạo tài khoản hoặc đăng nhập</a> để theo dõi mọi đơn hàng ở
+            một nơi.
+          </p>
         }
         <div class="actions">
           @if (session.signedIn()) {
             <a class="pill" [routerLink]="['/account/orders', order.orderId]">Theo dõi đơn hàng</a>
           } @else {
-            <a class="pill" routerLink="/track-order" [state]="{ orderId: order.orderId }"
+            <a class="pill" routerLink="/track-order" [queryParams]="{ orderCode: order.orderId }"
               >Theo dõi đơn hàng</a
             >
           }
@@ -91,10 +103,10 @@ import { CheckoutSession } from './checkout-session';
         <h1>Đơn #{{ orderId() }}</h1>
         <p>
           Thông tin xác nhận chỉ hiển thị ngay sau khi đặt hàng. Bạn có thể tra cứu trạng thái đơn
-          bằng mã đơn và số điện thoại hoặc email đã dùng khi đặt.
+          bằng mã đơn và email đã dùng khi đặt.
         </p>
         <div class="actions">
-          <a class="pill" routerLink="/track-order" [state]="{ orderId: orderId() }"
+          <a class="pill" routerLink="/track-order" [queryParams]="{ orderCode: orderId() }"
             >Tra cứu đơn hàng</a
           >
           <a class="pill outline" routerLink="/shop">Tiếp tục mua sắm</a>
@@ -214,7 +226,7 @@ import { CheckoutSession } from './checkout-session';
 })
 export class OrderSuccessPage {
   readonly session = inject(AuthSession);
-  readonly isMock = inject(API_CONFIG).mode === 'mock';
+  readonly isMock = inject(API_CONFIG).checkoutMode === 'mock';
   private readonly checkoutSession = inject(CheckoutSession);
   readonly orderId = toSignal(
     inject(ActivatedRoute).paramMap.pipe(map((params) => params.get('orderId') ?? '')),
@@ -222,9 +234,25 @@ export class OrderSuccessPage {
   );
   /** Only the receipt of the order placed in this session is shown. */
   readonly receipt = computed(() => {
-    const receipt = this.checkoutSession.lastReceipt();
-    return receipt?.orderId === this.orderId() ? receipt : null;
+    this.checkoutSession.lastReceipt();
+    return this.checkoutSession.receiptFor(this.orderId());
   });
+  readonly maskedEmail = computed(() => maskEmail(this.receipt()?.email ?? ''));
+  private readonly router = inject(Router);
+
+  constructor() {
+    // Receipt gone (new tab, tab reopened): members go to the order, guests to the lookup page.
+    effect(() => {
+      if (this.session.restoring() || this.receipt() || !this.orderId()) return;
+      void this.router.navigate(
+        this.session.signedIn() ? ['/account/orders', this.orderId()] : ['/track-order'],
+        {
+          replaceUrl: true,
+          queryParams: this.session.signedIn() ? null : { orderCode: this.orderId() },
+        },
+      );
+    });
+  }
   readonly firstName = computed(() => {
     const name = this.receipt()?.customerName.trim() ?? '';
     return name.split(/\s+/).at(-1) ?? name;
@@ -237,4 +265,11 @@ export class OrderSuccessPage {
   dateTime(iso: string): string {
     return formatDateTime(iso);
   }
+}
+
+/** "nguyen.van@gmail.com" -> "n*****@gmail.com". */
+function maskEmail(email: string): string {
+  const [name, domain] = email.split('@');
+  if (!name || !domain) return '';
+  return `${name[0]}${'*'.repeat(Math.max(2, name.length - 1))}@${domain}`;
 }

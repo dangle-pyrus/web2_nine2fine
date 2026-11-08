@@ -10,12 +10,15 @@ import {
   viewChild,
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter, finalize, switchMap } from 'rxjs';
-import { CHECKOUT_API, CheckoutError, TrackOrderRequest } from '../checkout/checkout-api';
+import { CHECKOUT_API, CheckoutError } from '../checkout/checkout-api';
+import { API_CONFIG } from '../../core/api-config';
+import { CODE_PATTERN, cleanCode } from '../auth/auth-messages';
+import { orderCanCancel } from '../orders/order-status-map';
 import { Order } from '../orders/order-models';
-import { canCancel, canPay, formatDate } from '../orders/order-status';
+import { canPay, formatDate } from '../orders/order-status';
 import { canRequestReturn } from '../orders/order-returns';
 import { storeSettings } from '../../core/store-settings';
 import { OverlayService } from '../../shared/ui/overlay.service';
@@ -23,9 +26,9 @@ import { ConfirmDialog, ConfirmDialogData } from '../../shared/ui/confirm-dialog
 import { OrderStatusBadge } from '../orders/order-status-badge';
 import { OrderView } from '../orders/order-view';
 
-const CONTACT_PATTERN = /^(?:(?:0|\+84)\d{9}|[^\s@]+@[^\s@]+\.[^\s@]+)$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Guest order tracking (plan 18): order ID + phone/email, never carried in the URL. */
+/** Guest order tracking: order code + email, then an emailed code; only the code may be in the URL. */
 @Component({
   selector: 'n2f-track-order-page',
   imports: [ReactiveFormsModule, RouterLink, OrderStatusBadge, OrderView],
@@ -33,48 +36,103 @@ const CONTACT_PATTERN = /^(?:(?:0|\+84)\d{9}|[^\s@]+@[^\s@]+\.[^\s@]+)$/;
     <div class="container tracking">
       <h1>Tra cứu đơn hàng</h1>
       <p class="lead">
-        Nhập mã đơn và số điện thoại hoặc email bạn đã dùng khi đặt hàng.
+        Nhập mã đơn và email bạn đã dùng khi đặt hàng, chúng tôi sẽ gửi mã xác minh tới email đó.
         <a routerLink="/auth/login" [queryParams]="{ returnUrl: '/account/orders' }">Đăng nhập</a>
         để xem toàn bộ lịch sử mua hàng.
       </p>
-      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <div class="field">
-          <label for="track-order-id"
-            >Mã đơn hàng<span class="req" aria-hidden="true">*</span></label
-          >
-          <input
-            id="track-order-id"
-            formControlName="orderId"
-            autocomplete="off"
-            placeholder="VD: N2F260928010"
-            aria-required="true"
-            [attr.aria-invalid]="invalid('orderId')"
-          />
-          @if (invalid('orderId')) {
-            <p class="field-error">Nhập mã đơn hàng.</p>
+      @if (step() !== 'result') {
+        <form
+          [formGroup]="form"
+          (ngSubmit)="step() === 'request' ? requestCode() : verify()"
+          novalidate
+        >
+          <div class="field">
+            <label for="track-order-id"
+              >Mã đơn hàng<span class="req" aria-hidden="true">*</span></label
+            >
+            <input
+              id="track-order-id"
+              formControlName="orderCode"
+              autocomplete="off"
+              placeholder="VD: N2F2609280104"
+              aria-required="true"
+              [attr.aria-invalid]="invalid('orderCode')"
+              [attr.aria-describedby]="invalid('orderCode') ? 'track-order-id-error' : null"
+            />
+            @if (invalid('orderCode')) {
+              <p class="field-error" id="track-order-id-error">Nhập mã đơn hàng.</p>
+            }
+          </div>
+          <div class="field">
+            <label for="track-email"
+              >Email đặt hàng<span class="req" aria-hidden="true">*</span></label
+            >
+            <input
+              id="track-email"
+              type="email"
+              formControlName="email"
+              autocomplete="email"
+              aria-required="true"
+              [attr.aria-invalid]="invalid('email')"
+              [attr.aria-describedby]="invalid('email') ? 'track-email-error' : null"
+            />
+            @if (invalid('email')) {
+              <p class="field-error" id="track-email-error">Nhập địa chỉ email hợp lệ.</p>
+            }
+          </div>
+          @if (step() === 'request') {
+            <button class="pill" type="submit" [disabled]="busy() || waitSeconds() > 0">
+              {{ busy() ? 'Đang gửi…' : 'Gửi mã xác minh' }}
+            </button>
+          } @else {
+            <div class="field code">
+              <label for="track-code"
+                >Mã xác minh (8 số)<span class="req" aria-hidden="true">*</span></label
+              >
+              <input
+                id="track-code"
+                formControlName="code"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="8"
+                aria-required="true"
+                [attr.aria-invalid]="invalid('code')"
+                [attr.aria-describedby]="invalid('code') ? 'track-code-error' : null"
+              />
+              @if (invalid('code')) {
+                <p class="field-error" id="track-code-error">Nhập đủ 8 chữ số của mã xác minh.</p>
+              }
+              <p class="hint">Mã có hiệu lực 10 phút.</p>
+            </div>
+            <div class="verify-actions">
+              <button class="pill" type="submit" [disabled]="busy() || lockSeconds() > 0">
+                {{ busy() ? 'Đang xác minh…' : 'Xem đơn hàng' }}
+              </button>
+              <button
+                type="button"
+                class="pill outline"
+                [disabled]="busy() || sending() || waitSeconds() > 0"
+                (click)="requestCode()"
+              >
+                {{ waitSeconds() > 0 ? 'Gửi lại mã sau ' + waitSeconds() + ' giây' : 'Gửi lại mã' }}
+              </button>
+              <button type="button" class="link" (click)="restart()">Đổi mã đơn hoặc email</button>
+            </div>
           }
-        </div>
-        <div class="field">
-          <label for="track-contact"
-            >Số điện thoại hoặc email<span class="req" aria-hidden="true">*</span></label
-          >
-          <input
-            id="track-contact"
-            formControlName="contact"
-            autocomplete="email"
-            aria-required="true"
-            [attr.aria-invalid]="invalid('contact')"
-          />
-          @if (invalid('contact')) {
-            <p class="field-error">Nhập số điện thoại (0 hoặc +84) hoặc email hợp lệ.</p>
-          }
-        </div>
-        <button class="pill" type="submit" [disabled]="busy()">
-          {{ busy() ? 'Đang tra cứu…' : 'Tra cứu' }}
-        </button>
-      </form>
+        </form>
+      }
+      <div aria-live="polite">
+        @if (notice() && step() !== 'result') {
+          <p class="notice" role="status">{{ notice() }}</p>
+        }
+      </div>
       @if (error()) {
-        <p class="form-error" role="alert">{{ error() }}</p>
+        <p class="form-error" role="alert">
+          {{ error() }}
+          @if (canRetry()) {
+            <button type="button" class="link" (click)="retry()">Thử lại</button>
+          }
+        </p>
       }
 
       @if (order(); as current) {
@@ -151,6 +209,29 @@ const CONTACT_PATTERN = /^(?:(?:0|\+84)\d{9}|[^\s@]+@[^\s@]+\.[^\s@]+)$/;
       align-items: start;
       gap: 16px;
       max-width: 860px;
+    }
+    .verify-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      grid-column: 1 / -1;
+    }
+    .verify-actions .pill {
+      margin-top: 0;
+    }
+    .link {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--ink);
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .field.code {
+      grid-column: 1 / -1;
+      max-width: 320px;
     }
     .field {
       display: flex;
@@ -279,27 +360,52 @@ const CONTACT_PATTERN = /^(?:(?:0|\+84)\d{9}|[^\s@]+@[^\s@]+\.[^\s@]+)$/;
 })
 export class TrackOrderPage {
   readonly order = signal<Order | null>(null);
+  readonly step = signal<'request' | 'verify' | 'result'>('request');
   readonly busy = signal(false);
+  readonly sending = signal(false);
   readonly error = signal('');
   readonly notice = signal('');
   readonly cancelling = signal(false);
+  /** The failed call can be repeated with the same data. */
+  readonly canRetry = signal(false);
+  /** Seconds before another code can be requested. */
+  readonly waitSeconds = signal(0);
+  /** Seconds the code box stays locked after too many wrong codes. */
+  readonly lockSeconds = signal(0);
   get info() {
     return storeSettings().info;
   }
-  /** Order ID + contact that found the current result; reused to prove a cancellation. */
-  private verified: TrackOrderRequest | null = null;
 
+  private readonly returnsEnabled = inject(API_CONFIG).checkoutMode === 'mock';
   private readonly api = inject(CHECKOUT_API);
   private readonly overlay = inject(OverlayService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly result = viewChild<ElementRef<HTMLElement>>('result');
+  private lastAction: 'request' | 'verify' = 'request';
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private lockTimer: ReturnType<typeof setInterval> | undefined;
   readonly form = inject(FormBuilder).nonNullable.group({
-    orderId: [(history.state as { orderId?: string } | null)?.orderId ?? '', Validators.required],
-    contact: ['', [Validators.required, Validators.pattern(CONTACT_PATTERN)]],
+    // The code comes from the link (`?orderCode=`); email and OTP never go in the URL.
+    orderCode: [
+      inject(ActivatedRoute).snapshot.queryParamMap.get('orderCode') ?? '',
+      [Validators.required, Validators.maxLength(20)],
+    ],
+    email: [
+      '',
+      [Validators.required, Validators.maxLength(100), Validators.pattern(EMAIL_PATTERN)],
+    ],
+    code: ['', [Validators.required, Validators.pattern(CODE_PATTERN)]],
   });
 
-  invalid(key: 'orderId' | 'contact'): boolean {
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      clearInterval(this.timer);
+      clearInterval(this.lockTimer);
+    });
+  }
+
+  invalid(key: 'orderCode' | 'email' | 'code'): boolean {
     const control = this.form.controls[key];
     return control.invalid && control.touched;
   }
@@ -313,16 +419,87 @@ export class TrackOrderPage {
   }
 
   cancellable(order: Order): boolean {
-    return canCancel(order);
+    return orderCanCancel(order);
   }
 
   returnable(order: Order): boolean {
-    return canRequestReturn(order);
+    return this.returnsEnabled && canRequestReturn(order);
+  }
+
+  restart(): void {
+    this.step.set('request');
+    this.form.controls.code.reset('');
+    this.error.set('');
+    this.notice.set('');
+  }
+
+  retry(): void {
+    if (this.lastAction === 'verify') this.verify();
+    else this.requestCode();
+  }
+
+  /** Step 1: always the same answer, whether or not the order and email match. */
+  requestCode(): void {
+    this.lastAction = 'request';
+    this.form.controls.orderCode.markAsTouched();
+    this.form.controls.email.markAsTouched();
+    if (
+      this.form.controls.orderCode.invalid ||
+      this.form.controls.email.invalid ||
+      this.busy() ||
+      this.sending() ||
+      this.waitSeconds() > 0
+    ) {
+      return;
+    }
+    this.sending.set(true);
+    this.busy.set(this.step() === 'request');
+    this.error.set('');
+    this.canRetry.set(false);
+    const { orderCode, email } = this.form.getRawValue();
+    this.api
+      .requestLookupCode({ orderCode, email: email.trim() })
+      .pipe(
+        finalize(() => {
+          this.busy.set(false);
+          this.sending.set(false);
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: ({ resendAfterSeconds }) => {
+          this.notice.set(
+            'Nếu thông tin khớp, chúng tôi đã gửi mã xác minh tới email của đơn hàng.',
+          );
+          this.step.set('verify');
+          this.countdown(resendAfterSeconds, this.waitSeconds, 'timer');
+        },
+        error: (error: unknown) => this.onError(error),
+      });
+  }
+
+  /** Step 2: order code + email + code; the server starts a 30-minute view (cookie). */
+  verify(): void {
+    this.lastAction = 'verify';
+    this.form.markAllAsTouched();
+    if (this.form.invalid || this.busy() || this.lockSeconds() > 0) return;
+    this.busy.set(true);
+    this.error.set('');
+    this.canRetry.set(false);
+    const { orderCode, email, code } = this.form.getRawValue();
+    this.api
+      .verifyLookup({ orderCode, email: email.trim(), code: cleanCode(code) })
+      .pipe(
+        finalize(() => this.busy.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (order) => this.show(order),
+        error: (error: unknown) => this.onError(error),
+      });
   }
 
   cancel(order: Order): void {
-    const proof = this.verified;
-    if (!proof) return;
     const data: ConfirmDialogData = {
       title: 'Hủy đơn hàng?',
       message: order.payment.paid
@@ -331,55 +508,107 @@ export class TrackOrderPage {
       confirmLabel: 'Hủy đơn',
     };
     this.notice.set('');
+    this.error.set('');
     this.overlay
       .open(ConfirmDialog, data.title, 'modal', data)
       .closed.pipe(
         filter((confirmed) => confirmed === true),
         switchMap(() => {
           this.cancelling.set(true);
-          return this.api.cancelOrder(proof).pipe(finalize(() => this.cancelling.set(false)));
+          return this.api.cancel(order.id).pipe(finalize(() => this.cancelling.set(false)));
         }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
         next: (cancelled) => {
           this.order.set(cancelled);
-          this.notice.set(`Đã hủy đơn #${cancelled.id}.`);
+          this.notice.set(
+            `Đã hủy đơn #${cancelled.id}. Sản phẩm được hoàn lại kho${
+              cancelled.payment.paid
+                ? `, số tiền đã thanh toán được hoàn lại trong ${storeSettings().policy.refundWorkingDays} ngày làm việc`
+                : ''
+            }.`,
+          );
         },
-        error: (error: unknown) =>
-          this.error.set(
-            error instanceof CheckoutError && error.code === 'not-cancellable'
-              ? `Đơn hàng đã được giao cho đơn vị vận chuyển nên không thể hủy trực tuyến. Vui lòng gọi ${storeSettings().info.hotline}.`
-              : 'Chưa hủy được đơn hàng. Vui lòng thử lại.',
-          ),
+        error: (error: unknown) => this.onCancelError(error),
       });
   }
 
-  submit(): void {
-    this.form.markAllAsTouched();
-    if (this.form.invalid || this.busy()) return;
-    this.busy.set(true);
-    this.error.set('');
-    this.order.set(null);
+  private show(order: Order): void {
+    this.order.set(order);
+    this.step.set('result');
     this.notice.set('');
-    this.verified = null;
-    const { orderId, contact } = this.form.getRawValue();
-    this.api
-      .trackOrder({ orderId, contact })
-      .pipe(
-        finalize(() => this.busy.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (order) => {
-          this.verified = { orderId, contact };
-          this.order.set(order);
-          afterNextRender(() => this.result()?.nativeElement.focus(), { injector: this.injector });
-        },
-        error: () =>
-          this.error.set(
-            'Không tìm thấy đơn hàng khớp với thông tin đã nhập. Vui lòng kiểm tra mã đơn và số điện thoại/email.',
-          ),
-      });
+    afterNextRender(() => this.result()?.nativeElement.focus(), { injector: this.injector });
   }
+
+  private onCancelError(error: unknown): void {
+    const code = error instanceof CheckoutError ? error.code : 'unavailable';
+    if (code === 'not-cancellable') {
+      this.error.set('Đơn hàng này không thể huỷ nữa. Vui lòng liên hệ CSKH.');
+    } else if (code === 'unauthenticated') {
+      this.expireView();
+    } else {
+      this.error.set('Chưa hủy được đơn hàng. Vui lòng thử lại.');
+    }
+  }
+
+  /** The 30-minute view ended: back to the first step with the data kept. */
+  private expireView(): void {
+    this.order.set(null);
+    this.step.set('request');
+    this.form.controls.code.reset('');
+    this.error.set('Phiên xem đơn đã hết hạn, vui lòng xác minh lại.');
+  }
+
+  private onError(error: unknown): void {
+    const known = error instanceof CheckoutError ? error : new CheckoutError('unavailable');
+    switch (known.code) {
+      case 'not-found':
+        this.error.set('Không tìm thấy đơn hàng phù hợp.');
+        break;
+      case 'code-locked':
+      case 'rate-limited': {
+        const seconds = known.retryAfterSeconds ?? 60;
+        this.countdown(seconds, this.lockSeconds, 'lock');
+        this.error.set(
+          known.code === 'code-locked'
+            ? `Bạn nhập sai mã quá nhiều lần. Vui lòng thử lại sau ${formatWait(seconds)}.`
+            : `Bạn thao tác quá nhanh. Vui lòng thử lại sau ${formatWait(seconds)}.`,
+        );
+        if (this.step() === 'request') this.countdown(seconds, this.waitSeconds, 'timer');
+        break;
+      }
+      case 'unauthenticated':
+        this.expireView();
+        break;
+      default:
+        this.error.set('Chưa kết nối được. Dữ liệu bạn nhập vẫn được giữ, hãy thử lại.');
+        this.canRetry.set(true);
+    }
+  }
+
+  private countdown(
+    seconds: number,
+    target: { set(value: number): void; update(fn: (value: number) => number): void },
+    which: 'timer' | 'lock',
+  ): void {
+    target.set(seconds);
+    const handle = setInterval(() => {
+      target.update((left) => Math.max(0, left - 1));
+      if ((which === 'timer' ? this.waitSeconds() : this.lockSeconds()) === 0) {
+        clearInterval(handle);
+      }
+    }, 1000);
+    if (which === 'timer') {
+      clearInterval(this.timer);
+      this.timer = handle;
+    } else {
+      clearInterval(this.lockTimer);
+      this.lockTimer = handle;
+    }
+  }
+}
+
+function formatWait(seconds: number): string {
+  return seconds >= 120 ? `${Math.ceil(seconds / 60)} phút` : `${seconds} giây`;
 }

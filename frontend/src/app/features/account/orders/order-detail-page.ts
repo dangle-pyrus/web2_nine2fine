@@ -3,9 +3,9 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, map, switchMap } from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
-import { ACCOUNT_API } from '../data-access/account-api';
+import { API_CONFIG } from '../../../core/api-config';
+import { ORDERS_API, orderErrorMessage } from '../data-access/orders-api';
 import { Order } from '../../orders/order-models';
-import { accountErrorMessage } from '../account-messages';
 import { canBuyAgain, canPay, formatDate, formatDateTime } from '../../orders/order-status';
 import { canRequestReturn, returnDeadline } from '../../orders/order-returns';
 import { ToastService } from '../../../shared/ui/toast';
@@ -41,16 +41,18 @@ import { OrderCancellation } from './order-cancellation';
         @if (payable(current)) {
           <div class="actions" actions>
             <a class="pill" [routerLink]="['/payment', current.id]">Thanh toán ngay</a>
-            <button
-              type="button"
-              class="pill outline"
-              [disabled]="busy()"
-              (click)="cancel(current)"
-            >
-              {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
-            </button>
+            @if (current.canCancel) {
+              <button
+                type="button"
+                class="pill outline"
+                [disabled]="busy()"
+                (click)="cancel(current)"
+              >
+                {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
+              </button>
+            }
           </div>
-        } @else if (current.status === 'processing') {
+        } @else if (current.canCancel) {
           <div class="actions" actions>
             <button
               type="button"
@@ -169,7 +171,8 @@ export class OrderDetailPage {
   readonly notice = signal('');
   readonly busy = signal(false);
 
-  private readonly api = inject(ACCOUNT_API);
+  private readonly returnsEnabled = inject(API_CONFIG).checkoutMode === 'mock';
+  private readonly api = inject(ORDERS_API);
   private readonly cancellation = inject(OrderCancellation);
   private readonly buyer = inject(BuyAgain);
   private readonly toast = inject(ToastService);
@@ -179,12 +182,12 @@ export class OrderDetailPage {
     inject(ActivatedRoute)
       .paramMap.pipe(
         map((params) => params.get('orderId') ?? ''),
-        switchMap((id) => this.api.getOrder(id)),
+        switchMap((id) => this.api.get(id)),
         takeUntilDestroyed(),
       )
       .subscribe({
         next: (order) => this.order.set(order),
-        error: (error: unknown) => this.error.set(accountErrorMessage(error)),
+        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
       });
   }
 
@@ -201,7 +204,8 @@ export class OrderDetailPage {
   }
 
   returnable(order: Order): boolean {
-    return canRequestReturn(order);
+    // Returns have no API yet: with real orders the entry stays hidden.
+    return this.returnsEnabled && canRequestReturn(order);
   }
 
   deadline(order: Order): string {
@@ -235,7 +239,7 @@ export class OrderDetailPage {
           this.notice.set(`Đã hủy đơn #${cancelled.id}.`);
           this.toast.show({ title: 'Đã hủy đơn hàng', detail: `Đơn #${cancelled.id}` });
         },
-        error: (error: unknown) => this.error.set(accountErrorMessage(error)),
+        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
       });
   }
 }

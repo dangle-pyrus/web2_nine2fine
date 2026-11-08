@@ -40,7 +40,7 @@ Cách đăng nhập: vào **Đăng nhập** → nhập email → **Tiếp tục*
 - Hạng Silver: đã chi 23.450.000 ₫ / 40.000.000 ₫.
 
 **Giỏ hàng và Yêu thích** (lưu trong localStorage của trình duyệt): giỏ có 4 dòng (5 sản phẩm), danh
-sách yêu thích có 5 sản phẩm. Chỉ được ghi **khi trình duyệt chưa từng có** khóa `n2f.cart.v1` /
+sách yêu thích có 5 sản phẩm. Chỉ được ghi **khi trình duyệt chưa từng có** khóa `n2f.cart.v2` /
 `n2f.wishlist.v1`. Nếu bạn đã xóa hết giỏ, giỏ sẽ không tự đầy lại. Muốn lấy lại dữ liệu mẫu: DevTools
 → Application → Local Storage → xóa hai khóa trên rồi tải lại trang.
 

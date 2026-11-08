@@ -3,13 +3,14 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DialogRef } from '@angular/cdk/dialog';
 import { RouterLink } from '@angular/router';
-import { CartState } from './cart-state';
+import { CartLine, CartState, limitMessage } from './cart-state';
 import { WishlistState } from '../wishlist/wishlist-state';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
@@ -17,7 +18,6 @@ import { PricePipe } from '../../shared/commerce/price.pipe';
 import { ProductCardComponent } from '../../shared/commerce/product-card.component';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
 import { DEFAULT_QUERY, Product, ProductVariant } from '../catalog/models/product';
-import { storeSettings } from '../../core/store-settings';
 import { getMedia } from '../../../media/media-manifest';
 
 /**
@@ -65,7 +65,38 @@ import { getMedia } from '../../../media/media-manifest';
         </div>
       </header>
 
-      @if (!cart.lines().length) {
+      <div class="cart-alerts" aria-live="polite">
+        @if (cart.serverError()) {
+          <p class="alert" role="alert">
+            Chưa tải được giỏ hàng của bạn.
+            <button type="button" class="link" (click)="cart.loadServerCart()">Thử lại</button>
+          </p>
+        }
+        @if (cart.refreshError() && cart.lines().length) {
+          <p class="alert" role="alert">
+            Chưa cập nhật được giá mới nhất.
+            <button type="button" class="link" (click)="cart.retryRefresh()">Thử lại</button>
+          </p>
+        }
+        @if (cart.changed() && cart.lines().length) {
+          <p class="alert info">
+            Một số sản phẩm đã thay đổi giá hoặc tình trạng hàng. Vui lòng kiểm tra trước khi thanh
+            toán.
+          </p>
+        }
+        @if (cart.notice()) {
+          <p class="alert info" role="status">{{ cart.notice() }}</p>
+        }
+      </div>
+      @if (cart.serverLoading() && !cart.lines().length) {
+        <div class="skeleton" role="status" aria-label="Đang tải giỏ hàng">
+          @for (row of [1, 2]; track row) {
+            <div class="ghost"><span></span><span></span></div>
+          }
+        </div>
+      } @else if (!cart.lines().length && cart.serverError()) {
+        <!-- A failed load is not an empty cart: the banner above offers a retry. -->
+      } @else if (!cart.lines().length) {
         <n2f-empty-state
           image="/assets/illustrations/empty_cart.svg"
           heading="Một khởi đầu mới"
@@ -75,7 +106,7 @@ import { getMedia } from '../../../media/media-manifest';
           ></n2f-empty-state
         >
       } @else {
-        <div class="cart-body">
+        <div class="cart-body" [class.refreshing]="cart.refreshing()">
           <div class="cart-main">
             @if (selecting()) {
               <div class="select-bar">
@@ -86,7 +117,7 @@ import { getMedia } from '../../../media/media-manifest';
                     [indeterminate]="!allPicked() && picked().size > 0"
                     (change)="toggleAll()"
                   />
-                  <span>Chọn tất cả ({{ cart.lines().length }})</span>
+                  <span>Chọn tất cả ({{ pickable().length }})</span>
                 </label>
                 <button
                   type="button"
@@ -101,12 +132,18 @@ import { getMedia } from '../../../media/media-manifest';
 
             <div class="cart-scroll">
               @for (line of cart.lines(); track line.variantId) {
-                <article class="cart-line" [class.selecting]="selecting()">
+                <article
+                  class="cart-line"
+                  [class.selecting]="selecting()"
+                  [class.sold-out]="line.saleStatus === 'SOLD_OUT'"
+                  [class.unavailable]="line.saleStatus === 'UNAVAILABLE'"
+                >
                   @if (selecting()) {
                     <input
                       type="checkbox"
                       class="line-check"
                       [checked]="picked().has(line.variantId)"
+                      [disabled]="!isActive(line)"
                       [attr.aria-label]="'Chọn ' + line.name + ' ' + line.color + ' ' + line.size"
                       (change)="togglePick(line.variantId)"
                     />
@@ -122,11 +159,15 @@ import { getMedia } from '../../../media/media-manifest';
                         }}</a>
                       </h2>
                       <!-- One amount per line: the line total. -->
-                      <p class="line-price">{{ line.price * line.quantity | vnd }}</p>
+                      <p class="line-price">
+                        @if (isActive(line)) {
+                          {{ line.price * line.quantity | vnd }}
+                        }
+                      </p>
                     </div>
                     <p class="variant">
                       <span>Màu: {{ line.color }} · Size: {{ line.size }}</span>
-                      @if (!selecting()) {
+                      @if (!selecting() && line.saleStatus !== 'UNAVAILABLE') {
                         <button
                           type="button"
                           class="edit-variant"
@@ -139,9 +180,33 @@ import { getMedia } from '../../../media/media-manifest';
                         </button>
                       }
                     </p>
+                    @if (line.priceChange; as change) {
+                      <p class="line-note price" role="status">
+                        Giá đã thay đổi từ {{ change.from | vnd }} thành {{ change.to | vnd }}
+                      </p>
+                    }
+                    @if (line.saleStatus === 'SOLD_OUT') {
+                      <p class="line-note sold" role="status">Đã hết hàng</p>
+                    } @else if (line.saleStatus === 'UNAVAILABLE') {
+                      <p class="line-note sold" role="status">Sản phẩm không còn kinh doanh</p>
+                    } @else if (limitText(line); as text) {
+                      <p class="line-note" role="status">{{ text }}</p>
+                    } @else if (cart.notices()[line.variantId]; as text) {
+                      <p class="line-note" role="status">{{ text }}</p>
+                    }
                     <div class="line-controls">
                       <div class="quantity">
-                        @if (line.quantity <= 1 && !selecting()) {
+                        @if (line.saleStatus === 'UNAVAILABLE') {
+                          <button
+                            type="button"
+                            class="icon-button"
+                            [attr.aria-label]="'Xóa ' + line.name + ' khỏi giỏ'"
+                            title="Xóa khỏi giỏ"
+                            (click)="cart.remove(line.variantId)"
+                          >
+                            <n2f-icon name="reiconTrash3" size="16px" /> Xóa
+                          </button>
+                        } @else if (line.quantity <= 1 && !selecting()) {
                           <!-- At 1 the minus becomes remove, so the card needs no separate delete button. -->
                           <button
                             type="button"
@@ -163,18 +228,20 @@ import { getMedia } from '../../../media/media-manifest';
                             <n2f-icon name="reiconMinus" size="14px" />
                           </button>
                         }
-                        <span [attr.aria-label]="'Số lượng ' + line.quantity">{{
-                          line.quantity
-                        }}</span
-                        ><button
-                          type="button"
-                          class="icon-button"
-                          [disabled]="line.quantity >= line.stock"
-                          [attr.aria-label]="'Tăng số lượng ' + line.name"
-                          (click)="cart.adjust(line.variantId, 1)"
-                        >
-                          <n2f-icon name="reiconPlus" size="14px" />
-                        </button>
+                        @if (line.saleStatus !== 'UNAVAILABLE') {
+                          <span [attr.aria-label]="'Số lượng ' + line.quantity">{{
+                            line.quantity
+                          }}</span
+                          ><button
+                            type="button"
+                            class="icon-button"
+                            [disabled]="!isActive(line) || line.quantity >= capOf(line)"
+                            [attr.aria-label]="'Tăng số lượng ' + line.name"
+                            (click)="cart.adjust(line.variantId, 1)"
+                          >
+                            <n2f-icon name="reiconPlus" size="14px" />
+                          </button>
+                        }
                       </div>
                       <button
                         type="button"
@@ -279,14 +346,26 @@ import { getMedia } from '../../../media/media-manifest';
               </span>
               <strong>{{ summarySubtotal() | vnd }}</strong>
             </div>
-            @if (summaryCount()) {
+            @if (checkoutBlock(); as reason) {
+              <button
+                type="button"
+                class="button dark checkout"
+                disabled
+                aria-describedby="checkout-block"
+              >
+                {{
+                  summaryCount()
+                    ? 'Thanh toán (' + summaryCount() + ')'
+                    : 'Chọn sản phẩm để thanh toán'
+                }}
+              </button>
+              @if (reason !== 'none') {
+                <p class="note" id="checkout-block" role="alert">{{ reason }}</p>
+              }
+            } @else {
               <a class="button dark checkout" routerLink="/checkout" (click)="startCheckout()"
                 >Thanh toán ({{ summaryCount() }})</a
               >
-            } @else {
-              <button type="button" class="button dark checkout" disabled>
-                Chọn sản phẩm để thanh toán
-              </button>
             }
             @if (dialog) {
               <a class="view-cart" routerLink="/cart" (click)="close()">Xem giỏ hàng</a>
@@ -301,6 +380,12 @@ import { getMedia } from '../../../media/media-manifest';
               </p>
             }
           </aside>
+        </div>
+      }
+      @if (cart.undoable(); as removed) {
+        <div class="undo" role="status" aria-live="polite">
+          <span>Đã xóa {{ removed.name }} khỏi giỏ.</span>
+          <button type="button" class="link" (click)="cart.undoRemove()">Hoàn tác</button>
         </div>
       }
       @if (!dialog && recommendations().length) {
@@ -319,6 +404,83 @@ import { getMedia } from '../../../media/media-manifest';
     :host {
       display: block;
       height: 100%;
+    }
+    .cart-alerts:empty {
+      display: none;
+    }
+    .alert {
+      margin: 0 0 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius-card);
+      background: #fdecec;
+      color: var(--required);
+      font-size: 14px;
+    }
+    .alert.info {
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .link {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: inherit;
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .refreshing .line-price,
+    .refreshing .total strong {
+      opacity: 0.5;
+    }
+    .cart-line.sold-out .thumb,
+    .cart-line.sold-out .line-head,
+    .cart-line.unavailable .thumb,
+    .cart-line.unavailable .line-head {
+      opacity: 0.5;
+    }
+    .line-note {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .line-note.price {
+      color: var(--brand);
+    }
+    .line-note.sold {
+      color: var(--required);
+      font-weight: 600;
+    }
+    .undo {
+      position: sticky;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 16px auto 0;
+      max-width: 420px;
+      padding: 12px 16px;
+      border-radius: var(--radius-button);
+      background: var(--ink);
+      color: #fff;
+      font-size: 14px;
+    }
+    .skeleton .ghost {
+      display: grid;
+      gap: 12px;
+      margin: 16px 0;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-card);
+    }
+    .skeleton .ghost span {
+      height: 14px;
+      border-radius: 4px;
+      background: var(--surface);
+    }
+    .skeleton .ghost span:nth-child(2) {
+      height: 70px;
     }
     .cart-view {
       display: flex;
@@ -849,14 +1011,17 @@ export class CartView {
   /** Selection mode (checklist button): pick lines to remove or to buy now. */
   readonly selecting = signal(false);
   readonly picked = signal<ReadonlySet<string>>(new Set());
+  /** Lines that can be bought: sold-out and discontinued ones stay visible but cannot be picked. */
+  readonly pickable = computed(() => this.cart.lines().filter((line) => this.isActive(line)));
   readonly allPicked = computed(
-    () => this.cart.lines().length > 0 && this.picked().size === this.cart.lines().length,
+    () => this.pickable().length > 0 && this.picked().size === this.pickable().length,
   );
   /** In selection mode the summary (and checkout) covers only the picked lines. */
   readonly summaryLines = computed(() =>
-    this.selecting()
+    (this.selecting()
       ? this.cart.lines().filter((line) => this.picked().has(line.variantId))
-      : this.cart.lines(),
+      : this.cart.lines()
+    ).filter((line) => this.isActive(line)),
   );
   readonly summaryCount = computed(() =>
     this.summaryLines().reduce((sum, line) => sum + line.quantity, 0),
@@ -864,9 +1029,21 @@ export class CartView {
   readonly summarySubtotal = computed(() =>
     this.summaryLines().reduce((sum, line) => sum + line.quantity * line.price, 0),
   );
+  /** The threshold comes from the server's policy (HTTP) or the mock's. */
   readonly remainingForFreeShipping = computed(() =>
-    Math.max(0, storeSettings().policy.freeShippingFrom - this.summarySubtotal()),
+    Math.max(0, this.cart.policy().freeShippingThreshold - this.summarySubtotal()),
   );
+  /** Why checkout is locked ('none' = nothing picked), or null when it can go ahead. */
+  readonly checkoutBlock = computed<string | null>(() => {
+    if (!this.summaryCount()) return 'none';
+    const policy = this.cart.policy();
+    if (this.summaryCount() > policy.maxItemsPerOrder) {
+      return `Mỗi đơn tối đa ${policy.maxItemsPerOrder} sản phẩm.`;
+    }
+    if (this.cart.refreshError()) return 'Chưa cập nhật được giá mới nhất. Vui lòng thử lại.';
+    if (this.cart.refreshing() && !this.cart.lines().length) return 'Đang cập nhật giá…';
+    return null;
+  });
   /** Line being edited (variant id) and the colour/size picked in its editor. */
   readonly editing = signal<string | null>(null);
   readonly draftColor = signal('');
@@ -883,6 +1060,16 @@ export class CartView {
   });
 
   constructor() {
+    // Opening the cart reads the member's server cart / reprices the browser cart.
+    this.cart.open();
+    // After a sign-in merge only the lines brought over are selected (AC-CART-13).
+    effect(() => {
+      const merged = this.cart.mergedIds();
+      if (!merged?.size) return;
+      this.selecting.set(true);
+      this.picked.set(new Set(merged));
+      this.cart.mergedIds.set(null);
+    });
     if (!this.dialog) {
       this.catalog
         .list({ ...DEFAULT_QUERY, sort: 'bestselling', limit: 12 })
@@ -892,8 +1079,35 @@ export class CartView {
   }
 
   startCheckout(): void {
-    this.cart.checkoutIds.set(this.selecting() ? new Set(this.picked()) : null);
+    const allActive = this.pickable().length === this.cart.lines().length;
+    this.cart.checkoutIds.set(
+      this.selecting()
+        ? new Set([...this.picked()].filter((id) => this.isActive(this.lineOf(id))))
+        : allActive
+          ? null
+          : new Set(this.pickable().map((line) => line.variantId)),
+    );
     this.close();
+  }
+
+  isActive(line: CartLine | undefined): boolean {
+    return !!line && (line.saleStatus ?? 'ACTIVE') === 'ACTIVE';
+  }
+
+  /** Highest quantity the "+" button may reach (server limit or min(5, stock)). */
+  capOf(line: CartLine): number {
+    return Math.min(this.cart.policy().maxPerVariant, line.maxQuantity ?? line.stock);
+  }
+
+  /** BR-CART-02 sentence when the line sits at its limit. */
+  limitText(line: CartLine): string {
+    if (!this.isActive(line) || line.quantity < this.capOf(line)) return '';
+    const max = this.cart.policy().maxPerVariant;
+    return limitMessage(line.stock < max ? 'stock' : 'limit', line.stock, max);
+  }
+
+  private lineOf(id: string): CartLine | undefined {
+    return this.cart.lines().find((line) => line.variantId === id);
   }
 
   toggleSelecting(): void {
@@ -903,6 +1117,7 @@ export class CartView {
   }
 
   togglePick(id: string): void {
+    if (!this.isActive(this.lineOf(id))) return;
     this.picked.update((ids) => {
       const next = new Set(ids);
       if (next.has(id)) next.delete(id);
@@ -913,7 +1128,7 @@ export class CartView {
 
   toggleAll(): void {
     this.picked.set(
-      this.allPicked() ? new Set() : new Set(this.cart.lines().map((line) => line.variantId)),
+      this.allPicked() ? new Set() : new Set(this.pickable().map((line) => line.variantId)),
     );
   }
 
@@ -962,7 +1177,16 @@ export class CartView {
   applyEdit(variantId: string, product: Product): void {
     const variant = this.draftVariant(product);
     if (!variant) return;
-    this.cart.changeVariant(variantId, product, variant);
+    const merged = this.cart.changeVariant(variantId, product, variant);
+    // A merged line is picked if either of the two was; a moved line keeps its pick.
+    if (this.selecting()) {
+      this.picked.update((ids) => {
+        const next = new Set(ids);
+        const wasPicked = next.delete(variantId);
+        if (wasPicked || (merged && next.has(variant.id))) next.add(variant.id);
+        return next;
+      });
+    }
     this.editing.set(null);
   }
 

@@ -15,7 +15,7 @@ export default defineConfig({
         {
           origin: 'http://127.0.0.1:4200',
           localStorage: [
-            { name: 'n2f.cart.v1', value: '[]' },
+            { name: 'n2f.cart.v2', value: '[]' },
             { name: 'n2f.wishlist.v1', value: '[]' },
           ],
         },

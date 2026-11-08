@@ -64,7 +64,7 @@ test('variant validation, cart limits, drawer keyboard and mock checkout', async
   await page.getByRole('button', { name: 'Mở giỏ hàng' }).click();
   await page.getByRole('link', { name: /^Thanh toán \(\d+\)$/ }).click();
   await page.getByRole('button', { name: /Đặt đơn trải nghiệm/ }).click();
-  await expect(page.getByText('Nhập họ và tên của bạn.')).toBeVisible();
+  await expect(page.getByText('Nhập họ và tên (2–50 ký tự, có chữ cái).')).toBeVisible();
   await expect(page.getByText('Vui lòng đồng ý để đặt hàng.')).toBeVisible();
   await page.getByRole('textbox', { name: 'Họ và tên', exact: true }).fill('Nguyen Van A');
   await page.getByRole('textbox', { name: 'Số điện thoại', exact: true }).fill('0901234567');

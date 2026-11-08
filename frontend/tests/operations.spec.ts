@@ -55,13 +55,14 @@ test('policies, help page and seller identity are published', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Không tìm thấy chính sách' })).toBeVisible();
 });
 
-test('guest checkout without email keeps note and VAT invoice, then cancels by phone', async ({
+test('guest checkout keeps note and VAT invoice, then cancels after email verification', async ({
   page,
 }) => {
   await addToCart(page, 'nine-to-fine-shirt');
   await page.goto('/checkout');
   await page.getByRole('textbox', { name: 'Họ và tên', exact: true }).fill('Lê Hoa');
   await page.getByRole('textbox', { name: 'Số điện thoại', exact: true }).fill('0933444555');
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill('hoa@example.com');
   await page
     .getByRole('combobox', { name: 'Tỉnh / Thành phố' })
     .selectOption({ label: 'Thành phố Hà Nội' });
@@ -84,8 +85,10 @@ test('guest checkout without email keeps note and VAT invoice, then cancels by p
   await expect(page.getByRole('heading', { name: 'Cảm ơn bạn, Hoa.' })).toBeVisible();
 
   await page.getByRole('link', { name: 'Theo dõi đơn hàng' }).click();
-  await page.getByRole('textbox', { name: 'Số điện thoại hoặc email' }).fill('0933444555');
-  await page.getByRole('button', { name: 'Tra cứu' }).click();
+  await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('hoa@example.com');
+  await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
+  await page.getByRole('textbox', { name: 'Mã xác minh (8 số)' }).fill('12345678');
+  await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByText('Giao giờ hành chính')).toBeVisible();
   await expect(page.getByText('Công ty TNHH Hoa Lê')).toBeVisible();
   await expect(page.getByText('MST 0101234567')).toBeVisible();
@@ -192,10 +195,10 @@ test('checkout names the lines that ran out of stock and fixes them', async ({ p
   await addToCart(page, 'nine-to-fine-shirt');
   // Simulate a stale cart: the browser still thinks 9 pieces are available.
   await page.evaluate(() => {
-    const lines = JSON.parse(localStorage.getItem('n2f.cart.v1') ?? '[]');
+    const lines = JSON.parse(localStorage.getItem('n2f.cart.v2') ?? '[]');
     lines[0].quantity = 9;
     lines[0].stock = 9;
-    localStorage.setItem('n2f.cart.v1', JSON.stringify(lines));
+    localStorage.setItem('n2f.cart.v2', JSON.stringify(lines));
   });
   await page.goto('/checkout');
   if ((await page.locator('aside details').getAttribute('open')) === null) {
