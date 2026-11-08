@@ -291,6 +291,8 @@ export class CheckoutPage {
   private confirmDuplicate = false;
   /** The shop reported the shortage on order: a later quote must not hide it until fixed. */
   private stockFromError = false;
+  /** Order pressed while the quote was being recalculated: it goes out when the quote lands. */
+  private submitWhenQuoted = false;
   /** Ward from a saved draft, selected again once its province's ward list has loaded. */
   private pendingWard = '';
 
@@ -378,6 +380,10 @@ export class CheckoutPage {
         this.quoting.set(false);
         if (result) this.useQuote(result);
         else if (!this.cart.checkoutLines().length) this.quote.set(null);
+        if (this.submitWhenQuoted) {
+          this.submitWhenQuoted = false;
+          if (result) this.submit();
+        }
       });
 
     this.form.valueChanges
@@ -529,9 +535,14 @@ export class CheckoutPage {
       this.focusFirstError();
       return;
     }
-    if (this.quoting() || this.quoteFailed()) {
+    if (this.quoting()) {
       this.submitLock = false;
-      this.error.set('Đang tính tổng thanh toán. Vui lòng đợi trong giây lát rồi bấm Đặt hàng.');
+      this.submitWhenQuoted = true;
+      return;
+    }
+    if (this.quoteFailed()) {
+      this.submitLock = false;
+      this.error.set('Chưa tính được tổng thanh toán. Vui lòng bấm Thử lại.');
       return;
     }
     this.submitting.set(true);

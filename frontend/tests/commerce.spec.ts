@@ -58,6 +58,10 @@ test('variant validation, cart limits, drawer keyboard and mock checkout', async
   await expect(
     page.getByRole('button', { name: 'Tăng số lượng The Everyday Blazer' }),
   ).toBeDisabled();
+  // 5 pieces would pass the 5.000.000 ₫ COD limit; bring the order back under it.
+  await page
+    .getByRole('button', { name: 'Giảm số lượng The Everyday Blazer' })
+    .click({ clickCount: 2 });
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
   await expect(page.getByRole('button', { name: 'Mở giỏ hàng' })).toBeFocused();
