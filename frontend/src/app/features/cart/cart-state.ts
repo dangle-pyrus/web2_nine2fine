@@ -1,5 +1,6 @@
 import { computed, effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
 import {
   catchError,
   debounceTime,
@@ -19,6 +20,7 @@ import { readLocal, writeLocal } from '../../core/local-state';
 import { STORE_INFO } from '../../core/store-info';
 import { Product, ProductVariant } from '../catalog/models/product';
 import { AuthSession } from '../auth/auth-session';
+import { ToastService } from '../../shared/ui/toast';
 import { WishlistState } from '../wishlist/wishlist-state';
 import { CHECKOUT_API, CheckoutError, RefreshedLine } from '../checkout/checkout-api';
 import {
@@ -141,6 +143,8 @@ export function limitMessage(reason: 'stock' | 'limit', stock: number, max: numb
 export class CartState {
   private readonly session = inject(AuthSession);
   private readonly wishlist = inject(WishlistState);
+  private readonly toast = inject(ToastService);
+  private readonly router = inject(Router);
   private readonly cartApi = inject(CART_API);
   private readonly checkoutApi = inject(CHECKOUT_API);
   private readonly checkoutMode = inject(API_CONFIG).checkoutMode;
@@ -755,7 +759,11 @@ export class CartState {
     if (resume?.ids?.length) this.checkoutIds.set(new Set(resume.ids));
     else if (merged.size) this.checkoutIds.set(merged);
     if (result.addedCount > 0) {
-      this.say(`Đã thêm ${result.addedCount} sản phẩm từ giỏ hàng trước khi đăng nhập.`);
+      const text = `Đã thêm ${result.addedCount} sản phẩm từ giỏ hàng trước khi đăng nhập.`;
+      this.say(text);
+      // The sentence above only shows inside the cart; elsewhere (the shopper lands on the page
+      // they came from) it needs a toast, but not twice when the cart is already open.
+      if (!/^\/cart(?:[/?#]|$)/.test(this.router.url)) this.toast.show({ title: text });
     }
     if (result.evicted.length) {
       this.wishlist.addMany(result.evicted.map((line) => line.productId));

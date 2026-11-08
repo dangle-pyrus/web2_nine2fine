@@ -30,6 +30,8 @@ export interface MockFlags {
   serverCart?: boolean;
   /** Mock server cart fails with `unavailable` (offline). */
   cartFail?: boolean;
+  /** `GET /auth/me` answers as a guest: the server revoked the session behind the page's back. */
+  sessionRevoked?: boolean;
 }
 
 const KEY = 'n2f.mock.flags';

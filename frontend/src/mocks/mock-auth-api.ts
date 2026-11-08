@@ -28,6 +28,7 @@ import {
 } from './accounts';
 import { MockAccountStore } from './mock-account-store';
 import { fail, respond } from './mock-latency';
+import { mockFlags } from './mock-flags';
 import { MockPersistence } from './mock-persistence';
 
 const SECOND = 1000;
@@ -194,7 +195,7 @@ export class MockAuthApi implements AuthApi {
   }
 
   me(): Observable<AuthUser | null> {
-    return of(this.current);
+    return of(mockFlags().sessionRevoked ? null : this.current);
   }
 
   logout(): Observable<void> {

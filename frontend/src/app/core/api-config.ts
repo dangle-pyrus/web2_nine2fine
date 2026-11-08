@@ -17,6 +17,10 @@ export interface ApiConfig {
   checkoutMode: 'mock' | 'http';
   baseUrl: string;
 }
+/**
+ * `authMode`, `catalogMode` and `checkoutMode` are only labels in the normal build: those slices are
+ * bound to their HTTP adapters in `storefront-adapters.ts` (the e2e build binds mocks instead).
+ */
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
 export const apiConfig: ApiConfig = {
   mode: 'mock',

@@ -884,16 +884,26 @@ export class CheckoutPage {
       )
       .subscribe((member) => {
         if (!member) return;
+        // What the shopper already typed (a draft, or the form kept while signing in) wins.
+        const controls = this.form.controls;
+        // A saved address would overwrite the recipient and address fields.
+        const typedAddress = !!(
+          controls.name.value ||
+          controls.phone.value ||
+          controls.street.value ||
+          controls.provinceCode.value
+        );
         this.form.patchValue({
-          name: `${member.profile.lastName} ${member.profile.firstName}`.trim(),
-          email: member.profile.email,
-          phone: member.profile.phone ?? '',
+          name:
+            controls.name.value || `${member.profile.lastName} ${member.profile.firstName}`.trim(),
+          email: controls.email.value || member.profile.email,
+          phone: controls.phone.value || (member.profile.phone ?? ''),
         });
         this.savedAddresses.set(member.addresses);
         this.memberVouchers.set(member.vouchers);
         const preferred =
           member.addresses.find((address) => address.isDefault) ?? member.addresses[0];
-        if (preferred) this.form.controls.savedAddress.setValue(preferred.id);
+        if (preferred && !typedAddress) this.form.controls.savedAddress.setValue(preferred.id);
       });
   }
 

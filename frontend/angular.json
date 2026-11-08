@@ -49,6 +49,10 @@
                 {
                   "replace": "src/app/core/api-config.ts",
                   "with": "src/app/core/api-config.e2e.ts"
+                },
+                {
+                  "replace": "src/app/core/storefront-adapters.ts",
+                  "with": "src/app/core/storefront-adapters.e2e.ts"
                 }
               ]
             }
