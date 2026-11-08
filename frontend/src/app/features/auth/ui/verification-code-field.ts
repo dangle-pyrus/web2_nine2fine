@@ -14,9 +14,8 @@ import {
 import { FormControl, ReactiveFormsModule, ValueChangeEvent } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
-import { API_CONFIG } from '../../../core/api-config';
 import { IconComponent } from '../../../shared/ui/icon.component';
-import { DEMO_VERIFICATION_CODE } from '../../../../mocks/accounts';
+import { demoVerificationCode } from '../../../core/storefront-adapters';
 import { AUTH_API, VerificationPurpose } from '../data-access/auth-api';
 import { AuthMessage, authMessage, cleanCode } from '../auth-messages';
 import { AuthMessageText } from './auth-message';
@@ -76,7 +75,7 @@ import { AuthMessageText } from './auth-message';
       }}
     </p>
     <span class="sr-only" role="status" aria-live="polite">{{ announcement() }}</span>
-    @if (isMock) {
+    @if (demoCode) {
       <p class="notice">Chế độ trải nghiệm: dùng mã {{ demoCode }}.</p>
     }
   `,
@@ -89,8 +88,8 @@ export class VerificationCodeField implements OnInit {
   readonly purpose = input.required<VerificationPurpose>();
   readonly fieldId = input('verification-code');
 
-  readonly isMock = inject(API_CONFIG).authMode === 'mock';
-  readonly demoCode = DEMO_VERIFICATION_CODE;
+  /** Set only in the mock (e2e) build; the normal build has no demo code in its bundle. */
+  readonly demoCode = demoVerificationCode;
   readonly secondsLeft = signal(0);
   readonly sending = signal(false);
   readonly showError = signal(false);

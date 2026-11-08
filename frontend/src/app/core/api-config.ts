@@ -18,8 +18,11 @@ export interface ApiConfig {
   baseUrl: string;
 }
 /**
- * `authMode`, `catalogMode` and `checkoutMode` are only labels in the normal build: those slices are
- * bound to their HTTP adapters in `storefront-adapters.ts` (the e2e build binds mocks instead).
+ * Which adapter each slice uses is decided in `storefront-adapters.ts` (HTTP) or its e2e twin
+ * (mocks), not here. `authMode`, `catalogMode` and `checkoutMode` are still read at run time to pick
+ * behaviour that only exists in one mode (cart sync, demo hints, returns, reviews, demo seed), so
+ * keep them in step with the adapter files. Both adapter files must bind the same token set; the
+ * `StorefrontBindings` type in `storefront-adapter-tokens.ts` enforces it.
  */
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
 export const apiConfig: ApiConfig = {

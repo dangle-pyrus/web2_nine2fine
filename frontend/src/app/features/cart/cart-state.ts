@@ -1,9 +1,10 @@
 import { computed, effect, inject, Injectable, signal, untracked } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 import {
   catchError,
   debounceTime,
+  filter,
   forkJoin,
   map,
   Observable,
@@ -12,7 +13,9 @@ import {
   startWith,
   Subject,
   switchMap,
+  take,
   tap,
+  timeout,
 } from 'rxjs';
 import { API_CONFIG } from '../../core/api-config';
 import { CommercePolicy, MOCK_POLICY } from '../../core/commerce-policy';
@@ -66,6 +69,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY = 24 * 60 * 60 * 1000;
 const REFRESH_DEBOUNCE_MS = 300;
 const UNDO_MS = 5000;
+const AUTH_LEAVE_WAIT_MS = 5000;
+const CART_URL = /^\/cart(?:[/?#]|$)/;
+const AUTH_URL = /^\/auth(?:[/?#]|$)/;
 
 function isCartLines(value: unknown): value is CartLine[] {
   return (
@@ -506,6 +512,9 @@ export class CartState {
   private serverCall(call: Observable<CartMutated>): void {
     if (!this.serverCart()) return;
     this.mutating++;
+    // The baseline moves before the request leaves: a reload while it is in flight must not see
+    // this change as new guest lines and merge it a second time (m-3).
+    this.saveBaseline();
     call.subscribe({
       next: (result) => {
         this.mutating--;
@@ -761,13 +770,35 @@ export class CartState {
     if (result.addedCount > 0) {
       const text = `Đã thêm ${result.addedCount} sản phẩm từ giỏ hàng trước khi đăng nhập.`;
       this.say(text);
-      // The sentence above only shows inside the cart; elsewhere (the shopper lands on the page
-      // they came from) it needs a toast, but not twice when the cart is already open.
-      if (!/^\/cart(?:[/?#]|$)/.test(this.router.url)) this.toast.show({ title: text });
+      this.announceMerge(text);
     }
     if (result.evicted.length) {
       this.wishlist.addMany(result.evicted.map((line) => line.productId));
     }
+  }
+
+  /**
+   * The sentence shows inside the cart; anywhere else it needs a toast, but never both. While the
+   * shopper is still on an `/auth` page the final page is not known yet (`returnUrl` may be
+   * `/cart`), so the decision waits for the navigation that leaves it.
+   */
+  private announceMerge(text: string): void {
+    const show = (url: string): void => {
+      if (!CART_URL.test(url)) this.toast.show({ title: text });
+    };
+    if (!AUTH_URL.test(this.router.url)) return show(this.router.url);
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        filter((event) => !AUTH_URL.test(event.urlAfterRedirects)),
+        take(1),
+        timeout(AUTH_LEAVE_WAIT_MS),
+      )
+      .subscribe({
+        next: (event) => show(event.urlAfterRedirects),
+        // The shopper stayed on the auth page: tell them anyway.
+        error: () => show(this.router.url),
+      });
   }
 
   private baselineFor(userId: string): Record<string, number> {

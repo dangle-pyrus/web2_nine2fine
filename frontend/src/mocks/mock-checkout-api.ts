@@ -27,7 +27,13 @@ import { DEMO_VERIFICATION_CODE } from './accounts';
 import { MockAccountStore } from './mock-account-store';
 import { MockPersistence } from './mock-persistence';
 import { fail, respond } from './mock-latency';
-import { mockFlags, mockPolicy, refreshMockLine, takePlaceError } from './mock-flags';
+import {
+  countMockCall,
+  mockFlags,
+  mockPolicy,
+  refreshMockLine,
+  takePlaceError,
+} from './mock-flags';
 import { DEMO_SEED_VOUCHER_RULES } from './demo-seed'; // DEMO SEED (remove with src/mocks/demo-seed/)
 
 const MINUTE = 60_000;
@@ -89,6 +95,7 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
   }
 
   quote(request: QuoteRequest): Observable<CheckoutQuote> {
+    countMockCall('quote');
     if (mockFlags().refreshFail) return failWith('unavailable');
     try {
       return respond(this.buildQuote(request));

@@ -56,6 +56,20 @@ export function takePlaceError(): MockFlags['placeError'] {
   return error;
 }
 
+const CALLS_KEY = 'n2f.mock.calls';
+
+/** Counts a mock request in `sessionStorage` `n2f.mock.calls` so a test can assert how many left. */
+export function countMockCall(name: string): void {
+  try {
+    const storage = globalThis.sessionStorage;
+    const calls = JSON.parse(storage?.getItem(CALLS_KEY) ?? '{}') as Record<string, number>;
+    calls[name] = (calls[name] ?? 0) + 1;
+    storage?.setItem(CALLS_KEY, JSON.stringify(calls));
+  } catch {
+    /* No storage: nothing counted. */
+  }
+}
+
 export const mockPolicy = (): CommercePolicy => ({ ...MOCK_POLICY });
 
 /** One line refreshed from the demo catalog at its live stock and (possibly overridden) price. */

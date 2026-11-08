@@ -517,3 +517,382 @@ test('AC-CHK-36 (FE part): 429 rate-limited on placing an order shows a countdow
   await page.getByRole('button', { name: /Đặt đơn trải nghiệm/ }).click();
   await expect(page).toHaveURL(/\/order-success\/N2F\d{10}$/);
 });
+
+// --- Cart rules on a browser cart (AC-CART-03, 05, 06, 10, 12) ---------------------------------
+
+interface SeedLine {
+  variantId: string;
+  quantity: number;
+  /** Days since the line was last touched. */
+  ageDays?: number;
+}
+
+const NAMES: Record<string, string> = {
+  '01': 'The Everyday Blazer',
+  '02': 'Nine-to-Fine Shirt',
+  '03': 'After Hours Dress',
+  '04': 'The Straight Trousers',
+};
+
+/** Writes the browser cart straight into `localStorage`; the next page load reads it. */
+async function seedDeviceCart(page: Page, lines: SeedLine[]): Promise<void> {
+  await page.goto('/');
+  // The app writes its (empty) cart once at start; seed only after that.
+  await expect(page.getByRole('button', { name: 'Mở giỏ hàng' })).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.evaluate(
+    ({ items, names, slugs }) => {
+      const now = Date.now();
+      const day = 24 * 60 * 60 * 1000;
+      const cart = items.map((item) => {
+        const [product, color, size] = item.variantId.split('-');
+        const at = new Date(now - (item.ageDays ?? 0) * day).toISOString();
+        return {
+          productId: product,
+          slug: slugs[product] ?? product,
+          name: names[product] ?? `Sản phẩm ${product}`,
+          mediaId: 'catalog-placeholder',
+          variantId: item.variantId,
+          color: color === '0' ? 'Đen' : 'Xám',
+          size,
+          price: 1290000,
+          stock: 5,
+          quantity: item.quantity,
+          saleStatus: 'ACTIVE',
+          maxQuantity: 5,
+          addedAt: at,
+          updatedAt: at,
+        };
+      });
+      localStorage.setItem('n2f.cart.v2', JSON.stringify(cart));
+    },
+    { items: lines, names: NAMES, slugs: SLUGS },
+  );
+}
+
+async function mockCalls(page: Page, name: string): Promise<number> {
+  return page.evaluate(
+    (key) =>
+      (JSON.parse(sessionStorage.getItem('n2f.mock.calls') ?? '{}') as Record<string, number>)[
+        key
+      ] ?? 0,
+    name,
+  );
+}
+
+test('AC-CART-03: "−" at quantity 1 removes the line', async ({ page }) => {
+  await seedDeviceCart(page, [{ variantId: BLAZER_M, quantity: 1 }]);
+  await page.goto('/cart');
+  await expect(page.locator('.cart-line')).toHaveCount(1);
+  // At quantity 1 the minus button is the remove button (no separate delete icon).
+  await expect(page.getByRole('button', { name: /Giảm số lượng/ })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Xóa The Everyday Blazer khỏi giỏ' }).click();
+  await expect(page.locator('.cart-line')).toHaveCount(0);
+  await expect(badge(page)).toHaveText('0');
+  expect(await deviceCart(page)).toEqual({});
+  // At quantity 2 the same position is a real "−".
+  await seedDeviceCart(page, [{ variantId: BLAZER_M, quantity: 2 }]);
+  await page.goto('/cart');
+  await page.getByRole('button', { name: 'Giảm số lượng The Everyday Blazer' }).click();
+  await expect(page.getByLabel('Số lượng 1')).toBeVisible();
+  await expect(page.locator('.cart-line')).toHaveCount(1);
+});
+
+test('AC-CART-05: more than 20 pieces lock checkout with the sentence; 20 unlocks it', async ({
+  page,
+}) => {
+  await seedDeviceCart(
+    page,
+    ['01', '02', '03', '04', '05'].map((product) => ({
+      variantId: `${product}-0-M`,
+      quantity: 5,
+    })),
+  );
+  await page.goto('/cart');
+  await expect(page.locator('.cart-line')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Thanh toán (25)' })).toBeDisabled();
+  await expect(page.getByText('Mỗi đơn tối đa 20 sản phẩm.')).toBeVisible();
+  // Pick 4 of the 5 lines: 20 pieces, checkout opens.
+  await page.getByRole('button', { name: 'Chọn sản phẩm để xóa' }).click();
+  const boxes = page.getByRole('checkbox', { name: /^Chọn / });
+  for (let i = 0; i < 5; i++) await boxes.nth(i).setChecked(i < 4);
+  await expect(page.getByRole('link', { name: 'Thanh toán (20)' })).toBeVisible();
+  await expect(page.getByText('Mỗi đơn tối đa 20 sản phẩm.')).toHaveCount(0);
+  await boxes.nth(4).check();
+  await expect(page.getByRole('button', { name: 'Thanh toán (25)' })).toBeDisabled();
+});
+
+test('AC-CART-06: changing to a size already in the cart merges, caps at 5 and stays in checkout', async ({
+  page,
+}) => {
+  await seedDeviceCart(page, [
+    { variantId: '01-0-S', quantity: 4 },
+    { variantId: BLAZER_M, quantity: 3 },
+  ]);
+  await page.goto('/cart');
+  await expect(page.getByRole('link', { name: 'Thanh toán (7)' })).toBeVisible();
+  const mLine = page.locator('.cart-line').filter({ hasText: 'Size: M' });
+  await mLine.getByRole('button', { name: 'Đổi màu hoặc size The Everyday Blazer' }).click();
+  const editor = page.getByRole('group', { name: 'Chỉnh The Everyday Blazer' });
+  // A sold-out size cannot be picked.
+  await expect(editor.getByRole('button', { name: 'Size XL - hết hàng' })).toBeDisabled();
+  await editor.getByRole('button', { name: 'Size S', exact: true }).click();
+  await editor.getByRole('button', { name: 'Cập nhật' }).click();
+  await expect(page.locator('.cart-line')).toHaveCount(1);
+  await expect(page.getByLabel('Số lượng 5')).toBeVisible();
+  await expect(
+    page.getByText(
+      'Đã gộp với sản phẩm cùng màu, size có sẵn trong giỏ. Số lượng được điều chỉnh còn 5.',
+    ),
+  ).toBeVisible();
+  // The merged line stays in the order: checkout covers its 5 pieces.
+  await expect(page.getByRole('link', { name: 'Thanh toán (5)' })).toBeVisible({ timeout: 10000 });
+  expect(await deviceCart(page)).toEqual({ '01-0-S': 5 });
+});
+
+test('AC-CART-10: five taps of "+" within a second send one price request', async ({ page }) => {
+  await seedDeviceCart(page, [
+    { variantId: BLAZER_M, quantity: 1 },
+    { variantId: Y, quantity: 1 },
+  ]);
+  await page.goto('/cart');
+  await expect(page.locator('.cart-line')).toHaveCount(2);
+  // Let the refresh that opening the cart starts finish, then count from zero.
+  await expect.poll(() => mockCalls(page, 'quote')).toBeGreaterThan(0);
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => sessionStorage.setItem('n2f.mock.calls', '{}'));
+  // Five taps in the same instant (3 on one line, 2 on the other): well inside the 300 ms window.
+  await page.evaluate(() => {
+    const tap = (name: string, times: number) => {
+      const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+      for (let i = 0; i < times; i++) button?.click();
+    };
+    tap('Tăng số lượng The Everyday Blazer', 3);
+    tap('Tăng số lượng Nine-to-Fine Shirt', 2);
+  });
+  await expect(page.getByLabel('Số lượng 4')).toBeVisible();
+  await expect(page.getByLabel('Số lượng 3')).toBeVisible();
+  await expect.poll(() => mockCalls(page, 'quote')).toBe(1);
+  // Nothing else follows the burst.
+  await page.waitForTimeout(1200);
+  expect(await mockCalls(page, 'quote')).toBe(1);
+});
+
+test('AC-CART-12: a browser cart untouched for 31 days is empty, 29 days is kept', async ({
+  page,
+}) => {
+  await seedDeviceCart(page, [{ variantId: BLAZER_M, quantity: 2, ageDays: 31 }]);
+  await page.goto('/cart');
+  await expect(page.locator('.cart-line')).toHaveCount(0);
+  await expect(badge(page)).toHaveText('0');
+  await seedDeviceCart(page, [{ variantId: BLAZER_M, quantity: 2, ageDays: 29 }]);
+  await page.goto('/cart');
+  await expect(page.locator('.cart-line')).toHaveCount(1);
+  await expect(badge(page)).toHaveText('2');
+});
+
+// --- Checkout form and error words (AC-CHK-03, 04, 05, 20, 37) ----------------------------------
+
+const field = (page: Page, name: string) => page.getByRole('textbox', { name, exact: true });
+
+test('AC-CHK-04 (FE): 101-character email and phone 84912345678 are refused; +84 is accepted', async ({
+  page,
+}) => {
+  await addBlazer(page);
+  await page.goto('/checkout');
+  const email = field(page, 'Email');
+  const emailError = page.getByText('Nhập địa chỉ email hợp lệ (tối đa 100 ký tự).');
+  await email.fill(`${'a'.repeat(60)}@${'b'.repeat(36)}.com`);
+  await email.blur();
+  await expect(emailError).toBeVisible();
+  await email.fill(`${'a'.repeat(60)}@${'b'.repeat(35)}.com`);
+  await email.blur();
+  await expect(emailError).toHaveCount(0);
+  const phone = field(page, 'Số điện thoại');
+  const phoneError = page.getByText('Nhập số điện thoại di động hợp lệ (0 hoặc +84).');
+  await phone.fill('84912345678');
+  await phone.blur();
+  await expect(phoneError).toBeVisible();
+  await phone.fill('+84912345678');
+  await phone.blur();
+  await expect(phoneError).toHaveCount(0);
+});
+
+test('AC-CHK-05 (FE): a guest typing an account email gets a sign-in hint and can still order', async ({
+  page,
+}) => {
+  await addBlazer(page);
+  await page.goto('/checkout');
+  await fillCheckout(page);
+  await field(page, 'Email').fill(MEMBER.email);
+  const hint = page.getByText('Đã có tài khoản với email này?');
+  await expect(hint).toBeVisible();
+  await expect(hint.getByRole('link', { name: 'Đăng nhập' })).toHaveAttribute(
+    'href',
+    /\/auth\/login\?returnUrl=%2Fcheckout/,
+  );
+  const submit = page.getByRole('button', { name: /Đặt đơn trải nghiệm/ });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page).toHaveURL(/\/order-success\/N2F\d{10}$/);
+});
+
+test('AC-CHK-03 (Should): the draft survives a reload, expires after 25 hours, is cleared by an order', async ({
+  page,
+}) => {
+  const DRAFT = 'n2f.checkout.draft.v1';
+  const draft = () => page.evaluate((key) => localStorage.getItem(key), DRAFT);
+  await addBlazer(page);
+  await page.goto('/checkout');
+  await field(page, 'Họ và tên').fill('Trần Bình');
+  await field(page, 'Số điện thoại').fill('0911222333');
+  await expect.poll(draft).toContain('Trần Bình');
+  await page.reload();
+  await expect(field(page, 'Họ và tên')).toHaveValue('Trần Bình');
+  await expect(field(page, 'Số điện thoại')).toHaveValue('0911222333');
+  // 25 hours later the draft is ignored.
+  await page.evaluate((key) => {
+    const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as { savedAt: number };
+    stored.savedAt = Date.now() - 25 * 60 * 60 * 1000;
+    localStorage.setItem(key, JSON.stringify(stored));
+  }, DRAFT);
+  await page.goto('/checkout');
+  await expect(field(page, 'Họ và tên')).toHaveValue('');
+  // Place an order: the draft is gone and a new checkout starts empty.
+  await fillCheckout(page);
+  const submit = page.getByRole('button', { name: /Đặt đơn trải nghiệm/ });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page).toHaveURL(/\/order-success\/N2F\d{10}$/);
+  expect(await draft()).toBeNull();
+  await addBlazer(page);
+  await page.goto('/checkout');
+  await expect(field(page, 'Họ và tên')).toHaveValue('');
+  await expect(field(page, 'Email')).toHaveValue('');
+});
+
+test('AC-CHK-20 (Should): a possible duplicate asks first, confirming places the order', async ({
+  page,
+  isMobile,
+}) => {
+  await addBlazer(page);
+  await page.goto('/checkout');
+  await fillCheckout(page);
+  await openSummary(page, isMobile);
+  await setFlags(page, { placeError: 'possible-duplicate' });
+  const submit = page.getByRole('button', { name: /Đặt đơn trải nghiệm/ });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  const dialog = page.getByRole('alertdialog', { name: 'Đơn hàng trùng' });
+  await expect(dialog).toContainText(
+    'Bạn vừa đặt đơn giống hệt (N2F2611040427). Bạn vẫn muốn đặt thêm?',
+  );
+  await expect(page).toHaveURL(/\/checkout$/);
+  await expect(dialog.getByRole('link', { name: 'Xem đơn trước' })).toHaveAttribute(
+    'href',
+    /\/track-order\?orderCode=N2F2611040427/,
+  );
+  await dialog.getByRole('button', { name: 'Vẫn đặt đơn mới' }).click();
+  await expect(page).toHaveURL(/\/order-success\/N2F\d{10}$/);
+});
+
+test.describe('AC-CHK-37: each failure has its own sentence', () => {
+  const ADDRESS = 'Địa chỉ giao hàng chưa hợp lệ. Vui lòng chọn lại tỉnh/thành và phường/xã.';
+
+  async function place(page: Page, isMobile: boolean, error: string): Promise<void> {
+    await addBlazer(page);
+    await page.goto('/checkout');
+    await fillCheckout(page);
+    await openSummary(page, isMobile);
+    await setFlags(page, { placeError: error });
+    const submit = page.getByRole('button', { name: /Đặt đơn trải nghiệm/ });
+    await expect(submit).toBeEnabled();
+    await submit.click();
+  }
+
+  test('unavailable (5xx, offline): connection sentence and retry, no address sentence', async ({
+    page,
+    isMobile,
+  }) => {
+    await place(page, isMobile, 'unavailable');
+    await expect(
+      page.getByText('Chưa đặt được hàng do lỗi kết nối. Đơn của bạn chưa bị mất, hãy thử lại.'),
+    ).toBeVisible();
+    await expect(page.getByText(ADDRESS)).toHaveCount(0);
+    await expect(field(page, 'Họ và tên')).toHaveValue('Trần Bình');
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page).toHaveURL(/\/order-success\/N2F\d{10}$/);
+  });
+
+  test('invalid-address: the address sentence shows and the ward is cleared', async ({
+    page,
+    isMobile,
+  }) => {
+    await place(page, isMobile, 'invalid-address');
+    await expect(page.getByText(ADDRESS).first()).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Phường / Xã' })).toHaveValue('');
+  });
+
+  test('idempotency-conflict and rate-limited never use the address sentence', async ({
+    page,
+    isMobile,
+  }) => {
+    await place(page, isMobile, 'idempotency-conflict');
+    await expect(
+      page.getByText('Đơn hàng đã thay đổi, vui lòng kiểm tra và bấm Đặt hàng lại.'),
+    ).toBeVisible();
+    await expect(page.getByText(ADDRESS)).toHaveCount(0);
+    await setFlags(page, { placeError: 'rate-limited' });
+    await page.getByRole('button', { name: /Đặt đơn trải nghiệm/ }).click();
+    await expect(
+      page.getByText(/Bạn thao tác quá nhanh\. Vui lòng thử lại sau 3 giây\./),
+    ).toBeVisible();
+    await expect(page.getByText(ADDRESS)).toHaveCount(0);
+  });
+});
+
+// --- Merge toast and in-flight reload (m-2, m-3) ------------------------------------------------
+
+test('m-2: signing in with returnUrl=/cart shows the merge sentence in the cart, not also a toast', async ({
+  page,
+}) => {
+  // Records every toast that ever shows (a toast fades before the assertion would look).
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { __toasts: string[] }).__toasts = seen;
+    new MutationObserver(() => {
+      document.querySelectorAll('.toast').forEach((toast) => {
+        if (toast.textContent) seen.push(toast.textContent);
+      });
+    }).observe(document, { childList: true, subtree: true, characterData: true });
+  });
+  await seedDeviceCart(page, [{ variantId: X, quantity: 2 }]);
+  await setFlags(page, { serverCart: true });
+  // The mock answers the merge before or after the router leaves /auth depending on timing; the
+  // sentence must show once either way (in the cart), never also as a toast.
+  await signIn(page, '/cart');
+  await expect(page).toHaveURL(/\/cart$/);
+  await expect(page.locator('.alert', { hasText: MERGE_SENTENCE(1) })).toHaveCount(1);
+  await page.waitForTimeout(1000);
+  const toasts = await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts);
+  expect(toasts.filter((text) => text.includes(MERGE_SENTENCE(1)))).toEqual([]);
+});
+
+test('m-3: reloading right after adding (before the server answers) does not merge that line twice', async ({
+  page,
+}) => {
+  await openStorefront(page);
+  await signIn(page);
+  await expect(page).toHaveURL(/\/new-in$/);
+  await page.goto(`/product/${SLUGS['01']}`);
+  await page.getByRole('button', { name: 'M', exact: true }).click();
+  await page.getByRole('button', { name: 'Thêm vào giỏ' }).click();
+  // The mock answers after 400 ms: reload well before that.
+  await expect.poll(() => deviceCart(page)).toEqual({ [X]: 1 });
+  await page.reload();
+  await expect(badge(page)).toHaveText('1');
+  // A second merge, if there were one, would land a moment later.
+  await page.waitForTimeout(1500);
+  await expect(badge(page)).toHaveText('1');
+  expect(await deviceCart(page)).toEqual({ [X]: 1 });
+});
