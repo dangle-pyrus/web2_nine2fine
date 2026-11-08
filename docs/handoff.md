@@ -1,5 +1,19 @@
 # Handoff
 
+## Slice 3 BE — Cart & Checkout (2026-11-08, backend xong, chờ FE tích hợp + Thắng áp Supabase)
+- Đã làm (bước 1-6 của `docs/implementation/slice-3-cart-checkout.md`): 7 mã lỗi mới; migration `20261107000500_cart_checkout_schema` (13 bảng, CHECK, RLS, chỉ cộng thêm); seed `npm run seed:checkout` (tham số, 2 voucher, 34 tỉnh/thành + 3.321 phường/xã, ngày nghỉ); giỏ thành viên, báo giá, voucher, địa giới; đặt COD nguyên tử + `Idempotency-Key`; huỷ; tra cứu OTP; đơn thành viên; email; job nền 60 giây (`server.ts`). Chưa làm: lát 3.8 QR/SePay (Q2); `GET /orders/{code}/payment` có nhưng 404 vì QR tắt.
+- Giả định chờ Thắng gom ở `backend/src/config/assumptions.ts` (làm tròn mã % 1.000 ₫, OTP tra cứu, cookie 30 phút, huỷ `to_ship`, khoá idempotency 24 giờ). Tên trạng thái nằm ở enum DB.
+- Dữ liệu cần Thắng đối chiếu trước go-live: `backend/prisma/seed-data/holidays-vn.json` (2026 theo lịch đã công bố, 2027 chỉ ước tính Tết 5-9/2; thiếu Giỗ Tổ 2027) và `vn-locations.json` (nguồn provinces.open-api.vn v2, mã tỉnh 2 số, mã phường 5 số).
+
+### Đề xuất đổi contract (Slice 3)
+Code lệch nhẹ, không sửa openapi (locked); chờ Orchestrator duyệt:
+1. `POST /checkout/quote` và `/vouchers/check` trả `422 invalid-address` khi `address` sai (contract chỉ ghi `validation`).
+2. `POST /checkout/quote` trả `429` khi IP đang bị khoá dò mã mà body có `voucherCodes` (contract chỉ nêu ở `/vouchers/check`); mã không tồn tại trong quote cũng cộng bộ đếm 10/15 phút.
+3. `quote.lineDiscounts` luôn có (mảng rỗng khi không giảm); `pricing.shippingFee = 0` khi không còn dòng nào mua được (tạm tính 0).
+4. AC-VOU-08: 390.000 + 550.000 giảm 141.000 chia ra 58.500 + 82.500 (chia hết, phần dư 0); PRD nói "dòng 550.000 nhận phần dư" nên cần PO sửa chữ AC (ví dụ dùng số khác).
+5. `limitedBy: 'stock'` cũng trả cho dòng `discontinued`.
+6. Đơn bị huỷ trước khi thư xác nhận kịp gửi: không gửi thư xác nhận (chỉ thư huỷ).
+
 ## Slice 2 — Catalog (2026-11-07, chờ QA/PO nghiệm thu)
 - BE (commit c263fee, 3e3a306, dc488d3, ee7fe6a): mã `not-found`, migration cộng thêm `20261107000400_catalog_schema` (RLS bật 4 bảng mới), `foldVi` + seed catalog idempotent (8 SP, 64 biến thể, 4 bảng size), module catalog, rate limit 120/60s/IP, cache header, đếm truy vấn. typecheck/build qua; `npm test` 133/133 pass (8 file), chưa đạt 3 lần pass liền do worker crash 0xC0000409 (không có assertion fail).
 - FE (commit 62d6520, b4c0d4a, 975ed2a): `catalogMode`, adapter HTTP + mock theo contract, Xem thêm, tiêu đề theo `total`, wishlist theo `ids`, PDP ẩn đánh giá ở http, hết hàng. lint/format/build qua; `catalog.spec.ts` 12/12; `pdp-plp/header/home/commerce` 32 pass, 4 skip, 2 fail (`commerce:144` flaky, `home:56` mobile banner → /auth/login, luồng auth, chưa xác nhận có từ trước).
