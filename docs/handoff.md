@@ -1,5 +1,12 @@
 # Handoff
 
+## Slice 4 — Admin đơn hàng: thiết kế xong, contract locked (2026-11-08)
+- Chọn slice: Thắng (decisions 2026-11-08). PRD Slice 4: 41 BR (BR-ADM-01..41), 50 AC (46 Must, 4 Should); backlog lát 4.1–4.9.
+- Câu hỏi: S4-Q1..Q7, Q9 chốt theo mặc định PO; PO thêm lý do huỷ `customer_request` (staff, `to_ship`) — Thắng có thể bác. S4-Q8 (nội dung COMMON-01..03) còn mở, không chặn.
+- Contract: `docs/api/openapi.yaml` tag `admin-orders` 12 endpoint, **locked** (commit 9b9a7b7). Mã lỗi mới `invalid-transition`, `order-state-changed`, `condition-not-met`. Kế hoạch BE: `docs/api/admin-orders-implementation-plan.md` (migration chỉ cộng thêm, máy trạng thái, test T-ADM ↔ AC-ADM, điểm FE phải đổi).
+- Lưu ý: trường `callAttempts.inFirstDay` giữ tên nhưng nghĩa là số lần lớn nhất trong một cửa sổ 24 giờ.
+- Tiếp theo: lát 4.1 (quyền, migration, cờ `adminOrdersMode`) → 4.2 (đọc) → 4.3 → 4.4 → 4.5 (bật `toShipCancelMode: 'request'`) → 4.6 Should → 4.7 nghiệm thu trên Supabase.
+
 ## Slice 3 — QA vòng 2 (2026-11-08)
 - Must 71/73 Pass, 0 Fail, 0 KKĐ, 2 hoãn Q2 (CHK-25, 27); Should 4/4. Minor m-1..m-5, m-7 đóng (commit 552e3a3, 78b83eb + commit tài liệu). Chi tiết: `docs/qa/report-slice-3-checkout.md` › "Cập nhật vòng 2".
 - Còn chặn DoD: M-1 crash worker vitest trên Windows (không assertion fail). Đề xuất thử Node 22 LTS hoặc Thắng ghi chấp nhận.
