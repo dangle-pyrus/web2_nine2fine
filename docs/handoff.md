@@ -5,6 +5,13 @@
 - Giả định chờ Thắng gom ở `backend/src/config/assumptions.ts` (làm tròn mã % 1.000 ₫, OTP tra cứu, cookie 30 phút, huỷ `to_ship`, khoá idempotency 24 giờ). Tên trạng thái nằm ở enum DB.
 - Dữ liệu cần Thắng đối chiếu trước go-live: `backend/prisma/seed-data/holidays-vn.json` (2026 theo lịch đã công bố, 2027 chỉ ước tính Tết 5-9/2; thiếu Giỗ Tổ 2027) và `vn-locations.json` (nguồn provinces.open-api.vn v2, mã tỉnh 2 số, mã phường 5 số).
 
+## Slice 3 FE — bước 7, 8 (2026-11-08, mock xong, chưa tích hợp thật)
+- Commit 1ea60b7 (bước 7), 65b2e7c, 391342e (bước 8). `checkoutMode` (http mặc định, e2e mock), adapter HTTP + mock cho giỏ/báo giá/voucher/đặt hàng/địa giới/tra cứu OTP/đơn thành viên (`ORDERS_API`), `CartState` hai nguồn lưu (khoá v2, gộp sau đăng nhập, đăng xuất xoá giỏ máy, làm tươi giá debounce 300 ms, Hoàn tác), checkout 2 ô voucher + Idempotency-Key + xử lý 409, trang thành công (biên nhận sessionStorage), tra cứu mã đơn + email + OTP, danh sách đơn phân trang.
+- Giả định Q1-Q4 gom ở `features/orders/order-status-map.ts` (`SLICE3_ASSUMPTIONS`, ánh xạ trạng thái) và `core/commerce-policy.ts`; QR ẩn khi `policy.bankTransferEnabled` false (HTTP).
+- Kiểm: lint, format:check, build qua (cảnh báo budget initial 616 kB > 600 kB). Playwright mock toàn bộ: 204 pass, 1 fail (admin.spec.ts:24 desktop, flaky khởi động nguội như ở Slice 2), 7 skip; trước Slice 3 là 178 pass. Có 26 test mới trong `tests/cart-checkout.spec.ts`. Cờ giả lập lỗi cho test: sessionStorage `n2f.mock.flags` (`src/mocks/mock-flags.ts`).
+- Chưa làm/kiểm: bước 9 (tích hợp thật), giỏ thành viên + gộp ở chế độ mock chỉ bật qua cờ `serverCart` (chưa có test Playwright AC-CART-13..18), 429 đặt hàng, khôi phục form sau đăng nhập từ checkout chưa có test, tra cứu bằng SĐT đã bỏ cả ở mock.
+- Lệch contract: không có. Lưu ý `stockIssues[].available` là tồn còn lại; FE tự cắt theo `maxPerVariant` khi bấm "Cập nhật theo số còn lại".
+
 ### Đề xuất đổi contract (Slice 3)
 Code lệch nhẹ, không sửa openapi (locked); chờ Orchestrator duyệt:
 1. `POST /checkout/quote` và `/vouchers/check` trả `422 invalid-address` khi `address` sai (contract chỉ ghi `validation`).
