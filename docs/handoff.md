@@ -39,6 +39,10 @@
 - Chưa làm/kiểm: bước 9 (tích hợp thật), giỏ thành viên + gộp ở chế độ mock chỉ bật qua cờ `serverCart` (chưa có test Playwright AC-CART-13..18), 429 đặt hàng, khôi phục form sau đăng nhập từ checkout chưa có test, tra cứu bằng SĐT đã bỏ cả ở mock.
 - Lệch contract: không có. Lưu ý `stockIssues[].available` là tồn còn lại; FE tự cắt theo `maxPerVariant` khi bấm "Cập nhật theo số còn lại".
 
+- **BE lát 4.1 + 4.2 xong (2026-11-08, backend-dev)**: migration `20261108000100_admin_orders_schema` (chỉ cộng thêm; áp n2f_dev + n2f_test, chưa chạm Supabase); 3 mã lỗi + `currentStatus`/`order`; `noStore`, `adminRateLimit` theo tài khoản; `ADMIN_ASSUMPTIONS`, `toShipCancelMode: 'direct'` (đổi 'request' ở lát 4.5); `insertOrderEvent` (mọi ghi sự kiện); `GET /admin/orders`, `/counts`, `/{code}` (timeline mới nhất trước, `allowedActions`); DTO khách thêm `actor`, `shipment`, `deliveredAt`, `cancelRequest`, `cancelMode`, timeline lọc theo kind. Test `backend/test/admin-orders.test.ts` (T-ADM-01..10, 12, 45, 49, 90 phần 4.1/4.2).
+- Lệch có chủ ý: `POST /admin/orders/{code}/cancel` hiện chỉ có cổng quyền `other` -> 403 cho staff (để kiểm AC-ADM-02/03), phần còn lại trả 404 tới lát 4.3. `notes` để lát 4.6; `overdue` luôn `[]` tới 4.6. Hai test Slice 3 sửa dữ liệu dựng bằng SQL cho khớp CHECK mới (`cancel_requested` cần `cancel_requested_at`; `delivery_refused_at` chỉ ở `cancelled`) và 1 assert timeline thêm `actor` (cộng thêm theo contract). Test RLS chỉ kiểm bảng đơn/checkout (bảng auth baseline cục bộ không bật RLS, có từ trước).
+- Đề xuất đổi contract (Slice 4): không có.
+
 ### Đề xuất đổi contract (Slice 3)
 Code lệch nhẹ, không sửa openapi (locked); chờ Orchestrator duyệt:
 1. `POST /checkout/quote` và `/vouchers/check` trả `422 invalid-address` khi `address` sai (contract chỉ ghi `validation`).

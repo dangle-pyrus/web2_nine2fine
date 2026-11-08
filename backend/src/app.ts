@@ -10,6 +10,9 @@ import { adminAuthRouter, authRouter } from './modules/auth/auth.routes';
 import { cartRouter } from './modules/cart/cart.routes';
 import { locationRouter } from './modules/location/location.routes';
 import { orderRouter } from './modules/order/order.routes';
+import { noStore } from './middleware/no-store';
+import { requireAuth, requireRole } from './middleware/auth';
+import { orderAdminRouter } from './modules/order-admin/order-admin.routes';
 import { checkoutRouter, voucherRouter } from './modules/checkout/checkout.routes';
 
 export interface CreateAppOptions {
@@ -51,6 +54,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use(cookieParser());
   api.use('/auth', authRouter);
   api.use('/admin/auth', adminAuthRouter);
+  // noStore TRƯỚC requireAuth để cả 401 / 403 có Cache-Control: no-store (BR-ADM-01).
+  api.use('/admin/orders', noStore, requireAuth('admin'), requireRole('staff', 'admin'), orderAdminRouter);
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);

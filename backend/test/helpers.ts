@@ -251,4 +251,91 @@ export async function makeAwaitingPayment(code: string, dueAt: Date): Promise<vo
   await prisma.order.update({ where: { code }, data: { status: 'to_pay', paymentMethod: 'bank_transfer', paymentDueAt: dueAt } });
 }
 
+let staffSeq = 0;
+/** Tạo staff / admin + đăng nhập `/admin/auth/login`, trả cookie `n2f_asid`. */
+async function loginRole(role: 'staff' | 'admin', email = `${role}${++staffSeq}@nine2fine.test`, names: { firstName?: string; lastName?: string } = {}) {
+  const user = await createUser({ email, password: A.password, role, ...names });
+  const res = await post('/api/admin/auth/login', { email, password: A.password }, { ip: freshIp() });
+  const cookie = cookieFrom(res, 'n2f_asid');
+  if (!cookie) throw new Error(`admin login ${res.status}`);
+  return { user, email, cookie };
+}
+export const loginStaff = (email?: string, names?: { firstName?: string; lastName?: string }) => loginRole('staff', email, names);
+export const loginAdmin = (email?: string, names?: { firstName?: string; lastName?: string }) => loginRole('admin', email, names);
+
+/** Gọi API admin với cookie; mặc định IP riêng mỗi lần. */
+export const adminGet = (path: string, cookie?: string) => get(`/api/admin/orders${path}`, { cookie, ip: freshIp() });
+export const adminPost = (path: string, body: unknown, cookie?: string, headers?: Record<string, string>) =>
+  post(`/api/admin/orders${path}`, body, { cookie, ip: freshIp(), headers });
+
+export interface MakeOrderOpts {
+  status?: 'to_pay' | 'to_ship' | 'to_receive' | 'completed' | 'cancel_requested' | 'cancelled';
+  paymentMethod?: 'cod' | 'bank_transfer';
+  /** `needs_confirm_call` (mặc định true với COD). */
+  needsCall?: boolean;
+  createdAt?: Date;
+  phone?: string;
+  email?: string;
+  name?: string;
+  userId?: string | null;
+  items?: Array<{ variantId: string; quantity: number }>;
+  /** Cột bổ sung (Prisma), ví dụ confirmedAt, carrier... */
+  data?: Record<string, unknown>;
+}
+
+let orderSeq = 0;
+/** Dựng đơn trực tiếp bằng Prisma (không qua POST /orders): cho phép đặt status, needs_confirm_call, created_at. Kèm sự kiện `placed`. */
+export async function makeOrder(o: MakeOrderOpts = {}): Promise<{ code: string; id: string }> {
+  const status = o.status ?? 'to_ship';
+  const method = o.paymentMethod ?? (status === 'to_pay' ? 'bank_transfer' : 'cod');
+  const at = o.createdAt ?? new Date();
+  const code = `N2F26110${String(++orderSeq).padStart(5, '0')}`.slice(0, 13);
+  const lines = o.items ?? [{ variantId: await vid('off-duty-top', 'Trắng', 'S'), quantity: 1 }];
+  const variants = await prisma.productVariant.findMany({ where: { variant_id: { in: lines.map((l) => l.variantId) } }, include: { product: true } });
+  const price = (v: (typeof variants)[number]) => Number(v.product.price);
+  const subtotal = lines.reduce((n, l) => n + price(variants.find((v) => v.variant_id === l.variantId)!) * l.quantity, 0);
+  const order = await prisma.order.create({
+    data: {
+      code,
+      status,
+      userId: o.userId ?? null,
+      paymentMethod: method,
+      email: o.email ?? 'khach@example.com',
+      recipientName: o.name ?? 'Nguyễn Văn A',
+      recipientPhone: o.phone ?? '0912345678',
+      provinceCode: '01',
+      wardCode: await firstWard(),
+      provinceName: 'Hà Nội',
+      wardName: 'Ba Đình',
+      street: '12 Phố Huế',
+      subtotal,
+      discount: 0,
+      shippingFee: 0,
+      shippingDiscount: 0,
+      total: subtotal,
+      estimatedFrom: new Date('2026-11-11'),
+      estimatedTo: new Date('2026-11-13'),
+      needsConfirmCall: o.needsCall ?? method === 'cod',
+      termsAcceptedAt: at,
+      itemsFingerprint: 'a'.repeat(64),
+      createdAt: at,
+      ...(status === 'to_pay' ? { paymentDueAt: new Date(at.getTime() + 1800_000) } : {}),
+      ...(o.data ?? {}),
+      items: {
+        createMany: { data: lines.map((l, i) => {
+          const v = variants.find((x) => x.variant_id === l.variantId)!;
+          return {
+            lineNo: i + 1, variantId: v.variant_id, productId: v.productId, productSlug: v.product.slug, name: v.product.name,
+            colorName: v.colorName, size: v.size, sku: v.sku, mediaId: v.product.coverMediaId, unitPrice: Number(v.product.price), quantity: l.quantity,
+          };
+        }) },
+      },
+    },
+  });
+  await prisma.orderEvent.create({
+    data: { orderId: order.order_id, at, fromStatus: null, toStatus: status === 'to_pay' ? 'to_pay' : 'to_ship', paymentStatus: 'pending', actor: 'customer', kind: 'placed' },
+  });
+  return { code, id: order.order_id };
+}
+
 export { prisma, flushMail };
