@@ -1,28 +1,28 @@
-# Kế hoạch triển khai Admin đơn hàng (Slice 4) - draft cùng contract
+# Kế hoạch triển khai Admin đơn hàng (Slice 4) - locked 2026-11-08 cùng contract
 
-Hợp đồng: `docs/api/openapi.yaml` (phần Slice 4 `status: draft (2026-11-08)`; Orchestrator khoá sau khi duyệt; auth, catalog, phần còn lại của Slice 3 vẫn locked). BR/AC: `docs/product/PRD.md` mục "Slice 4: Admin đơn hàng" (BR-ADM-01..41, AC-ADM-01..49, mục 7 câu hỏi mở). Lát giao: `docs/product/backlog.md` mục "Slice 4" (4.1-4.9). Khi mâu thuẫn, PRD thắng. Chỉ là tài liệu: agent triển khai làm theo mục 12 mà không cần hỏi lại; các chỗ cần quyết định nằm ở mục 14 và 15. Cùng khuôn với `docs/api/cart-checkout-implementation-plan.md` (đọc mục 4.4, 4.7 của file đó: khoá, `cancelOrderTx`).
+Hợp đồng: `docs/api/openapi.yaml` (phần Slice 4 `status: locked (2026-11-08)`, Orchestrator; auth, catalog, phần còn lại của Slice 3 cũng locked; đổi qua quy trình handoff -> Orchestrator duyệt -> cập nhật contract + `docs/decisions.md`). BR/AC: `docs/product/PRD.md` mục "Slice 4: Admin đơn hàng" (BR-ADM-01..41, AC-ADM-01..50, mục 7 câu hỏi). Lát giao: `docs/product/backlog.md` mục "Slice 4" (4.1-4.9). Khi mâu thuẫn, PRD thắng. Chỉ là tài liệu: agent triển khai làm theo mục 12 mà không cần hỏi lại; các chỗ cần quyết định nằm ở mục 14 và 15 (đã giải). Cùng khuôn với `docs/api/cart-checkout-implementation-plan.md` (đọc mục 4.4, 4.7 của file đó: khoá, `cancelOrderTx`).
 
-## 0. Giả định chờ Thắng (mặc định PO, dễ đổi)
+## 0. Câu hỏi S4-Q1..Q9: đã trả lời (2026-11-08), điểm lật vẫn giữ
 
-Mọi giả định gom vào **một** khối `ADMIN_ASSUMPTIONS` trong `backend/src/config/assumptions.ts` (cạnh `ASSUMPTIONS` của Slice 3) và một hằng `TRANSITIONS` (mục 4); đổi một câu trả lời = sửa đúng chỗ ghi ở cột "Lật ở đâu" + sửa BR/contract theo quy trình.
+S4-Q1..Q7 và Q9 **đã trả lời**: Thắng nhận mặc định PO (`docs/decisions.md`, các dòng 2026-11-08 về Slice 4). Chỉ **S4-Q8** (nội dung COMMON-01..03) còn mở, không chặn. Các giá trị dưới đây là mặc định phát hành; vẫn gom vào **một** khối `ADMIN_ASSUMPTIONS` trong `backend/src/config/assumptions.ts` (cạnh `ASSUMPTIONS` của Slice 3) và một hằng `TRANSITIONS` (mục 4); đổi một câu trả lời = sửa đúng chỗ ghi ở cột "Lật ở đâu" + sửa BR/contract theo quy trình.
 
 | Q | Mặc định đang dùng | Lật ở đâu | Hệ quả khi lật |
 | --- | --- | --- | --- |
-| S4-Q1 | Khách ở `to_ship` chỉ **gửi yêu cầu huỷ** (shop duyệt); phát hành cùng lát 4.5 | `ASSUMPTIONS.toShipCancelMode: 'direct' \| 'request'` (thay `customerCancellableFrom`, xem mục 14). `'direct'` = hành vi Slice 3 | `'direct'`: không có `cancel_requested` mới, bỏ 2 endpoint `cancel-request/*` khỏi router (cờ), tab `cancel-requests` luôn 0. Lát 4.1-4.4 không phụ thuộc; **4.5 chặn tới khi Thắng trả lời** |
-| S4-Q2 | Hàng hoàn **hai bước**: huỷ từ `to_receive` không cộng tồn, `returned-stock` cộng sau | `ADMIN_ASSUMPTIONS.returnStockMode: 'two-step' \| 'one-step'` | `'one-step'`: huỷ từ `to_receive` gọi `restoreStock = true` (cộng ngay, như `to_ship`), `returned_from_transit` luôn `false`, tab `returning` luôn 0, `returned-stock` -> `409 invalid-transition`; vẫn ghi `delivery_refused_at` cho `refused` |
-| S4-Q3 | 08:00-18:00, thứ Hai-thứ Bảy; gọi trong 2 giờ làm việc; duyệt huỷ trong 24 giờ; chỉ cờ | `ADMIN_ASSUMPTIONS.workHours = { fromHour: 8, toHour: 18, days: [1..6] }`, `callSlaWorkingHours: 2`, `cancelRequestSlaHours: 24` | Chỉ đổi cờ `overdue` (Should) |
-| S4-Q4 | staff huỷ 4 lý do cố định + duyệt / từ chối; chỉ admin huỷ `other` | `ADMIN_ASSUMPTIONS.adminOnlyCancelReasons: ['other']` | Thêm / bớt lý do admin-only; `allowedActions` đổi theo, FE không đổi |
-| S4-Q5 | Đơn vị vận chuyển nhập tự do 2-50 ký tự | `ADMIN_ASSUMPTIONS.carrierMode: 'free-text'` (danh mục = đổi schema Zod `carrier` thành `z.enum`; contract đổi `AdminShipRequest.carrier`) | FE gợi ý GHN, GHTK, Viettel Post, J&T (không ép) |
-| S4-Q6 | Mỗi đơn khách chỉ **một** yêu cầu huỷ | `ADMIN_ASSUMPTIONS.cancelRequestResubmit: false` | `true`: UPDATE yêu cầu không còn `AND cancel_requested_at IS NULL`, mỗi yêu cầu cần dòng riêng (cần bảng `order_cancel_requests` - **không làm** ở Slice 4; nên lật sang `true` là việc của slice sau) |
-| S4-Q7 | Chữ email và 5 câu lý do theo PRD | Một file `mail/order-templates.ts` + hằng `SHOP_CANCEL_REASON_TEXT` | Sửa chữ, không đổi contract |
-| S4-Q8 | Bảng chuyển trạng thái mục 4 (suy ra từ CHK-PAY-14; COMMON-01..03 chưa có) | Hằng `TRANSITIONS` trong `order-state.ts` (mọi kiểm ở một chỗ) | Sửa bảng + test T-ADM-0x tương ứng |
-| S4-Q9 | `declined_on_call`; 3 lần / 24 giờ tính từ lần đầu; mã vận đơn không trùng; staff thấy SĐT / email | `ADMIN_ASSUMPTIONS.unreachableAttempts: 3`, `unreachableWindowMs: 24h` | Tham số |
+| S4-Q1 (đã trả lời) | Khách ở `to_ship` chỉ **gửi yêu cầu huỷ** (shop duyệt); phát hành cùng lát 4.5 với **`toShipCancelMode: 'request'`** | `ASSUMPTIONS.toShipCancelMode: 'direct' \| 'request'` (thay `customerCancellableFrom`, xem mục 14). `'direct'` = hành vi Slice 3 | `'direct'`: không có `cancel_requested` mới, bỏ 2 endpoint `cancel-request/*` khỏi router (cờ), tab `cancel-requests` luôn 0. Lát 4.1-4.4 không phụ thuộc; **lát 4.5 không còn bị chặn bởi câu hỏi** (vẫn phụ thuộc 4.3 / 4.4 về kỹ thuật: `runAction`, `cancelOrderTx` tách, email) |
+| S4-Q2 (đã trả lời) | Hàng hoàn **hai bước**: huỷ từ `to_receive` không cộng tồn, `returned-stock` cộng sau | `ADMIN_ASSUMPTIONS.returnStockMode: 'two-step' \| 'one-step'` | `'one-step'`: huỷ từ `to_receive` gọi `restoreStock = true` (cộng ngay, như `to_ship`), `returned_from_transit` luôn `false`, tab `returning` luôn 0, `returned-stock` -> `409 invalid-transition`; vẫn ghi `delivery_refused_at` cho `refused` |
+| S4-Q3 (đã trả lời) | 08:00-18:00, thứ Hai-thứ Bảy; gọi trong 2 giờ làm việc; duyệt huỷ trong 24 giờ; chỉ cờ | `ADMIN_ASSUMPTIONS.workHours = { fromHour: 8, toHour: 18, days: [1..6] }`, `callSlaWorkingHours: 2`, `cancelRequestSlaHours: 24` | Chỉ đổi cờ `overdue` (Should) |
+| S4-Q4 (đã trả lời; thêm `customer_request`) | staff huỷ **5** lý do cố định (`unreachable`, `declined_on_call`, `customer_request`, `refused`, `undeliverable`) + duyệt / từ chối; chỉ admin huỷ `other` | `ADMIN_ASSUMPTIONS.adminOnlyCancelReasons: ['other']` | Thêm / bớt lý do admin-only; `allowedActions` đổi theo, FE không đổi |
+| S4-Q5 (đã trả lời) | Đơn vị vận chuyển nhập tự do 2-50 ký tự | `ADMIN_ASSUMPTIONS.carrierMode: 'free-text'` (danh mục = đổi schema Zod `carrier` thành `z.enum`; contract đổi `AdminShipRequest.carrier`) | FE gợi ý GHN, GHTK, Viettel Post, J&T (không ép) |
+| S4-Q6 (đã trả lời) | Mỗi đơn khách chỉ **một** yêu cầu huỷ | `ADMIN_ASSUMPTIONS.cancelRequestResubmit: false` | `true`: UPDATE yêu cầu không còn `AND cancel_requested_at IS NULL`, mỗi yêu cầu cần dòng riêng (cần bảng `order_cancel_requests` - **không làm** ở Slice 4; nên lật sang `true` là việc của slice sau) |
+| S4-Q7 (đã trả lời) | Chữ email và 6 câu lý do theo PRD (gồm `customer_request`); Thắng sửa chữ sau khi đọc thư thật ở nghiệm thu 4.7 | Một file `mail/order-templates.ts` + hằng `SHOP_CANCEL_REASON_TEXT` | Sửa chữ, không đổi contract |
+| S4-Q8 (**còn mở**, không chặn) | Bảng chuyển trạng thái mục 4 (suy ra từ CHK-PAY-14; COMMON-01..03 chưa có nội dung) | Hằng `TRANSITIONS` trong `order-state.ts` (mọi kiểm ở một chỗ) | Sửa bảng + test T-ADM-0x tương ứng |
+| S4-Q9 (đã trả lời) | `declined_on_call`; `unreachable` = 3 lần gọi **liên tiếp** có lần cuối - lần đầu <= 24 giờ 00 phút (cửa sổ 24 giờ bất kỳ, chỉ mở lý do, không tự huỷ); mã vận đơn không trùng; staff thấy SĐT / email | `ADMIN_ASSUMPTIONS.unreachableAttempts: 3`, `unreachableWindowMs: 24 * 3600 * 1000` (so sánh `<=`) | Tham số |
 
-Điều kiện (backlog): 4.1-4.4 làm theo mặc định không cần chờ; **4.5 chỉ merge bật khi Thắng trả lời S4-Q1** (nếu chưa, ship với `toShipCancelMode: 'direct'`).
+Điều kiện (backlog): 4.1-4.4 làm theo mặc định; **lát 4.5 không còn chờ câu trả lời** (S4-Q1 đã trả lời) và phát hành với `toShipCancelMode: 'request'`; về kỹ thuật vẫn làm sau 4.3 (`runAction`, `cancelOrderTx` tách) và 4.4 (email, hàng hoàn). Điểm lật (`'direct'`, `'one-step'`, ...) giữ nguyên trong code và bảng trên để Thắng đổi ý sau này thì chỉ sửa cờ + contract theo quy trình.
 
 ## 1. Phạm vi BE Slice 4
 
-12 endpoint mới (tag `admin-orders`, tất cả `adminSession`): `GET /admin/orders`, `GET /admin/orders/counts`, `GET /admin/orders/{orderCode}`, `POST /admin/orders/{orderCode}/{call-attempts | confirm | ship | deliver | cancel | returned-stock | cancel-request/approve | cancel-request/reject | notes}`. Đổi 1 endpoint cũ: `POST /orders/{orderCode}/cancel` (khách; `to_ship` -> `cancel_requested`). Thêm trường cộng thêm vào `Order`, `OrderTimelineEntry`, `ErrorResponse`; 3 mã lỗi mới (mục 14).
+12 endpoint mới (tag `admin-orders`, tất cả `adminSession`): `GET /admin/orders` (`page`, `limit`), `GET /admin/orders/counts`, `GET /admin/orders/{orderCode}`, `POST /admin/orders/{orderCode}/{call-attempts | confirm | ship | deliver | cancel | returned-stock | cancel-request/approve | cancel-request/reject | notes}`. Đổi 1 endpoint cũ: `POST /orders/{orderCode}/cancel` (khách; `to_ship` -> `cancel_requested`). Thêm trường cộng thêm vào `Order`, `OrderTimelineEntry`, `ErrorResponse`; 3 mã lỗi mới (mục 14).
 
 Ngoài phạm vi: sửa địa chỉ / dòng hàng, hoàn tiền, `to_pay` / QR, trả hàng, trạng thái `delivering` / `delivery-failed` / `returned-to-sender`, mọi màn admin khác, vô hiệu hoá / đổi vai trò bằng giao diện (AC-AUTH-75), xuất file.
 
@@ -47,7 +47,7 @@ Không bảng mới (không `DROP`, `RENAME`, đổi kiểu, `TRUNCATE`, `DELETE
 | cancel_request_outcome | varchar(8) NULL | `approved` / `rejected` |
 | cancel_request_decided_at, cancel_request_decided_by | timestamp(6) NULL, uuid NULL FK users SET NULL | |
 | cancel_request_reject_reason | varchar(250) NULL | khách thấy |
-| cancel_reason_code | varchar(20) NULL | `unreachable`, `declined_on_call`, `refused`, `undeliverable`, `other` (chỉ huỷ do shop) |
+| cancel_reason_code | varchar(20) NULL | `unreachable`, `declined_on_call`, `customer_request`, `refused`, `undeliverable`, `other` (chỉ huỷ qua `.../cancel`; dài nhất 16 ký tự) |
 | cancel_note | varchar(250) NULL | ghi chú nội bộ của huỷ do shop; **không bao giờ vào DTO khách / email** |
 | returned_from_transit | boolean NOT NULL DEFAULT false | đặt `true` khi huỷ từ `to_receive` (S4-Q2 hai bước) |
 | return_handled_at, return_handled_by | timestamp(6) NULL, uuid NULL FK users SET NULL | xử lý hàng hoàn |
@@ -60,7 +60,7 @@ CHECK thêm tay (cột mới NULL nên chạy được trên dữ liệu cũ):
 - `(carrier IS NULL) = (tracking_number IS NULL) AND (carrier IS NULL) = (handed_over_at IS NULL)`; `tracking_number IS NULL OR tracking_number ~ '^[A-Z0-9-]{4,40}$'`; `active_tracking_number IS NULL OR active_tracking_number = tracking_number`.
 - `delivered_at IS NULL OR status = 'completed'`; `confirmed_by IS NULL OR confirmed_at IS NOT NULL`.
 - `status <> 'cancel_requested' OR cancel_requested_at IS NOT NULL`; `cancel_request_outcome IS NULL OR (cancel_request_outcome IN ('approved','rejected') AND cancel_requested_at IS NOT NULL)`.
-- `cancel_reason_code IS NULL OR (status = 'cancelled' AND cancel_reason_code IN ('unreachable','declined_on_call','refused','undeliverable','other'))`.
+- `cancel_reason_code IS NULL OR (status = 'cancelled' AND cancel_reason_code IN ('unreachable','declined_on_call','customer_request','refused','undeliverable','other'))`.
 - `returned_from_transit = false OR status = 'cancelled'`; `(return_handled_at IS NULL) = (return_decision IS NULL)`; `return_handled_at IS NULL OR returned_from_transit`; `return_decision IS NULL OR return_decision IN ('restocked','written_off')`; `return_decision <> 'restocked' OR stock_restored_at IS NOT NULL`.
 - `delivery_refused_at IS NULL OR status = 'cancelled'`.
 
@@ -119,8 +119,9 @@ Một nguồn sự thật: `backend/src/modules/order-admin/order-state.ts` xu�
 | T2 | `confirm` | `to_ship` | cần gọi | `to_ship` | S | `confirmed_at/by` | `confirmed` | không |
 | T3 | `ship` | `to_ship` | không cần gọi hoặc đã xác nhận (nếu không: `condition-not-met`) | `to_receive` | S | `carrier`, `tracking_number`, `active_tracking_number`, `handed_over_at/by`; tồn không đổi; `payment_status` giữ `pending` | `shipped` | `order-shipped` |
 | T4 | `deliver` | `to_receive` | - | `completed` | S | `payment_status = paid`, `paid_at = COALESCE(paid_at, $now)`, `delivered_at/by`; không hoàn tác | `delivered` | `order-delivered` |
-| T5 | `cancel` `unreachable` | `to_ship` | cần gọi + >= 3 lần `call_attempt` trong 24 giờ từ lần đầu (không: `condition-not-met`) | `cancelled` | S | hoàn tồn + trả voucher; `cancelled_by = shop`, `cancel_reason_code`, `cancel_reason` = câu chuẩn; `active_tracking_number` NULL | `cancelled` | `order-cancelled-shop` |
+| T5 | `cancel` `unreachable` | `to_ship` | cần gọi + có 3 lần `call_attempt` **liên tiếp** mà lần cuối - lần đầu <= 24 giờ 00 phút (cửa sổ 24 giờ bất kỳ, `<=`; không đủ, kể cả 24 giờ 01 phút: `condition-not-met` 409). SQL: `lead(at, 2) OVER (ORDER BY at) - at <= interval '24 hours'` tồn tại. Chỉ **mở** lý do trong `allowedActions`, không tự huỷ | `cancelled` | S | hoàn tồn + trả voucher; `cancelled_by = shop`, `cancel_reason_code`, `cancel_reason` = câu chuẩn; `active_tracking_number` NULL | `cancelled` | `order-cancelled-shop` |
 | T6 | `cancel` `declined_on_call` | `to_ship` | cần gọi | `cancelled` | S | như T5 | `cancelled` | `order-cancelled-shop` |
+| T6a | `cancel` `customer_request` | `to_ship` | `note` 5-250 (422 `field: note`); **mọi** đơn `to_ship` (cần gọi hay không, đã xác nhận hay chưa) | `cancelled` | S | hoàn tồn + trả voucher như T5, nhưng `cancelled_by = customer` (sự kiện vẫn `actor = shop`, ghi tên + vai trò nhân viên, `reason_code = customer_request`); **không** ghi `delivery_refused_at` (không tính giới hạn COD); `cancel_reason` = "Đơn đã được huỷ theo yêu cầu của bạn."; `cancel_note` = note; `active_tracking_number` NULL | `cancelled` | `order-cancelled-shop` (câu `customer_request`) |
 | T7 | `cancel` `refused` | `to_receive` | - | `cancelled` | S | **chưa** hoàn tồn; trả voucher; `delivery_refused_at = $now`; `returned_from_transit = true`; `active_tracking_number` NULL | `cancelled` | `order-cancelled-shop` |
 | T8 | `cancel` `undeliverable` | `to_receive` | - | `cancelled` | S | như T7 nhưng **không** ghi `delivery_refused_at` | `cancelled` | `order-cancelled-shop` |
 | T9 | `cancel` `other` | `to_ship` | `note` 5-250 | `cancelled` | **A** | như T5 | `cancelled` | `order-cancelled-shop` |
@@ -136,7 +137,7 @@ Một nguồn sự thật: `backend/src/modules/order-admin/order-state.ts` xu�
 
 Mọi cặp (trạng thái, hành động) không nằm trong bảng (kể cả `to_pay`, `completed`, `cancelled` thường là chỉ xem; khách huỷ ở `to_receive` / `completed` / `cancelled` / `cancel_requested` / sau khi bị từ chối) -> `409 invalid-transition` (admin) hoặc `409 not-cancellable` (khách), **không đổi dữ liệu, không sự kiện, không thư**. Thứ tự kiểm: mục 6.2. Mỗi dòng thao tác thành công = **đúng 1** `order_events` (BR-ADM-11).
 
-Ghi chú: bảng cho thấy xác nhận không đổi trạng thái; đơn `to_ship` đã xác nhận (hoặc không cần gọi) staff chỉ có thể bàn giao, hoặc admin huỷ `other`; staff không huỷ được (theo BR-ADM-02/24, xem mục 15 #5).
+Ghi chú: bảng cho thấy xác nhận không đổi trạng thái; đơn `to_ship` đã xác nhận (hoặc không cần gọi) staff chỉ có thể bàn giao, hoặc admin huỷ `other`; khi khách gọi hotline xin huỷ thì staff / admin huỷ bằng `customer_request` (T6a, BR-ADM-24; xem mục 15 #5). `cancel_requested` không huỷ bằng lý do nào ở `.../cancel` (-> `invalid-transition`, AC-ADM-50).
 
 ## 5. Module backend
 
@@ -166,7 +167,7 @@ backend/test/helpers.ts                                    + loginStaff(), login
 ```
 `requireAuth('admin')` hiện có đã: đọc `role` và `is_active` từ `users` ở mỗi yêu cầu, loại `member`, xoá cookie khi hỏng (BR-ADM-01, 03; AC-ADM-03). `requireRole('staff','admin')` chỉ là lưới an toàn (member đã bị loại). **Quyền theo hành động** (`cancel other` chỉ admin) kiểm trong controller **trước** khi đọc đơn (mục 6.2) rồi lặp lại trong `computeAllowedActions` / `actions/cancel.ts` (phòng thủ hai lớp: nếu `reason` thuộc `adminOnlyCancelReasons` mà `role <> admin` -> `Errors.forbidden()`).
 
-Ghi chú: HTTP admin đã đổi vai trò / vô hiệu có hiệu lực ngay (AC-ADM-03) nhờ đọc `users` mỗi yêu cầu; **không** có `revokeAllUserSessions` ở Slice 4 (xem mục 15 #10).
+Ghi chú: HTTP admin đã đổi vai trò / vô hiệu có hiệu lực ngay (AC-ADM-03) nhờ đọc `users` mỗi yêu cầu; **không** có `revokeAllUserSessions` ở Slice 4 (xem mục 15 #8).
 
 ## 6. Giao dịch, khoá, đồng thời, idempotency
 
@@ -200,7 +201,7 @@ sau commit: nếu sự kiện có email_template -> scheduleEventEmail(eventId)
 `orders` (dòng đích) -> `vouchers` (theo `voucher_id` tăng dần) -> `product_variants` (theo `variant_id` tăng dần) -> `order_events` / `idempotency_keys` (chỉ INSERT). Mọi hành động Slice 4 và đường huỷ khách / hết hạn tuân theo, nên không có chu trình khoá. Hành động chạm đơn nào cũng khoá **một** đơn; không có thao tác nhiều đơn.
 
 ### 6.4 Dịch vụ huỷ dùng chung (lát 4.3)
-Tách `cancelOrderTx(tx, p)` hiện có thành tham số: `{ orderId, actor: 'customer'|'shop'|'system', actorUser?: { id, name, role }, allowedFrom, restoreStock: boolean, reason: string|null /* cột cancel_reason: hiển thị khách */, internalNote?, reasonCode?, markReturned?: boolean, markRefused?: boolean, eventKind, eventDetail, emailTemplate }`. Thân hàm: khoá dòng đơn -> `UPDATE orders SET status='cancelled', cancelled_at, cancelled_by, cancel_reason, [cancel_reason_code, cancel_note], [stock_restored_at = $now nếu restoreStock], [returned_from_transit = true nếu markReturned], [delivery_refused_at = $now nếu markRefused], active_tracking_number = NULL WHERE order_id AND status = ANY(allowedFrom) AND stock_restored_at IS NULL RETURNING ...` -> trả voucher (giữ nguyên truy vấn hiện có) -> **nếu `restoreStock`**: cộng tồn từng dòng theo `variant_id` -> `insertOrderEvent`. Khác Slice 3: `stock_restored_at` chỉ đặt khi thật sự hoàn (huỷ từ `to_receive` để NULL tới khi T11). `restockReturnedTx` làm riêng T11: `UPDATE orders SET stock_restored_at=$now, return_handled_at, return_decision='restocked' ... WHERE returned_from_transit AND return_handled_at IS NULL AND stock_restored_at IS NULL` rồi cộng tồn.
+Tách `cancelOrderTx(tx, p)` hiện có thành tham số: `{ orderId, actor: 'customer'|'shop'|'system' /* actor của sự kiện */, cancelledBy: 'customer'|'shop'|'system' /* cột cancelled_by; customer_request = 'customer' dù actor = 'shop' */, actorUser?: { id, name, role }, allowedFrom, restoreStock: boolean, reason: string|null /* cột cancel_reason: hiển thị khách */, internalNote?, reasonCode?, markReturned?: boolean, markRefused?: boolean, eventKind, eventDetail, emailTemplate }`. Thân hàm: khoá dòng đơn -> `UPDATE orders SET status='cancelled', cancelled_at, cancelled_by, cancel_reason, [cancel_reason_code, cancel_note], [stock_restored_at = $now nếu restoreStock], [returned_from_transit = true nếu markReturned], [delivery_refused_at = $now nếu markRefused], active_tracking_number = NULL WHERE order_id AND status = ANY(allowedFrom) AND stock_restored_at IS NULL RETURNING ...` -> trả voucher (giữ nguyên truy vấn hiện có) -> **nếu `restoreStock`**: cộng tồn từng dòng theo `variant_id` -> `insertOrderEvent`. Khác Slice 3: `stock_restored_at` chỉ đặt khi thật sự hoàn (huỷ từ `to_receive` để NULL tới khi T11). `restockReturnedTx` làm riêng T11: `UPDATE orders SET stock_restored_at=$now, return_handled_at, return_decision='restocked' ... WHERE returned_from_transit AND return_handled_at IS NULL AND stock_restored_at IS NULL` rồi cộng tồn.
 Khách (`cancelByCustomer`): `to_pay` -> `cancelOrderTx` như cũ; `to_ship` -> nếu `toShipCancelMode = 'request'` gọi `requestCancelTx` (C1) và **không** gửi email "đã huỷ" (không có thư cho yêu cầu); nếu `'direct'` -> `cancelOrderTx` như Slice 3. Khoá dòng đơn dùng chung với admin nên AC-ADM-40 (khách yêu cầu đua nhân viên bàn giao) chỉ có một bên thắng: bên thua thấy trạng thái đã đổi -> khách `not-cancellable`, nhân viên `order-state-changed`.
 
 ### 6.5 Bảo vệ "tối đa 1 hiệu ứng phụ"
@@ -229,7 +230,7 @@ Counts: một truy vấn `COUNT(*) FILTER (WHERE <tab>)` x8 + `COUNT(*)` (đảm
 
 Tìm `q` (sau trim, `char_length > 100` -> 422 `field: q`; rỗng bỏ qua): OR của (1) mã: bỏ `#`, chữ hoa, nếu độ dài >= 6 -> `code LIKE $upper || '%'` (thoát `\ % _`); (2) SĐT: bỏ khoảng trắng / `.`/`-`, `+84` / `84` đầu -> `0`; nếu toàn chữ số và >= 4 -> `recipient_phone LIKE '%' || $d || '%'`; (3) email: `email LIKE '%' || lower($q) || '%'` (cột đã chữ thường); (4) tên: bỏ dấu cả hai phía bằng `translate()` (`foldViSql(recipient_name) LIKE '%' || foldVi($q) || '%'`, hằng bảng ánh xạ `àáảãạăắằ... -> a`, `đ -> d`, có `lower()`). Mọi `LIKE` dùng `ESCAPE '\'` và thoát `%`, `_`, `\` từ `q` (nên `q = '%'` khớp 0 đơn, AC-ADM-06). Không dùng extension (`unaccent`) hay thêm cột (không UPDATE dữ liệu cũ); chi phí quét tuần tự chấp nhận ở quy mô đồ án, kèm cảnh báo ở mục 15 R2.
 
-`list`: `ORDER BY created_at DESC, code DESC LIMIT pageSize OFFSET (page-1)*pageSize` + `COUNT(*)` cùng `WHERE`; mỗi dòng cần `itemCount` = `SUM(order_items.quantity)` (subquery tương quan hoặc `LEFT JOIN LATERAL`), `tab` tính bằng `CASE` cùng biểu thức, `overdue` tính ở mapper (Should). Danh sách **không** tải `events`.
+`list`: `ORDER BY created_at DESC, code DESC LIMIT $limit OFFSET (page-1)*$limit` + `COUNT(*)` cùng `WHERE`; mỗi dòng cần `itemCount` = `SUM(order_items.quantity)` (subquery tương quan hoặc `LEFT JOIN LATERAL`), `tab` tính bằng `CASE` cùng biểu thức, `overdue` tính ở mapper (Should). Danh sách **không** tải `events`.
 
 ## 8. Email (5 thư, BR-ADM-21, 23, 28, 30, 31, 35; mailer có sẵn, text thuần)
 
@@ -238,7 +239,7 @@ Thêm vào `mail/order-templates.ts` (cùng `orderBlock`, `footer` có câu ch�
 | --- | --- | --- | --- |
 | `order-shipped` | T3 | nine2fine – Đơn #{mã} đã được giao cho đơn vị vận chuyển | mã đơn, đơn vị, mã vận đơn, ngày giao dự kiến (`estimatedFrom-To`), tổng thanh toán (COD: số tiền shipper thu), người nhận + địa chỉ, link xem / tra cứu |
 | `order-delivered` | T4 | nine2fine – Đơn #{mã} đã giao thành công | mã, ngày giao (`deliveredAt` giờ VN), sản phẩm, tổng; link chính sách đổi trả; hotline; **không** lời mời đánh giá |
-| `order-cancelled-shop` | T5-T10 | nine2fine – Đơn #{mã} đã huỷ (cùng khuôn `orderCancelledMail`) | câu chuẩn theo `reason_code` (S4-Q7): `unreachable` "Chúng tôi không liên lạc được với bạn để xác nhận đơn.", `declined_on_call` "Bạn đã báo không muốn nhận đơn.", `refused` "Đơn không được nhận khi giao hàng.", `undeliverable` "Giao hàng không thành công.", `other` "nine2fine không thể thực hiện đơn này."; **COD: không có đoạn hoàn tiền**; không in `cancel_note` |
+| `order-cancelled-shop` | T5-T10, T6a | nine2fine – Đơn #{mã} đã huỷ (cùng khuôn `orderCancelledMail`) | câu chuẩn theo `reason_code` (S4-Q7): `unreachable` "Chúng tôi không liên lạc được với bạn để xác nhận đơn.", `declined_on_call` "Bạn đã báo không muốn nhận đơn.", `refused` "Đơn không được nhận khi giao hàng.", `undeliverable` "Giao hàng không thành công.", `customer_request` "Đơn đã được huỷ theo yêu cầu của bạn.", `other` "nine2fine không thể thực hiện đơn này."; **COD: không có đoạn hoàn tiền**; không in `cancel_note` |
 | `cancel-approved` | T13 | nine2fine – Yêu cầu huỷ đơn #{mã} đã được duyệt | đơn đã huỷ, tồn trả, không có thông tin hoàn tiền (COD) |
 | `cancel-rejected` | T14 | nine2fine – Yêu cầu huỷ đơn #{mã} chưa được chấp nhận | lý do từ chối, đơn vẫn được xử lý và giao, hotline, hướng dẫn gọi nếu vẫn muốn huỷ |
 
@@ -263,10 +264,10 @@ Không đổi seed Slice 3. Tài khoản staff / admin đã có ở `prisma/seed
 | Mã test | Nội dung | AC |
 | --- | --- | --- |
 | T-ADM-01 | Không cookie / `n2f_asid` hết hạn / thu hồi / chỉ có `n2f_sid`: `GET` list, `GET` detail, `POST` hành động đều 401 `unauthenticated`, không có dữ liệu đơn, `Cache-Control: no-store`; đơn không đổi | 01 (AUTH-84) |
-| T-ADM-02 | staff `cancel other` 403 (đơn / sự kiện không đổi); staff `ship` 200; admin `cancel other` 200; kiểm quyền xảy ra trước 404 / trạng thái | 02 (AUTH-85) |
-| T-ADM-03 | SQL hạ admin -> staff: `cancel other` 403 yêu cầu kế tiếp; `is_active = false`: 401 và cookie bị xoá | 03 |
+| T-ADM-02 | staff `cancel other` 403 (đơn / sự kiện không đổi); staff `ship` 200; staff `cancel customer_request` 200; admin `cancel other` 200; kiểm quyền xảy ra trước 404 / trạng thái | 02 (AUTH-85) |
+| T-ADM-03 | Vai trò đọc lại mỗi yêu cầu (cùng cookie, không đăng nhập lại): SQL hạ admin -> staff: `cancel other` 403 `forbidden` (đơn / sự kiện không đổi) và `GET` danh sách vẫn 200; SQL `is_active = false`: `GET` danh sách 401 `unauthenticated`, không có dữ liệu đơn. **Không** kiểm xoá dòng `sessions` / cookie (-> slice Admin người dùng, AC-AUTH-75) | 03 |
 | T-ADM-04 | `allowedActions`: staff không có `cancel-other`, admin có; theo trạng thái / điều kiện (chưa xác nhận: không có `ship`; < 3 lần gọi: không có `cancel-unreachable`) | 04, 09 |
-| T-ADM-05 | Phân trang: 45 đơn: mặc định 20, trang 3 = 5, trang 9 rỗng `total 45`, `pageSize` 51 / 0 -> 422 `field: pageSize` | 05 |
+| T-ADM-05 | Phân trang: 45 đơn: mặc định 20, `page=3` = 5, `page=9` rỗng `total 45`, `limit=51` / `0` -> 422 `field: limit`; phản hồi có `page`, `limit` (không có `pageSize`) | 05 |
 | T-ADM-06 | `q`: mã đủ / `#` / tiền tố 8 ký tự, SĐT `0912...`, `+84912...`, `5678`, email hoa, tên không dấu, `%` -> 0, 101 ký tự -> 422, rỗng -> tất cả | 06 |
 | T-ADM-07 | Counts khớp danh sách ở mọi tab; tổng 8 tab = `all`; sau `confirm`: `to-confirm` giảm 1, `to-fulfil` tăng 1; counts có bộ lọc khớp list có bộ lọc | 07 |
 | T-ADM-08 | Lọc ngày GMT+7 biên (00:30 và 23:59 hôm trước), `payment`, `from > to` 422, kết hợp AND với `view` + `q` | 08 |
@@ -281,7 +282,7 @@ Không đổi seed Slice 3. Tài khoản staff / admin đã có ở `prisma/seed
 | T-ADM-17 | `Idempotency-Key`: cùng khoá + body -> 200 `Idempotency-Replayed: true`, không sự kiện / thư mới; khác body hoặc khác người -> 409 `idempotency-conflict`; lỗi 4xx không lưu khoá; hai request cùng khoá song song: 1 thực hiện | 17 |
 | T-ADM-18 | `call-attempts`: A hợp lệ nhiều lần (250 / 251 ký tự), vẫn `to_ship` và `to-confirm`; đơn không cần gọi, đã xác nhận, `completed`: 409 | 18 |
 | T-ADM-19 | `confirm`: lưu giờ + người, vẫn `to_ship`, sang `to-fulfil`; lần hai 409 | 19 |
-| T-ADM-20 | `unreachable`: 2 lần -> 409 `condition-not-met`; (t, t+23h, t+25h) -> 409; 3 lần trong 2 giờ -> 200 | 20 |
+| T-ADM-20 | `unreachable` (đồng hồ giả, `call_attempt` chèn bằng SQL): 2 lần -> 409 `condition-not-met`; (t, t+23h, t+25h) -> 409; 3 lần trong 2 giờ -> 200; (t, t+30h, t+31h, t+32h) -> 200; **biên**: (t, t+12h, t+24h00m00s) -> 200, (t, t+12h, t+24h01m) -> 409 `condition-not-met`; sau 409 `allowedActions` không có `cancel-unreachable`, đơn vẫn `to_ship` | 20 |
 | T-ADM-21 | `unreachable` thành công: `cancelled`, `cancelledBy shop`, `pending`, tồn +2, voucher trả, email có câu chuẩn, `delivery_refused_at` NULL | 21 |
 | T-ADM-22 | `declined_on_call`: chưa xác nhận 200 (tồn hoàn, email); đã xác nhận 409; đơn không cần gọi 409 | 22 |
 | T-ADM-23 | `ship` validate: carrier 1 / 51, mã 3 / `ab c!` / 41 ký tự, mã trùng đơn chưa huỷ -> 422 đúng `field`; mã trùng đơn đã huỷ hợp lệ; `P2002` được dịch thành 422 | 23 |
@@ -308,6 +309,7 @@ Không đổi seed Slice 3. Tài khoản staff / admin đã có ở `prisma/seed
 | T-ADM-46 | `notes` 500 ký tự 200 (1 sự kiện, không có trong API khách), 501 -> 422 | 46 (Should) |
 | T-ADM-48 | Cờ `overdue`: cần gọi 3 giờ làm việc, `cancel_requested` 25 giờ, `to_receive` quá `estimated_to`; trong hạn không có cờ; `addWorkingHours` đơn vị test riêng (qua Chủ nhật, 18:00) | 48 (Should) |
 | T-ADM-49 | Rate limit: 121 `GET` / 60 giây và 61 `POST` / 60 giây của một tài khoản -> 429 + `retryAfterSeconds`; duyệt 20 đơn liên tiếp không bị chặn; tài khoản khác không bị ảnh hưởng | 49 (Should) |
+| T-ADM-50 | `customer_request`: note rỗng / 4 / 251 -> 422 `field: note`, 5 -> 200 cho đơn chưa xác nhận, đã xác nhận, không cần gọi (staff và admin): `cancelled`, `cancelledBy customer`, tồn hoàn đúng 1 lần, voucher trả, `payment pending`, 1 sự kiện ghi tên + vai trò NV, `delivery_refused_at` NULL (COD không bị khoá: `quote` cùng SĐT vẫn mở), email có "Đơn đã được huỷ theo yêu cầu của bạn." và không chứa note; `to_receive` và `cancel_requested` -> 409 `invalid-transition`; lần hai 409; `allowedActions` có `cancel-customer-request` ở mọi `to_ship` | 50 |
 | T-ADM-60 | Tích hợp: `POST /orders` COD cần gọi -> call-attempt x3 -> `unreachable`; và đặt -> confirm -> ship -> deliver; tồn khớp DB sau mỗi bước | 21, 24, 26 |
 | T-ADM-90 | Schema: CHECK/UNIQUE mới (mã vận đơn trùng đơn chưa huỷ bị chặn, `delivered_at` chỉ ở `completed`, `cancel_requested` cần `cancel_requested_at`...); mọi bảng còn RLS; `active_tracking_number` NULL sau huỷ | 45 |
 
@@ -317,9 +319,9 @@ AC chỉ có phần FE / thật: AC-ADM-04 (menu, "Chưa khả dụng", không g
 
 1. **4.1 Nền**: migration + Prisma + `lib/errors.ts` (3 mã, `currentStatus`, `order`) + `noStore` + `app.ts` mount + rate limit key + `ADMIN_ASSUMPTIONS`; `order-event.ts` (`insertOrderEvent`, **sửa mọi nơi hiện đang `INSERT INTO order_events`** để đi qua nó và đặt `kind`); test T-ADM-01..03, 45, 90. FE: cờ, đăng nhập HTTP, menu, "Chưa khả dụng", ma trận quyền.
 2. **4.2 Đọc**: `order-admin.query.ts`, `order-admin.mapper.ts`, `GET list / counts / detail`, DTO khách (6.6); T-ADM-04..10, 12, 41-phần BE.
-3. **4.3 Gọi xác nhận + dịch vụ huỷ dùng chung**: refactor `cancelOrderTx` (6.4) giữ nguyên test Slice 3 xanh; `runAction`; T1, T2, T5, T6, T9; T-ADM-11, 13, 18-22, 29-30.
+3. **4.3 Gọi xác nhận + dịch vụ huỷ dùng chung**: refactor `cancelOrderTx` (6.4) giữ nguyên test Slice 3 xanh; `runAction`; T1, T2, T5, T6, T6a, T9; T-ADM-11, 13, 18-22, 29-30, 50.
 4. **4.4 Bàn giao, giao xong, hàng hoàn**: T3, T4, T7, T8, T10-T12; email `order-shipped`, `order-delivered`, `order-cancelled-shop`; T-ADM-16, 17, 23-28, 31-35, 43.
-5. **4.5 Yêu cầu huỷ** (chờ S4-Q1): C1, T13, T14, `toShipCancelMode`, email 2 mẫu; T-ADM-14, 15, 36-40. Đồng thời sửa `assumptions.ts` (mục 14) và FE storefront.
+5. **4.5 Yêu cầu huỷ** (S4-Q1 đã trả lời; phát hành `toShipCancelMode: 'request'`; không còn bị chặn bởi câu hỏi, chỉ đi sau 4.3 / 4.4): C1, T13, T14, `toShipCancelMode`, email 2 mẫu; T-ADM-14, 15, 36-40. Đồng thời sửa `assumptions.ts` (mục 14) và FE storefront.
 6. **4.6 Should**: `notes`, `overdue`, rate limit; T-ADM-46, 48, 49.
 7. **4.7 Nghiệm thu thật**: Orchestrator / Thắng chạy `migrate deploy` hai lần, hai nhánh đơn thật.
 
@@ -328,7 +330,7 @@ Mỗi lát: `tsc --noEmit` và `npm test` pass (M-1 vitest crash: chạy 3 lần
 ## 13. Điểm FE phải đổi (admin FE đang là mock, chỉ đọc code FE; việc của frontend-dev)
 
 1. **Cờ cấu hình**: thêm `adminOrdersMode: 'mock' | 'http'` vào `ApiConfig` (`core/api-config.ts`, `api-config.e2e.ts` giữ `mock`), độc lập `mode`, `authMode`... `admin-providers.ts`: `bind()` nhận khoá `'adminOrdersMode'`; `ADMIN_ORDERS_API` -> `HttpAdminOrdersApi` khi `http`. Cần `authMode = 'http'` (admin login thật, cookie `n2f_asid`): cấu hình `adminOrdersMode: http` + `authMode: mock` là sai (không có cookie) - FE `console.warn`/chặn khi khởi động. Các `ADMIN_*_API` khác không đổi (vẫn `mode`).
-2. **`HttpAdminOrdersApi`**: `GET /admin/orders` (`view`, `q`, `payment`, `from`, `to`, `page`, `pageSize`), `GET /admin/orders/counts` (badge tab), `GET /admin/orders/{code}`, 9 hành động `POST` (mỗi lần mang `X-Requested-With: n2f` qua interceptor có sẵn, `withCredentials`, `expectedStatus` lấy từ đơn đang hiển thị, `Idempotency-Key` sinh một lần mỗi ý định và dùng lại khi Thử lại). Lỗi đọc theo `error.code` (BR-ADM-34): `order-state-changed` -> thay đơn bằng `error.order`, toast "Đơn vừa được cập nhật bởi người khác."; `invalid-transition` / `condition-not-met` -> tải lại đơn; `forbidden` -> ẩn nút; `unauthenticated` -> `/admin/login`; `rate-limited` -> `retryAfterSeconds`; mất mạng / 5xx -> giữ dữ liệu đã nhập, "Thử lại" **tải lại đơn trước** (BR-ADM-15). Không cập nhật lạc quan; nút khoá tới khi có kết quả.
+2. **`HttpAdminOrdersApi`**: `GET /admin/orders` (`view`, `q`, `payment`, `from`, `to`, `page`, `limit`; không dùng `pageSize`), `GET /admin/orders/counts` (badge tab), `GET /admin/orders/{code}`, 9 hành động `POST` (mỗi lần mang `X-Requested-With: n2f` qua interceptor có sẵn, `withCredentials`, `expectedStatus` lấy từ đơn đang hiển thị, `Idempotency-Key` sinh một lần mỗi ý định và dùng lại khi Thử lại). Lỗi đọc theo `error.code` (BR-ADM-34): `order-state-changed` -> thay đơn bằng `error.order`, toast "Đơn vừa được cập nhật bởi người khác."; `invalid-transition` / `condition-not-met` -> tải lại đơn; `forbidden` -> ẩn nút; `unauthenticated` -> `/admin/login`; `rate-limited` -> `retryAfterSeconds`; mất mạng / 5xx -> giữ dữ liệu đã nhập, "Thử lại" **tải lại đơn trước** (BR-ADM-15). Không cập nhật lạc quan; nút khoá tới khi có kết quả.
 3. **Ánh xạ trạng thái** (K1; API giữ 6 trạng thái, FE `OrderStatus` mock có 11):
    | API (`status` + dữ liệu) | FE `OrderStatus` | Nhãn |
    | --- | --- | --- |
@@ -342,14 +344,14 @@ Mỗi lát: `tsc --noEmit` và `npm test` pass (M-1 vitest crash: chạy 3 lần
    | (bỏ ở HTTP) | `delivering`, `delivery-failed`, `returned-to-sender`, `return-requested`, `returned` | không hiện ở filter / badge |
 4. **Ánh xạ thanh toán** (K2; `PaymentState` mock = `paid/unpaid/cod/refunded/void`): COD + `pending` + chưa huỷ -> `cod` ("Thu khi giao"); `paid` -> `paid`; `bank_transfer` + `pending` (`to_pay`) -> `unpaid`; `cancelled` + COD + `pending` -> `void` ("Không thu tiền"); `refunded` / `partially_refunded` -> `refunded`; `failed` -> `unpaid`. Phương thức: API `bank-transfer` = FE `bank-transfer` (không có `card`).
 5. **Tab danh sách**: giữ các tab cần thiết ánh xạ 1-1 vào `view`: `all`, `pending-payment`, `to-confirm` ("Cần gọi"), `to-fulfil`, `in-transit`, `cancel-requests`, `returning`, `completed`, `cancelled`; badge lấy từ `/counts`. Bộ lọc `payment`, ngày `from/to` (GMT+7), ô tìm `q` (<= 100 ký tự, debounce).
-6. **Hành động**: nút lấy từ `allowedActions`, không tự suy: `call-attempt`, `confirm`, `ship` (hộp thoại đơn vị + mã vận đơn; **bỏ `estimatedAt`** của `ShipInput` mock, K5; gợi ý GHN/GHTK/Viettel Post/J&T nhưng nhập tự do), `deliver`, `cancel-*` (hộp thoại chọn lý do theo `allowedActions`, ghi chú bắt buộc khi `other`), `restock` / `write-off`, `approve-cancel` / `reject-cancel` (lý do), `add-note`, `print-slip`. Xoá các hành động mock không còn trong API (đổi địa chỉ, sửa dòng hàng, trả hàng, delivering...): ẩn ở `http`.
+6. **Hành động**: nút lấy từ `allowedActions`, không tự suy: `call-attempt`, `confirm`, `ship` (hộp thoại đơn vị + mã vận đơn; **bỏ `estimatedAt`** của `ShipInput` mock, K5; gợi ý GHN/GHTK/Viettel Post/J&T nhưng nhập tự do), `deliver`, `cancel-*` (hộp thoại chọn lý do theo `allowedActions`, ghi chú bắt buộc khi `other` và `customer_request`), `restock` / `write-off`, `approve-cancel` / `reject-cancel` (lý do), `add-note`, `print-slip`. Xoá các hành động mock không còn trong API (đổi địa chỉ, sửa dòng hàng, trả hàng, delivering...): ẩn ở `http`.
 7. **Chi tiết**: timeline từ `timeline` (mới nhất trước; `actor.type`/`name`/`role`; `note` nội bộ); khối "Vận chuyển" (`shipment`), "Xác nhận" (`confirmation`), "Yêu cầu huỷ" (`cancelRequest`), "Hàng hoàn" (`returnHandling`), "Cuộc gọi" (`callAttempts.inFirstDay` / 3); cờ `overdue`.
-8. **`permissions.ts` (ma trận)**: staff **thêm** `orders.cancel` (bốn lý do cố định) - hiện staff không có; admin có thêm quyền **mới** `orders.cancel-other` (huỷ lý do khác). `orders.process` bao gồm ghi cuộc gọi / xác nhận / bàn giao / giao xong / hàng hoàn / duyệt-từ chối. `returns.process`, `orders.export`: giữ nhưng ẩn ở `http` (Won't). Cập nhật `PERMISSION_MATRIX` (màn Cài đặt vẫn mock): dòng "Hủy đơn" cho cả hai vai trò, thêm dòng "Hủy đơn với lý do khác" chỉ admin. Đây chỉ là trải nghiệm: máy chủ mới là chốt chặn (BR-ADM-04).
+8. **`permissions.ts` (ma trận)**: staff **thêm** `orders.cancel` (năm lý do cố định, gồm `customer_request`) - hiện staff không có; admin có thêm quyền **mới** `orders.cancel-other` (huỷ lý do khác). `orders.process` bao gồm ghi cuộc gọi / xác nhận / bàn giao / giao xong / hàng hoàn / duyệt-từ chối. `returns.process`, `orders.export`: giữ nhưng ẩn ở `http` (Won't). Cập nhật `PERMISSION_MATRIX` (màn Cài đặt vẫn mock): dòng "Hủy đơn" cho cả hai vai trò, thêm dòng "Hủy đơn với lý do khác" chỉ admin. Đây chỉ là trải nghiệm: máy chủ mới là chốt chặn (BR-ADM-04).
 9. **Route và menu ở HTTP** (BR-ADM-36, AC-ADM-04, 44): `/admin` -> `/admin/orders`; menu chỉ "Đơn hàng"; mọi route admin khác (dashboard, products, inventory, customers, promotions, reports, content, settings, returns) -> trang "Chưa khả dụng" **không** inject mock API nào nên không có dữ liệu mock và không request nào khác ngoài `/api/admin/auth/*` và `/api/admin/orders/*`; tìm kiếm toàn cục (`ADMIN_SEARCH_API`) ẩn. `mock` giữ nguyên hành vi hiện tại (số test Playwright `admin.spec.ts` pass không giảm).
 10. **Storefront** (BR-ADM-33; phần 4.5): `cancel_requested` -> "Đang chờ duyệt huỷ" + "Đã gửi yêu cầu huỷ", ẩn nút Huỷ; `to_receive` -> "Đang vận chuyển" + `shipment.carrier` + `trackingNumber`; `completed` -> "Hoàn thành"; nút ở `to_ship` ghi "Gửi yêu cầu huỷ" khi `cancelMode = 'request'`; `cancelRequest.outcome = rejected` -> không có nút, câu "Yêu cầu huỷ chưa được chấp nhận" + `rejectReason` + hướng dẫn gọi hotline (S4-Q6). `mapOrderStatus` (Slice 3 mục 8.9) thêm `cancel_requested` -> `cancel-requested`. Timeline khách hiện `actor = nine2fine` / "Khách".
 11. **Tài khoản demo**: dùng tài khoản seed BE (`admin@nine2fine.test`, `staff@nine2fine.test`), không `@nine2fine.vn` của mock (K9).
 
-## 14. Thay đổi phần Slice 3 (draft, cần Orchestrator duyệt khi khoá)
+## 14. Thay đổi phần Slice 3 (locked 2026-11-08 cùng Slice 4)
 
 | # | Chỗ | Loại | Chi tiết |
 | --- | --- | --- | --- |
@@ -362,7 +364,7 @@ Mỗi lát: `tsc --noEmit` và `npm test` pass (M-1 vitest crash: chạy 3 lần
 | 7 | `ErrorResponse.error` | Cộng thêm 2 trường | `currentStatus`, `order` (`AdminOrder`) |
 
 `backend/src/config/assumptions.ts`:
-- **Q4 của Slice 3** (khối chú thích đầu file + `customerCancellableFrom: ['to_pay', 'to_ship']`): thay bằng `toShipCancelMode: 'direct' | 'request'` (mặc định `'direct'` cho tới lát 4.5 rồi đổi `'request'`; dùng ở `cancelByCustomer` và `toOrderDto.cancelMode/canCancel`) và `customerDirectCancelFrom: ['to_pay']`. Cập nhật chú thích: "Q4 (Slice 3) -> thay bởi S4-Q1". **Đặt tên:** PRD Slice 3 đánh số "Q4" cho huỷ `to_ship`, PRD Slice 4 dùng "Q4" cho phân quyền; code dùng tiền tố `S4-` để khỏi nhầm.
+- **Q4 của Slice 3** (khối chú thích đầu file + `customerCancellableFrom: ['to_pay', 'to_ship']`): thay bằng `toShipCancelMode: 'direct' | 'request'` (mặc định phát hành `'request'` cùng lát 4.5; trước lát 4.5 code giữ `'direct'` để storefront không đổi hành vi sớm; dùng ở `cancelByCustomer` và `toOrderDto.cancelMode/canCancel`) và `customerDirectCancelFrom: ['to_pay']`. Cập nhật chú thích: "Q4 (Slice 3) -> thay bởi S4-Q1". **Đặt tên:** PRD Slice 3 đánh số "Q4" cho huỷ `to_ship`, PRD Slice 4 dùng "Q4" cho phân quyền; code dùng tiền tố `S4-` để khỏi nhầm.
 - Thêm `ADMIN_ASSUMPTIONS` (mục 0).
 - `systemCancellableFrom: ['to_pay']` giữ nguyên.
 
@@ -370,18 +372,20 @@ Mỗi lát: `tsc --noEmit` và `npm test` pass (M-1 vitest crash: chạy 3 lần
 
 ## 15. Phát hiện ở PRD / điểm cần Orchestrator-PO xem, rủi ro
 
-PRD không sửa theo yêu cầu; danh sách để xử lý:
-1. **BR-CHK-27 (PRD Slice 3) ghi `unauthorized`**, contract đã chốt `unauthenticated` (PRD Slice 4 K10 đã tự sửa; PRD Slice 3 chưa).
-2. **Tên phương thức**: BR-ADM-08 viết `bank_transfer` (tên enum DB), contract dùng `bank-transfer` (`PaymentMethod`); admin API theo contract (`payment=bank-transfer`).
-3. **Tên tham số phân trang**: AC-ADM-05 dùng `pageSize`, `GET /orders` (Slice 3, khách) dùng `limit`; admin theo PRD (`page`, `pageSize`); khác nhau có chủ ý, cần ghi chú cho FE.
-4. **Hướng sắp xếp timeline**: BR-ADM-10 mới nhất trước (admin) trái `Order.timeline` Slice 3 cũ nhất trước (khách); giữ cả hai theo từng API.
-5. **Khoảng trống quyền**: BR-ADM-13 cho `to_ship` -> huỷ, nhưng BR-ADM-24 chỉ cho staff huỷ lý do cần gọi (`unreachable`, `declined_on_call`); đơn `to_ship` đã xác nhận / không cần gọi staff **không huỷ được** (chỉ admin `other`, hoặc khách yêu cầu rồi duyệt). Có chủ ý (K4)? Nếu không, thêm lý do huỷ cho đơn đã xác nhận.
-6. **"Q4" trùng số** giữa Slice 3 (huỷ `to_ship`) và Slice 4 (phân quyền) - xem mục 14.
-7. **Chữ "tính từ lần đầu" ở BR-ADM-18** chỉ xét cửa sổ 24 giờ đầu tiên (A2 trong AC-ADM-20: t, t+23h, t+25h = không đủ); cửa sổ trượt sẽ cho kết quả khác (t+23h, t+25h + một lần nữa trong 24 giờ). Cài đặt theo cửa sổ đầu, ghi ở contract.
-8. **AC-ADM-03 "phiên bị xoá"**: `authenticate` hiện từ chối và xoá **cookie**, không xoá / thu hồi dòng `sessions` (phiên của tài khoản vô hiệu vẫn nằm trong DB nhưng không dùng được vì `is_active` đọc mỗi yêu cầu). Nếu cần thu hồi dòng thật, thuộc slice Admin người dùng (`revokeAllUserSessions`, handoff 2026-11-07); AC kiểm bằng hành vi (401 + cookie xoá).
-9. **BR-ADM-41 "theo tài khoản"** cần mở rộng `createRateLimit` (hiện theo IP); đã tính ở mục 5, 9.
-10. **Thứ tự kiểm `expectedStatus` trước `invalid-transition`** (BR-ADM-13 vs 14 không nói ai trước): chọn `order-state-changed` trước khi `expectedStatus` cũ; nếu FE gửi trạng thái đúng thì ra `invalid-transition` (AC-ADM-13, 19 vẫn đúng khi test gửi `expectedStatus` = trạng thái thật).
-11. **Thư xác nhận cho yêu cầu huỷ của khách** (C1) và **thư "đã quyết định hàng hoàn"**: PRD không có; không làm.
+
+Tất cả đã giải (2026-11-08, `docs/decisions.md` + PRD cập nhật):
+1. **BR-CHK-27 `unauthorized`**: đã giải, dùng `unauthenticated` (401) / `forbidden` (403) (PRD Slice 4 K10; contract không đổi).
+2. **Tên phương thức** `bank_transfer` (DB) vs `bank-transfer` (contract): đã giải, admin API theo contract (`payment=bank-transfer`); mapper đổi qua lại.
+3. **Phân trang**: đã giải, admin dùng `page` + `limit` (1..50, mặc định 20, lỗi `field: limit`) như Slice 3 (BR-ADM-05); không còn `pageSize`.
+4. **Hướng sắp xếp timeline**: đã giải, admin mới nhất trước, khách cũ nhất trước (chủ ý, BR-ADM-10); contract ghi rõ ở cả hai mô tả.
+5. **Khoảng trống quyền `to_ship` đã xác nhận**: đã giải bằng lý do mới `customer_request` (staff + admin, mọi đơn `to_ship`, note 5-250, `cancelledBy = customer`, không tính giới hạn COD; BR-ADM-02, 24, 28; AC-ADM-50). Staff có 5 lý do; chỉ admin có `other`.
+6. **"Q4" trùng số**: đã giải, code dùng tiền tố `S4-` (mục 14).
+7. **BR-ADM-18 "tính từ lần đầu"**: đã giải theo hướng khác bản nháp: **cửa sổ 24 giờ bất kỳ** (3 lần liên tiếp, lần cuối - lần đầu <= 24 giờ 00 phút; biên 24 giờ 00 đủ, 24 giờ 01 không; chỉ mở `unreachable`, không tự huỷ). Lỗi khi chưa đủ: `409 condition-not-met`. `callAttempts.inFirstDay` giữ tên, nghĩa = số lần lớn nhất trong một cửa sổ 24 giờ. Cập nhật T5 và T-ADM-20 (mục 4, 11).
+8. **AC-ADM-03 "phiên bị xoá"**: đã giải, kiểm bằng hành vi: vai trò đọc lại mỗi yêu cầu (hạ vai trò bằng SQL: hành động chỉ admin -> 403, `GET` vẫn 200; `is_active = false` -> 401 `unauthenticated`). Slice 4 **không** thu hồi dòng `sessions` / xoá cookie; việc đó thuộc slice Admin người dùng (AC-AUTH-75).
+9. **BR-ADM-41 "theo tài khoản"**: đã tính ở mục 5, 9 (`createRateLimit` thêm `key`).
+10. **Thứ tự kiểm `expectedStatus` trước `invalid-transition`**: đã giải ở contract + mục 6.2 (`order-state-changed` trước; test gửi `expectedStatus` = trạng thái thật cho AC-ADM-13, 19).
+11. **Thư xác nhận yêu cầu huỷ (C1) và thư "đã quyết định hàng hoàn"**: không làm (PRD không có).
+12. **S4-Q1..Q7, Q9** đã trả lời (mục 0); **S4-Q8** (COMMON-01..03) còn mở, không chặn.
 
 Rủi ro:
 | # | Vấn đề | Đề xuất |

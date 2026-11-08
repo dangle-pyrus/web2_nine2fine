@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, draft)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -73,26 +73,26 @@ info:
     ---
     # Admin đơn hàng (Slice 4)
 
-    **status: draft** (2026-11-08, backend-dev; Orchestrator khoá sau khi duyệt). Chỉ phần Slice 4 (tag `admin-orders`, schema `Admin*`, ba mã lỗi mới, hai thuộc tính mới của `ErrorResponse`, và các thay đổi cộng thêm / đổi hành vi của phần Slice 3 liệt kê ở "Thay đổi phần Slice 3" dưới đây) là `draft`; auth, catalog, phần còn lại của Slice 3 vẫn `locked`. BR/AC: `docs/product/PRD.md` mục "Slice 4: Admin đơn hàng" (BR-ADM-01..41, AC-ADM-01..49); khi mâu thuẫn, PRD thắng. Kế hoạch triển khai: `docs/api/admin-orders-implementation-plan.md`.
+    **status: locked (2026-11-08)**: Slice 4 admin-orders locked 2026-11-08, Orchestrator. Phần Slice 4 (tag `admin-orders`, schema `Admin*`, ba mã lỗi mới, hai thuộc tính mới của `ErrorResponse`, và các thay đổi cộng thêm / đổi hành vi của phần Slice 3 liệt kê ở "Thay đổi phần Slice 3" dưới đây) đã chốt; auth, catalog, phần còn lại của Slice 3 không đổi. BR/AC: `docs/product/PRD.md` mục "Slice 4: Admin đơn hàng" (BR-ADM-01..41, AC-ADM-01..50); khi mâu thuẫn, PRD thắng. Kế hoạch triển khai: `docs/api/admin-orders-implementation-plan.md`.
 
-    **Mặc định PO chờ Thắng (đánh dấu `[chờ Thắng S4-Qn]`, gom ở `backend/src/config/assumptions.ts`; đổi thì sửa theo quy trình):** S4-Q1 khách ở `to_ship` chỉ gửi yêu cầu huỷ; S4-Q2 đơn bị từ chối nhận / giao không thành: huỷ ngay, cộng tồn ở bước "xử lý hàng hoàn" riêng; S4-Q3 giờ làm việc 08:00-18:00 thứ Hai-thứ Bảy, duyệt huỷ trong 24 giờ (chỉ cờ); S4-Q4 staff huỷ 4 lý do cố định, chỉ admin huỷ lý do `other`; S4-Q5 đơn vị vận chuyển nhập tự do 2-50 ký tự; S4-Q6 mỗi đơn khách chỉ gửi một yêu cầu huỷ; S4-Q7 chữ email và 5 câu lý do theo PRD; S4-Q8 bảng chuyển trạng thái do PO suy ra từ CHK-PAY-14 (COMMON-01..03 chưa có); S4-Q9 `declined_on_call`, "3 lần trong 24 giờ tính từ lần gọi đầu", mã vận đơn không trùng, staff thấy đủ SĐT / email.
+    **Câu hỏi đã trả lời (2026-11-08, Thắng nhận mặc định PO; `docs/decisions.md`):** S4-Q1 khách ở `to_ship` chỉ gửi yêu cầu huỷ (phát hành `toShipCancelMode = 'request'` cùng lát 4.5); S4-Q2 đơn bị từ chối nhận / giao không thành: huỷ ngay, cộng tồn ở bước "xử lý hàng hoàn" riêng; S4-Q3 giờ làm việc 08:00-18:00 thứ Hai-thứ Bảy, duyệt huỷ trong 24 giờ (chỉ cờ); S4-Q4 staff huỷ 5 lý do cố định (gồm `customer_request`), chỉ admin huỷ lý do `other`; S4-Q5 đơn vị vận chuyển nhập tự do 2-50 ký tự; S4-Q6 mỗi đơn khách chỉ gửi một yêu cầu huỷ; S4-Q7 chữ email và câu lý do theo PRD (Thắng sửa chữ sau khi đọc thư thật); S4-Q9 `declined_on_call`, cửa sổ 24 giờ của `unreachable`, mã vận đơn không trùng, staff thấy đủ SĐT / email. Các điểm lật nằm ở `backend/src/config/assumptions.ts` (xem plan mục 0); đổi thì theo quy trình contract locked. **Còn mở:** S4-Q8 (nội dung COMMON-01..03; bảng chuyển trạng thái do PO suy ra từ CHK-PAY-14, không chặn).
 
     ## Quy ước Slice 4
     - **Xác thực:** mọi `/admin/orders/**` dùng cookie admin `n2f_asid` (scheme `adminSession`, cùng cơ chế phiên Slice 1). Không có cookie, hết hạn, thu hồi, hoặc chỉ có `n2f_sid` -> `401 unauthenticated`, không có dữ liệu đơn; tài khoản bị vô hiệu -> `401` và xoá cookie (BR-ADM-03). Vai trò và `is_active` đọc lại từ bảng `users` ở **mọi** yêu cầu. Mọi phản hồi (kể cả `401`, `403`, `404`, `409`, `422`) có `Cache-Control: no-store` (BR-ADM-01).
     - **CSRF:** yêu cầu ghi (`POST`) dùng đúng quy tắc hiện có: `Origin` thuộc allowlist + `X-Requested-With: n2f` + `Content-Type: application/json` (`403 origin-not-allowed`). `GET` không đổi trạng thái.
-    - **Phân quyền (BR-ADM-02) [chờ Thắng S4-Q4]:** `staff` và `admin`: xem, ghi cuộc gọi, xác nhận, bàn giao, giao xong, huỷ lý do `unreachable` / `declined_on_call` / `refused` / `undeliverable`, xử lý hàng hoàn, duyệt / từ chối yêu cầu huỷ, ghi chú. Chỉ `admin`: huỷ lý do `other`. Thiếu quyền -> `403 forbidden`, đơn không đổi, không có sự kiện. `member` không có phiên admin nên luôn `401`.
+    - **Phân quyền (BR-ADM-02, S4-Q4):** `staff` và `admin`: xem, ghi cuộc gọi, xác nhận, bàn giao, giao xong, huỷ lý do `unreachable` / `declined_on_call` / `customer_request` / `refused` / `undeliverable`, xử lý hàng hoàn, duyệt / từ chối yêu cầu huỷ, ghi chú. Chỉ `admin`: huỷ lý do `other`. Thiếu quyền -> `403 forbidden`, đơn không đổi, không có sự kiện. `member` không có phiên admin nên luôn `401`. **Vai trò đọc lại từ `users` ở mỗi yêu cầu (AC-ADM-03):** hạ vai trò bằng SQL có hiệu lực ngay ở yêu cầu kế tiếp (hành động chỉ admin -> `403 forbidden`, `GET` vẫn `200`); `is_active = false` -> `401 unauthenticated` ở yêu cầu kế tiếp. Slice 4 **không** thu hồi dòng `sessions` (thuộc slice Admin người dùng, AC-AUTH-75).
     - **Thứ tự kiểm ở yêu cầu ghi:** `401` -> `403 origin-not-allowed` -> `429` -> `403 forbidden` (theo vai trò và `reason`, không cần đọc đơn) -> `422 validation` (định dạng body) -> `404 not-found` (mã đơn) -> khoá dòng đơn rồi `409 order-state-changed` (`expectedStatus` khác trạng thái hiện tại) -> `409 invalid-transition` -> `409 condition-not-met` -> `200`.
     - **Chống hai người giẫm nhau (BR-ADM-14, 15):** mọi hành động trừ `notes` mang `expectedStatus` = trạng thái đơn mà người thao tác đang thấy. Máy chủ khoá dòng đơn (`SELECT ... FOR UPDATE`), so sánh, rồi mới thực hiện toàn bộ thay đổi + đúng 1 sự kiện trong **một** giao dịch. Khác -> `409 order-state-changed` kèm `order` (đơn hiện tại) và `currentStatus`; không đổi gì, không sự kiện, không thư. Khi hai yêu cầu cùng đơn chạy đồng thời đúng một yêu cầu thành công. `expectedStatus` chỉ phát hiện đổi **trạng thái**; hành động hợp lệ theo trạng thái nhưng không hợp lệ theo điều kiện (đã xác nhận, đã xử lý hàng hoàn...) -> `409 invalid-transition`.
     - **Idempotency (tuỳ chọn):** header `Idempotency-Key` (16-64 ký tự `A-Za-z0-9-`) ở mọi `POST` hành động. Cùng khoá + cùng người + cùng đường dẫn + cùng body trong 24 giờ -> `200` với đúng kết quả lần đầu, header `Idempotency-Replayed: true`, không tác dụng phụ; cùng khoá khác nội dung -> `409 idempotency-conflict`. Lỗi `4xx/5xx` không lưu khoá. Không có header thì chỉ có `expectedStatus` bảo vệ (đủ cho BR-ADM-14; FE "Thử lại" luôn tải lại đơn trước, AC-ADM-17).
-    - **Phân trang:** `page` (>= 1, mặc định 1), `pageSize` (1..50, mặc định 20); sai -> `422 validation`, `field: pageSize` / `page`. Trang quá cuối -> `items` rỗng, `total` đúng. Sắp `placedAt` giảm dần, hoà bằng mã đơn giảm dần.
+    - **Phân trang:** `page` (>= 1, mặc định 1), `limit` (1..50, mặc định 20; cùng tên tham số với Slice 3, không dùng `pageSize`); sai -> `422 validation`, `field: limit` / `page`. Trang quá cuối -> `items` rỗng, `total` đúng. Sắp `placedAt` giảm dần, hoà bằng mã đơn giảm dần. Phản hồi trả `page` và `limit` đã áp dụng.
     - **Tab (`view`) [BR-ADM-07]:** mỗi đơn thuộc đúng một tab (trừ `all`): `pending-payment` = `to_pay`; `to-confirm` = đơn COD `to_ship`, `needsConfirmCall`, chưa xác nhận ("cần gọi"); `to-fulfil` = `to_ship` còn lại; `in-transit` = `to_receive`; `cancel-requests` = `cancel_requested`; `returning` = `cancelled` từ `to_receive` mà hàng hoàn chưa xử lý; `completed`; `cancelled` = `cancelled` còn lại. Tổng 8 tab con = `all`.
-    - **Timeline admin:** mới nhất trước; mỗi dòng có người thực hiện (`staff` kèm tên + vai trò, `customer`, `system`), trạng thái trước / sau, ghi chú nội bộ. Sự kiện chỉ thêm, API không có `PUT` / `DELETE` sự kiện (`404`). Timeline phía khách (`Order.timeline`, cũ nhất trước) chỉ gồm các lần đổi trạng thái, người = `nine2fine` hoặc `customer`, không có tên nhân viên, ghi chú nội bộ, lần gọi, lý do nội bộ, mã người dùng (BR-ADM-12).
+    - **Timeline admin:** **mới nhất trước** (BR-ADM-10); mỗi dòng có người thực hiện (`staff` kèm tên + vai trò, `customer`, `system`), trạng thái trước / sau, ghi chú nội bộ. Sự kiện chỉ thêm, API không có `PUT` / `DELETE` sự kiện (`404`). Timeline phía khách (`Order.timeline`, **cũ nhất trước** như Slice 3; hai API khác thứ tự là chủ ý) chỉ gồm các lần đổi trạng thái, người = `nine2fine` hoặc `customer`, không có tên nhân viên, ghi chú nội bộ, lần gọi, lý do nội bộ, mã người dùng (BR-ADM-12).
     - **`allowedActions`** do máy chủ tính theo vai trò + trạng thái + điều kiện (đã xác nhận chưa, đủ 3 lần gọi chưa, hàng hoàn đã xử lý chưa); FE chỉ hiện nút có trong danh sách (BR-ADM-04). Ghi chú nội bộ (`add-note`) luôn có.
     - **Giới hạn tần suất (Should, BR-ADM-41):** theo tài khoản admin / staff: đọc (`GET`) 120 / 60 giây, ghi (`POST`) 60 / 60 giây, bộ đếm riêng; vượt -> `429 rate-limited` + `Retry-After`.
     - **Mã lỗi mới:** `invalid-transition` (409), `order-state-changed` (409), `condition-not-met` (409). Tái dùng: `unauthenticated`, `forbidden`, `origin-not-allowed`, `not-found`, `validation`, `idempotency-conflict`, `rate-limited`, `not-cancellable` (phía khách), `unavailable`.
 
-    ## Thay đổi phần Slice 3 (đều ở trạng thái draft cùng Slice 4; cộng thêm trừ mục 1)
-    1. **Đổi hành vi** `POST /orders/{orderCode}/cancel` ở `to_ship`: tạo `cancel_requested` thay vì huỷ ngay `[chờ Thắng S4-Q1]` (thay giả định chờ Thắng số 4 của Slice 3). `to_pay` vẫn huỷ thẳng. Phát hành cùng lát có màn duyệt (lát 4.5).
+    ## Thay đổi phần Slice 3 (locked cùng Slice 4 ngày 2026-11-08; cộng thêm trừ mục 1)
+    1. **Đổi hành vi** `POST /orders/{orderCode}/cancel` ở `to_ship`: tạo `cancel_requested` thay vì huỷ ngay (S4-Q1 đã chốt; thay giả định chờ Thắng số 4 của Slice 3). `to_pay` vẫn huỷ thẳng. Phát hành cùng lát có màn duyệt (lát 4.5) với `toShipCancelMode = 'request'`.
     2. `Order` thêm tuỳ chọn: `shipment`, `deliveredAt`, `cancelRequest`, `cancelMode`; `canCancel` mở rộng nghĩa; `OrderTimelineEntry` thêm tuỳ chọn `actor`. `OrderStatus.cancel_requested` nay có thể xuất hiện.
     3. `ErrorCode` thêm 3 mã; `ErrorResponse.error` thêm `currentStatus`, `order`.
     4. `Order.cancelReason` của đơn huỷ do shop là **câu chuẩn cho khách** (BR-ADM-28), không phải ghi chú nội bộ.
@@ -115,9 +115,9 @@ tags:
   - name: voucher
     description: 'Slice 3, status: locked (2026-11-07). Kiểm mã giảm giá.'
   - name: order
-    description: 'Slice 3, status: locked (2026-11-07). Đặt đơn, xem / huỷ đơn của thành viên, tra cứu đơn khách bằng mã + email + OTP. Slice 4 (draft) đổi hành vi huỷ ở `to_ship` và thêm trường cộng thêm cho `Order`.'
+    description: 'Slice 3, status: locked (2026-11-07). Đặt đơn, xem / huỷ đơn của thành viên, tra cứu đơn khách bằng mã + email + OTP. Slice 4 (locked 2026-11-08) đổi hành vi huỷ ở `to_ship` và thêm trường cộng thêm cho `Order`.'
   - name: admin-orders
-    description: 'Slice 4, status: draft. Staff / admin xem và xử lý đơn (cookie `n2f_asid`): danh sách, đếm tab, chi tiết + timeline, gọi xác nhận COD, bàn giao, giao xong, huỷ do shop, hàng hoàn, duyệt / từ chối yêu cầu huỷ, ghi chú nội bộ.'
+    description: 'Slice 4, status: locked (2026-11-08). Staff / admin xem và xử lý đơn (cookie `n2f_asid`): danh sách, đếm tab, chi tiết + timeline, gọi xác nhận COD, bàn giao, giao xong, huỷ do shop, hàng hoàn, duyệt / từ chối yêu cầu huỷ, ghi chú nội bộ.'
 security: []
 paths:
   /auth/lookup:
@@ -1101,7 +1101,7 @@ paths:
       description: |
         Được huỷ khi `to_pay` (bất kỳ lúc nào) hoặc `to_ship` `[giả định chờ Thắng]`; trạng thái khác (`to_receive`, `completed`, `cancel_requested`, đã `cancelled`) -> `409 not-cancellable` và không hoàn gì thêm (AC-CHK-16, 29). Một giao dịch: `status = cancelled`, `cancelledBy = customer`, trả tồn đúng số đã trừ (đúng một lần), trả lượt voucher nếu mã còn hạn (AC-VOU-15). `paymentStatus` giữ nguyên (đơn đã `paid` được kế toán hoàn thủ công, email báo 1-3 ngày làm việc). Gửi email "đơn đã huỷ" nền. Quyền: chủ đơn hoặc cookie `n2f_oa` (trong 30 phút).
 
-        **Slice 4 (draft, đổi hành vi) `[chờ Thắng S4-Q1]`, BR-ADM-29:** từ lát 4.5, khách ở `to_ship` **không** huỷ ngay: đơn sang `cancel_requested` (`200` trả `Order` với `status = cancel_requested`, `cancelRequest.outcome = pending`); lưu thời điểm + `reason` (<= 250 ký tự, dài hơn -> `422 validation`); tồn, lượt voucher, `paymentStatus` giữ nguyên; không có `cancelledBy`. Đang `cancel_requested`, hoặc yêu cầu đã từng bị từ chối (mỗi đơn một yêu cầu `[chờ Thắng S4-Q6]`), hoặc `to_receive` / `completed` / `cancelled` -> `409 not-cancellable`. `to_pay` vẫn huỷ thẳng như trên. Khách yêu cầu huỷ và nhân viên bàn giao cùng lúc: một bên thắng, bên kia `409` (`not-cancellable` ở phía khách). Trước lát 4.5, `to_ship` vẫn huỷ thẳng (cờ `ASSUMPTIONS.toShipCancelMode = 'direct'`).
+        **Slice 4 (locked, đổi hành vi; S4-Q1), BR-ADM-29:** từ lát 4.5, khách ở `to_ship` **không** huỷ ngay: đơn sang `cancel_requested` (`200` trả `Order` với `status = cancel_requested`, `cancelRequest.outcome = pending`); lưu thời điểm + `reason` (<= 250 ký tự, dài hơn -> `422 validation`); tồn, lượt voucher, `paymentStatus` giữ nguyên; không có `cancelledBy`. Đang `cancel_requested`, hoặc yêu cầu đã từng bị từ chối (mỗi đơn một yêu cầu, S4-Q6), hoặc `to_receive` / `completed` / `cancelled` -> `409 not-cancellable`. `to_pay` vẫn huỷ thẳng như trên. Khách yêu cầu huỷ và nhân viên bàn giao cùng lúc: một bên thắng, bên kia `409` (`not-cancellable` ở phía khách). Trước lát 4.5, `to_ship` vẫn huỷ thẳng; phát hành cùng lát 4.5 với `ASSUMPTIONS.toShipCancelMode = 'request'` (cờ `'direct'` để lật nếu Thắng đổi ý). Khách gọi hotline xin huỷ đơn `to_ship` thì nhân viên huỷ lý do `customer_request` (không qua yêu cầu huỷ).
       parameters:
         - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
         - $ref: '#/components/parameters/CsrfHeader'
@@ -1160,7 +1160,7 @@ paths:
     get:
       tags: [admin-orders]
       operationId: adminListOrders
-      x-status: draft
+      x-status: locked
       summary: Danh sách đơn, tab, tìm, lọc, phân trang (BR-ADM-05..08)
       description: |
         Chỉ đọc. `view` chọn tab (mặc định `all`); `q`, `payment`, `from`, `to` kết hợp theo AND (BR-ADM-08). Danh sách và `GET /admin/orders/counts` dùng cùng bộ lọc nên số đếm khớp danh sách.
@@ -1175,7 +1175,7 @@ paths:
         - { name: from, in: query, schema: { type: string, format: date } }
         - { name: to, in: query, schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
-        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 }, description: 'Ngoài khoảng 1..50 -> `422 validation`, `field: limit`.' }
       responses:
         '200':
           description: Một trang đơn (mới nhất trước).
@@ -1192,9 +1192,9 @@ paths:
     get:
       tags: [admin-orders]
       operationId: adminCountOrders
-      x-status: draft
+      x-status: locked
       summary: Số đơn của mọi tab (BR-ADM-07)
-      description: 'Trả đủ số của mọi tab, tổng 8 tab con = `all`. Nhận cùng `q`, `payment`, `from`, `to` như danh sách (không nhận `view`, `page`, `pageSize`); không có bộ lọc thì đếm toàn bộ. Lỗi `422` như danh sách.'
+      description: 'Trả đủ số của mọi tab, tổng 8 tab con = `all`. Nhận cùng `q`, `payment`, `from`, `to` như danh sách (không nhận `view`, `page`, `limit`); không có bộ lọc thì đếm toàn bộ. Lỗi `422` như danh sách.'
       security:
         - adminSession: []
       parameters:
@@ -1218,7 +1218,7 @@ paths:
     get:
       tags: [admin-orders]
       operationId: adminGetOrder
-      x-status: draft
+      x-status: locked
       summary: Chi tiết đơn + timeline + hành động cho phép (BR-ADM-09, 10)
       description: 'Mã không phân biệt hoa thường, có hoặc không `#`; mã lạ hoặc sai dạng -> `404 not-found`. SĐT và email hiện đầy đủ cho cả staff và admin. Không có `PUT` / `DELETE` trên đơn hay sự kiện (`404`).'
       security:
@@ -1241,7 +1241,7 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminRecordCallAttempt
-      x-status: draft
+      x-status: locked
       summary: Ghi nhận "không liên lạc được" (BR-ADM-16)
       description: 'Chỉ đơn COD `to_ship` cần gọi (`needsConfirmCall`, chưa xác nhận): ghi đúng 1 sự kiện (thời điểm, người, `note` tuỳ chọn <= 250 ký tự); trạng thái không đổi. Không giới hạn số lần. Đơn không cần gọi hoặc đã xác nhận -> `409 invalid-transition`. Quyền: staff, admin.'
       security:
@@ -1268,7 +1268,7 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminConfirmOrder
-      x-status: draft
+      x-status: locked
       summary: Khách xác nhận qua điện thoại (BR-ADM-17)
       description: 'Chỉ đơn COD `to_ship` cần gọi, chưa xác nhận: lưu `confirmedAt` + người xác nhận; trạng thái vẫn `to_ship`; đơn chuyển từ tab `to-confirm` sang `to-fulfil`. Lần hai -> `409 invalid-transition`. Không gửi email. Quyền: staff, admin.'
       security:
@@ -1295,10 +1295,10 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminShipOrder
-      x-status: draft
+      x-status: locked
       summary: Bàn giao vận chuyển (BR-ADM-20, 21)
       description: |
-        Chỉ đơn `to_ship` và, nếu đơn cần gọi, đã xác nhận (chưa -> `409 condition-not-met`). `carrier` 2-50 ký tự (nhập tự do `[chờ Thắng S4-Q5]`); `trackingNumber` 4-40 ký tự gồm chữ, số, `-` (server lưu **chữ hoa**), không trùng mã vận đơn của đơn khác **chưa huỷ**; sai -> `422 validation` kèm `field` (`carrier` | `trackingNumber`), mã trùng cũng `422` với `field: trackingNumber` (mã của đơn đã huỷ thì hợp lệ).
+        Chỉ đơn `to_ship` và, nếu đơn cần gọi, đã xác nhận (chưa -> `409 condition-not-met`). `carrier` 2-50 ký tự (nhập tự do, S4-Q5); `trackingNumber` 4-40 ký tự gồm chữ, số, `-` (server lưu **chữ hoa**), không trùng mã vận đơn của đơn khác **chưa huỷ**; sai -> `422 validation` kèm `field` (`carrier` | `trackingNumber`), mã trùng cũng `422` với `field: trackingNumber` (mã của đơn đã huỷ thì hợp lệ).
         Kết quả: `to_receive`, lưu `shipment` (thời điểm bàn giao, đơn vị, mã); tồn không đổi (đã trừ lúc đặt); `paymentStatus` giữ `pending`; ngày giao dự kiến giữ nguyên (BR-CHK-11). Gửi email "đã bàn giao vận chuyển" (BR-ADM-21). Quyền: staff, admin.
       security:
         - adminSession: []
@@ -1324,7 +1324,7 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminDeliverOrder
-      x-status: draft
+      x-status: locked
       summary: Giao thành công (BR-ADM-22, 23)
       description: 'Chỉ đơn `to_receive`: `completed`, `paymentStatus = paid`, lưu `deliveredAt` / `paidAt` (thu tiền COD); không hoàn tác; `completed` là trạng thái cuối (mọi hành động admin và huỷ của khách -> `409`). Gửi email "giao thành công". Quyền: staff, admin.'
       security:
@@ -1351,19 +1351,20 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminCancelOrder
-      x-status: draft
+      x-status: locked
       summary: Huỷ do shop / giao không thành / khách từ chối nhận (BR-ADM-18, 19, 24..26, 28)
       description: |
         `reason` là mã cố định, chỉ hợp lệ ở trạng thái cho phép (tổ hợp sai -> `409 invalid-transition`):
         | reason | trạng thái | điều kiện | ai |
         | --- | --- | --- | --- |
-        | `unreachable` | `to_ship` | đơn cần gọi, chưa xác nhận, **>= 3** lần "không liên lạc được" nằm trong 24 giờ tính từ lần đầu (chưa đủ -> `409 condition-not-met`) | staff, admin |
+        | `unreachable` | `to_ship` | đơn cần gọi, chưa xác nhận, có **3 lần "không liên lạc được" liên tiếp** mà lần cuối trừ lần đầu <= 24 giờ 00 phút (cửa sổ 24 giờ bất kỳ, gồm cả mốc đúng 24 giờ 00; không cần cách nhau bao lâu). Chưa đủ (kể cả 24 giờ 01 phút) -> `409 condition-not-met`; đủ điều kiện chỉ **mở** lý do này, không tự huỷ | staff, admin |
         | `declined_on_call` | `to_ship` | đơn cần gọi, chưa xác nhận | staff, admin |
+        | `customer_request` | `to_ship` | mọi đơn `to_ship` (COD cần gọi hay không, đã xác nhận hay chưa; khách gọi hotline xin huỷ trước khi bàn giao); `note` bắt buộc 5-250 ký tự (thiếu / ngắn / dài -> `422`, `field: note`) | staff, admin |
         | `refused` | `to_receive` | khách từ chối nhận; ghi `delivery_refused_at` (tính vào giới hạn COD, BR-CHK-19) | staff, admin |
         | `undeliverable` | `to_receive` | giao không thành; không tính giới hạn COD | staff, admin |
         | `other` | `to_ship` hoặc `to_receive` | `note` bắt buộc 5-250 ký tự (thiếu / ngắn / dài -> `422`, `field: note`) | **chỉ admin** (staff -> `403 forbidden`, kiểm trước khi đọc đơn) |
 
-        Kết quả: `cancelled`, `cancelledBy = shop`, `paymentStatus` giữ nguyên (COD `pending`). **Từ `to_ship`:** trong cùng giao dịch cộng lại đúng số lượng đã trừ của từng dòng (đúng một lần, dấu `stock_restored_at`) và trả lượt voucher nếu mã còn hạn (BR-ADM-25). **Từ `to_receive`** `[chờ Thắng S4-Q2]`: chưa cộng tồn (hàng chưa về kho), chỉ trả lượt voucher; đơn vào tab `returning` (`returnHandling.state = pending`), nhân viên xử lý ở `.../returned-stock`. `note` (tuỳ chọn <= 250 ký tự, bắt buộc với `other`) là ghi chú nội bộ: chỉ ở timeline admin. Gửi email "đơn đã huỷ" kèm câu chuẩn theo `reason` (không lộ `note`): `unreachable` "Chúng tôi không liên lạc được với bạn để xác nhận đơn."; `declined_on_call` "Bạn đã báo không muốn nhận đơn."; `refused` "Đơn không được nhận khi giao hàng."; `undeliverable` "Giao hàng không thành công."; `other` "nine2fine không thể thực hiện đơn này.". `Order.cancelReason` (storefront) = câu chuẩn đó.
+        Kết quả: `cancelled`, `cancelledBy = shop` (riêng `customer_request`: `cancelledBy = customer`, hoàn kho + voucher như `to_ship`, **không** ghi `delivery_refused_at` nên không tính giới hạn COD), `paymentStatus` giữ nguyên (COD `pending`). Đơn `cancel_requested` không huỷ bằng lý do nào ở đây (dùng duyệt / từ chối; -> `409 invalid-transition`). **Từ `to_ship`:** trong cùng giao dịch cộng lại đúng số lượng đã trừ của từng dòng (đúng một lần, dấu `stock_restored_at`) và trả lượt voucher nếu mã còn hạn (BR-ADM-25). **Từ `to_receive`** (S4-Q2): chưa cộng tồn (hàng chưa về kho), chỉ trả lượt voucher; đơn vào tab `returning` (`returnHandling.state = pending`), nhân viên xử lý ở `.../returned-stock`. `note` (tuỳ chọn <= 250 ký tự, bắt buộc với `other`) là ghi chú nội bộ: chỉ ở timeline admin. Gửi email "đơn đã huỷ" kèm câu chuẩn theo `reason` (không lộ `note`): `unreachable` "Chúng tôi không liên lạc được với bạn để xác nhận đơn."; `declined_on_call` "Bạn đã báo không muốn nhận đơn."; `refused` "Đơn không được nhận khi giao hàng."; `undeliverable` "Giao hàng không thành công."; `customer_request` "Đơn đã được huỷ theo yêu cầu của bạn."; `other` "nine2fine không thể thực hiện đơn này.". `Order.cancelReason` (storefront) = câu chuẩn đó.
       security:
         - adminSession: []
       parameters:
@@ -1388,8 +1389,8 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminHandleReturnedStock
-      x-status: draft
-      summary: Xử lý hàng hoàn về (BR-ADM-27) [chờ Thắng S4-Q2]
+      x-status: locked
+      summary: Xử lý hàng hoàn về (BR-ADM-27, S4-Q2)
       description: 'Chỉ đơn `cancelled` từ `to_receive` mà hàng hoàn chưa xử lý (`returnHandling.state = pending`), xử lý đúng một lần: `restocked` (hàng về kho: cộng lại đúng số lượng từng dòng, đặt `stockRestoredAt`) hoặc `written_off` (hỏng / mất: không cộng tồn, `note` bắt buộc 5-250 ký tự, thiếu / ngắn -> `422`, `field: note`). Trạng thái đơn không đổi (`cancelled`); đơn rời tab `returning`. Lần hai, hoặc đơn không ở `returning` (kể cả đã hoàn kho do huỷ từ `to_ship`) -> `409 invalid-transition`. Không gửi email. Quyền: staff, admin.'
       security:
         - adminSession: []
@@ -1415,8 +1416,8 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminApproveCancelRequest
-      x-status: draft
-      summary: Duyệt yêu cầu huỷ của khách (BR-ADM-30) [chờ Thắng S4-Q1]
+      x-status: locked
+      summary: Duyệt yêu cầu huỷ của khách (BR-ADM-30, S4-Q1)
       description: 'Chỉ đơn `cancel_requested`: `cancelled`, `cancelledBy = customer`, sự kiện ghi nhân viên duyệt; hoàn kho + lượt voucher như huỷ từ `to_ship` (một lần); `paymentStatus` giữ nguyên. Gửi email "Yêu cầu huỷ đơn #{mã} đã được duyệt". Hai nhân viên duyệt cùng lúc: một `200`, một `409 order-state-changed`. Quyền: staff, admin.'
       security:
         - adminSession: []
@@ -1442,8 +1443,8 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminRejectCancelRequest
-      x-status: draft
-      summary: Từ chối yêu cầu huỷ của khách (BR-ADM-31) [chờ Thắng S4-Q1, S4-Q6]
+      x-status: locked
+      summary: Từ chối yêu cầu huỷ của khách (BR-ADM-31, S4-Q1, S4-Q6)
       description: 'Chỉ đơn `cancel_requested`: `reason` bắt buộc 5-250 ký tự (thiếu / ngắn / dài -> `422`, `field: reason`); đơn trở về `to_ship` giữ nguyên trạng thái xác nhận; tồn và voucher không đổi. `reason` hiển thị cho khách (email + `Order.cancelRequest.rejectReason`). Gửi email "Yêu cầu huỷ đơn #{mã} chưa được chấp nhận" kèm lý do và hotline. Khách không gửi lại được yêu cầu thứ hai (`409 not-cancellable` ở `POST /orders/{orderCode}/cancel`). Quyền: staff, admin.'
       security:
         - adminSession: []
@@ -1469,7 +1470,7 @@ paths:
     post:
       tags: [admin-orders]
       operationId: adminAddOrderNote
-      x-status: draft
+      x-status: locked
       summary: Ghi chú nội bộ (BR-ADM-38, Should)
       description: 'Mọi trạng thái. `note` 1-500 ký tự (sau trim); 1 sự kiện trong timeline admin (`kind = note`), không đổi trạng thái, không hiện cho khách, không gửi email. Không cần `expectedStatus`. Quyền: staff, admin.'
       security:
@@ -1526,13 +1527,13 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/OrderCodeInput' }
-      description: 'Slice 4 (draft). Mã đơn, chữ thường và `#` được chấp nhận; sai dạng hoặc không có -> `404 not-found`.'
+      description: 'Slice 4. Mã đơn, chữ thường và `#` được chấp nhận; sai dạng hoặc không có -> `404 not-found`.'
     AdminIdempotencyKey:
       name: Idempotency-Key
       in: header
       required: false
       schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
-      description: 'Slice 4 (draft). Tuỳ chọn. FE sinh một khoá cho mỗi ý định bấm nút (dùng lại khi "Thử lại" cùng thao tác). Cùng khoá + cùng người + cùng đường dẫn + cùng body trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`); khác nội dung -> `409 idempotency-conflict`. Sai dạng -> `422 validation`, `field: Idempotency-Key`.'
+      description: 'Slice 4. Tuỳ chọn. FE sinh một khoá cho mỗi ý định bấm nút (dùng lại khi "Thử lại" cùng thao tác). Cùng khoá + cùng người + cùng đường dẫn + cùng body trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`); khác nội dung -> `409 idempotency-conflict`. Sai dạng -> `422 validation`, `field: Idempotency-Key`.'
   headers:
     RetryAfter:
       description: Số giây chờ, bằng `error.retryAfterSeconds`.
@@ -1615,7 +1616,7 @@ components:
               cart: { $ref: '#/components/schemas/CartView' }
               notice: { oneOf: [{ $ref: '#/components/schemas/CartNotice' }, { type: 'null' }] }
     AdminOrderUpdated:
-      description: 'Slice 4 (draft). Đơn sau thao tác (dạng admin). Gửi lại cùng `Idempotency-Key` + cùng nội dung: cùng kết quả đầu tiên, header `Idempotency-Replayed: true`, không tác dụng phụ.'
+      description: 'Slice 4. Đơn sau thao tác (dạng admin). Gửi lại cùng `Idempotency-Key` + cùng nội dung: cùng kết quả đầu tiên, header `Idempotency-Replayed: true`, không tác dụng phụ.'
       headers:
         Cache-Control: { schema: { type: string, const: no-store } }
         Idempotency-Replayed: { schema: { type: string, const: 'true' }, description: 'Chỉ có khi là bản phát lại.' }
@@ -1629,10 +1630,10 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     AdminConflict:
       description: |
-        Slice 4 (draft). Một trong (mọi trường hợp: không đổi dữ liệu, không sự kiện, không email; luôn kèm `currentStatus`):
+        Slice 4. Một trong (mọi trường hợp: không đổi dữ liệu, không sự kiện, không email; luôn kèm `currentStatus`):
         - `order-state-changed`: `expectedStatus` khác trạng thái hiện tại; kèm `order` (đơn hiện tại). FE tải lại, báo "Đơn vừa được cập nhật bởi người khác." (BR-ADM-14, 15).
         - `invalid-transition`: bước không hợp lệ ở trạng thái / điều kiện hiện tại (BR-ADM-13), kể cả thao tác lần hai (đã xác nhận, đã xử lý hàng hoàn, đã bàn giao...).
-        - `condition-not-met`: đúng trạng thái nhưng thiếu điều kiện (bàn giao đơn cần gọi chưa xác nhận; huỷ `unreachable` chưa đủ 3 lần gọi trong 24 giờ).
+        - `condition-not-met`: đúng trạng thái nhưng thiếu điều kiện (bàn giao đơn cần gọi chưa xác nhận; huỷ `unreachable` chưa có 3 lần gọi liên tiếp trong 24 giờ 00 phút, ví dụ lần cuối cách lần đầu 24 giờ 01 phút).
         - `idempotency-conflict`: cùng `Idempotency-Key` nhưng nội dung khác.
       content:
         application/json:
@@ -1704,9 +1705,9 @@ components:
         | idempotency-conflict | 409 | AC-CHK-18 |
         | possible-duplicate | 409 | AC-CHK-20 (Should, kèm `existingOrderCode`) |
         | not-cancellable | 409 | AC-CHK-16, 29; AC-ADM-27, 36, 37, 39 (Slice 4, phía khách) |
-        | invalid-transition | 409 | AC-ADM-13, 16, 18, 19, 22..24, 26, 27, 33, 34, 38, 40 (Slice 4, draft; kèm `currentStatus`) |
-        | order-state-changed | 409 | AC-ADM-14..17, 40 (Slice 4, draft; kèm `order`, `currentStatus`) |
-        | condition-not-met | 409 | AC-ADM-20, 24 (Slice 4, draft) |
+        | invalid-transition | 409 | AC-ADM-13, 16, 18, 19, 22..24, 26, 27, 33, 34, 38, 40, 50 (Slice 4; kèm `currentStatus`) |
+        | order-state-changed | 409 | AC-ADM-14..17, 40 (Slice 4; kèm `order`, `currentStatus`) |
+        | condition-not-met | 409 | AC-ADM-20, 24 (Slice 4) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -1775,10 +1776,10 @@ components:
               description: 'Slice 3, `possible-duplicate`: mã đơn trước đó.'
               $ref: '#/components/schemas/OrderCode'
             currentStatus:
-              description: 'Slice 4 (draft): trạng thái hiện tại của đơn, có ở `invalid-transition`, `order-state-changed`, `condition-not-met` (BR-ADM-13).'
+              description: 'Slice 4: trạng thái hiện tại của đơn, có ở `invalid-transition`, `order-state-changed`, `condition-not-met` (BR-ADM-13).'
               $ref: '#/components/schemas/OrderStatus'
             order:
-              description: 'Slice 4 (draft): đơn hiện tại (dạng admin), luôn có ở `order-state-changed` để FE vẽ lại không gọi thêm (BR-ADM-14).'
+              description: 'Slice 4: đơn hiện tại (dạng admin), luôn có ở `order-state-changed` để FE vẽ lại không gọi thêm (BR-ADM-14).'
               $ref: '#/components/schemas/AdminOrder'
     Category:
       type: string
@@ -2218,7 +2219,7 @@ components:
         at: { type: string, format: date-time }
         title: { type: string }
         detail: { type: string, description: 'Slice 4: lý do đã được làm sạch cho khách (câu chuẩn hoặc lý do do chính khách nhập); đơn `to_receive` kèm đơn vị + mã vận đơn.' }
-        actor: { type: string, enum: [customer, nine2fine], description: 'Slice 4 (draft). Người thực hiện: `customer` hiện "Khách", `nine2fine` cho nhân viên và hệ thống (không lộ tên nhân viên, BR-ADM-12). Dòng cũ (Slice 3) cũng được điền theo `actor` của sự kiện.' }
+        actor: { type: string, enum: [customer, nine2fine], description: 'Slice 4. Người thực hiện: `customer` hiện "Khách", `nine2fine` cho nhân viên và hệ thống (không lộ tên nhân viên, BR-ADM-12). Dòng cũ (Slice 3) cũng được điền theo `actor` của sự kiện.' }
     Order:
       type: object
       required: [id, placedAt, status, paymentStatus, paymentMethod, items, pricing, vouchers, recipient, shippingAddress, estimatedDelivery, canCancel, timeline]
@@ -2277,12 +2278,12 @@ components:
         cancelMode:
           type: string
           enum: [cancel, request]
-          description: 'Slice 4 (draft). Có khi `canCancel = true`: `cancel` = huỷ ngay (`to_pay`); `request` = gửi yêu cầu huỷ chờ shop duyệt (`to_ship`, S4-Q1). FE đổi chữ nút theo trường này.'
+          description: 'Slice 4. Có khi `canCancel = true`: `cancel` = huỷ ngay (`to_pay`); `request` = gửi yêu cầu huỷ chờ shop duyệt (`to_ship`, S4-Q1). FE đổi chữ nút theo trường này.'
         cancelRequest:
           type: object
           required: [requestedAt, outcome]
           additionalProperties: false
-          description: 'Slice 4 (draft). Có khi khách đã gửi yêu cầu huỷ (đang chờ, hoặc đã bị từ chối). Yêu cầu được duyệt thì đơn `cancelled`. Khi `outcome = rejected` khách không gửi lại được (S4-Q6): FE hướng dẫn gọi hotline.'
+          description: 'Slice 4. Có khi khách đã gửi yêu cầu huỷ (đang chờ, hoặc đã bị từ chối). Yêu cầu được duyệt thì đơn `cancelled`. Khi `outcome = rejected` khách không gửi lại được (S4-Q6): FE hướng dẫn gọi hotline.'
           properties:
             requestedAt: { type: string, format: date-time }
             outcome: { type: string, enum: [pending, rejected, approved] }
@@ -2291,14 +2292,14 @@ components:
           type: object
           required: [carrier, trackingNumber, handedOverAt]
           additionalProperties: false
-          description: 'Slice 4 (draft). Có từ khi bàn giao vận chuyển (`to_receive`, `completed`, và `cancelled` từ `to_receive`). Không có tên nhân viên.'
+          description: 'Slice 4. Có từ khi bàn giao vận chuyển (`to_receive`, `completed`, và `cancelled` từ `to_receive`). Không có tên nhân viên.'
           properties:
             carrier: { type: string }
             trackingNumber: { type: string }
             handedOverAt: { type: string, format: date-time }
-        deliveredAt: { type: string, format: date-time, description: 'Slice 4 (draft). Thời điểm giao xong / thu tiền; chỉ khi `completed`.' }
+        deliveredAt: { type: string, format: date-time, description: 'Slice 4. Thời điểm giao xong / thu tiền; chỉ khi `completed`.' }
         willCallToConfirm: { type: boolean, description: 'COD cần CSKH gọi xác nhận trong 2 giờ làm việc (BR-CHK-20): false với thành viên đã có đơn `completed` và đơn < 1.000.000 ₫. Chỉ có ở đơn COD `to_ship`.' }
-        timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' }, description: 'Cũ nhất trước; mỗi lần đổi trạng thái một dòng (BR-CHK-22). Slice 4: chỉ các lần đổi trạng thái (không có lần gọi, xác nhận, ghi chú, hàng hoàn), người = `nine2fine` hoặc `customer` (BR-ADM-12).' }
+        timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' }, description: 'Cũ nhất trước (khác timeline admin là mới nhất trước, chủ ý); mỗi lần đổi trạng thái một dòng (BR-CHK-22). Slice 4: chỉ các lần đổi trạng thái (không có lần gọi, xác nhận, ghi chú, hàng hoàn), người = `nine2fine` hoặc `customer` (BR-ADM-12).' }
     OrderReceipt:
       type: object
       required: [order]
@@ -2339,7 +2340,7 @@ components:
     AdminOrderTab:
       type: string
       enum: [all, pending-payment, to-confirm, to-fulfil, in-transit, cancel-requests, returning, completed, cancelled]
-      description: 'Slice 4 (draft), BR-ADM-07. Mỗi đơn thuộc đúng một tab trừ `all`. FE ánh xạ sang nhãn "Chờ xác nhận" (`to-confirm`), "Đang chuẩn bị" (`to-fulfil`), "Đang vận chuyển" (`in-transit`), "Chờ duyệt huỷ" (`cancel-requests`)...'
+      description: 'Slice 4, BR-ADM-07. Mỗi đơn thuộc đúng một tab trừ `all`. FE ánh xạ sang nhãn "Chờ xác nhận" (`to-confirm`), "Đang chuẩn bị" (`to-fulfil`), "Đang vận chuyển" (`in-transit`), "Chờ duyệt huỷ" (`cancel-requests`)...'
     AdminOrderBucket:
       type: string
       enum: [pending-payment, to-confirm, to-fulfil, in-transit, cancel-requests, returning, completed, cancelled]
@@ -2348,7 +2349,7 @@ components:
       type: object
       required: [all, pending-payment, to-confirm, to-fulfil, in-transit, cancel-requests, returning, completed, cancelled]
       additionalProperties: false
-      description: 'Slice 4 (draft). `all` = tổng 8 tab con.'
+      description: 'Slice 4. `all` = tổng 8 tab con.'
       properties:
         all: { type: integer, minimum: 0 }
         pending-payment: { type: integer, minimum: 0 }
@@ -2362,7 +2363,7 @@ components:
     AdminOverdueFlag:
       type: string
       enum: [confirm-call, cancel-request, delivery]
-      description: 'Should (BR-ADM-40) [chờ Thắng S4-Q3]. `confirm-call`: cần gọi quá 2 giờ làm việc kể từ lúc đặt (08:00-18:00, thứ Hai-thứ Bảy); `cancel-request`: `cancel_requested` quá 24 giờ chưa quyết định; `delivery`: `to_receive` quá ngày giao dự kiến muộn nhất. Chỉ là cờ, không tự đổi trạng thái.'
+      description: 'Should (BR-ADM-40; S4-Q3). `confirm-call`: cần gọi quá 2 giờ làm việc kể từ lúc đặt (08:00-18:00, thứ Hai-thứ Bảy); `cancel-request`: `cancel_requested` quá 24 giờ chưa quyết định; `delivery`: `to_receive` quá ngày giao dự kiến muộn nhất. Chỉ là cờ, không tự đổi trạng thái.'
     AdminOrderAction:
       type: string
       enum:
@@ -2372,6 +2373,7 @@ components:
         - deliver
         - cancel-unreachable
         - cancel-declined-on-call
+        - cancel-customer-request
         - cancel-refused
         - cancel-undeliverable
         - cancel-other
@@ -2382,8 +2384,8 @@ components:
         - add-note
         - print-slip
       description: |
-        Hành động hợp lệ ngay lúc này cho **đúng người đang gọi** (vai trò + trạng thái + điều kiện), BR-ADM-04. Ánh xạ: `call-attempt` -> `POST .../call-attempts`; `confirm` -> `.../confirm`; `ship` -> `.../ship`; `deliver` -> `.../deliver`; `cancel-<reason>` -> `.../cancel` với `reason` tương ứng (`cancel-declined-on-call` = `declined_on_call`); `restock`, `write-off` -> `.../returned-stock` (`decision` `restocked` / `written_off`); `approve-cancel`, `reject-cancel` -> `.../cancel-request/*`; `add-note` -> `.../notes`. `print-slip` (Should, BR-ADM-39) không có endpoint: FE in từ dữ liệu đơn (`to_ship` / `to_receive`).
-        Chính xác theo điều kiện: `ship` chỉ có khi đơn không cần gọi hoặc đã xác nhận; `cancel-unreachable` chỉ có khi đã đủ 3 lần gọi trong 24 giờ; `cancel-other` chỉ có với admin.
+        Hành động hợp lệ ngay lúc này cho **đúng người đang gọi** (vai trò + trạng thái + điều kiện), BR-ADM-04. Ánh xạ: `call-attempt` -> `POST .../call-attempts`; `confirm` -> `.../confirm`; `ship` -> `.../ship`; `deliver` -> `.../deliver`; `cancel-<reason>` -> `.../cancel` với `reason` tương ứng (`cancel-declined-on-call` = `declined_on_call`, `cancel-customer-request` = `customer_request`); `restock`, `write-off` -> `.../returned-stock` (`decision` `restocked` / `written_off`); `approve-cancel`, `reject-cancel` -> `.../cancel-request/*`; `add-note` -> `.../notes`. `print-slip` (Should, BR-ADM-39) không có endpoint: FE in từ dữ liệu đơn (`to_ship` / `to_receive`).
+        Chính xác theo điều kiện: `ship` chỉ có khi đơn không cần gọi hoặc đã xác nhận; `cancel-unreachable` chỉ có khi có 3 lần gọi liên tiếp trong một cửa sổ 24 giờ 00 phút; `cancel-customer-request` có ở mọi đơn `to_ship` cho staff và admin; `cancel-other` chỉ có với admin.
     StaffRef:
       type: object
       required: [name, role]
@@ -2408,7 +2410,7 @@ components:
       type: object
       required: [at, kind, toStatus, paymentStatus, actor, title]
       additionalProperties: false
-      description: 'Một sự kiện đơn (BR-ADM-10). Mỗi thao tác thành công đúng 1 dòng, kể cả thao tác không đổi trạng thái (`fromStatus = toStatus`). Chỉ thêm, không sửa / xoá được. Mới nhất trước.'
+      description: 'Một sự kiện đơn (BR-ADM-10). Mỗi thao tác thành công đúng 1 dòng, kể cả thao tác không đổi trạng thái (`fromStatus = toStatus`). Chỉ thêm, không sửa / xoá được. `AdminOrder.timeline` sắp **mới nhất trước** (khác `Order.timeline` của khách: cũ nhất trước; chủ ý).'
       properties:
         at: { type: string, format: date-time }
         kind: { $ref: '#/components/schemas/AdminEventKind' }
@@ -2418,7 +2420,7 @@ components:
         actor: { $ref: '#/components/schemas/AdminActor' }
         title: { type: string, description: 'Tiêu đề tiếng Việt, ví dụ "Ghi nhận không liên lạc được", "Bàn giao vận chuyển".' }
         detail: { type: string, description: 'Phần khách cũng thấy (câu chuẩn lý do huỷ, lý do khách nhập, đơn vị + mã vận đơn, lý do từ chối yêu cầu huỷ).' }
-        reasonCode: { type: string, description: 'Mã lý do huỷ (`unreachable`, `declined_on_call`, `refused`, `undeliverable`, `other`) hoặc quyết định hàng hoàn (`restocked`, `written_off`).' }
+        reasonCode: { type: string, description: 'Mã lý do huỷ (`unreachable`, `declined_on_call`, `customer_request`, `refused`, `undeliverable`, `other`) hoặc quyết định hàng hoàn (`restocked`, `written_off`).' }
         note: { type: string, description: 'Ghi chú nội bộ (tối đa 500 ký tự). Không bao giờ có ở API khách.' }
     AdminOrderSummary:
       type: object
@@ -2440,13 +2442,13 @@ components:
         overdue: { type: array, items: { $ref: '#/components/schemas/AdminOverdueFlag' }, description: 'Should (BR-ADM-40). Rỗng nếu trong hạn.' }
     AdminOrderPage:
       type: object
-      required: [items, total, page, pageSize]
+      required: [items, total, page, limit]
       additionalProperties: false
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AdminOrderSummary' }, maxItems: 50 }
         total: { type: integer, minimum: 0, description: 'Tổng số đơn khớp bộ lọc (mọi trang).' }
         page: { type: integer, minimum: 1 }
-        pageSize: { type: integer, minimum: 1, maximum: 50 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
     AdminOrder:
       type: object
       required: [id, placedAt, status, paymentStatus, paymentMethod, items, pricing, vouchers, recipient, shippingAddress, estimatedDelivery, tab, needsCall, callAttempts, overdue, allowedActions, timeline]
@@ -2512,7 +2514,7 @@ components:
           type: object
           required: [total, inFirstDay]
           additionalProperties: false
-          description: 'Đếm "không liên lạc được" (BR-ADM-16, 18). `inFirstDay` = số lần nằm trong 24 giờ tính từ lần đầu; huỷ `unreachable` cần `inFirstDay >= 3`.'
+          description: 'Đếm "không liên lạc được" (BR-ADM-16, 18). `inFirstDay` (tên giữ để tương thích FE) = số lần lớn nhất nằm trong một cửa sổ 24 giờ 00 phút bất kỳ (lần cuối trừ lần đầu <= 24 giờ); huỷ `unreachable` cần `inFirstDay >= 3`.'
           properties:
             total: { type: integer, minimum: 0 }
             inFirstDay: { type: integer, minimum: 0 }
@@ -2535,7 +2537,7 @@ components:
           properties:
             by: { $ref: '#/components/schemas/CancelledBy' }
             at: { type: string, format: date-time }
-            reasonCode: { type: string, enum: [unreachable, declined_on_call, refused, undeliverable, other], description: 'Chỉ khi `by = shop`.' }
+            reasonCode: { type: string, enum: [unreachable, declined_on_call, customer_request, refused, undeliverable, other], description: 'Chỉ khi huỷ qua `.../cancel`: `by = shop`, trừ `customer_request` (`by = customer`).' }
             reason: { type: string, description: 'Câu hiển thị cho khách (= `Order.cancelReason`).' }
             note: { type: string, description: 'Ghi chú nội bộ (bắt buộc với `other`).' }
         cancelRequest:
@@ -2554,7 +2556,7 @@ components:
           type: object
           required: [state]
           additionalProperties: false
-          description: 'Chỉ có với đơn `cancelled` từ `to_receive` (BR-ADM-26, 27) [chờ Thắng S4-Q2]. `pending` = tab `returning`.'
+          description: 'Chỉ có với đơn `cancelled` từ `to_receive` (BR-ADM-26, 27; S4-Q2). `pending` = tab `returning`.'
           properties:
             state: { type: string, enum: [pending, restocked, written_off] }
             decidedAt: { type: string, format: date-time }
@@ -2586,11 +2588,11 @@ components:
       additionalProperties: false
       properties:
         expectedStatus: { $ref: '#/components/schemas/OrderStatus' }
-        carrier: { type: string, minLength: 2, maxLength: 50, description: 'Đơn vị vận chuyển (trim); nhập tự do [chờ Thắng S4-Q5].', examples: ['GHTK'] }
+        carrier: { type: string, minLength: 2, maxLength: 50, description: 'Đơn vị vận chuyển (trim); nhập tự do (S4-Q5).', examples: ['GHTK'] }
         trackingNumber: { type: string, minLength: 4, maxLength: 40, pattern: '^[A-Za-z0-9-]+$', description: 'Server trim, lưu chữ hoa.', examples: ['ghtk-12345'] }
     AdminCancelReason:
       type: string
-      enum: [unreachable, declined_on_call, refused, undeliverable, other]
+      enum: [unreachable, declined_on_call, customer_request, refused, undeliverable, other]
     AdminCancelRequest:
       type: object
       required: [expectedStatus, reason]
@@ -2598,7 +2600,7 @@ components:
       properties:
         expectedStatus: { $ref: '#/components/schemas/OrderStatus' }
         reason: { $ref: '#/components/schemas/AdminCancelReason' }
-        note: { type: string, maxLength: 250, description: 'Ghi chú nội bộ; bắt buộc 5-250 ký tự (sau trim) khi `reason = other`, tuỳ chọn <= 250 ở các lý do còn lại. Không bao giờ gửi cho khách.' }
+        note: { type: string, maxLength: 250, description: 'Ghi chú nội bộ; bắt buộc 5-250 ký tự (sau trim) khi `reason` = `other` hoặc `customer_request`, tuỳ chọn <= 250 ở các lý do còn lại. Không bao giờ gửi cho khách.' }
     AdminReturnedStockRequest:
       type: object
       required: [expectedStatus, decision]
