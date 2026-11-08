@@ -8,6 +8,7 @@ import { runInBackground, sendMail } from '../../mail/mailer';
 import type { MailMessage } from '../../mail/mailer';
 import {
   emailFailureSupportMail, eventEmailFailureSupportMail, orderAwaitingPaymentMail, orderCancelledMail, orderConfirmedMail,
+  orderDeliveredMail, orderShippedMail,
 } from '../../mail/order-templates';
 import type { OrderDto } from './order.mapper';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
@@ -101,6 +102,8 @@ export async function retryPendingEmails(at: Date = clockNow()): Promise<number>
 
 /** Tên thư lưu ở `order_events.email_template` -> nội dung. */
 const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean) => MailMessage> = {
+  'order-shipped': orderShippedMail,
+  'order-delivered': orderDeliveredMail,
   'order-cancelled-shop': orderCancelledMail,
 };
 

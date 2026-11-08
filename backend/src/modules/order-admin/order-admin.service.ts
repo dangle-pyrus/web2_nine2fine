@@ -7,12 +7,12 @@ import { AppError, Errors } from '../../lib/errors';
 import { logger } from '../../lib/logger';
 import type { Db } from '../../lib/sql';
 import { ts } from '../../lib/sql';
-import { cancelOrderWith } from '../order/cancel-order.service';
+import { cancelOrderWith, restockReturnedTx } from '../order/cancel-order.service';
 import { acquireIdempotency, completeIdempotency, requestHash } from '../order/idempotency';
 import { EventActorUser, insertOrderEvent, staffDisplayName } from '../order/order-event';
 import { scheduleEventEmail } from '../order/order-email.service';
 import { ADMIN_ORDER_INCLUDE, toAdminOrder } from './order-admin.mapper';
-import type { CallAttemptBody, CancelBody } from './order-admin.schemas';
+import type { CallAttemptBody, CancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
 import {
   AdminAction, AdminCancelReason, callStatsOf, cancelActionOf, checkTransition, SHOP_CANCEL_REASON_TEXT, StateOrder,
 } from './order-state';
@@ -33,7 +33,10 @@ export interface Actor {
 export type ActionInput =
   | { kind: 'call-attempt'; body: CallAttemptBody }
   | { kind: 'confirm'; body: { expectedStatus: order_status } }
-  | { kind: 'cancel'; body: CancelBody };
+  | { kind: 'ship'; body: ShipBody }
+  | { kind: 'deliver'; body: { expectedStatus: order_status } }
+  | { kind: 'cancel'; body: CancelBody }
+  | { kind: 'returned-stock'; body: ReturnedStockBody };
 
 interface LockedOrder {
   order_id: string;
@@ -71,6 +74,8 @@ const actionOf = (a: ActionInput): AdminAction => {
   switch (a.kind) {
     case 'cancel':
       return cancelActionOf(a.body.reason as AdminCancelReason);
+    case 'returned-stock':
+      return a.body.decision === 'restocked' ? 'restock' : 'write-off';
     default:
       return a.kind;
   }
@@ -115,6 +120,48 @@ async function doConfirm(c: Ctx): Promise<Done> {
   return { eventId, emailTemplate: null };
 }
 
+const isUniqueViolation = (err: unknown): boolean => {
+  const e = err as { code?: string; meta?: { code?: string }; message?: string };
+  return e?.code === 'P2002' || (e?.code === 'P2010' && e?.meta?.code === '23505') || /\b23505\b/.test(String(e?.message ?? ''));
+};
+const duplicateTracking = () => Errors.validation('Mã vận đơn đã dùng cho một đơn khác chưa huỷ.', 'trackingNumber');
+
+async function doShip(c: Ctx, b: ShipBody): Promise<Done> {
+  // Kiểm trước (lỗi sạch trong trường hợp thường); chỉ mục UNIQUE `active_tracking_number` là đai cuối khi đua.
+  const dup = await c.tx.$queryRaw<Array<{ x: number }>>(Prisma.sql`
+    SELECT 1 AS x FROM "orders" WHERE "active_tracking_number" = ${b.trackingNumber} AND "order_id" <> ${c.o.order_id}::uuid`);
+  if (dup.length > 0) throw duplicateTracking();
+  let n: number;
+  try {
+    n = await c.tx.$executeRaw(Prisma.sql`
+      UPDATE "orders" SET "status" = 'to_receive', "carrier" = ${b.carrier}, "tracking_number" = ${b.trackingNumber},
+        "active_tracking_number" = ${b.trackingNumber}, "handed_over_at" = ${ts(c.at)}, "handed_over_by" = ${c.user.id}::uuid
+      WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'to_ship'`);
+  } catch (err) {
+    if (isUniqueViolation(err)) throw duplicateTracking();
+    throw err;
+  }
+  if (n !== 1) await stateChanged(c);
+  const eventId = await insertOrderEvent(c.tx, {
+    orderId: c.o.order_id, at: c.at, fromStatus: 'to_ship', toStatus: 'to_receive', paymentStatus: c.o.payment_status,
+    actor: 'shop', actorUser: c.user, kind: 'shipped', detail: `${b.carrier} - ${b.trackingNumber}`, emailTemplate: 'order-shipped',
+  });
+  return { eventId, emailTemplate: 'order-shipped' };
+}
+
+async function doDeliver(c: Ctx): Promise<Done> {
+  const n = await c.tx.$executeRaw(Prisma.sql`
+    UPDATE "orders" SET "status" = 'completed', "payment_status" = 'paid', "paid_at" = COALESCE("paid_at", ${ts(c.at)}),
+      "delivered_at" = ${ts(c.at)}, "delivered_by" = ${c.user.id}::uuid
+    WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'to_receive'`);
+  if (n !== 1) await stateChanged(c);
+  const eventId = await insertOrderEvent(c.tx, {
+    orderId: c.o.order_id, at: c.at, fromStatus: 'to_receive', toStatus: 'completed', paymentStatus: 'paid',
+    actor: 'shop', actorUser: c.user, kind: 'delivered', emailTemplate: 'order-delivered',
+  });
+  return { eventId, emailTemplate: 'order-delivered' };
+}
+
 async function doCancel(c: Ctx, b: CancelBody): Promise<Done> {
   const reason = b.reason as AdminCancelReason;
   const fromTransit = c.o.status === 'to_receive';
@@ -140,6 +187,25 @@ async function doCancel(c: Ctx, b: CancelBody): Promise<Done> {
   });
   if (!r) return stateChanged(c);
   return { eventId: r.eventId, emailTemplate: 'order-cancelled-shop' };
+}
+
+async function doReturnedStock(c: Ctx, b: ReturnedStockBody): Promise<Done> {
+  if (b.decision === 'restocked') {
+    if (!(await restockReturnedTx(c.tx, c.o.order_id, c.user.id, b.note ?? null, c.at))) await stateChanged(c);
+  } else {
+    const n = await c.tx.$executeRaw(Prisma.sql`
+      UPDATE "orders" SET "return_handled_at" = ${ts(c.at)}, "return_handled_by" = ${c.user.id}::uuid,
+        "return_decision" = 'written_off', "return_note" = ${b.note ?? null}
+      WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'cancelled' AND "returned_from_transit"
+        AND "return_handled_at" IS NULL AND "stock_restored_at" IS NULL`);
+    if (n !== 1) await stateChanged(c);
+  }
+  const eventId = await insertOrderEvent(c.tx, {
+    orderId: c.o.order_id, at: c.at, fromStatus: 'cancelled', toStatus: 'cancelled', paymentStatus: c.o.payment_status,
+    actor: 'shop', actorUser: c.user, kind: b.decision === 'restocked' ? 'stock_restocked' : 'stock_written_off',
+    reasonCode: b.decision, internalNote: b.note ?? null,
+  });
+  return { eventId, emailTemplate: null };
 }
 
 /* ---------------- Khuôn chung ---------------- */
@@ -209,7 +275,10 @@ export async function runAction(p: {
           const done =
             i.kind === 'call-attempt' ? await doCallAttempt(c, i.body)
             : i.kind === 'confirm' ? await doConfirm(c)
-            : await doCancel(c, i.body);
+            : i.kind === 'ship' ? await doShip(c, i.body)
+            : i.kind === 'deliver' ? await doDeliver(c)
+            : i.kind === 'cancel' ? await doCancel(c, i.body)
+            : await doReturnedStock(c, i.body);
 
           // 9. Đọc lại (cùng tx); 8. lưu khoá idempotency với bản chụp.
           const order = await loadAdminOrder(tx, o.order_id, p.actor.role);

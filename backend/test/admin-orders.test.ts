@@ -73,13 +73,15 @@ describe('T-ADM-02 phân quyền theo hành động (AC-ADM-02)', () => {
     expect(await snapshot(code)).toBe(before);
   });
 
-  it('admin huỷ other 200; staff huỷ customer_request 200 (lát 4.3)', async () => {
+  it('admin huỷ other 200; staff ship 200 và huỷ customer_request 200 (lát 4.3, 4.4)', async () => {
     const admin = await loginAdmin();
     const staff = await loginStaff();
     const { code } = await makeOrder();
     const r = await adminPost(`/${code}/cancel`, { expectedStatus: 'to_ship', reason: 'other', note: 'lệch kho' }, admin.cookie);
     expect(r.status).toBe(200);
     expect(r.body.cancellation).toMatchObject({ by: 'shop', reasonCode: 'other' });
+    const b = await makeOrder({ needsCall: false });
+    expect((await adminPost(`/${b.code}/ship`, { expectedStatus: 'to_ship', carrier: 'GHTK', trackingNumber: 'GHTK-0002' }, staff.cookie)).status).toBe(200);
     const c = await makeOrder();
     expect((await adminPost(`/${c.code}/cancel`, { expectedStatus: 'to_ship', reason: 'customer_request', note: 'Khách gọi hotline' }, staff.cookie)).status).toBe(200);
   });

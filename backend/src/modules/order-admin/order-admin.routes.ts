@@ -89,6 +89,16 @@ orderAdminRouter.post(
   wrap(async (req, res) => respond(req, res, { kind: 'confirm', body: parseBody(expectedStatusSchema, req.body) })),
 );
 
+orderAdminRouter.post(
+  '/:orderCode/ship',
+  wrap(async (req, res) => respond(req, res, { kind: 'ship', body: parseBody(shipSchema, req.body) })),
+);
+
+orderAdminRouter.post(
+  '/:orderCode/deliver',
+  wrap(async (req, res) => respond(req, res, { kind: 'deliver', body: parseBody(expectedStatusSchema, req.body) })),
+);
+
 /** Quyền theo `reason` kiểm TRƯỚC Zod và trước khi đọc đơn (BR-ADM-02, AC-ADM-02/03); lặp lại trong máy trạng thái. */
 orderAdminRouter.post(
   '/:orderCode/cancel',
@@ -99,4 +109,9 @@ orderAdminRouter.post(
     }
     await respond(req, res, { kind: 'cancel', body: parseBody(cancelSchema, req.body) });
   }),
+);
+
+orderAdminRouter.post(
+  '/:orderCode/returned-stock',
+  wrap(async (req, res) => respond(req, res, { kind: 'returned-stock', body: parseBody(returnedStockSchema, req.body) })),
 );

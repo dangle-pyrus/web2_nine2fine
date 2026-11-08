@@ -152,6 +152,61 @@ export function emailFailureSupportMail(to: string, orderCode: string): MailMess
   };
 }
 
+/** Chân thư Slice 4 (bàn giao, giao xong): chính sách đổi trả, hotline, câu chống lừa đảo (BR-ADM-35). */
+const slice4Footer = (): string[] => [
+  '',
+  `Chính sách đổi trả: ${getConfig().appBaseUrl}/policies/returns`,
+  `Hotline CSKH: ${HOTLINE}`,
+  '',
+  SCAM_NOTICE,
+  '',
+  'nine2fine',
+];
+
+/** BR-ADM-21: đã bàn giao cho đơn vị vận chuyển. */
+export function orderShippedMail(o: OrderDto, isMember: boolean): MailMessage {
+  const s = o.shipment;
+  const lines = [
+    'Xin chào,',
+    '',
+    `Đơn #${o.id} đã được giao cho đơn vị vận chuyển.`,
+    ...(s ? [`Đơn vị vận chuyển: ${s.carrier}`, `Mã vận đơn: ${s.trackingNumber}`] : []),
+    `Ngày giao dự kiến: ${vnDate(o.estimatedDelivery.from)} - ${vnDate(o.estimatedDelivery.to)}`,
+    o.paymentMethod === 'cod' && o.paymentStatus !== 'paid'
+      ? `Số tiền shipper thu khi giao: ${money(o.pricing.total)}`
+      : `Tổng thanh toán: ${money(o.pricing.total)}`,
+    '',
+  ];
+  return {
+    to: o.recipient.email,
+    subject: `nine2fine – Đơn #${o.id} đã được giao cho đơn vị vận chuyển`,
+    text: [...lines, ...orderBlock(o, isMember), ...slice4Footer()].join('\n'),
+  };
+}
+
+/** BR-ADM-23: giao thành công. Không có lời mời đánh giá. */
+export function orderDeliveredMail(o: OrderDto, isMember: boolean): MailMessage {
+  const base = getConfig().appBaseUrl;
+  const viewLink = isMember ? `${base}/account/orders/${o.id}` : `${base}/track-order?code=${o.id}`;
+  const lines = [
+    'Xin chào,',
+    '',
+    `Đơn #${o.id} đã giao thành công${o.deliveredAt ? ` lúc ${vnDateTime(o.deliveredAt)}` : ''}. Cảm ơn bạn đã mua sắm tại nine2fine.`,
+    '',
+    `Mã đơn: #${o.id}`,
+    'Sản phẩm:',
+    ...o.items.map((i) => `- ${i.name} | ${i.color} | ${i.size} | SL ${i.quantity} | ${money(i.unitPrice)}`),
+    `Tổng thanh toán: ${money(o.pricing.total)}`,
+    '',
+    `Xem đơn: ${viewLink}`,
+  ];
+  return {
+    to: o.recipient.email,
+    subject: `nine2fine – Đơn #${o.id} đã giao thành công`,
+    text: [...lines, ...slice4Footer()].join('\n'),
+  };
+}
+
 /** Báo CSKH khi thư của một sự kiện đơn lỗi 3 lần. KHÔNG kèm email khách. */
 export function eventEmailFailureSupportMail(to: string, orderCode: string): MailMessage {
   return {
