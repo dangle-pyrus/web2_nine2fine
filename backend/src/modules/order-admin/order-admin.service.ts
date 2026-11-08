@@ -12,7 +12,7 @@ import { acquireIdempotency, completeIdempotency, requestHash } from '../order/i
 import { EventActorUser, insertOrderEvent, staffDisplayName } from '../order/order-event';
 import { scheduleEventEmail } from '../order/order-email.service';
 import { ADMIN_ORDER_INCLUDE, toAdminOrder } from './order-admin.mapper';
-import type { CallAttemptBody, CancelBody, RejectCancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
+import type { CallAttemptBody, CancelBody, NoteBody, RejectCancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
 import {
   AdminAction, AdminCancelReason, callStatsOf, cancelActionOf, checkTransition, SHOP_CANCEL_REASON_TEXT, StateOrder,
 } from './order-state';
@@ -38,7 +38,8 @@ export type ActionInput =
   | { kind: 'cancel'; body: CancelBody }
   | { kind: 'returned-stock'; body: ReturnedStockBody }
   | { kind: 'approve-cancel'; body: { expectedStatus: order_status } }
-  | { kind: 'reject-cancel'; body: RejectCancelBody };
+  | { kind: 'reject-cancel'; body: RejectCancelBody }
+  | { kind: 'note'; body: NoteBody };
 
 interface LockedOrder {
   order_id: string;
@@ -74,6 +75,8 @@ export interface ActionResult {
 
 const actionOf = (a: ActionInput): AdminAction => {
   switch (a.kind) {
+    case 'note':
+      return 'add-note';
     case 'cancel':
       return cancelActionOf(a.body.reason as AdminCancelReason);
     case 'returned-stock':
@@ -251,6 +254,15 @@ async function doRejectCancel(c: Ctx, b: RejectCancelBody): Promise<Done> {
   return { eventId, emailTemplate: 'cancel-rejected' };
 }
 
+/** BR-ADM-38: 1 sự kiện `note` (internal_note), không đổi trạng thái / thanh toán, không thư. */
+async function doNote(c: Ctx, b: NoteBody): Promise<Done> {
+  const eventId = await insertOrderEvent(c.tx, {
+    orderId: c.o.order_id, at: c.at, fromStatus: c.o.status, toStatus: c.o.status, paymentStatus: c.o.payment_status,
+    actor: 'shop', actorUser: c.user, kind: 'note', internalNote: b.note,
+  });
+  return { eventId, emailTemplate: null };
+}
+
 /* ---------------- Khuôn chung ---------------- */
 
 const isRetryable = (err: unknown): boolean => {
@@ -295,7 +307,7 @@ export async function runAction(p: {
           }
 
           // 3. expectedStatus.
-          if (p.input.body.expectedStatus !== o.status) {
+          if (p.input.kind !== 'note' && p.input.body.expectedStatus !== o.status) {
             throw Errors.orderStateChanged(await loadAdminOrder(tx, o.order_id, p.actor.role), o.status);
           }
 
@@ -304,8 +316,8 @@ export async function runAction(p: {
             status: o.status, paymentMethod: o.payment_method, needsConfirmCall: o.needs_confirm_call, confirmedAt: o.confirmed_at,
             returnedFromTransit: o.returned_from_transit, returnHandledAt: o.return_handled_at, stockRestoredAt: o.stock_restored_at,
           };
-          const stats = callStatsOf(action === 'cancel-unreachable' ? await callTimes(tx, o.order_id) : []);
-          const v = checkTransition(action, state, p.actor.role, stats);
+          const stats = p.input.kind === 'note' ? callStatsOf([]) : callStatsOf(action === 'cancel-unreachable' ? await callTimes(tx, o.order_id) : []);
+          const v = p.input.kind === 'note' ? { ok: true as const } : checkTransition(action, state, p.actor.role, stats);
           if (!v.ok) {
             if (v.kind === 'forbidden') throw Errors.forbidden();
             if (v.kind === 'condition-not-met') throw Errors.conditionNotMet(v.message, o.status);
@@ -323,6 +335,7 @@ export async function runAction(p: {
             : i.kind === 'cancel' ? await doCancel(c, i.body)
             : i.kind === 'approve-cancel' ? await doApproveCancel(c)
             : i.kind === 'reject-cancel' ? await doRejectCancel(c, i.body)
+            : i.kind === 'note' ? await doNote(c, i.body)
             : await doReturnedStock(c, i.body);
 
           // 9. Đọc lại (cùng tx); 8. lưu khoá idempotency với bản chụp.

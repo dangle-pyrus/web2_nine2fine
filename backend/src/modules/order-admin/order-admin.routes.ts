@@ -9,7 +9,7 @@ import { ADMIN_ORDER_INCLUDE, toAdminOrder, toAdminSummary } from './order-admin
 import { countOrders, listOrders } from './order-admin.query';
 import { ActionInput, Actor, runAction } from './order-admin.service';
 import {
-  callAttemptSchema, cancelSchema, countsQuerySchema, expectedStatusSchema, listQuerySchema, rejectCancelSchema, returnedStockSchema, shipSchema,
+  callAttemptSchema, cancelSchema, countsQuerySchema, expectedStatusSchema, listQuerySchema, noteSchema, rejectCancelSchema, returnedStockSchema, shipSchema,
 } from './order-admin.schemas';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
@@ -130,4 +130,10 @@ orderAdminRouter.post(
 orderAdminRouter.post(
   '/:orderCode/cancel-request/reject',
   wrap(async (req, res) => respond(req, res, { kind: 'reject-cancel', body: parseBody(rejectCancelSchema, req.body) })),
+);
+
+/** Lát 4.6 (BR-ADM-38): ghi chú nội bộ, mọi trạng thái, không `expectedStatus`, không đổi trạng thái, không email. Staff + admin. */
+orderAdminRouter.post(
+  '/:orderCode/notes',
+  wrap(async (req, res) => respond(req, res, { kind: 'note', body: parseBody(noteSchema, req.body) })),
 );

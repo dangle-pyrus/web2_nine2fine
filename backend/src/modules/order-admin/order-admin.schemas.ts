@@ -71,6 +71,15 @@ const requireNote = (note: string | undefined, ctx: z.RefinementCtx) => {
 
 export const expectedStatusSchema = z.object({ expectedStatus });
 
+const INTERNAL_NOTE_MSG = 'Ghi chú nội bộ từ 1 đến 500 ký tự.';
+/** BR-ADM-38: không có `expectedStatus` (ghi chú hợp lệ ở mọi trạng thái); trim, 1-500 ký tự. */
+export const noteSchema = z.object({
+  note: z
+    .string({ error: INTERNAL_NOTE_MSG })
+    .transform((v) => v.normalize('NFC').trim())
+    .refine((v) => len(v) >= 1 && len(v) <= 500, { error: INTERNAL_NOTE_MSG }),
+});
+
 export const callAttemptSchema = z.object({ expectedStatus, note: optionalNote });
 
 const CARRIER_MSG = 'Đơn vị vận chuyển từ 2 đến 50 ký tự.';
@@ -123,3 +132,4 @@ export type ShipBody = z.output<typeof shipSchema>;
 export type CancelBody = z.output<typeof cancelSchema>;
 export type ReturnedStockBody = z.output<typeof returnedStockSchema>;
 export type RejectCancelBody = z.output<typeof rejectCancelSchema>;
+export type NoteBody = z.output<typeof noteSchema>;

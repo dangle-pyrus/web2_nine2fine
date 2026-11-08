@@ -1,6 +1,8 @@
 import type { Order, OrderEvent, OrderItem, User, user_role } from '@prisma/client';
+import { now as clockNow } from '../../lib/clock';
 import { kindOf, toOrderDto } from '../order/order.mapper';
 import type { SummaryRow } from './order-admin.query';
+import { overdueOf } from './overdue';
 import { AdminAction, callStatsOf, computeAllowedActions, needsCall, StateOrder, tabOf } from './order-state';
 
 export type AdminOrderRow = Order & {
@@ -112,7 +114,7 @@ export function toAdminOrder(o: AdminOrderRow, role: user_role) {
       ...(stats.firstAt ? { firstAt: iso(stats.firstAt) } : {}),
       ...(stats.lastAt ? { lastAt: iso(stats.lastAt) } : {}),
     },
-    overdue: [],
+    overdue: overdueOf({ status: o.status, needsCall: needsCall(state), createdAt: o.createdAt, cancelRequestedAt: o.cancelRequestedAt, estimatedTo: o.estimatedTo }, clockNow()),
     allowedActions: allowed,
     timeline: toAdminTimeline(o.events),
   };
@@ -178,6 +180,6 @@ export function toAdminSummary(r: SummaryRow) {
     needsCall: r.needs_call,
     hasCancelRequest: r.status === 'cancel_requested',
     tab: r.tab,
-    overdue: [] as string[],
+    overdue: overdueOf({ status: r.status, needsCall: r.needs_call, createdAt: r.created_at, cancelRequestedAt: r.cancel_requested_at, estimatedTo: r.estimated_to }, clockNow()),
   };
 }
