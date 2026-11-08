@@ -193,11 +193,13 @@ Không có.
 ## Cập nhật sau báo cáo (2026-11-08, orchestrator, Thắng xác nhận áp Supabase)
 
 - Migration Slice 3 đã có trên Supabase (áp lúc 05:36:53Z). `migrate deploy` chạy 2 lần: "No pending migrations to apply". `seed:checkout` chạy lại không đổi số dòng, `used_count` voucher giữ 0. RLS bật mọi bảng mới. **AC-CHK-41: Pass** (Must: 62 Pass, 8 KKĐ).
-- BE trỏ Supabase: địa giới và `POST /checkout/quote` (2 voucher) trả đúng tổng 1.097.000. M-2 còn lại: đặt đơn thật qua FE trên Supabase và thư Gmail thật (AC-CHK-34), chưa làm vì tạo dữ liệu đơn và gửi thư thật.
+- BE trỏ Supabase: địa giới và `POST /checkout/quote` (2 voucher) trả đúng tổng 1.097.000.
+- Đơn thật qua FE trên Supabase (Thắng duyệt): đơn khách COD N2F2611082686, 1.290.000 ₫. Thư xác nhận gửi qua SMTP (1 lần thử), Thắng xác nhận vào hộp thư chính Gmail, tổng đúng. **AC-CHK-34: Pass.** Tra cứu OTP qua Gmail thật mở đúng đơn; huỷ: tồn 4 -> 5, `stock_restored_at` có. **M-2 đóng.**
+- Tổng sau cập nhật: AC Must 73: **63 Pass**, 1 Fail (AC-VOU-08, chữ AC), **7 KKĐ**, 2 hoãn Q2. Còn chưa đạt DoD vì M-1 và 7 AC KKĐ.
 
 ## Việc còn lại
 
-1. Đặt 1 đơn thật qua FE với BE trỏ Supabase, email Gmail thật (AC-CHK-34), rồi huỷ đơn đó.
+1. (Đã xong) Đơn thật trên Supabase với Gmail thật.
 2. Sáu đề xuất đổi contract trong `docs/handoff.md` còn mở, chờ duyệt (không tính là lỗi).
 3. Q1-Q4 đang chạy theo giả định. Lát 3.8 QR/SePay chưa làm, chờ Thắng (Q2); khi làm xong chạy lại AC-CHK-25, AC-CHK-27.
 4. Xử lý M2, hoặc ghi chấp nhận trong `decisions.md`, để đóng DoD lệnh kiểm tra.
