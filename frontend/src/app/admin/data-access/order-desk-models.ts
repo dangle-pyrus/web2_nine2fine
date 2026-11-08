@@ -187,6 +187,29 @@ export interface DeskOrder {
   timeline: DeskTimelineEntry[];
 }
 
+/**
+ * One write of the orders desk (lát 4.3-4.4). `expectedStatus` is the status the user was looking
+ * at (BR-ADM-14); the body sent is the command without `action`.
+ */
+export type DeskCommand =
+  | { action: 'call-attempt'; expectedStatus: DeskOrderStatus; note?: string }
+  | { action: 'confirm'; expectedStatus: DeskOrderStatus }
+  | { action: 'ship'; expectedStatus: DeskOrderStatus; carrier: string; trackingNumber: string }
+  | { action: 'deliver'; expectedStatus: DeskOrderStatus }
+  | {
+      action: 'cancel';
+      expectedStatus: DeskOrderStatus;
+      reason: DeskCancelReasonCode;
+      note?: string;
+    }
+  | {
+      action: 'returned-stock';
+      expectedStatus: DeskOrderStatus;
+      decision: 'restocked' | 'written_off';
+      note?: string;
+    };
+export type DeskCommandAction = DeskCommand['action'];
+
 /** Query of the list and (without `view`, `page`, `limit`) of the counts. */
 export interface DeskOrderFilter {
   q: string;
@@ -205,3 +228,14 @@ export interface DeskOrderQuery extends DeskOrderFilter {
 export const DESK_MAX_SEARCH = 100;
 export const DESK_DEFAULT_LIMIT = 20;
 export const DESK_LIMITS = [20, 50] as const;
+
+export const DESK_CARRIER_MIN = 2;
+export const DESK_CARRIER_MAX = 50;
+export const DESK_TRACKING_MIN = 4;
+export const DESK_TRACKING_MAX = 40;
+/** Letters, digits and `-` only (AdminShipRequest.trackingNumber). */
+export const DESK_TRACKING_PATTERN = /^[A-Za-z0-9-]+$/;
+export const DESK_NOTE_MIN = 5;
+export const DESK_NOTE_MAX = 250;
+/** Names offered first when handing over; the field stays free text (S4-Q5). */
+export const DESK_CARRIER_SUGGESTIONS = ['GHN', 'GHTK', 'Viettel Post', 'J&T'] as const;

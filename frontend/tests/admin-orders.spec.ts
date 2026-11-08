@@ -1,7 +1,8 @@
 import { expect, Page, test } from '@playwright/test';
 
 /**
- * Slice 4, lát 4.1-4.2 (orders desk on the contract mock). The e2e build keeps the earlier mock
+ * Slice 4, lát 4.1-4.2 (orders desk on the contract mock; the writes of lát 4.3-4.4 are in
+ * `admin-order-actions.spec.ts`). The e2e build keeps the earlier mock
  * back office by default; these specs switch to the desk with `adminOrdersMode = contract-mock`.
  */
 const MODE_KEY = 'n2f.e2e.adminOrdersMode';
@@ -59,8 +60,11 @@ test.describe('admin orders desk (contract mock)', () => {
     await expect(menu.locator('.menu-list a')).toContainText('Đơn hàng');
     await page.getByRole('link', { name: /N2F2611072359/ }).click();
     await expect(page.getByRole('button', { name: 'Bàn giao vận chuyển' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Huỷ: khách yêu cầu' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Huỷ với lý do khác' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
+    const reasons = page.getByRole('dialog').getByRole('radio');
+    await expect(reasons).toHaveCount(1);
+    await expect(page.getByRole('dialog').getByLabel('Khách yêu cầu huỷ')).toBeVisible();
+    await expect(page.getByRole('dialog').getByLabel('Lý do khác')).toHaveCount(0);
     await page.goto('/admin/products');
     await expect(page.getByRole('heading', { name: 'Chưa khả dụng' })).toBeVisible();
     expect(requests.filter((url) => /\/api\/admin\/(?!orders|auth)/.test(url))).toEqual([]);
@@ -69,8 +73,9 @@ test.describe('admin orders desk (contract mock)', () => {
   test('AC-ADM-04: admin sees "Huỷ với lý do khác" on the same order', async ({ page }) => {
     await signIn(page);
     await page.goto('/admin/orders/N2F2611072359');
-    await expect(page.getByRole('button', { name: 'Huỷ với lý do khác' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Huỷ với lý do khác' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('radio')).toHaveCount(2);
+    await expect(page.getByRole('dialog').getByLabel('Lý do khác')).toBeVisible();
   });
 
   test('AC-ADM-05: 45 orders, 20 per page, page 3 has 5, page 9 is empty', async ({ page }) => {

@@ -8,6 +8,7 @@ import type { PaymentState } from '../data-access/models';
 import type {
   DeskAction,
   DeskBucket,
+  DeskCancelReasonCode,
   DeskOrderStatus,
   DeskPaymentMethod,
   DeskPaymentStatus,
@@ -113,4 +114,35 @@ export function actorLabel(actor: DeskTimelineEntry['actor']): string {
   if (actor.type === 'customer') return 'Khách';
   if (actor.type === 'system') return 'Hệ thống';
   return `${actor.name ?? 'Nhân viên'} (${actor.role === 'admin' ? 'Quản trị viên' : 'Nhân viên'})`;
+}
+
+export const CANCEL_REASON_LABELS: Record<DeskCancelReasonCode, string> = {
+  unreachable: 'Không liên lạc được',
+  declined_on_call: 'Khách từ chối khi gọi xác nhận',
+  customer_request: 'Khách yêu cầu huỷ (gọi hotline)',
+  refused: 'Khách từ chối nhận hàng',
+  undeliverable: 'Giao không thành',
+  other: 'Lý do khác',
+};
+
+/** Which `allowedActions` entry opens which cancel reason; the picker lists only those present. */
+export const CANCEL_ACTION_REASON: Partial<Record<DeskAction, DeskCancelReasonCode>> = {
+  'cancel-unreachable': 'unreachable',
+  'cancel-declined-on-call': 'declined_on_call',
+  'cancel-customer-request': 'customer_request',
+  'cancel-refused': 'refused',
+  'cancel-undeliverable': 'undeliverable',
+  'cancel-other': 'other',
+};
+export const CANCEL_REASON_ORDER = Object.values(CANCEL_ACTION_REASON);
+
+/** Reasons that need a 5-250 character internal note (AdminCancelRequest.note). */
+export const NOTE_REQUIRED_REASONS: readonly DeskCancelReasonCode[] = ['customer_request', 'other'];
+
+/** Reasons the order may be cancelled with right now, in the contract's order. */
+export function cancelReasonsOf(order: { allowedActions: DeskAction[] }): DeskCancelReasonCode[] {
+  const open = new Set(order.allowedActions.map((action) => CANCEL_ACTION_REASON[action]));
+  return CANCEL_REASON_ORDER.filter(
+    (reason): reason is DeskCancelReasonCode => !!reason && open.has(reason),
+  );
 }

@@ -53,11 +53,43 @@
     </div>
     }
 
+    <div #live class="notice-live" tabindex="-1" aria-live="polite">
+      @if (notice(); as notice) {
+      <div
+        class="banner"
+        [class.banner--success]="notice.tone === 'success'"
+        [class.banner--warning]="notice.tone === 'warning'"
+        [attr.role]="notice.tone === 'warning' ? 'alert' : 'status'"
+        data-testid="order-notice"
+      >
+        <adm-icon [name]="notice.tone === 'success' ? 'reiconCheck' : 'reiconAlertTriangle'" />
+        <div class="banner-body">
+          <p>{{ notice.text }}</p>
+        </div>
+        <button type="button" class="adm-btn adm-btn--sm banner-action" (click)="dismissNotice()">
+          Đóng
+        </button>
+      </div>
+      }
+    </div>
+
     <section class="section" aria-labelledby="actions-title">
       <header><h2 id="actions-title">Thao tác</h2></header>
       @if (actions().length) {
       <ul class="actions">
-        @for (action of actions(); track action) {
+        @for (button of buttons().live; track button.kind) {
+        <li>
+          <button
+            type="button"
+            class="adm-btn"
+            [class.adm-btn--primary]="button.kind !== 'cancel' && button.kind !== 'write-off'"
+            [attr.data-action]="button.kind"
+            (click)="open(button.kind)"
+          >
+            {{ button.kind === 'cancel' ? 'Huỷ đơn' : actionLabels[button.action] }}
+          </button>
+        </li>
+        } @for (action of buttons().waiting; track action) {
         <li>
           <button
             type="button"
@@ -72,8 +104,7 @@
         }
       </ul>
       <p class="small secondary">
-        Chỉ hiện thao tác máy chủ cho phép ở bước này. Các thao tác xử lý đơn sẽ mở ở bản cập nhật
-        tới.
+        Chỉ hiện thao tác máy chủ cho phép ở bước này. Mỗi thao tác hỏi xác nhận trước khi gửi.
       </p>
       } @else {
       <p class="secondary">Không có thao tác nào cho đơn này.</p>
@@ -243,6 +274,16 @@
         <div class="span-2">
           <dt>Câu hiển thị cho khách</dt>
           <dd>{{ cancellation.reason }}</dd>
+        </div>
+        } @if (order.deliveryRefusedAt) {
+        <div>
+          <dt>Từ chối nhận lúc</dt>
+          <dd>{{ order.deliveryRefusedAt | admDateTime }}</dd>
+        </div>
+        } @if (order.stockRestoredAt) {
+        <div class="span-2">
+          <dt>Tồn kho</dt>
+          <dd>Đã cộng lại tồn kho lúc {{ order.stockRestoredAt | admDateTime }}.</dd>
         </div>
         } @if (cancellation.note) {
         <div class="span-2">

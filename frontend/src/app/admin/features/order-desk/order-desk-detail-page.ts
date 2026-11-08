@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap, tap } from 'rxjs';
@@ -7,6 +15,9 @@ import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import {
   ACTION_LABELS,
   actorLabel,
+  CANCEL_ACTION_REASON,
+  CANCEL_REASON_LABELS,
+  DESK_TABS,
   entryStatusLabel,
   OVERDUE_LABELS,
   paymentState,
@@ -17,11 +28,18 @@ import { AdminApiError } from '../../data-access/models';
 import { errorMessage } from '../../data-access/http-support';
 import { ADMIN_ORDER_DESK_API } from '../../data-access/order-desk-api';
 import type { DeskAction, DeskOrder, DeskStaffRef } from '../../data-access/order-desk-models';
+import { AdminDialogs } from '../../ui/dialogs';
 import { AdmBadge } from '../../ui/badge';
 import { AdmCopyButton } from '../../ui/copy-button';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
 import { AdmPageHeader } from '../../ui/page-header';
+import {
+  DeskActionDialog,
+  type DeskActionDialogData,
+  type DeskActionKind,
+  type DeskActionOutcome,
+} from './order-action-dialog';
 import { routeParam } from '../../ui/route-param';
 
 type LoadState =
@@ -30,19 +48,26 @@ type LoadState =
   | { kind: 'not-found' }
   | { kind: 'error'; message: string };
 
-const CANCEL_REASONS: Record<string, string> = {
-  unreachable: 'Không liên lạc được',
-  declined_on_call: 'Khách từ chối khi gọi xác nhận',
-  customer_request: 'Khách yêu cầu huỷ',
-  refused: 'Khách từ chối nhận hàng',
-  undeliverable: 'Giao không thành',
-  other: 'Lý do khác',
-};
+function kindOf(action: DeskAction): DeskActionKind | null {
+  if (action in CANCEL_ACTION_REASON) return 'cancel';
+  switch (action) {
+    case 'call-attempt':
+    case 'confirm':
+    case 'ship':
+    case 'deliver':
+    case 'restock':
+    case 'write-off':
+      return action;
+    default:
+      return null;
+  }
+}
 
 /**
  * Order detail of the orders desk (Slice 4, BR-ADM-09, 10): customer, shipping and payment blocks,
- * the history newest first, and the buttons the server allows right now (`allowedActions`). The
- * actions themselves arrive with lát 4.3-4.6, so the buttons are shown but disabled.
+ * the history newest first, and the buttons the server allows right now (`allowedActions`).
+ * Lát 4.3-4.4 act on them (call attempt, confirm, ship, deliver, cancel, returned stock); the
+ * remaining buttons (cancel requests, notes, print) stay disabled until their lát.
  */
 @Component({
   selector: 'adm-order-desk-detail-page',
@@ -64,6 +89,7 @@ const CANCEL_REASONS: Record<string, string> = {
 export class OrderDeskDetailPage {
   private readonly api = inject(ADMIN_ORDER_DESK_API);
   protected readonly session = inject(AdminSession);
+  private readonly dialogs = inject(AdminDialogs);
   private readonly code = routeParam('id');
   private readonly tick = signal(0);
 
@@ -79,7 +105,7 @@ export class OrderDeskDetailPage {
   protected readonly actorLabel = actorLabel;
   protected readonly statusLabel = entryStatusLabel;
   protected readonly overdueLabels = OVERDUE_LABELS;
-  protected readonly cancelReasons = CANCEL_REASONS;
+  protected readonly cancelReasons = CANCEL_REASON_LABELS;
   protected readonly methods = PAYMENT_METHODS;
   protected readonly actionLabels = ACTION_LABELS;
 
@@ -89,6 +115,24 @@ export class OrderDeskDetailPage {
   });
   /** Only what the server lists (`allowedActions`), in the server's order. */
   protected readonly actions = computed<DeskAction[]>(() => this.order()?.allowedActions ?? []);
+  /** Buttons that act now (the cancel reasons share one) and the ones that wait for a later lát. */
+  protected readonly buttons = computed(() => {
+    const seen = new Set<DeskActionKind>();
+    const live: { action: DeskAction; kind: DeskActionKind }[] = [];
+    const waiting: DeskAction[] = [];
+    for (const action of this.actions()) {
+      const kind = kindOf(action);
+      if (!kind) waiting.push(action);
+      else if (!seen.has(kind)) {
+        seen.add(kind);
+        live.push({ action, kind });
+      }
+    }
+    return { live, waiting };
+  });
+  /** Result of the last action: polite for success, assertive when the server said no. */
+  protected readonly notice = signal<{ tone: 'success' | 'warning'; text: string } | null>(null);
+  private readonly live = viewChild<ElementRef<HTMLElement>>('live');
 
   constructor() {
     toObservable(computed(() => ({ code: this.code(), tick: this.tick() })))
@@ -109,6 +153,54 @@ export class OrderDeskDetailPage {
         takeUntilDestroyed(),
       )
       .subscribe((state) => this.state.set(state));
+  }
+
+  open(kind: DeskActionKind): void {
+    const order = this.order();
+    if (!order) return;
+    this.notice.set(null);
+    this.dialogs
+      .modal<DeskActionDialogData, DeskActionOutcome>(DeskActionDialog, { order, kind })
+      .closed.subscribe((outcome) => this.settle(outcome));
+  }
+
+  dismissNotice(): void {
+    this.notice.set(null);
+  }
+
+  /** The page changes only with the server's answer (BR-ADM-15); then it tells where the order went. */
+  private settle(outcome: DeskActionOutcome | undefined): void {
+    if (!outcome) return;
+    if (outcome.kind === 'done') {
+      this.state.set({ kind: 'ready', order: outcome.order });
+      this.announceTab(outcome.order, outcome.message);
+    } else {
+      this.notice.set({ tone: 'warning', text: outcome.message });
+      if (outcome.order) this.state.set({ kind: 'ready', order: outcome.order });
+      else this.tick.update((value) => value + 1);
+      this.focusNotice();
+    }
+  }
+
+  private focusNotice(): void {
+    setTimeout(() => this.live()?.nativeElement.focus());
+  }
+
+  /** Counts of the tabs follow the change (BR-ADM-07): say which tab the order is in now. */
+  private announceTab(order: DeskOrder, message: string): void {
+    this.api
+      .counts({ q: '', payment: '', from: '', to: '' })
+      .pipe(catchError(() => of(null)))
+      .subscribe((counts) => {
+        const label = DESK_TABS.find((tab) => tab.value === order.tab)?.label ?? '';
+        this.notice.set({
+          tone: 'success',
+          text: counts
+            ? `${message} Đơn nằm ở tab “${label}” (${counts[order.tab]} đơn).`
+            : message,
+        });
+        this.focusNotice();
+      });
   }
 
   retry(): void {

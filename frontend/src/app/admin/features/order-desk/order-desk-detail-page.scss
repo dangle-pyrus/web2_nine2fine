@@ -122,3 +122,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.notice-live:focus {
+  outline: none;
+}
