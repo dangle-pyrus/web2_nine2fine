@@ -489,7 +489,7 @@ test('AC-CART-18: a revoked session keeps the cart; signing in again adds only t
   await expect(page.locator('.toast', { hasText: MERGE_SENTENCE(1) })).toHaveCount(1);
 });
 
-test('AC-CHK-33: 429 rate-limited on placing an order shows a countdown and keeps form and cart', async ({
+test('AC-CHK-36 (FE part): 429 rate-limited on placing an order shows a countdown and keeps form and cart', async ({
   page,
   isMobile,
 }) => {
