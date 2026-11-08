@@ -190,9 +190,14 @@ Không có.
 - **m-6. Dữ liệu ngày nghỉ.** `backend/prisma/seed-data/holidays-vn.json`: 2027 chỉ ước tính (Tết 5-9/2/2027), thiếu Giỗ Tổ 2027. Ảnh hưởng AC-CHK-11 cho đơn năm 2027. Chịu trách nhiệm: Thắng đối chiếu văn bản chính thức trước go-live.
 - **m-7. Thiếu ca test:** email 101 ký tự và SĐT `84912345678` (AC-CHK-04); "+ 5 lần trong 1 giây" (AC-CART-10); nháp 25 giờ (AC-CHK-03 Should); hộp thoại đơn trùng ở FE (AC-CHK-20 Should).
 
+## Cập nhật sau báo cáo (2026-11-08, orchestrator, Thắng xác nhận áp Supabase)
+
+- Migration Slice 3 đã có trên Supabase (áp lúc 05:36:53Z). `migrate deploy` chạy 2 lần: "No pending migrations to apply". `seed:checkout` chạy lại không đổi số dòng, `used_count` voucher giữ 0. RLS bật mọi bảng mới. **AC-CHK-41: Pass** (Must: 62 Pass, 8 KKĐ).
+- BE trỏ Supabase: địa giới và `POST /checkout/quote` (2 voucher) trả đúng tổng 1.097.000. M-2 còn lại: đặt đơn thật qua FE trên Supabase và thư Gmail thật (AC-CHK-34), chưa làm vì tạo dữ liệu đơn và gửi thư thật.
+
 ## Việc còn lại
 
-1. Thắng xác nhận rồi áp migration và seed Slice 3 lên Supabase (`migrate deploy` hai lần), kiểm lại luồng đặt hàng với BE trỏ Supabase, gửi 1 đơn có email Gmail thật (AC-CHK-34, AC-CHK-41).
+1. Đặt 1 đơn thật qua FE với BE trỏ Supabase, email Gmail thật (AC-CHK-34), rồi huỷ đơn đó.
 2. Sáu đề xuất đổi contract trong `docs/handoff.md` còn mở, chờ duyệt (không tính là lỗi).
 3. Q1-Q4 đang chạy theo giả định. Lát 3.8 QR/SePay chưa làm, chờ Thắng (Q2); khi làm xong chạy lại AC-CHK-25, AC-CHK-27.
 4. Xử lý M2, hoặc ghi chấp nhận trong `decisions.md`, để đóng DoD lệnh kiểm tra.
