@@ -57,6 +57,10 @@ import { CATALOG_API, HttpCatalogApi } from './features/catalog/data-access/cata
 import { MockCatalogApi } from '../mocks/mock-catalog-api';
 import { CHECKOUT_API, HttpCheckoutApi, PAYMENT_SIMULATOR } from './features/checkout/checkout-api';
 import { MockCheckoutApi } from '../mocks/mock-checkout-api';
+import { CART_API, HttpCartApi } from './features/cart/data-access/cart-api';
+import { MockCartApi } from '../mocks/mock-cart-api';
+import { HttpOrdersApi, ORDERS_API } from './features/account/data-access/orders-api';
+import { MockOrdersApi } from '../mocks/mock-orders-api';
 import { AUTH_API, HttpAuthApi } from './features/auth/data-access/auth-api';
 import { MockAuthApi } from '../mocks/mock-auth-api';
 import { ACCOUNT_API, HttpAccountApi } from './features/account/data-access/account-api';
@@ -69,10 +73,7 @@ import {
 import { MockStoreSettingsApi } from '../mocks/mock-store-settings-api';
 import { HttpNewsletterApi, NEWSLETTER_API } from './features/home/newsletter-api';
 import { MockNewsletterApi } from '../mocks/mock-newsletter-api';
-import { MockPersistence } from '../mocks/mock-persistence';
 import { AuthSession } from './features/auth/auth-session';
-import { CheckoutSession } from './features/checkout/checkout-session';
-import { OrderReceipt } from './features/checkout/checkout-api';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -127,16 +128,6 @@ export const appConfig: ApplicationConfig = {
     { provide: API_CONFIG, useValue: apiConfig },
     // Signed-in shopper: asked from the backend cookie (`GET /auth/me`), or from the mock session.
     provideAppInitializer(() => inject(AuthSession).restore()),
-    // Mock mode only: keep the last receipt across F5 (a real backend owns orders).
-    provideAppInitializer(() => {
-      if (inject(API_CONFIG).mode !== 'mock') return;
-      const persistence = inject(MockPersistence);
-      const checkout = inject(CheckoutSession);
-      const receipt = persistence.register<OrderReceipt | null>('receipt', () =>
-        checkout.lastReceipt(),
-      );
-      if (receipt) checkout.lastReceipt.set(receipt);
-    }),
     {
       provide: CATALOG_API,
       useFactory: () =>
@@ -145,11 +136,24 @@ export const appConfig: ApplicationConfig = {
     {
       provide: CHECKOUT_API,
       useFactory: () =>
-        inject(API_CONFIG).mode === 'mock' ? inject(MockCheckoutApi) : inject(HttpCheckoutApi),
+        inject(API_CONFIG).checkoutMode === 'mock'
+          ? inject(MockCheckoutApi)
+          : inject(HttpCheckoutApi),
     },
     {
       provide: PAYMENT_SIMULATOR,
-      useFactory: () => (inject(API_CONFIG).mode === 'mock' ? inject(MockCheckoutApi) : null),
+      useFactory: () =>
+        inject(API_CONFIG).checkoutMode === 'mock' ? inject(MockCheckoutApi) : null,
+    },
+    {
+      provide: CART_API,
+      useFactory: () =>
+        inject(API_CONFIG).checkoutMode === 'mock' ? inject(MockCartApi) : inject(HttpCartApi),
+    },
+    {
+      provide: ORDERS_API,
+      useFactory: () =>
+        inject(API_CONFIG).checkoutMode === 'mock' ? inject(MockOrdersApi) : inject(HttpOrdersApi),
     },
     {
       provide: AUTH_API,

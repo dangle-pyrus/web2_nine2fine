@@ -27,6 +27,10 @@ export interface OrderItem {
   unitPrice: number;
   compareAtPrice?: number;
   mediaId: string;
+  /** API orders: lets "Mua lại" put the exact variant back in the cart. */
+  variantId?: string;
+  /** Voucher discount already shared out to this line (API orders). */
+  lineDiscount?: number;
 }
 
 export interface OrderPricing {
@@ -165,4 +169,15 @@ export interface Order {
   returnDays?: number;
   /** Status and carrier events from the backend; the UI derives a basic history when absent. */
   timeline?: OrderEvent[];
+  /** Replaces the standard status label (e.g. a cancellation awaiting the shop). */
+  statusNote?: string;
+  /** API orders: the server says whether the shopper may cancel now. */
+  canCancel?: boolean;
+  /** COD order the shop will call to confirm (API orders). */
+  willCallToConfirm?: boolean;
+  cancelReason?: string;
+  /** `YYYY-MM-DD` dates (API orders). */
+  estimatedDelivery?: { from: string; to: string };
+  /** Buyer email on the order (API orders; never put in a URL). */
+  email?: string;
 }

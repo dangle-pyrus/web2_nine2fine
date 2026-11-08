@@ -10,6 +10,11 @@ export interface ApiConfig {
   authMode: 'mock' | 'http';
   /** Catalog (products, size charts): `http` once Slice 2 is integrated; cart, checkout, account, admin follow `mode`. */
   catalogMode: 'mock' | 'http';
+  /**
+   * Cart, quote, checkout, order placement, locations, guest order lookup and the order part of the
+   * account (Slice 3). Independent of `mode`: profile, addresses and admin stay on `mode`.
+   */
+  checkoutMode: 'mock' | 'http';
   baseUrl: string;
 }
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
@@ -17,5 +22,6 @@ export const apiConfig: ApiConfig = {
   mode: 'mock',
   authMode: 'http',
   catalogMode: 'http',
+  checkoutMode: 'http',
   baseUrl: '/api',
 };

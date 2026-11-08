@@ -4,36 +4,40 @@ import {
   CheckoutApi,
   CheckoutError,
   CheckoutErrorCode,
+  CheckoutErrorDetails,
   CheckoutQuote,
   CheckoutRequest,
+  LookupRequest,
+  LookupVerifyRequest,
   OrderReceipt,
   PaymentSession,
   PaymentSimulator,
   QuoteRequest,
   StockIssue,
-  TrackOrderRequest,
+  VoucherApplied,
+  VoucherCheckResult,
+  VoucherRejection,
 } from '../app/features/checkout/checkout-api';
+import { Location } from '../app/features/account/data-access/account-models';
 import { Order, OrderItem, OrderPricing } from '../app/features/orders/order-models';
+import { withCancel } from '../app/features/account/data-access/orders-api';
 import { AuthSession } from '../app/features/auth/auth-session';
-import { STORE_POLICY } from '../app/core/store-policy';
-import { PRODUCTS } from './products';
 import { PROVINCES, WARDS } from './locations';
+import { DEMO_VERIFICATION_CODE } from './accounts';
 import { MockAccountStore } from './mock-account-store';
 import { MockPersistence } from './mock-persistence';
 import { fail, respond } from './mock-latency';
+import { mockFlags, mockPolicy, refreshMockLine, takePlaceError } from './mock-flags';
 import { DEMO_SEED_VOUCHER_RULES } from './demo-seed'; // DEMO SEED (remove with src/mocks/demo-seed/)
 
-/** Demo pricing rules only; real shipping fees, promotions and limits come from the backend. */
-const SHIPPING_FEE = STORE_POLICY.shippingFee;
-const FREE_SHIPPING_FROM = STORE_POLICY.freeShippingFrom;
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
-/** Unpaid bank-transfer orders are held this long, then cancelled. */
-const PAYMENT_HOLD_MS = STORE_POLICY.paymentHoldMinutes * MINUTE;
 /** Demo reconciliation: the mock "receives" the transfer this long after the QR is first shown. */
 const AUTO_PAID_AFTER_MS = 15_000;
 const QR_PLACEHOLDER = '/assets/payment/qr-placeholder.jpg';
+/** Wrong lookup codes allowed per email before the mock locks it (BR-AUTH-08 style). */
+const MAX_LOOKUP_ATTEMPTS = 5;
 
 interface VoucherRule {
   label: string;
@@ -42,11 +46,12 @@ interface VoucherRule {
   shipping?: boolean;
 }
 
+/** Percent codes round down to 1.000 ₫ (assumption Q1). */
 const VOUCHER_RULES: Record<string, VoucherRule> = {
   N2FWELCOME15: {
     label: 'Giảm 15% đơn hàng đầu tiên',
     minSubtotal: 100000,
-    discount: (subtotal) => Math.round((subtotal * 0.15) / 1000) * 1000,
+    discount: (subtotal) => Math.floor((subtotal * 0.15) / 1000) * 1000,
   },
   N2FBDAY100: { label: 'Giảm 100K tháng sinh nhật', minSubtotal: 800000, discount: () => 100000 },
   N2FFREESHIP: {
@@ -70,6 +75,9 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
   private readonly receipts = new Map<string, OrderReceipt>();
   /** When the payment page first showed each order's QR (start of the simulated transfer). */
   private readonly paymentStarted = new Map<string, number>();
+  /** Orders a guest proved with the lookup code (stands for the `n2f_oa` cookie). */
+  private readonly verified = new Set<string>();
+  private readonly lookupFailures = new Map<string, number>();
 
   constructor() {
     const saved = inject(MockPersistence).register('checkout', () => ({
@@ -81,115 +89,114 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
   }
 
   quote(request: QuoteRequest): Observable<CheckoutQuote> {
-    const resolved = this.resolveItems(request.items);
-    return 'issues' in resolved
-      ? failWith('stock-changed', resolved.issues)
-      : respond(this.price(resolved.items, request.voucherCode));
+    if (mockFlags().refreshFail) return failWith('unavailable');
+    try {
+      return respond(this.buildQuote(request));
+    } catch (error) {
+      return fail(error as Error);
+    }
+  }
+
+  checkVoucher(
+    code: string,
+    request: Pick<QuoteRequest, 'items' | 'voucherCodes' | 'address' | 'contact'>,
+  ): Observable<VoucherCheckResult> {
+    if (mockFlags().voucherLocked) return failWith('rate-limited', { retryAfterSeconds: 900 });
+    if (mockFlags().refreshFail) return failWith('unavailable');
+    const normalized = normalizeCode(code);
+    try {
+      const existing = (request.voucherCodes ?? []).map(normalizeCode);
+      const withCode = this.buildQuote({ ...request, voucherCodes: [...existing, normalized] });
+      const applied = withCode.vouchers.find((voucher) => voucher.code === normalized);
+      if (applied) return respond({ result: applied, quote: withCode });
+      const rejection = withCode.rejectedVouchers.find((voucher) => voucher.code === normalized);
+      return respond({
+        result: rejection ?? { applied: false, code: normalized, reason: 'not-found' },
+        quote: this.buildQuote({ ...request, voucherCodes: existing }),
+      });
+    } catch (error) {
+      return fail(error as Error);
+    }
   }
 
   placeOrder(request: CheckoutRequest, idempotencyKey: string): Observable<OrderReceipt> {
     const replay = this.receipts.get(idempotencyKey);
     if (replay) return respond(replay);
-    const resolved = this.resolveItems(request.items);
-    if ('issues' in resolved) return failWith('stock-changed', resolved.issues);
-    const items = resolved.items;
-    if (!request.acceptedTerms) return failWith('unavailable');
-    const province = PROVINCES.find((candidate) => candidate.code === request.address.provinceCode);
-    const ward = WARDS[request.address.provinceCode]?.find(
-      (candidate) => candidate.code === request.address.wardCode,
-    );
-    if (!province || !ward) return failWith('invalid-address');
-    const quote = this.price(items, request.voucherCode);
-    if (request.voucherCode && !quote.voucher) return failWith('invalid-voucher');
-
-    const now = Date.now();
-    const prepaid = request.paymentMethod === 'bank-transfer';
-    const order: Order = {
-      id: `N2F${new Date(now).toISOString().slice(2, 10).replace(/-/g, '')}${String(now).slice(-3)}`,
-      placedAt: new Date(now).toISOString(),
-      status: prepaid ? 'pending-payment' : 'processing',
-      paymentDueAt: prepaid ? new Date(now + PAYMENT_HOLD_MS).toISOString() : undefined,
-      items,
-      pricing: quote.pricing,
-      shippingAddress: {
-        recipient: request.contact.name.trim(),
-        phone: request.contact.phone.trim(),
-        street: request.address.street.trim(),
-        ward: ward.name,
-        province: province.name,
-      },
-      payment: prepaid
-        ? { method: 'bank-transfer', label: 'Chưa thanh toán · Chuyển khoản QR', paid: false }
-        : { method: 'cod', label: 'Thanh toán khi nhận hàng (COD)', paid: false },
-      note: request.note.trim() || undefined,
-      invoice: request.invoice
-        ? {
-            companyName: request.invoice.companyName.trim(),
-            taxCode: request.invoice.taxCode.trim(),
-            address: request.invoice.address.trim(),
-            email: request.invoice.email.trim().toLowerCase(),
-          }
-        : undefined,
-    };
-    this.store.reserve(order);
-    this.store.addOrder(
-      order,
-      {
-        email: request.contact.email.trim().toLowerCase(),
-        phone: normalizePhone(request.contact.phone),
-      },
-      this.session.user()?.id ?? null,
-    );
-    const receipt: OrderReceipt = {
-      orderId: order.id,
-      status: order.status,
-      total: order.pricing.total,
-      customerName: request.contact.name.trim(),
-      paymentMethod: request.paymentMethod,
-      paymentDueAt: order.paymentDueAt ?? null,
-      bankTransfer: prepaid ? { ...DEMO_BANK, reference: order.id } : null,
-      estimatedDelivery: quote.estimatedDelivery,
-    };
-    this.receipts.set(idempotencyKey, receipt);
-    return respond(receipt);
+    const injected = takePlaceError();
+    if (injected) return this.injectedFailure(injected, request);
+    try {
+      return respond(this.create(request, idempotencyKey));
+    } catch (error) {
+      return fail(error as Error);
+    }
   }
 
-  trackOrder(request: TrackOrderRequest): Observable<Order> {
-    const found = this.verify(request);
-    // Same error for unknown IDs and wrong contacts, so order IDs cannot be probed.
-    return found ? respond(found.order) : failWith('not-found');
+  provinces(): Observable<Location[]> {
+    return respond([...PROVINCES]);
   }
 
-  private verify(request: TrackOrderRequest) {
-    const found = this.store.findOrder(request.orderId.trim().toUpperCase());
-    const contact = request.contact.trim().toLowerCase();
-    const matches =
-      !!found &&
-      !!contact &&
-      (found.contact.email === contact || found.contact.phone === normalizePhone(contact));
-    return matches ? found : undefined;
+  wards(provinceCode: string): Observable<Location[]> {
+    const wards = WARDS[provinceCode];
+    return wards ? respond([...wards]) : failWith('not-found');
   }
 
-  cancelOrder(request: TrackOrderRequest): Observable<Order> {
-    const found = this.verify(request);
+  /** Same answer whether or not the order exists (AC-CHK-31). */
+  requestLookupCode(request: LookupRequest): Observable<{ resendAfterSeconds: number }> {
+    void request;
+    return respond({ resendAfterSeconds: 60 });
+  }
+
+  verifyLookup(request: LookupVerifyRequest): Observable<Order> {
+    const email = request.email.trim().toLowerCase();
+    const failures = this.lookupFailures.get(email) ?? 0;
+    if (failures >= MAX_LOOKUP_ATTEMPTS) {
+      return failWith('code-locked', { retryAfterSeconds: 60 });
+    }
+    const found = this.store.findOrder(normalizeOrderCode(request.orderCode));
+    if (!found || found.contact.email !== email || request.code !== DEMO_VERIFICATION_CODE) {
+      this.lookupFailures.set(email, failures + 1);
+      return failWith('not-found');
+    }
+    this.lookupFailures.delete(email);
+    this.verified.add(found.order.id);
+    return respond(this.present(found.order, found.contact.email));
+  }
+
+  getOrder(orderCode: string): Observable<Order> {
+    const id = normalizeOrderCode(orderCode);
+    const found = this.store.findOrder(id);
     if (!found) return failWith('not-found');
-    const result = this.store.cancelOrder(found.order.id);
-    return typeof result === 'string' ? failWith(result) : respond(result);
+    if (!this.verified.has(id)) return failWith('unauthenticated');
+    return respond(this.present(found.order, found.contact.email));
   }
 
-  /**
-   * Simulates the backend reconciling the virtual account: the order is paid and confirmed
-   * AUTO_PAID_AFTER_MS after the QR was first shown, or cancelled when the hold expires first.
-   */
+  cancel(orderCode: string): Observable<Order> {
+    const id = normalizeOrderCode(orderCode);
+    const found = this.store.findOrder(id);
+    if (!found) return failWith('not-found');
+    if (!this.verified.has(id)) return failWith('unauthenticated');
+    const result = this.store.cancelOrder(id);
+    return typeof result === 'string'
+      ? failWith(result)
+      : respond(this.present(result, found.contact.email));
+  }
+
+  private present(order: Order, email: string): Order {
+    return withCancel({ ...order, email });
+  }
+
+  /** Simulates the backend reconciling the virtual account. */
   paymentSession(orderId: string): Observable<PaymentSession> {
-    const id = orderId.trim().toUpperCase();
+    const id = normalizeOrderCode(orderId);
     const found = this.store.findOrder(id);
     if (!found || found.order.payment.method !== 'bank-transfer') return failWith('not-found');
     const now = Date.now();
     if (!this.paymentStarted.has(id)) this.paymentStarted.set(id, now);
     let order = found.order;
     if (order.status === 'pending-payment') {
-      const due = order.paymentDueAt ? Date.parse(order.paymentDueAt) : now + PAYMENT_HOLD_MS;
+      const due = order.paymentDueAt
+        ? Date.parse(order.paymentDueAt)
+        : now + mockPolicy().bankHoldMinutes * MINUTE;
       const paidAt = this.paymentStarted.get(id)! + AUTO_PAID_AFTER_MS;
       if (paidAt <= now && paidAt < due) order = this.markPaid(id, paidAt) ?? order;
       else if (due <= now) order = this.markExpired(id) ?? order;
@@ -243,7 +250,8 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
       amount: order.pricing.total,
       status,
       expiresAt:
-        order.paymentDueAt ?? new Date(Date.parse(order.placedAt) + PAYMENT_HOLD_MS).toISOString(),
+        order.paymentDueAt ??
+        new Date(Date.parse(order.placedAt) + mockPolicy().bankHoldMinutes * MINUTE).toISOString(),
       paidAt: order.paidAt ?? null,
       account: {
         bank: DEMO_BANK.bank,
@@ -255,83 +263,308 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
           .replace(/(\d{3})(?=\d)/g, '$1 ')}`,
       },
       qrImage: QR_PLACEHOLDER,
+      transferContent: order.id,
     };
   }
 
-  /** Order lines at today's price, or every line the shop cannot fill and what is left of it. */
-  private resolveItems(
-    lines: QuoteRequest['items'],
-  ): { items: OrderItem[] } | { issues: StockIssue[] } {
-    if (!lines.length) return { issues: [] };
-    const items: OrderItem[] = [];
-    const issues: StockIssue[] = [];
-    for (const line of lines) {
-      const product = PRODUCTS.find((candidate) =>
-        candidate.variants.some((variant) => variant.id === line.variantId),
-      );
-      const variant = product?.variants.find((candidate) => candidate.id === line.variantId);
-      if (!product || !variant) {
-        issues.push({ variantId: line.variantId, available: 0 });
-        continue;
-      }
-      if (!Number.isInteger(line.quantity) || line.quantity < 1) {
-        issues.push({ variantId: line.variantId, available: variant.inventory });
-        continue;
-      }
-      if (line.quantity > variant.inventory) {
-        issues.push({ variantId: line.variantId, available: variant.inventory });
-        continue;
-      }
-      items.push({
-        productSlug: product.slug,
-        name: product.name,
-        color: variant.color.name,
-        size: variant.size,
-        quantity: line.quantity,
-        unitPrice: product.price,
-        compareAtPrice: product.compareAtPrice,
-        mediaId: product.mediaId,
-      });
+  /** `POST /orders` for real: checks in the server's order, then stores and returns the order. */
+  private create(request: CheckoutRequest, idempotencyKey: string): OrderReceipt {
+    const policy = mockPolicy();
+    if (!request.acceptedTerms) {
+      throw new CheckoutError('validation', { field: 'acceptedTerms' });
     }
-    return issues.length ? { issues } : { items };
+    this.assertStructure(request.items.map((item) => item.quantity));
+    const province = PROVINCES.find((candidate) => candidate.code === request.address.provinceCode);
+    const ward = WARDS[request.address.provinceCode]?.find(
+      (candidate) => candidate.code === request.address.wardCode,
+    );
+    if (!province || !ward) {
+      throw new CheckoutError('invalid-address', { field: 'address.wardCode' });
+    }
+    const quote = this.buildQuote({
+      items: request.items,
+      voucherCodes: request.voucherCodes,
+      address: request.address,
+      contact: { email: request.contact.email, phone: request.contact.phone },
+      paymentMethod: request.paymentMethod,
+    });
+    const issues: StockIssue[] = quote.lines
+      .filter((line) => line.effectiveQuantity < line.requestedQuantity)
+      .map((line) => ({ variantId: line.variantId, available: line.inventory }));
+    if (issues.length) throw new CheckoutError('stock-changed', { stockIssues: issues, quote });
+    const requested = new Set(request.voucherCodes.map(normalizeCode));
+    const removed = quote.rejectedVouchers
+      .map((voucher) => voucher.code)
+      .filter((code) => requested.has(code));
+    if (removed.length) {
+      throw new CheckoutError('voucher-changed', { removedVoucherCodes: removed, quote });
+    }
+    if (!matchesExpected(request, quote)) throw new CheckoutError('price-changed', { quote });
+    const option = quote.paymentMethods.find(
+      (candidate) => candidate.method === request.paymentMethod,
+    );
+    if (!option?.available) throw new CheckoutError('validation', { field: 'paymentMethod' });
+
+    const now = Date.now();
+    const prepaid = request.paymentMethod === 'bank-transfer';
+    const items: OrderItem[] = quote.lines.map((line) => ({
+      variantId: line.variantId,
+      productSlug: line.slug,
+      name: line.name,
+      color: line.color,
+      size: line.size,
+      quantity: line.effectiveQuantity,
+      unitPrice: line.unitPrice,
+      compareAtPrice: line.compareAtPrice,
+      mediaId: line.mediaId,
+      lineDiscount: quote.lineDiscounts?.find((entry) => entry.variantId === line.variantId)
+        ?.amount,
+    }));
+    const email = request.contact.email.trim().toLowerCase();
+    const order: Order = {
+      id: `N2F${new Date(now).toISOString().slice(2, 10).replace(/-/g, '')}${String(
+        1000 + Math.floor(Math.random() * 9000),
+      )}`,
+      placedAt: new Date(now).toISOString(),
+      status: prepaid ? 'pending-payment' : 'processing',
+      paymentDueAt: prepaid
+        ? new Date(now + policy.bankHoldMinutes * MINUTE).toISOString()
+        : undefined,
+      items,
+      pricing: quote.pricing,
+      shippingAddress: {
+        recipient: request.contact.name.trim(),
+        phone: normalizePhone(request.contact.phone),
+        street: request.address.street.trim(),
+        ward: ward.name,
+        province: province.name,
+      },
+      payment: prepaid
+        ? { method: 'bank-transfer', label: 'Chưa thanh toán · Chuyển khoản QR', paid: false }
+        : { method: 'cod', label: 'Thanh toán khi nhận hàng (COD)', paid: false },
+      note: request.note.trim() || undefined,
+      voucherCode: quote.vouchers.map((voucher) => voucher.code).join(', ') || undefined,
+      invoice: request.invoice
+        ? {
+            companyName: request.invoice.companyName.trim(),
+            taxCode: request.invoice.taxCode.trim(),
+            address: request.invoice.address.trim(),
+            email: request.invoice.email.trim().toLowerCase(),
+          }
+        : undefined,
+      estimatedDelivery: quote.estimatedDelivery,
+      email,
+    };
+    this.store.reserve(order);
+    this.store.addOrder(
+      order,
+      { email, phone: normalizePhone(request.contact.phone) },
+      this.session.user()?.id ?? null,
+    );
+    const receipt: OrderReceipt = {
+      orderId: order.id,
+      status: order.status,
+      total: order.pricing.total,
+      customerName: request.contact.name.trim(),
+      paymentMethod: request.paymentMethod,
+      paymentDueAt: order.paymentDueAt ?? null,
+      bankTransfer: prepaid ? { ...DEMO_BANK, reference: order.id } : null,
+      estimatedDelivery: quote.estimatedDelivery,
+      email,
+      willCallToConfirm: !prepaid && !(this.session.signedIn() && order.pricing.total < 1_000_000),
+    };
+    this.receipts.set(idempotencyKey, receipt);
+    return receipt;
   }
 
-  private price(items: OrderItem[], voucherCode: string | null): CheckoutQuote {
-    const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-    const code = voucherCode?.trim().toUpperCase() || null;
-    // DEMO SEED: `?? DEMO_SEED_VOUCHER_RULES[code]` (remove with src/mocks/demo-seed/).
-    const rule = code ? (VOUCHER_RULES[code] ?? DEMO_SEED_VOUCHER_RULES[code]) : undefined;
-    let voucherError: string | null = null;
-    if (code && !rule) voucherError = 'Mã giảm giá không tồn tại hoặc đã hết hạn.';
-    else if (rule && subtotal < rule.minSubtotal) {
-      voucherError = `Đơn hàng cần tối thiểu ${rule.minSubtotal.toLocaleString('vi-VN')} ₫ để dùng mã này.`;
+  private injectedFailure(
+    code: NonNullable<ReturnType<typeof takePlaceError>>,
+    request: CheckoutRequest,
+  ): Observable<never> {
+    const quote = this.buildQuote({
+      items: request.items,
+      voucherCodes: code === 'voucher-changed' ? [] : request.voucherCodes,
+    });
+    switch (code) {
+      case 'price-changed': {
+        // The first line costs 10.000 ₫ more than the shopper saw.
+        const first = quote.lines[0];
+        const raised = first
+          ? {
+              ...quote,
+              lines: [{ ...first, unitPrice: first.unitPrice + 10000 }, ...quote.lines.slice(1)],
+            }
+          : quote;
+        const pricing = { ...raised.pricing };
+        pricing.subtotal += first ? 10000 * first.effectiveQuantity : 0;
+        pricing.total += first ? 10000 * first.effectiveQuantity : 0;
+        return failWith(code, { quote: { ...raised, pricing } });
+      }
+      case 'voucher-changed':
+        return failWith(code, {
+          removedVoucherCodes: request.voucherCodes.map(normalizeCode),
+          quote,
+        });
+      case 'stock-changed':
+        return failWith(code, {
+          quote,
+          stockIssues: request.items.slice(0, 1).map((item) => ({
+            variantId: item.variantId,
+            available: Math.max(0, item.quantity - 1),
+          })),
+        });
+      case 'rate-limited':
+        return failWith(code, { retryAfterSeconds: 3 });
+      case 'possible-duplicate':
+        return failWith(code, { existingOrderCode: 'N2F2611040427' });
+      case 'invalid-address':
+        return failWith(code, { field: 'address.wardCode' });
+      default:
+        return failWith(code);
     }
-    const applied = rule && !voucherError ? rule : undefined;
-    const shippingFee = SHIPPING_FEE;
-    const shippingDiscount = subtotal >= FREE_SHIPPING_FROM || applied?.shipping ? SHIPPING_FEE : 0;
-    const discount = applied ? Math.min(applied.discount(subtotal), subtotal) : 0;
+  }
+
+  private assertStructure(quantities: number[]): void {
+    const policy = mockPolicy();
+    if (
+      quantities.length > policy.maxCartLines ||
+      quantities.reduce((sum, quantity) => sum + quantity, 0) > policy.maxItemsPerOrder
+    ) {
+      throw new CheckoutError('validation', { field: 'items' });
+    }
+  }
+
+  /** Server-side pricing: prices and stock from the catalog, never from the request. */
+  private buildQuote(request: QuoteRequest): CheckoutQuote {
+    const policy = mockPolicy();
+    const lines = request.items.map((item) => refreshMockLine(item.variantId, item.quantity));
+    this.assertStructure(lines.map((line) => line.effectiveQuantity));
+    const subtotal = lines.reduce((sum, line) => sum + line.unitPrice * line.effectiveQuantity, 0);
+
+    const applied: VoucherApplied[] = [];
+    const rejectedVouchers: VoucherRejection[] = [];
+    let discount = 0;
+    for (const code of (request.voucherCodes ?? []).map(normalizeCode)) {
+      // DEMO SEED: `?? DEMO_SEED_VOUCHER_RULES[code]` (remove with src/mocks/demo-seed/).
+      const rule = VOUCHER_RULES[code] ?? DEMO_SEED_VOUCHER_RULES[code];
+      if (!rule) {
+        rejectedVouchers.push({ applied: false, code, reason: 'not-found' });
+      } else if (subtotal < rule.minSubtotal) {
+        rejectedVouchers.push({
+          applied: false,
+          code,
+          reason: 'min-spend',
+          missingAmount: rule.minSubtotal - subtotal,
+          minSubtotal: rule.minSubtotal,
+        });
+      } else if (rule.shipping && subtotal >= policy.freeShippingThreshold) {
+        rejectedVouchers.push({ applied: false, code, reason: 'shipping-already-free' });
+      } else {
+        const kind = rule.shipping ? 'free-shipping' : 'discount';
+        // A second code of the same kind replaces the first (BR-VOU-01).
+        const index = applied.findIndex((voucher) => voucher.kind === kind);
+        const voucher: VoucherApplied = {
+          applied: true,
+          code,
+          kind,
+          label: rule.label,
+          amount: Math.min(rule.discount(subtotal), subtotal),
+        };
+        if (index >= 0) applied.splice(index, 1, voucher);
+        else applied.push(voucher);
+      }
+    }
+    discount = applied.reduce((sum, voucher) => sum + voucher.amount, 0);
+
+    const fee = subtotal > 0 ? policy.shippingFee : 0;
+    const freeReason: 'threshold' | 'voucher' | null =
+      subtotal >= policy.freeShippingThreshold && fee > 0
+        ? 'threshold'
+        : applied.some((voucher) => voucher.kind === 'free-shipping') && fee > 0
+          ? 'voucher'
+          : null;
     const pricing: OrderPricing = {
       subtotal,
       discount,
-      shippingFee,
-      shippingDiscount,
-      total: subtotal - discount + shippingFee - shippingDiscount,
+      shippingFee: fee,
+      shippingDiscount: freeReason ? fee : 0,
+      total: subtotal - discount + fee - (freeReason ? fee : 0),
     };
     const now = Date.now();
     return {
+      lines,
+      lineDiscounts: shareDiscount(lines, discount),
       pricing,
-      voucher: applied && code ? { code, label: applied.label } : null,
-      voucherError,
+      vouchers: applied,
+      rejectedVouchers,
+      shipping: { fee, freeReason, addressRequired: !request.address },
       estimatedDelivery: {
-        from: new Date(now + 2 * DAY).toISOString(),
-        to: new Date(now + 4 * DAY).toISOString(),
+        from: new Date(now + 2 * DAY).toISOString().slice(0, 10),
+        to: new Date(now + 4 * DAY).toISOString().slice(0, 10),
       },
+      paymentMethods: [
+        pricing.total > policy.codMaxTotal
+          ? { method: 'cod', available: false, reason: 'over-limit' }
+          : { method: 'cod', available: true },
+        policy.bankTransferEnabled
+          ? { method: 'bank-transfer', available: true }
+          : { method: 'bank-transfer', available: false, reason: 'not-enabled' },
+      ],
+      policy,
     };
   }
 }
 
-function failWith(code: CheckoutErrorCode, issues: StockIssue[] = []): Observable<never> {
-  return fail(new CheckoutError(code, issues));
+/** Voucher discount split over the lines by value, rounded down; the rest goes to the biggest. */
+function shareDiscount(
+  lines: CheckoutQuote['lines'],
+  discount: number,
+): { variantId: string; amount: number }[] | undefined {
+  const priced = lines.filter((line) => line.effectiveQuantity > 0);
+  const total = priced.reduce((sum, line) => sum + line.unitPrice * line.effectiveQuantity, 0);
+  if (!discount || !total) return undefined;
+  const shares = priced.map((line) => ({
+    variantId: line.variantId,
+    value: line.unitPrice * line.effectiveQuantity,
+    amount: Math.floor((discount * line.unitPrice * line.effectiveQuantity) / total),
+  }));
+  const rest = discount - shares.reduce((sum, share) => sum + share.amount, 0);
+  const biggest = [...shares].sort(
+    (a, b) => b.value - a.value || a.variantId.localeCompare(b.variantId),
+  )[0];
+  biggest.amount += rest;
+  return shares
+    .filter((share) => share.amount > 0)
+    .map((share) => ({ variantId: share.variantId, amount: share.amount }));
+}
+
+function matchesExpected(request: CheckoutRequest, quote: CheckoutQuote): boolean {
+  const { expected } = request;
+  if (!expected) return true;
+  const samePricing = (Object.keys(quote.pricing) as (keyof OrderPricing)[]).every(
+    (key) => expected.pricing[key] === quote.pricing[key],
+  );
+  const sameLines = quote.lines.every(
+    (line) =>
+      expected.lines.find((candidate) => candidate.variantId === line.variantId)?.unitPrice ===
+      line.unitPrice,
+  );
+  return samePricing && sameLines;
+}
+
+function failWith(
+  code: CheckoutErrorCode,
+  details: CheckoutErrorDetails | StockIssue[] = {},
+): Observable<never> {
+  return fail(new CheckoutError(code, details));
+}
+
+function normalizeCode(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+function normalizeOrderCode(value: string): string {
+  return value.trim().replace(/^#/, '').toUpperCase();
 }
 
 function normalizePhone(value: string): string {

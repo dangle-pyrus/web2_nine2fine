@@ -48,6 +48,12 @@ export class WishlistState {
     return true;
   }
 
+  /** Adds products without toggling (cart lines pushed out of a full cart go here). */
+  addMany(productIds: string[]): void {
+    const fresh = productIds.filter((id) => id && !this.ids().includes(id));
+    if (fresh.length) this.write([...this.ids(), ...fresh]);
+  }
+
   private write(ids: string[]): void {
     this.ids.set(ids);
     writeLocal(this.key, ids);

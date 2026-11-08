@@ -1,7 +1,17 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { catchError, finalize, Observable, of, ReplaySubject, take, tap, timeout } from 'rxjs';
+import {
+  catchError,
+  finalize,
+  Observable,
+  of,
+  ReplaySubject,
+  Subject,
+  take,
+  tap,
+  timeout,
+} from 'rxjs';
 import { SessionEvents } from '../../core/session-events';
 import { isAdminPath, sanitizeReturnUrl } from '../../core/return-url';
 import { AUTH_API, AuthUser } from './data-access/auth-api';
@@ -23,6 +33,8 @@ export class AuthSession {
   readonly signedIn = computed(() => this.user() !== null);
   /** True from start-up until the first `GET /auth/me` answered, failed or timed out. */
   readonly restoring = signal(true);
+  /** Emits after the shopper signed out on purpose (not when the session expired). */
+  readonly loggedOut = new Subject<void>();
 
   constructor() {
     const router = inject(Router);
@@ -78,7 +90,10 @@ export class AuthSession {
   logout(): Observable<void> {
     return this.api.logout().pipe(
       catchError(() => of(undefined)),
-      tap(() => this.signOut()),
+      tap(() => {
+        this.signOut();
+        this.loggedOut.next();
+      }),
     );
   }
 }
