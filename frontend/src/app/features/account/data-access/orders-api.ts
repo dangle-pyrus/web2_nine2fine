@@ -5,7 +5,7 @@ import { API_CONFIG } from '../../../core/api-config';
 import { CheckoutError, toCheckoutError } from '../../checkout/checkout-api';
 import { Order } from '../../orders/order-models';
 import { OrderDto, toOrder } from '../../orders/order-mapper';
-import { canCancel } from '../../orders/order-status';
+import { canCancel, cancelModeOf } from '../../orders/order-status';
 import { AccountError } from './account-api';
 
 export interface OrderPage {
@@ -57,12 +57,14 @@ export class HttpOrdersApi implements OrdersApi {
 
 /** The mock has no server, so "may the shopper cancel" comes from the local rule. */
 export function withCancel(order: Order): Order {
-  return { ...order, canCancel: canCancel(order) };
+  const can = canCancel(order);
+  return { ...order, canCancel: can, cancelMode: can ? cancelModeOf(order) : undefined };
 }
 
 const MESSAGES = {
   'not-found': 'Không tìm thấy đơn hàng.',
-  'not-cancellable': 'Đơn hàng này không thể huỷ nữa. Vui lòng liên hệ CSKH.',
+  'not-cancellable':
+    'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
   unauthenticated: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
   'rate-limited': 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.',
 } as const;

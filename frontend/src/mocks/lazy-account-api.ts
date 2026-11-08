@@ -71,8 +71,8 @@ export class LazyMockAccountApi implements AccountApi {
   getOrder(id: string): Observable<Order> {
     return this.call((api) => api.getOrder(id));
   }
-  cancelOrder(id: string): Observable<Order> {
-    return this.call((api) => api.cancelOrder(id));
+  cancelOrder(id: string, reason?: string): Observable<Order> {
+    return this.call((api) => api.cancelOrder(id, reason));
   }
   uploadReturnPhoto(file: File): Observable<ReturnPhotoUpload> {
     return this.call((api) => api.uploadReturnPhoto(file));

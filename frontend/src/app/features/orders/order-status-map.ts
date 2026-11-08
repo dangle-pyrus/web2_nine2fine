@@ -11,8 +11,8 @@ export const SLICE3_ASSUMPTIONS = {
   qrNeedsPolicyFlag: true,
   /** Q3: provinces/wards come from the public API. */
   locationsFromApi: true,
-  /** Q4: a shopper cancels straight away at `to_ship` (otherwise "Yêu cầu huỷ"). */
-  cancelAtToShip: true,
+  /** Q4 (answered with Slice 4, S4-Q1): at `to_ship` the shopper only sends a cancel request. */
+  cancelAtToShip: false,
 } as const;
 
 export interface MappedStatus {
@@ -35,7 +35,7 @@ export function mapOrderStatus(status: string): MappedStatus {
     case 'completed':
       return { status: 'completed' };
     case 'cancel_requested':
-      return { status: 'processing', note: 'Đang chờ shop duyệt huỷ' };
+      return { status: 'cancel-requested' };
     case 'cancelled':
       return { status: 'cancelled' };
     default:

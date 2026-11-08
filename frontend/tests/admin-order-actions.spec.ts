@@ -718,3 +718,112 @@ test.describe('lát 4.4: ship, deliver, returned stock', () => {
     await expect(page.locator('.notice-live')).toBeFocused();
   });
 });
+
+/**
+ * Lát 4.5: approve / reject a customer's cancel request. Seeded `cancel_requested` orders:
+ * N2F2611051013 and N2F2611051014 (one tee each, reason "Đặt nhầm size", tab "Chờ duyệt huỷ").
+ */
+test.describe('lát 4.5: duyệt / từ chối yêu cầu huỷ', () => {
+  const REQUEST = 'N2F2611051013';
+  const reasonIn = (page: Page) => dialog(page).getByLabel(/Lý do từ chối/);
+
+  test('AC-ADM-36 (FE) / BR-ADM-33: the request shows time and reason; only approve and reject act on it', async ({
+    page,
+  }) => {
+    await signIn(page, STAFF);
+    await openOrder(page, REQUEST);
+    const section = page.locator('section[aria-labelledby="request-title"]');
+    await expect(section).toContainText('Chờ duyệt');
+    await expect(section).toContainText('Đặt nhầm size');
+    await expect(section.getByText('Gửi lúc')).toBeVisible();
+    await expect(trigger(page, 'approve-cancel')).toHaveText('Duyệt huỷ');
+    await expect(trigger(page, 'reject-cancel')).toHaveText('Từ chối huỷ');
+    // AC-ADM-40 (FE): nothing else is offered while the request waits.
+    for (const kind of ['call-attempt', 'confirm', 'ship', 'deliver', 'cancel']) {
+      await expect(trigger(page, kind)).toHaveCount(0);
+    }
+    // The tab "Chờ duyệt huỷ" lists it with its count.
+    await page.goto('/admin/orders');
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Chế độ xem đơn hàng' })
+        .getByRole('button', { name: /Chờ duyệt huỷ/ }),
+    ).toContainText('2');
+  });
+
+  test('AC-ADM-38 (FE): approve cancels the order, adds the stock once and records the approver', async ({
+    page,
+  }) => {
+    await signIn(page, STAFF);
+    await openOrder(page, REQUEST);
+    await trigger(page, 'approve-cancel').click();
+    await expect(dialog(page)).toContainText('cộng lại tồn kho');
+    await submitIn(page, 'Duyệt huỷ').click();
+    await expect(notice(page)).toContainText('Đã duyệt yêu cầu huỷ');
+    await expect(notice(page)).toContainText('Đơn nằm ở tab “Đã huỷ” (6 đơn)');
+    await expect(page.locator('.timeline .title').first()).toHaveText('Duyệt yêu cầu huỷ');
+    await expect(page.locator('section[aria-labelledby="request-title"]')).toContainText(
+      'Đã duyệt',
+    );
+    await expect(trigger(page, 'approve-cancel')).toHaveCount(0);
+    // The tee starts at 10 pieces; the approval puts the one piece back, once.
+    expect((await stock(page))[TEE]).toBe(11);
+    const [sent] = await calls(page);
+    expect(sent).toMatchObject({
+      code: REQUEST,
+      action: 'approve-cancel',
+      body: { expectedStatus: 'cancel_requested' },
+    });
+    expect(sent.key).toMatch(/^n2f-[a-z0-9]{24}$/);
+    expect(await calls(page)).toHaveLength(1);
+  });
+
+  test('AC-ADM-39 (FE): reject needs a 5-250 character reason; the order goes back to "Đang chuẩn bị"', async ({
+    page,
+  }) => {
+    await signIn(page, ADMIN);
+    await openOrder(page, REQUEST);
+    await trigger(page, 'reject-cancel').click();
+    await expect(dialog(page)).toContainText('Khách sẽ thấy lý do này');
+    for (const bad of ['', 'abcd', 'x'.repeat(251)]) {
+      await reasonIn(page).fill(bad);
+      await submitIn(page, 'Từ chối huỷ').click();
+      await expect(dialog(page).getByText('Nhập lý do từ 5 đến 250 ký tự.')).toBeVisible();
+    }
+    expect(await calls(page)).toHaveLength(0);
+    await reasonIn(page).fill('Đơn đã đóng gói xong, sắp bàn giao');
+    await submitIn(page, 'Từ chối huỷ').click();
+    await expect(notice(page)).toContainText('Đã từ chối yêu cầu huỷ');
+    await expect(notice(page)).toContainText('Đơn nằm ở tab “Đang chuẩn bị”');
+    const section = page.locator('section[aria-labelledby="request-title"]');
+    await expect(section).toContainText('Đã từ chối');
+    await expect(section).toContainText('Đơn đã đóng gói xong, sắp bàn giao');
+    await expect(page.locator('.timeline .title').first()).toHaveText('Từ chối yêu cầu huỷ');
+    await expect(trigger(page, 'reject-cancel')).toHaveCount(0);
+    // Rejecting touches no stock: the tee is still at its 10 pieces.
+    expect((await stock(page))[TEE]).toBe(10);
+    const [sent] = await calls(page);
+    expect(sent).toMatchObject({
+      action: 'reject-cancel',
+      body: { expectedStatus: 'cancel_requested', reason: 'Đơn đã đóng gói xong, sắp bàn giao' },
+    });
+  });
+
+  test('AC-ADM-38/40 (FE): a colleague decided first, so the order is refreshed and ours is not sent twice', async ({
+    page,
+  }) => {
+    await signIn(page, STAFF);
+    await openOrder(page, REQUEST);
+    await flag(page, 'conflict-once');
+    await trigger(page, 'approve-cancel').click();
+    await submitIn(page, 'Duyệt huỷ').click();
+    await expect(page.getByRole('alert')).toContainText('Đơn vừa được cập nhật bởi người khác.');
+    await expect(dialog(page)).toHaveCount(0);
+    await expect(page.locator('section[aria-labelledby="request-title"]')).toContainText(
+      'Đã duyệt',
+    );
+    await expect(trigger(page, 'approve-cancel')).toHaveCount(0);
+    // The colleague's approval added the stock once; ours was not applied.
+    expect((await stock(page))[TEE]).toBe(11);
+  });
+});

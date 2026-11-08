@@ -6,7 +6,13 @@ import { IconComponent } from '../../../shared/ui/icon.component';
 import { API_CONFIG } from '../../../core/api-config';
 import { ORDERS_API, orderErrorMessage } from '../data-access/orders-api';
 import { Order } from '../../orders/order-models';
-import { canBuyAgain, canPay, formatDate, formatDateTime } from '../../orders/order-status';
+import {
+  canBuyAgain,
+  canPay,
+  cancelLabels,
+  formatDate,
+  formatDateTime,
+} from '../../orders/order-status';
 import { canRequestReturn, returnDeadline } from '../../orders/order-returns';
 import { ToastService } from '../../../shared/ui/toast';
 import { BuyAgain } from './buy-again';
@@ -48,7 +54,7 @@ import { OrderCancellation } from './order-cancellation';
                 [disabled]="busy()"
                 (click)="cancel(current)"
               >
-                {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
+                {{ busy() ? labels(current).busy : labels(current).idle }}
               </button>
             }
           </div>
@@ -60,7 +66,7 @@ import { OrderCancellation } from './order-cancellation';
               [disabled]="busy()"
               (click)="cancel(current)"
             >
-              {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
+              {{ busy() ? labels(current).busy : labels(current).idle }}
             </button>
           </div>
         } @else if (rebuyable(current)) {
@@ -195,6 +201,10 @@ export class OrderDetailPage {
     return formatDateTime(iso);
   }
 
+  labels(order: Order): { idle: string; busy: string } {
+    return cancelLabels(order);
+  }
+
   payable(order: Order): boolean {
     return canPay(order);
   }
@@ -224,6 +234,13 @@ export class OrderDetailPage {
       .subscribe();
   }
 
+  private reload(id: string): void {
+    this.api
+      .get(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (fresh) => this.order.set(fresh), error: () => undefined });
+  }
+
   cancel(order: Order): void {
     this.busy.set(true);
     this.notice.set('');
@@ -234,12 +251,24 @@ export class OrderDetailPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (cancelled) => {
-          this.order.set(cancelled);
-          this.notice.set(`Đã hủy đơn #${cancelled.id}.`);
-          this.toast.show({ title: 'Đã hủy đơn hàng', detail: `Đơn #${cancelled.id}` });
+        next: (updated) => {
+          this.order.set(updated);
+          this.error.set('');
+          if (updated.status === 'cancel-requested') {
+            this.notice.set(
+              `Đã gửi yêu cầu huỷ đơn #${updated.id}. nine2fine sẽ phản hồi qua email; trong lúc chờ đơn vẫn được giữ nguyên.`,
+            );
+            this.toast.show({ title: 'Đã gửi yêu cầu huỷ', detail: `Đơn #${updated.id}` });
+          } else {
+            this.notice.set(`Đã hủy đơn #${updated.id}.`);
+            this.toast.show({ title: 'Đã hủy đơn hàng', detail: `Đơn #${updated.id}` });
+          }
         },
-        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
+        error: (error: unknown) => {
+          this.error.set(orderErrorMessage(error));
+          // The order moved on (handed over, request already sent): show where it is now.
+          if ((error as { code?: string }).code === 'not-cancellable') this.reload(order.id);
+        },
       });
   }
 }

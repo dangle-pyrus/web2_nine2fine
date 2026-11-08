@@ -131,6 +131,20 @@ export interface OrderEvent {
   at: string;
   title: string;
   detail?: string;
+  /** API orders (Slice 4): who acted; staff and system both read as `nine2fine`. */
+  actor?: 'customer' | 'nine2fine';
+}
+
+/** `cancelMode` of the API: cancel now (`to_pay`) or send a request the shop reviews (`to_ship`). */
+export type CancelMode = 'cancel' | 'request';
+
+/** The shopper's cancel request (Slice 4). One per order: after a rejection the hotline is the way. */
+export interface OrderCancelRequest {
+  /** ISO datetime. */
+  requestedAt: string;
+  outcome: 'pending' | 'approved' | 'rejected';
+  /** Shown to the shopper when the outcome is `rejected`. */
+  rejectReason?: string;
 }
 
 export interface Order {
@@ -175,6 +189,10 @@ export interface Order {
   statusNote?: string;
   /** API orders: the server says whether the shopper may cancel now. */
   canCancel?: boolean;
+  /** API orders: what the cancel button does (`request` = "Gửi yêu cầu huỷ"); absent when `canCancel` is false. */
+  cancelMode?: CancelMode;
+  /** API orders: the shopper's cancel request, pending or rejected. */
+  cancelRequest?: OrderCancelRequest;
   /** COD order the shop will call to confirm (API orders). */
   willCallToConfirm?: boolean;
   cancelReason?: string;

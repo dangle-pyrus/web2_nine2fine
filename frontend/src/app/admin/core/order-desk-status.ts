@@ -104,8 +104,8 @@ export const ACTION_LABELS: Record<DeskAction, string> = {
   'cancel-other': 'Huỷ với lý do khác',
   restock: 'Cộng lại tồn kho',
   'write-off': 'Loại bỏ hàng hoàn',
-  'approve-cancel': 'Duyệt yêu cầu huỷ',
-  'reject-cancel': 'Từ chối yêu cầu huỷ',
+  'approve-cancel': 'Duyệt huỷ',
+  'reject-cancel': 'Từ chối huỷ',
   'add-note': 'Thêm ghi chú nội bộ',
   'print-slip': 'In phiếu giao',
 };

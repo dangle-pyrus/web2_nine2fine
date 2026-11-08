@@ -7,6 +7,7 @@ import {
   reiconPackage,
   reiconReceipt,
 } from '@ng-icons/reicon';
+import { storeSettings } from '../../core/store-settings';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { PricePipe } from '../../shared/commerce/price.pipe';
 import { Order, ReturnReason } from './order-models';
@@ -42,6 +43,23 @@ import { OrderItems } from './order-items';
         <h2 id="order-status-title">{{ head.title }}</h2>
         @if (head.detail) {
           <p class="detail">{{ head.detail }}</p>
+        }
+        @if (order().cancelRequest; as request) {
+          @if (request.outcome === 'pending') {
+            <p class="detail request" role="status">
+              Yêu cầu huỷ gửi lúc {{ dateTime(request.requestedAt) }}. nine2fine sẽ phản hồi qua
+              email.
+            </p>
+          } @else if (request.outcome === 'rejected') {
+            <p class="detail request rejected" data-testid="cancel-rejected">
+              <strong>Yêu cầu huỷ chưa được chấp nhận.</strong>
+              @if (request.rejectReason) {
+                Lý do: {{ request.rejectReason }}.
+              }
+              Mỗi đơn chỉ gửi được một yêu cầu huỷ; nếu cần hỗ trợ thêm, vui lòng gọi
+              <a [href]="info().hotlineHref">{{ info().hotline }}</a> kèm mã đơn.
+            </p>
+          }
         }
         <!-- Page actions (pay, cancel, buy again) sit next to the status they act on. -->
         <ng-content select="[actions]" />
@@ -267,6 +285,11 @@ import { OrderItems } from './order-items';
               <time [attr.datetime]="event.at">{{ dateTime(event.at) }}</time>
               <div>
                 <strong>{{ event.title }}</strong>
+                @if (event.actor) {
+                  <span class="actor">{{
+                    event.actor === 'customer' ? 'Khách' : 'nine2fine'
+                  }}</span>
+                }
                 @if (event.detail) {
                   <span>{{ event.detail }}</span>
                 }
@@ -308,6 +331,15 @@ import { OrderItems } from './order-items';
     .detail {
       margin: 0;
       font-size: 14px;
+    }
+    .detail.request {
+      margin-top: 8px;
+    }
+    .detail.rejected {
+      color: var(--brand);
+    }
+    .detail.rejected a {
+      text-decoration: underline;
     }
     .refund {
       display: flex;
@@ -613,6 +645,7 @@ import { OrderItems } from './order-items';
 export class OrderView {
   readonly order = input.required<Order>();
   readonly headline = computed(() => orderHeadline(this.order()));
+  readonly info = computed(() => storeSettings().info);
   readonly steps = computed(() => orderProgress(this.order()));
   readonly events = computed(() => orderTimeline(this.order()));
   readonly refundInfo = computed(() => refundState(this.order()));

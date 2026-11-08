@@ -30,9 +30,17 @@ import {
   type DeskOrder,
 } from '../../data-access/order-desk-models';
 
-/** The seven buttons of lát 4.3-4.4 (the six cancel reasons share one picker). */
+/** The nine buttons of lát 4.3-4.5 (the six cancel reasons share one picker). */
 export type DeskActionKind =
-  'call-attempt' | 'confirm' | 'ship' | 'deliver' | 'cancel' | 'restock' | 'write-off';
+  | 'call-attempt'
+  | 'confirm'
+  | 'ship'
+  | 'deliver'
+  | 'cancel'
+  | 'restock'
+  | 'write-off'
+  | 'approve-cancel'
+  | 'reject-cancel';
 
 export interface DeskActionDialogData {
   order: DeskOrder;
@@ -82,6 +90,8 @@ const TITLES: Record<DeskActionKind, string> = {
   cancel: 'Huỷ đơn',
   restock: 'Cộng lại tồn kho?',
   'write-off': 'Loại bỏ hàng hoàn?',
+  'approve-cancel': 'Duyệt yêu cầu huỷ?',
+  'reject-cancel': 'Từ chối yêu cầu huỷ?',
 };
 
 const SUBMIT_LABELS: Record<DeskActionKind, string> = {
@@ -92,6 +102,8 @@ const SUBMIT_LABELS: Record<DeskActionKind, string> = {
   cancel: 'Huỷ đơn',
   restock: 'Cộng lại tồn kho',
   'write-off': 'Loại bỏ hàng hoàn',
+  'approve-cancel': 'Duyệt huỷ',
+  'reject-cancel': 'Từ chối huỷ',
 };
 
 /** Where a failure of the write ends up (BR-ADM-13..15, 34). */
@@ -207,7 +219,11 @@ function refuseMessage(code: string, kind: DeskActionKind): string {
               [attr.aria-describedby]="errors()['note'] ? 'desk-note-error' : 'desk-note-hint'"
             ></textarea>
             <p class="hint" id="desk-note-hint">
-              Chỉ nhân viên thấy ghi chú này, khách không thấy.
+              {{
+                kind === 'reject-cancel'
+                  ? 'Khách sẽ thấy lý do này (trên đơn và trong email).'
+                  : 'Chỉ nhân viên thấy ghi chú này, khách không thấy.'
+              }}
               {{
                 noteRequired()
                   ? 'Bắt buộc ' + noteMin + '-' + noteMax + ' ký tự.'
@@ -264,7 +280,8 @@ export class DeskActionDialog {
   protected readonly kind = this.data.kind;
   protected readonly title = TITLES[this.kind];
   protected readonly submitLabel = SUBMIT_LABELS[this.kind];
-  protected readonly danger = this.kind === 'cancel' || this.kind === 'write-off';
+  protected readonly danger =
+    this.kind === 'cancel' || this.kind === 'write-off' || this.kind === 'approve-cancel';
   protected readonly labels = CANCEL_REASON_LABELS;
   protected readonly reasons = cancelReasonsOf(this.order);
   protected readonly trackingMin = DESK_TRACKING_MIN;
@@ -291,6 +308,7 @@ export class DeskActionDialog {
       case 'cancel':
       case 'restock':
       case 'write-off':
+      case 'reject-cancel':
         return this.kind !== 'cancel' || !!this.reason();
       default:
         return false;
@@ -300,15 +318,18 @@ export class DeskActionDialog {
     const reason = this.reason();
     return (
       this.kind === 'write-off' ||
+      this.kind === 'reject-cancel' ||
       (this.kind === 'cancel' && !!reason && NOTE_REQUIRED_REASONS.includes(reason))
     );
   });
   protected readonly noteLabel = computed(() =>
     this.kind === 'write-off'
       ? 'Lý do loại bỏ (hỏng / mất)'
-      : this.noteRequired()
-        ? 'Ghi chú nội bộ'
-        : 'Ghi chú nội bộ (tuỳ chọn)',
+      : this.kind === 'reject-cancel'
+        ? 'Lý do từ chối'
+        : this.noteRequired()
+          ? 'Ghi chú nội bộ'
+          : 'Ghi chú nội bộ (tuỳ chọn)',
   );
 
   private key = newKey();
@@ -334,6 +355,10 @@ export class DeskActionDialog {
         return 'hàng hoàn đã về kho: cộng lại đúng số lượng từng dòng. Chỉ xử lý được một lần.';
       case 'write-off':
         return 'hàng hoàn hỏng hoặc mất: không cộng tồn kho. Chỉ xử lý được một lần.';
+      case 'approve-cancel':
+        return 'đơn được huỷ theo yêu cầu của khách, cộng lại tồn kho và khách nhận email. Không hoàn tác được.';
+      case 'reject-cancel':
+        return 'đơn trở về “Đang chuẩn bị” và khách nhận email kèm lý do. Khách không gửi lại được yêu cầu thứ hai.';
     }
   }
 
@@ -374,6 +399,7 @@ export class DeskActionDialog {
     const expectedStatus = this.order.status;
     const note = this.note().trim();
     const range = `Nhập ghi chú từ ${DESK_NOTE_MIN} đến ${DESK_NOTE_MAX} ký tự.`;
+    const reasonRange = `Nhập lý do từ ${DESK_NOTE_MIN} đến ${DESK_NOTE_MAX} ký tự.`;
     let command: DeskCommand | null = null;
     switch (this.kind) {
       case 'call-attempt':
@@ -414,6 +440,14 @@ export class DeskActionDialog {
         command = { action: 'cancel', expectedStatus, reason, ...(note ? { note } : {}) };
         break;
       }
+      case 'approve-cancel':
+        command = { action: 'approve-cancel', expectedStatus };
+        break;
+      case 'reject-cancel':
+        if (note.length < DESK_NOTE_MIN || note.length > DESK_NOTE_MAX)
+          errors['note'] = reasonRange;
+        command = { action: 'reject-cancel', expectedStatus, reason: note };
+        break;
       case 'restock':
       case 'write-off': {
         const written = this.kind === 'write-off';
@@ -490,6 +524,9 @@ export class DeskActionDialog {
         return allowed.includes(command.action);
       case 'cancel':
         return cancelReasonsOf(order).includes(command.reason);
+      case 'approve-cancel':
+      case 'reject-cancel':
+        return allowed.includes(command.action);
       case 'returned-stock':
         return allowed.includes(command.decision === 'restocked' ? 'restock' : 'write-off');
     }
@@ -524,7 +561,13 @@ export class DeskActionDialog {
       case 'validation': {
         const fields = (error as AdminApiError).fields;
         const known = ['reason', 'note', 'carrier', 'trackingNumber'];
-        const mine = Object.entries(fields).filter(([field]) => known.includes(field));
+        const mine = Object.entries(fields)
+          .filter(([field]) => known.includes(field))
+          // The reject reason is typed in the shared text box.
+          .map(([field, text]) => [
+            this.kind === 'reject-cancel' && field === 'reason' ? 'note' : field,
+            text,
+          ]);
         if (mine.length) {
           this.errors.set(Object.fromEntries(mine));
           this.failure.set('Máy chủ từ chối dữ liệu đã nhập. Sửa các trường được đánh dấu.');
@@ -581,6 +624,10 @@ export class DeskActionDialog {
         return 'Đã cộng lại tồn kho cho hàng hoàn.';
       case 'write-off':
         return 'Đã loại bỏ hàng hoàn, không cộng tồn kho.';
+      case 'approve-cancel':
+        return 'Đã duyệt yêu cầu huỷ. Đơn đã huỷ và tồn kho được cộng lại.';
+      case 'reject-cancel':
+        return 'Đã từ chối yêu cầu huỷ. Đơn trở về “Đang chuẩn bị”.';
     }
   }
 }

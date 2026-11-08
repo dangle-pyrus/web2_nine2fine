@@ -30,6 +30,11 @@ export interface MockFlags {
   serverCart?: boolean;
   /** Mock server cart fails with `unavailable` (offline). */
   cartFail?: boolean;
+  /**
+   * The shop's answer to a pending cancel request, applied the next time the order is read
+   * (guest tracking): `rejected` puts the order back to `to_ship`, `approved` cancels it.
+   */
+  cancelDecision?: 'approved' | 'rejected';
   /** `GET /auth/me` answers as a guest: the server revoked the session behind the page's back. */
   sessionRevoked?: boolean;
 }

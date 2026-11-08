@@ -82,7 +82,9 @@
           <button
             type="button"
             class="adm-btn"
-            [class.adm-btn--primary]="button.kind !== 'cancel' && button.kind !== 'write-off'"
+            [class.adm-btn--primary]="
+              button.kind !== 'cancel' && button.kind !== 'write-off' && button.kind !== 'reject-cancel'
+            "
             [attr.data-action]="button.kind"
             (click)="open(button.kind)"
           >

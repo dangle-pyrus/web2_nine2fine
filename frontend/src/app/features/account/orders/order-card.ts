@@ -8,6 +8,7 @@ import { Order } from '../../orders/order-models';
 import {
   canBuyAgain,
   canCancel,
+  cancelLabels,
   canPay,
   formatDateTime,
   orderNote,
@@ -63,7 +64,7 @@ import { OrderItems } from '../../orders/order-items';
                     [disabled]="busy()"
                     (click)="cancelRequested.emit(current)"
                   >
-                    {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
+                    {{ busy() ? labels().busy : labels().idle }}
                   </button>
                 }
                 <button type="button" class="pill" (click)="payRequested.emit(current)">
@@ -79,7 +80,7 @@ import { OrderItems } from '../../orders/order-items';
                   [disabled]="busy()"
                   (click)="cancelRequested.emit(current)"
                 >
-                  {{ busy() ? 'Đang hủy…' : 'Hủy đơn' }}
+                  {{ busy() ? labels().busy : labels().idle }}
                 </button>
               }
             }
@@ -280,6 +281,7 @@ export class OrderCard {
   readonly placedAt = computed(() => formatDateTime(this.order().placedAt));
   readonly payable = computed(() => canPay(this.order()));
   readonly cancellable = computed(() => canCancel(this.order()));
+  readonly labels = computed(() => cancelLabels(this.order()));
   readonly rebuyable = computed(() => canBuyAgain(this.order()));
   readonly note = computed(() => orderNote(this.order()));
   /** Packing and transit notes carry a small icon; other tones are text only. */

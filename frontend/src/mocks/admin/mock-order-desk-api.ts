@@ -352,6 +352,12 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
           throw invalid('note', range);
         if (tooLong) throw invalid('note', `Ghi chú tối đa ${DESK_NOTE_MAX} ký tự.`);
         break;
+      case 'reject-cancel': {
+        const length = command.reason.trim().length;
+        if (length < DESK_NOTE_MIN || length > DESK_NOTE_MAX)
+          throw invalid('reason', `Lý do từ chối từ ${DESK_NOTE_MIN} đến ${DESK_NOTE_MAX} ký tự.`);
+        break;
+      }
       case 'returned-stock':
         if (command.decision === 'written_off' && (noteLength < DESK_NOTE_MIN || tooLong))
           throw invalid('note', range);
@@ -411,6 +417,10 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
             if (!toShip && order.status !== 'to_receive') wrong();
             break;
         }
+        break;
+      case 'approve-cancel':
+      case 'reject-cancel':
+        if (order.status !== 'cancel_requested') wrong();
         break;
       case 'returned-stock':
         if (!(order.status === 'cancelled' && order.returnHandling?.state === 'pending')) wrong();
@@ -543,6 +553,53 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
         );
         break;
       }
+      case 'approve-cancel':
+        next = {
+          ...next,
+          status: 'cancelled',
+          needsCall: false,
+          cancellation: { by: 'customer', at: now },
+          cancelRequest: order.cancelRequest && {
+            ...order.cancelRequest,
+            outcome: 'approved',
+            decidedAt: now,
+            decidedBy: staff,
+          },
+          stockRestoredAt: now,
+        };
+        this.addStock(order, 1);
+        entry = this.event(
+          order,
+          'cancel_approved',
+          'Duyệt yêu cầu huỷ',
+          { detail: order.cancelRequest?.reason },
+          next,
+          staff,
+        );
+        break;
+      case 'reject-cancel': {
+        const reason = command.reason.trim();
+        next = {
+          ...next,
+          status: 'to_ship',
+          cancelRequest: order.cancelRequest && {
+            ...order.cancelRequest,
+            outcome: 'rejected',
+            decidedAt: now,
+            decidedBy: staff,
+            rejectReason: reason,
+          },
+        };
+        entry = this.event(
+          order,
+          'cancel_rejected',
+          'Từ chối yêu cầu huỷ',
+          { detail: reason },
+          next,
+          staff,
+        );
+        break;
+      }
       case 'returned-stock': {
         const restock = command.decision === 'restocked';
         const note = command.note?.trim();
@@ -594,6 +651,12 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
           },
           colleague,
         );
+    } else if (order.status === 'cancel_requested') {
+      this.apply(
+        order,
+        { action: 'approve-cancel', expectedStatus: 'cancel_requested' },
+        colleague,
+      );
     } else if (order.status === 'to_receive') {
       this.apply(order, { action: 'deliver', expectedStatus: 'to_receive' }, colleague);
     } else if (order.returnHandling?.state === 'pending') {

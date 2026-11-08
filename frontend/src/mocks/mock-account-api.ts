@@ -120,10 +120,10 @@ export class MockAccountApi implements AccountApi {
       return order ? respond(order) : failWith('not-found');
     });
   }
-  cancelOrder(id: string): Observable<Order> {
+  cancelOrder(id: string, reason?: string): Observable<Order> {
     return this.withData((data) => {
       if (!data.orders.some((candidate) => candidate.id === id)) return failWith('not-found');
-      const result = this.store.cancelOrder(id);
+      const result = this.store.cancelOrder(id, reason);
       return typeof result === 'string' ? failWith(result) : respond(result);
     });
   }

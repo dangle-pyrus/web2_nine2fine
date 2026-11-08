@@ -177,12 +177,12 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
     return respond(this.present(found.order, found.contact.email));
   }
 
-  cancel(orderCode: string): Observable<Order> {
+  cancel(orderCode: string, reason?: string): Observable<Order> {
     const id = normalizeOrderCode(orderCode);
     const found = this.store.findOrder(id);
     if (!found) return failWith('not-found');
     if (!this.verified.has(id)) return failWith('unauthenticated');
-    const result = this.store.cancelOrder(id);
+    const result = this.store.cancelOrder(id, reason);
     return typeof result === 'string'
       ? failWith(result)
       : respond(this.present(result, found.contact.email));

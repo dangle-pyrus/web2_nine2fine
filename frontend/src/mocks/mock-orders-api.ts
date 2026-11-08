@@ -24,7 +24,7 @@ export class MockOrdersApi implements OrdersApi {
   get(orderCode: string): Observable<Order> {
     return this.account.getOrder(orderCode).pipe(map(withCancel));
   }
-  cancel(orderCode: string): Observable<Order> {
-    return this.account.cancelOrder(orderCode).pipe(map(withCancel));
+  cancel(orderCode: string, reason?: string): Observable<Order> {
+    return this.account.cancelOrder(orderCode, reason).pipe(map(withCancel));
   }
 }

@@ -57,6 +57,8 @@ function kindOf(action: DeskAction): DeskActionKind | null {
     case 'deliver':
     case 'restock':
     case 'write-off':
+    case 'approve-cancel':
+    case 'reject-cancel':
       return action;
     default:
       return null;
@@ -66,8 +68,8 @@ function kindOf(action: DeskAction): DeskActionKind | null {
 /**
  * Order detail of the orders desk (Slice 4, BR-ADM-09, 10): customer, shipping and payment blocks,
  * the history newest first, and the buttons the server allows right now (`allowedActions`).
- * Lát 4.3-4.4 act on them (call attempt, confirm, ship, deliver, cancel, returned stock); the
- * remaining buttons (cancel requests, notes, print) stay disabled until their lát.
+ * Lát 4.3-4.5 act on them (call attempt, confirm, ship, deliver, cancel, returned stock, approve or reject a cancel request); the
+ * remaining buttons (notes, print) stay disabled until their lát.
  */
 @Component({
   selector: 'adm-order-desk-detail-page',

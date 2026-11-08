@@ -1,4 +1,4 @@
-import { Order, OrderEvent, OrderStatus } from './order-models';
+import { CancelMode, Order, OrderEvent, OrderStatus } from './order-models';
 
 /**
  * Labels and colours from the Figma `order-status` component set (135:135). `processing` is not in
@@ -28,7 +28,7 @@ export const ORDER_TABS = [
   {
     id: 'processing',
     label: 'Đang chuẩn bị',
-    statuses: ['pending-confirmation', 'processing'],
+    statuses: ['pending-confirmation', 'processing', 'cancel-requested'],
     active: true,
   },
   { id: 'shipping', label: 'Đang vận chuyển', statuses: ['shipping'], active: true },
@@ -124,7 +124,22 @@ export function canPay(order: Order, now = Date.now()): boolean {
  */
 export function canCancel(order: Order, now = Date.now()): boolean {
   // API orders carry the server's answer; the mock uses the local rule.
-  return order.canCancel ?? (canPay(order, now) || order.status === 'processing');
+  return (
+    order.canCancel ??
+    (canPay(order, now) || (order.status === 'processing' && !order.cancelRequest))
+  );
+}
+
+/** What the cancel button does: `to_pay` cancels now, `to_ship` sends a request the shop reviews. */
+export function cancelModeOf(order: Order, now = Date.now()): CancelMode {
+  return order.cancelMode ?? (canPay(order, now) ? 'cancel' : 'request');
+}
+
+/** Button text and its busy text for the shopper's cancel action. */
+export function cancelLabels(order: Order): { idle: string; busy: string } {
+  return cancelModeOf(order) === 'request'
+    ? { idle: 'Gửi yêu cầu huỷ', busy: 'Đang gửi…' }
+    : { idle: 'Hủy đơn', busy: 'Đang hủy…' };
 }
 
 /** Orders whose items can be put back in the bag in one click. */
@@ -190,6 +205,12 @@ export function orderNote(
       };
     case 'processing':
       if (order.statusNote) return { text: order.statusNote, tone: 'transit' };
+      if (order.cancelRequest?.outcome === 'rejected') {
+        return {
+          text: 'Yêu cầu huỷ chưa được chấp nhận. Đơn hàng vẫn được xử lý bình thường.',
+          tone: 'alert',
+        };
+      }
       if (order.willCallToConfirm) {
         return {
           text: 'nine2fine sẽ gọi xác nhận đơn trong 2 giờ làm việc.',
@@ -208,7 +229,10 @@ export function orderNote(
     case 'returned-to-sender':
       return { text: 'Đơn không giao được và đã hoàn về nine2fine.', tone: 'muted' };
     case 'cancel-requested':
-      return { text: 'Đã gửi yêu cầu huỷ, nine2fine sẽ phản hồi sớm.', tone: 'transit' };
+      return {
+        text: 'Đã gửi yêu cầu huỷ, nine2fine sẽ phản hồi sớm. Trong lúc chờ, đơn vẫn được giữ nguyên.',
+        tone: 'transit',
+      };
     case 'pending-payment': {
       if (!order.paymentDueAt) return null;
       const left = formatRemaining(order.paymentDueAt, now);
@@ -290,6 +314,7 @@ const CURRENT_STEP: Partial<Record<OrderStatus, number>> = {
   'pending-payment': 1,
   'pending-confirmation': 1,
   processing: 2,
+  'cancel-requested': 2,
   shipping: 2,
   delivering: 3,
   'delivery-failed': 3,
@@ -308,7 +333,7 @@ export function orderProgress(order: Order): ProgressStep[] | null {
       icon = 'reiconReceipt';
     }
     // A confirmed order still in the warehouse is being packed, not travelling yet.
-    if (index === 2 && order.status === 'processing') {
+    if (index === 2 && (order.status === 'processing' || order.status === 'cancel-requested')) {
       label = 'Chuẩn bị hàng';
       icon = 'reiconPackage';
     }
@@ -442,6 +467,9 @@ function derivedEvents(order: Order, now: number): OrderEvent[] {
   }
   if (order.status === 'cancelled' && order.cancelledAt) {
     events.push({ at: order.cancelledAt, title: cancelText(order) });
+  }
+  if (order.cancelRequest) {
+    events.push({ at: order.cancelRequest.requestedAt, title: 'Bạn đã gửi yêu cầu huỷ đơn' });
   }
   if (order.delivery?.deliveredAt) {
     events.push({ at: order.delivery.deliveredAt, title: 'Giao hàng thành công' });

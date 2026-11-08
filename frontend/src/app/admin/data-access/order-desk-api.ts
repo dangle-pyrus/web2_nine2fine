@@ -101,6 +101,8 @@ const WRITE_PATHS = {
   deliver: 'deliver',
   cancel: 'cancel',
   'returned-stock': 'returned-stock',
+  'approve-cancel': 'cancel-request/approve',
+  'reject-cancel': 'cancel-request/reject',
 } as const;
 
 @Injectable({ providedIn: 'root' })

@@ -1,4 +1,12 @@
-import { Order, OrderEvent, OrderItem, OrderPricing, PaymentMethod } from './order-models';
+import {
+  CancelMode,
+  Order,
+  OrderCancelRequest,
+  OrderEvent,
+  OrderItem,
+  OrderPricing,
+  PaymentMethod,
+} from './order-models';
 import { mapCancelledBy, mapOrderStatus } from './order-status-map';
 
 /** `Order` of docs/api/openapi.yaml (only the fields the app reads). */
@@ -33,8 +41,10 @@ export interface OrderDto {
   cancelledAt?: string;
   cancelReason?: string;
   canCancel?: boolean;
+  cancelMode?: CancelMode;
+  cancelRequest?: OrderCancelRequest;
   willCallToConfirm?: boolean;
-  timeline?: { at: string; title: string; detail?: string }[];
+  timeline?: { at: string; title: string; detail?: string; actor?: 'customer' | 'nine2fine' }[];
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -70,6 +80,7 @@ export function toOrder(dto: OrderDto): Order {
     at: entry.at,
     title: entry.title,
     detail: entry.detail,
+    actor: entry.actor,
   }));
   return {
     id: dto.id,
@@ -96,6 +107,8 @@ export function toOrder(dto: OrderDto): Order {
     invoice: dto.invoice,
     timeline,
     canCancel: dto.canCancel ?? false,
+    cancelMode: dto.canCancel ? dto.cancelMode : undefined,
+    cancelRequest: dto.cancelRequest,
     willCallToConfirm: dto.willCallToConfirm,
     estimatedDelivery: dto.estimatedDelivery,
     email: dto.recipient.email,

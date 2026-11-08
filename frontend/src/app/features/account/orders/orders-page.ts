@@ -382,16 +382,32 @@ export class OrdersPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (cancelled) => {
-          this.orders.update((list) =>
-            (list ?? []).map((candidate) =>
-              candidate.id === cancelled.id ? cancelled : candidate,
-            ),
+        next: (updated) => {
+          this.replace(updated);
+          this.toast.show(
+            updated.status === 'cancel-requested'
+              ? { title: 'Đã gửi yêu cầu huỷ', detail: `Đơn #${updated.id}` }
+              : { title: 'Đã hủy đơn hàng', detail: `Đơn #${updated.id}` },
           );
-          this.toast.show({ title: 'Đã hủy đơn hàng', detail: `Đơn #${cancelled.id}` });
         },
-        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
+        error: (error: unknown) => {
+          this.error.set(orderErrorMessage(error));
+          if ((error as { code?: string }).code === 'not-cancellable') this.reload(order.id);
+        },
       });
+  }
+
+  private replace(updated: Order): void {
+    this.orders.update((list) =>
+      (list ?? []).map((candidate) => (candidate.id === updated.id ? updated : candidate)),
+    );
+  }
+
+  private reload(id: string): void {
+    this.api
+      .get(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (fresh) => this.replace(fresh), error: () => undefined });
   }
 
   /** Bank-transfer orders continue on the QR / virtual-account payment page. */

@@ -1,7 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { Address, Membership, Voucher } from '../app/features/account/data-access/account-models';
 import { Order, ReturnRequest } from '../app/features/orders/order-models';
-import { canCancel } from '../app/features/orders/order-status';
+import { canCancel, cancelModeOf } from '../app/features/orders/order-status';
+import { mockFlags } from './mock-flags';
 import { canRequestReturn } from '../app/features/orders/order-returns';
 import { STORE_POLICY } from '../app/core/store-policy';
 import { MockInventory } from './mock-inventory';
@@ -91,11 +92,28 @@ export class MockAccountStore {
    * Customer cancellation (member or verified guest): allowed until the order leaves the warehouse.
    * Stock goes back on sale and a paid transfer is refunded to the paying account.
    */
-  cancelOrder(id: string): Order | 'not-found' | 'not-cancellable' {
+  cancelOrder(id: string, reason?: string): Order | 'not-found' | 'not-cancellable' {
     const found = this.findOrder(id);
     if (!found) return 'not-found';
     if (!canCancel(found.order)) return 'not-cancellable';
     const now = new Date();
+    // S4-Q1: a confirmed (`to_ship`) order only gets a request; stock and payment stay as they are.
+    if (cancelModeOf(found.order) === 'request') {
+      return this.updateOrder(id, (order) => ({
+        ...order,
+        status: 'cancel-requested',
+        cancelRequest: { requestedAt: now.toISOString(), outcome: 'pending' },
+        timeline: order.timeline && [
+          ...order.timeline,
+          {
+            at: now.toISOString(),
+            title: 'Bạn đã gửi yêu cầu huỷ đơn',
+            detail: reason,
+            actor: 'customer',
+          },
+        ],
+      }))!;
+    }
     this.releaseStock(found.order);
     return this.updateOrder(id, (order) => ({
       ...order,
@@ -179,7 +197,50 @@ export class MockAccountStore {
     this.contacts.set(order.id, contact);
   }
 
+  /** Plays the shop's decision on a pending cancel request when a test asked for one (`cancelDecision`). */
+  private settleCancelRequest(id: string): void {
+    const decision = mockFlags().cancelDecision;
+    if (!decision) return;
+    const pending = this.lookup(id);
+    if (pending?.status !== 'cancel-requested') return;
+    const at = new Date().toISOString();
+    if (decision === 'approved') {
+      this.releaseStock(pending);
+      this.updateOrder(id, (order) => ({
+        ...order,
+        status: 'cancelled',
+        cancelledBy: 'customer',
+        cancelledAt: at,
+        cancelRequest: order.cancelRequest && { ...order.cancelRequest, outcome: 'approved' },
+        timeline: order.timeline && [
+          ...order.timeline,
+          { at, title: 'Yêu cầu huỷ đã được duyệt', actor: 'nine2fine' },
+        ],
+      }));
+      return;
+    }
+    this.updateOrder(id, (order) => ({
+      ...order,
+      status: 'processing',
+      cancelRequest: {
+        requestedAt: order.cancelRequest?.requestedAt ?? at,
+        outcome: 'rejected',
+        rejectReason: 'Đơn đã được đóng gói, sắp bàn giao cho đơn vị vận chuyển',
+      },
+      timeline: order.timeline && [
+        ...order.timeline,
+        { at, title: 'Yêu cầu huỷ chưa được chấp nhận', actor: 'nine2fine' },
+      ],
+    }));
+  }
+
+  private lookup(id: string): Order | undefined {
+    const all = [...this.guestOrders, ...[...this.data.values()].flatMap((entry) => entry.orders)];
+    return all.find((candidate) => candidate.id === id);
+  }
+
   findOrder(id: string): { order: Order; contact: OrderContact } | undefined {
+    this.settleCancelRequest(id);
     const all = [...this.guestOrders, ...[...this.data.values()].flatMap((entry) => entry.orders)];
     const order = all.find((candidate) => candidate.id === id);
     const contact = this.contacts.get(id);

@@ -65,7 +65,7 @@ export interface AccountApi {
 
   listOrders(): Observable<Order[]>;
   getOrder(id: string): Observable<Order>;
-  cancelOrder(id: string): Observable<Order>;
+  cancelOrder(id: string, reason?: string): Observable<Order>;
   /** Each photo is uploaded as soon as it is picked; the request then sends the photo IDs. */
   uploadReturnPhoto(file: File): Observable<ReturnPhotoUpload>;
   requestReturn(id: string, input: ReturnRequestInput): Observable<Order>;
@@ -126,8 +126,12 @@ export class HttpAccountApi implements AccountApi {
   getOrder(id: string): Observable<Order> {
     return this.http.get<Order>(`${this.base}/orders/${id}`, this.options);
   }
-  cancelOrder(id: string): Observable<Order> {
-    return this.http.post<Order>(`${this.base}/orders/${id}/cancel`, {}, this.options);
+  cancelOrder(id: string, reason?: string): Observable<Order> {
+    return this.http.post<Order>(
+      `${this.base}/orders/${id}/cancel`,
+      reason ? { reason } : {},
+      this.options,
+    );
   }
   requestReturn(id: string, input: ReturnRequestInput): Observable<Order> {
     return this.http.post<Order>(`${this.base}/orders/${id}/returns`, input, this.options);

@@ -202,6 +202,8 @@ export type DeskCommand =
       reason: DeskCancelReasonCode;
       note?: string;
     }
+  | { action: 'approve-cancel'; expectedStatus: DeskOrderStatus }
+  | { action: 'reject-cancel'; expectedStatus: DeskOrderStatus; reason: string }
   | {
       action: 'returned-stock';
       expectedStatus: DeskOrderStatus;

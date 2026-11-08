@@ -12,17 +12,16 @@ import {
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { filter, finalize, switchMap } from 'rxjs';
+import { finalize, switchMap } from 'rxjs';
 import { CHECKOUT_API, CheckoutError } from '../checkout/checkout-api';
 import { API_CONFIG } from '../../core/api-config';
 import { CODE_PATTERN, cleanCode } from '../auth/auth-messages';
 import { orderCanCancel } from '../orders/order-status-map';
 import { Order } from '../orders/order-models';
-import { canPay, formatDate } from '../orders/order-status';
+import { canPay, cancelLabels, formatDate } from '../orders/order-status';
 import { canRequestReturn } from '../orders/order-returns';
 import { storeSettings } from '../../core/store-settings';
-import { OverlayService } from '../../shared/ui/overlay.service';
-import { ConfirmDialog, ConfirmDialogData } from '../../shared/ui/confirm-dialog';
+import { OrderCancellation } from '../account/orders/order-cancellation';
 import { OrderStatusBadge } from '../orders/order-status-badge';
 import { OrderView } from '../orders/order-view';
 
@@ -159,7 +158,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                   [disabled]="cancelling()"
                   (click)="cancel(current)"
                 >
-                  {{ cancelling() ? 'Đang hủy…' : 'Hủy đơn' }}
+                  {{ cancelling() ? labels(current).busy : labels(current).idle }}
                 </button>
               }
               @if (returnable(current)) {
@@ -378,7 +377,7 @@ export class TrackOrderPage {
 
   private readonly returnsEnabled = inject(API_CONFIG).checkoutMode === 'mock';
   private readonly api = inject(CHECKOUT_API);
-  private readonly overlay = inject(OverlayService);
+  private readonly cancellation = inject(OrderCancellation);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly result = viewChild<ElementRef<HTMLElement>>('result');
@@ -416,6 +415,10 @@ export class TrackOrderPage {
 
   payable(order: Order): boolean {
     return canPay(order);
+  }
+
+  labels(order: Order): { idle: string; busy: string } {
+    return cancelLabels(order);
   }
 
   cancellable(order: Order): boolean {
@@ -500,37 +503,31 @@ export class TrackOrderPage {
   }
 
   cancel(order: Order): void {
-    const data: ConfirmDialogData = {
-      title: 'Hủy đơn hàng?',
-      message: order.payment.paid
-        ? `Đơn #${order.id} sẽ được hủy và số tiền đã thanh toán được hoàn lại trong ${storeSettings().policy.refundWorkingDays} ngày làm việc.`
-        : `Đơn #${order.id} sẽ được hủy và không thể khôi phục.`,
-      confirmLabel: 'Hủy đơn',
-    };
     this.notice.set('');
     this.error.set('');
-    this.overlay
-      .open(ConfirmDialog, data.title, 'modal', data)
-      .closed.pipe(
-        filter((confirmed) => confirmed === true),
-        switchMap(() => {
+    this.cancellation
+      .ask(order)
+      .pipe(
+        switchMap(({ reason }) => {
           this.cancelling.set(true);
-          return this.api.cancel(order.id).pipe(finalize(() => this.cancelling.set(false)));
+          return this.api.cancel(order.id, reason).pipe(finalize(() => this.cancelling.set(false)));
         }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (cancelled) => {
-          this.order.set(cancelled);
+        next: (updated) => {
+          this.order.set(updated);
           this.notice.set(
-            `Đã hủy đơn #${cancelled.id}. Sản phẩm được hoàn lại kho${
-              cancelled.payment.paid
-                ? `, số tiền đã thanh toán được hoàn lại trong ${storeSettings().policy.refundWorkingDays} ngày làm việc`
-                : ''
-            }.`,
+            updated.status === 'cancel-requested'
+              ? `Đã gửi yêu cầu huỷ đơn #${updated.id}. nine2fine sẽ phản hồi qua email; trong lúc chờ đơn vẫn được giữ nguyên.`
+              : `Đã hủy đơn #${updated.id}. Sản phẩm được hoàn lại kho${
+                  updated.payment.paid
+                    ? `, số tiền đã thanh toán được hoàn lại trong ${storeSettings().policy.refundWorkingDays} ngày làm việc`
+                    : ''
+                }.`,
           );
         },
-        error: (error: unknown) => this.onCancelError(error),
+        error: (error: unknown) => this.onCancelError(error, order.id),
       });
   }
 
@@ -541,10 +538,17 @@ export class TrackOrderPage {
     afterNextRender(() => this.result()?.nativeElement.focus(), { injector: this.injector });
   }
 
-  private onCancelError(error: unknown): void {
+  private onCancelError(error: unknown, orderCode: string): void {
     const code = error instanceof CheckoutError ? error.code : 'unavailable';
     if (code === 'not-cancellable') {
-      this.error.set('Đơn hàng này không thể huỷ nữa. Vui lòng liên hệ CSKH.');
+      this.error.set(
+        'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
+      );
+      // Show where the order is now (the 30-minute view is still open).
+      this.api
+        .getOrder(orderCode)
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({ next: (fresh) => this.order.set(fresh), error: () => undefined });
     } else if (code === 'unauthenticated') {
       this.expireView();
     } else {
