@@ -14,6 +14,7 @@ import { noStore } from './middleware/no-store';
 import { requireAuth, requireRole } from './middleware/auth';
 import { orderAdminRouter } from './modules/order-admin/order-admin.routes';
 import { checkoutRouter, voucherRouter } from './modules/checkout/checkout.routes';
+import { accountRouter } from './modules/account/account.routes';
 
 export interface CreateAppOptions {
   /** Cho module khác (và test) gắn thêm route dưới /api, trước middleware 404 / lỗi. */
@@ -60,6 +61,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);
   api.use('/orders', orderRouter);
+  // Slice 5: noStore TRƯỚC requireAuth để cả 401 có Cache-Control: no-store (BR-ACC-01).
+  api.use('/account', noStore, requireAuth('storefront'), accountRouter);
   options.extraApiRoutes?.(api);
   app.use('/api', api);
 

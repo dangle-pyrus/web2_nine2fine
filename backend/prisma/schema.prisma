@@ -45,21 +45,29 @@ model User {
   cancelDecidedOrders Order[]      @relation("OrderCancelDecider")
   returnHandledOrders Order[]      @relation("OrderReturnHandler")
   orderEvents         OrderEvent[] @relation("OrderEventActor")
+  addresses           Address[]
 
   @@map("users")
 }
 
 model Address {
-  address_id    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  recipientName String   @map("recipient_name") @db.VarChar(100)
-  phone_number  String   @db.VarChar(20)
-  street        String   @db.VarChar(255)
-  district      String   @db.VarChar(100)
-  city          String   @db.VarChar(100)
-  isDefault     Boolean  @default(false) @map("is_default")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  address_id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  recipientName String    @map("recipient_name") @db.VarChar(100)
+  phone_number  String    @db.VarChar(20)
+  street        String    @db.VarChar(255)
+  district      String?   @db.VarChar(100)
+  city          String?   @db.VarChar(100)
+  provinceCode  String?   @map("province_code") @db.VarChar(10)
+  wardCode      String?   @map("ward_code") @db.VarChar(10)
+  isDefault     Boolean   @default(false) @map("is_default")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  user          User      @relation(fields: [userId], references: [user_id], onDelete: Cascade)
+  province      Province? @relation(fields: [provinceCode], references: [code], onDelete: Restrict)
+  ward          Ward?     @relation(fields: [wardCode], references: [code], onDelete: Restrict)
 
+  @@index([userId, createdAt], map: "idx_addresses_user_created")
   @@map("addresses")
 }
 
@@ -333,22 +341,24 @@ model Holiday {
 }
 
 model Province {
-  code       String  @id @map("province_code") @db.VarChar(10)
-  name       String  @db.VarChar(100)
-  nameSearch String  @map("name_search") @db.VarChar(100)
+  code       String    @id @map("province_code") @db.VarChar(10)
+  name       String    @db.VarChar(100)
+  nameSearch String    @map("name_search") @db.VarChar(100)
   wards      Ward[]
   orders     Order[]
+  addresses  Address[]
 
   @@map("provinces")
 }
 
 model Ward {
-  code         String   @id @map("ward_code") @db.VarChar(10)
-  provinceCode String   @map("province_code") @db.VarChar(10)
-  name         String   @db.VarChar(100)
-  nameSearch   String   @map("name_search") @db.VarChar(100)
-  province     Province @relation(fields: [provinceCode], references: [code], onDelete: Restrict)
+  code         String    @id @map("ward_code") @db.VarChar(10)
+  provinceCode String    @map("province_code") @db.VarChar(10)
+  name         String    @db.VarChar(100)
+  nameSearch   String    @map("name_search") @db.VarChar(100)
+  province     Province  @relation(fields: [provinceCode], references: [code], onDelete: Restrict)
   orders       Order[]
+  addresses    Address[]
 
   @@index([provinceCode, nameSearch], map: "idx_wards_province_name")
   @@map("wards")

@@ -89,14 +89,14 @@ export interface CallOpts {
   headers?: Record<string, string>;
 }
 
-export function call(method: 'get' | 'post' | 'put' | 'delete', path: string, body?: unknown, opts: CallOpts = {}) {
+export function call(method: 'get' | 'post' | 'put' | 'patch' | 'delete', path: string, body?: unknown, opts: CallOpts = {}) {
   const r = request(app)[method](path);
   r.set('X-Forwarded-For', opts.ip ?? '203.0.113.9');
   if (opts.origin !== null) r.set('Origin', opts.origin ?? ORIGIN);
   if (opts.xrw !== null) r.set('X-Requested-With', opts.xrw ?? 'n2f');
   if (opts.cookie) r.set('Cookie', opts.cookie);
   if (opts.headers) for (const [k, v] of Object.entries(opts.headers)) r.set(k, v);
-  if (method === 'post' || method === 'put' || method === 'delete') {
+  if (method === 'post' || method === 'put' || method === 'patch' || method === 'delete') {
     r.set('Content-Type', 'application/json');
     if (body !== undefined) r.send(typeof body === 'string' ? body : JSON.stringify(body));
   }
@@ -106,6 +106,7 @@ export const post = (path: string, body: unknown, opts?: CallOpts) => call('post
 export const get = (path: string, opts?: CallOpts) => call('get', path, undefined, opts);
 export const put = (path: string, body: unknown, opts?: CallOpts) => call('put', path, body, opts);
 export const del = (path: string, opts?: CallOpts) => call('delete', path, undefined, opts);
+export const patch = (path: string, body: unknown, opts?: CallOpts) => call('patch', path, body, opts);
 
 const setCookies = (res: request.Response): string[] =>
   ([] as string[]).concat((res.headers['set-cookie'] as string[] | string | undefined) ?? []);

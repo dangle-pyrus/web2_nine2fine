@@ -57,3 +57,19 @@ export const ADMIN_ASSUMPTIONS = {
   unreachableAttempts: 3,
   unreachableWindowMs: 24 * HOUR,
 } as const;
+
+/** GIẢ ĐỊNH Slice 5 (S5-Q1..Q6, PO tự chốt theo uỷ quyền của Thắng 2026-11-08). */
+export const ACCOUNT_ASSUMPTIONS = {
+  /** S5-Q1: ngưỡng chi tiêu (đồng) theo năm dương lịch VN, chỉ đơn `completed`. Thứ tự tăng dần. */
+  tiers: [
+    { tier: 'bronze', minSpent: 0 },
+    { tier: 'silver', minSpent: 18_000_000 },
+    { tier: 'gold', minSpent: 40_000_000 },
+  ] as ReadonlyArray<{ tier: 'bronze' | 'silver' | 'gold'; minSpent: number }>,
+  /** S5-Q4: số địa chỉ tối đa mỗi tài khoản. */
+  maxAddresses: 10,
+  /** BR-ACC-06: sai mật khẩu hiện tại 5 lần liên tiếp (cách <= 15 phút) thì khoá đổi mật khẩu 15 phút. */
+  passwordChangeMaxFails: 5,
+  passwordChangeGapMs: 15 * MINUTE,
+  passwordChangeLockMs: 15 * MINUTE,
+} as const;

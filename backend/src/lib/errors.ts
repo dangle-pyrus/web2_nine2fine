@@ -22,6 +22,7 @@ export type ErrorCode =
   | 'invalid-transition'
   | 'order-state-changed'
   | 'condition-not-met'
+  | 'invalid-password'
   | 'unavailable';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -48,6 +49,7 @@ const STATUS: Record<ErrorCode, number> = {
   'invalid-transition': 409,
   'order-state-changed': 409,
   'condition-not-met': 409,
+  'invalid-password': 422,
   unavailable: 500,
 };
 
@@ -138,5 +140,7 @@ export const Errors = {
     new AppError('order-state-changed', 'Đơn vừa được cập nhật bởi người khác.', { order, currentStatus }),
   conditionNotMet: (message: string, currentStatus: string) =>
     new AppError('condition-not-met', message, { currentStatus }),
+  invalidPassword: () =>
+    new AppError('invalid-password', 'Mật khẩu hiện tại chưa đúng.', { field: 'currentPassword' }),
   unavailable: () => new AppError('unavailable', 'Không thể kết nối. Vui lòng thử lại.'),
 };

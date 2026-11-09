@@ -138,4 +138,5 @@ export const keys = {
   codeVerifyFailIp: (ip: string) => `codeverify:fail:ip:${ip}`,
   pwFail: (email: string) => `pwfail:${email}`,
   pwFailIp: (ip: string) => `pwfail:ip:${ip}`,
+  pwChangeFail: (userId: string) => `pwchange:${userId}`,
 };
