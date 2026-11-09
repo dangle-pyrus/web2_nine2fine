@@ -238,6 +238,24 @@ Việc dọn mock (mục "Dọn mock") còn lại sau Slice 4: Account, các mà
 
 ---
 
+## Slice 5 — Account (P0)
+
+PRD: `docs/product/PRD.md` › Slice 5 (BR-ACC-01..18, AC-ACC-01..26). Thắng chốt 2026-11-08 và uỷ quyền tự chốt giả định (S5-Q1..Q6 chốt theo mặc định PO). Mục tiêu: hồ sơ, mật khẩu, sổ địa chỉ, hạng thành viên, ưu đãi chạy dữ liệu thật; checkout dùng sổ địa chỉ; không mock ở HTTP. Đóng AC hoãn AUTH-88 (và AUTH-29 phần hiển thị).
+
+| # | Hạng mục | Mức | BR | AC | Người làm | Phụ thuộc | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 5.1 | Nền + hồ sơ: module `account` (phiên storefront, no-store, giới hạn tần suất theo tài khoản), `GET/PATCH /account/profile`, contract, cờ FE `accountMode`, Profile HTTP | Must | 01..04, 17, 18 | 01, 02, 04..08, 24, 25 | BE → FE | Slice 4 | Xong (2026-11-09) |
+| 5.2 | Tạo / đổi mật khẩu (khoá 5 lần sai, thu hồi phiên khác, thư) | Must (+ thư Should) | 05..08 | 09..12 | BE, FE | 5.1 | Xong (2026-11-09) |
+| 5.3 | Sổ địa chỉ (migration cộng thêm, CRUD, mặc định, tối đa 10) | Must | 09..13 | 03, 13..18, 26 | BE, FE | 5.1 | Xong (2026-11-09) |
+| 5.4 | Checkout dùng sổ địa chỉ + hồ sơ | Must | 14 | 19..21 | FE | 5.3 | Xong (2026-11-09) |
+| 5.5 | Hạng thành viên, ưu đãi công khai | Should | 15, 16 | 22, 23 | BE, FE | 5.1 | Xong (2026-11-09) |
+| 5.6 | Nghiệm thu thật trên Supabase (migration Slice 5) | Must | — | 26 | Orchestrator | 5.1..5.5 | Chưa |
+| 5.7 | Sửa họ tên, đổi email, xoá tài khoản, đăng xuất mọi thiết bị, địa chỉ trả hàng, trả hàng, ví voucher / voucher theo hạng, tích điểm, "lưu địa chỉ vào sổ" ở checkout | Won't | — | — | slice sau | — |
+
+DoD: theo DoD chung; thêm: ở `accountMode: http` không có dữ liệu mock Account; đúng 1 địa chỉ mặc định do DB bảo đảm (AC-ACC-17); AC-AUTH-88 kiểm.
+
+---
+
 ## Sau các slice P0 (tóm tắt từ master plan mục 52)
 
 Các P0 còn lại cần nối BE: Account (profile, địa chỉ, voucher, hạng thành viên), Order Tracking timeline, SEO cơ bản, accessibility cơ bản, responsive QA — gom vào slice Account và slice Admin sau Slice 3.

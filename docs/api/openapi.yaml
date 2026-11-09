@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -96,6 +96,17 @@ info:
     2. `Order` thêm tuỳ chọn: `shipment`, `deliveredAt`, `cancelRequest`, `cancelMode`; `canCancel` mở rộng nghĩa; `OrderTimelineEntry` thêm tuỳ chọn `actor`. `OrderStatus.cancel_requested` nay có thể xuất hiện.
     3. `ErrorCode` thêm 3 mã; `ErrorResponse.error` thêm `currentStatus`, `order`.
     4. `Order.cancelReason` của đơn huỷ do shop là **câu chuẩn cho khách** (BR-ADM-28), không phải ghi chú nội bộ.
+    ---
+    # Account (Slice 5)
+
+    **status: locked (2026-11-08)**: tag `account`, schema `Account*`, `Membership`, `MemberVoucher`, `Address*`, mã lỗi mới `invalid-password`. Các phần trước không đổi. BR/AC: `docs/product/PRD.md` mục "Slice 5: Account" (BR-ACC-01..18, AC-ACC-01..26); khi mâu thuẫn, PRD thắng. Kế hoạch: `docs/api/account-implementation-plan.md`.
+
+    ## Quy ước Slice 5
+    - **Xác thực:** mọi `/account/**` dùng cookie storefront `n2f_sid` (scheme `storefrontSession`). Không có / hết hạn / thu hồi / chỉ có `n2f_asid` -> `401 unauthenticated`. Dữ liệu luôn là của chính người gọi; không có tham số người dùng. Mọi phản hồi `Cache-Control: no-store`.
+    - **CSRF:** yêu cầu ghi như các module khác (`Origin` + `X-Requested-With: n2f` + `Content-Type: application/json`).
+    - **Giới hạn tần suất theo tài khoản:** đọc 120 / 60 giây, ghi 30 / 60 giây -> `429 rate-limited` + `Retry-After`.
+    - **Thứ tự kiểm ở yêu cầu ghi:** `403 origin-not-allowed` -> `401` -> `429` -> `422 validation` -> `404 not-found` -> `422 invalid-address` / `invalid-password` / `password-locked` -> thành công.
+    - **Mã lỗi mới:** `invalid-password` (422, mật khẩu hiện tại sai khi đổi mật khẩu, `field: currentPassword`). Tái dùng: `validation`, `underage`, `password-locked`, `invalid-address`, `not-found`, `rate-limited`, `unauthenticated`, `unavailable`.
   license:
     name: Proprietary
 servers:
@@ -118,6 +129,8 @@ tags:
     description: 'Slice 3, status: locked (2026-11-07). Đặt đơn, xem / huỷ đơn của thành viên, tra cứu đơn khách bằng mã + email + OTP. Slice 4 (locked 2026-11-08) đổi hành vi huỷ ở `to_ship` và thêm trường cộng thêm cho `Order`.'
   - name: admin-orders
     description: 'Slice 4, status: locked (2026-11-08). Staff / admin xem và xử lý đơn (cookie `n2f_asid`): danh sách, đếm tab, chi tiết + timeline, gọi xác nhận COD, bàn giao, giao xong, huỷ do shop, hàng hoàn, duyệt / từ chối yêu cầu huỷ, ghi chú nội bộ.'
+  - name: account
+    description: 'Slice 5, status: locked (2026-11-08). Hồ sơ, mật khẩu, sổ địa chỉ, hạng thành viên, ưu đãi của thành viên (cookie `n2f_sid`). Đơn của thành viên vẫn ở tag `order`.'
 security: []
 paths:
   /auth/lookup:
@@ -1492,6 +1505,232 @@ paths:
         '422': { $ref: '#/components/responses/Validation' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /account/profile:
+    get:
+      tags: [account]
+      operationId: getAccountProfile
+      x-status: locked
+      summary: Hồ sơ của thành viên (BR-ACC-03)
+      security:
+        - storefrontSession: []
+      responses:
+        '200':
+          description: Hồ sơ.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountProfile' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      tags: [account]
+      operationId: updateAccountProfile
+      x-status: locked
+      summary: Sửa ngày sinh / số điện thoại (BR-ACC-04)
+      description: 'Chỉ nhận `birthDate`, `phone` (null = xoá). Trường khác bị bỏ qua; không có trường nào hợp lệ -> `422 validation`. `birthDate` sai -> `422 validation` (`field: birthDate`); chưa đủ 13 tuổi -> `422 underage`. `phone` theo BR-CHK-04 (chuẩn hoá `+84` -> `0`).'
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountProfileUpdate' }
+      responses:
+        '200':
+          description: Hồ sơ sau khi sửa.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountProfile' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/password:
+    put:
+      tags: [account]
+      operationId: setAccountPassword
+      x-status: locked
+      summary: Tạo hoặc đổi mật khẩu (BR-ACC-05..08)
+      description: 'Chưa có mật khẩu: `currentPassword` null / không gửi (tạo). Đã có: `currentPassword` bắt buộc; sai -> `422 invalid-password` (`field: currentPassword`); 5 lần sai liên tiếp (cách nhau <= 15 phút) -> khoá 15 phút `429 password-locked`. `newPassword` theo BR-AUTH-20, không trùng email, khác mật khẩu hiện tại -> nếu không `422 validation` (`field: newPassword`). Thành công: `204`, mọi phiên khác của tài khoản (storefront và admin) bị thu hồi, phiên hiện tại giữ; thư "mật khẩu đã thay đổi" gửi nền.'
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountPasswordRequest' }
+      responses:
+        '204':
+          description: Đã lưu mật khẩu.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/addresses:
+    get:
+      tags: [account]
+      operationId: listAccountAddresses
+      x-status: locked
+      summary: Sổ địa chỉ (BR-ACC-13)
+      description: Mặc định trước, còn lại mới tạo trước. Tối đa 10.
+      security:
+        - storefrontSession: []
+      responses:
+        '200':
+          description: Danh sách địa chỉ.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 10
+                items: { $ref: '#/components/schemas/Address' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [account]
+      operationId: createAccountAddress
+      x-status: locked
+      summary: Thêm địa chỉ (BR-ACC-09..11)
+      description: 'Địa chỉ đầu tiên luôn mặc định. `isDefault: true` -> địa chỉ này mặc định, cái cũ bỏ cờ. Đã có 10 -> `422 validation` (`field: addresses`). Phường không thuộc tỉnh / mã lạ -> `422 invalid-address`.'
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressInput' }
+      responses:
+        '201':
+          description: Địa chỉ mới.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/addresses/{addressId}:
+    parameters:
+      - $ref: '#/components/parameters/AddressId'
+    put:
+      tags: [account]
+      operationId: updateAccountAddress
+      x-status: locked
+      summary: Sửa địa chỉ (BR-ACC-09, 11)
+      description: 'Thay toàn bộ. `isDefault: false` trên địa chỉ đang mặc định bị bỏ qua (vẫn mặc định). Địa chỉ không phải của người gọi / không tồn tại / id sai dạng -> `404 not-found`.'
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressInput' }
+      responses:
+        '200':
+          description: Địa chỉ sau khi sửa.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [account]
+      operationId: deleteAccountAddress
+      x-status: locked
+      summary: Xoá địa chỉ (BR-ACC-11, 12)
+      description: 'Xoá vĩnh viễn. Xoá địa chỉ mặc định -> địa chỉ tạo gần nhất còn lại thành mặc định. Đơn đã đặt không đổi.'
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '204':
+          description: Đã xoá.
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/addresses/{addressId}/default:
+    parameters:
+      - $ref: '#/components/parameters/AddressId'
+    post:
+      tags: [account]
+      operationId: setDefaultAccountAddress
+      x-status: locked
+      summary: Đặt làm mặc định (BR-ACC-11)
+      description: 'Body rỗng `{}`. Trả cả sổ địa chỉ (thứ tự BR-ACC-13).'
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '200':
+          description: Sổ địa chỉ mới.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Address' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/membership:
+    get:
+      tags: [account]
+      operationId: getAccountMembership
+      x-status: locked
+      summary: Hạng thành viên (BR-ACC-15, Should)
+      description: 'Chi tiêu = tổng `total` đơn `completed` của thành viên, thời điểm giao (`deliveredAt`, thiếu thì thời điểm đặt) trong năm dương lịch hiện tại theo giờ VN. Ngưỡng: silver 18.000.000, gold 40.000.000 (`ASSUMPTIONS`).'
+      security:
+        - storefrontSession: []
+      responses:
+        '200':
+          description: Hạng.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Membership' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/vouchers:
+    get:
+      tags: [account]
+      operationId: listAccountVouchers
+      x-status: locked
+      summary: Ưu đãi dùng được (BR-ACC-16, Should)
+      description: 'Mã đang bật, trong thời gian, còn lượt chung và lượt riêng của người gọi; `firstOrderOnly` chỉ khi người gọi chưa có đơn còn hiệu lực. Sắp hạn gần trước, không hạn sau cùng.'
+      security:
+        - storefrontSession: []
+      responses:
+        '200':
+          description: Danh sách mã.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MemberVoucher' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -1510,6 +1749,12 @@ components:
       name: n2f_oa
       description: 'Quyền xem / huỷ đúng 1 đơn khách trong 30 phút sau khi nhập đúng OTP (`POST /orders/lookup/verify`). HttpOnly, SameSite=Lax, Path=/api/orders. Slice 3.'
   parameters:
+    AddressId:
+      name: addressId
+      in: path
+      required: true
+      description: UUID của địa chỉ; sai dạng -> `404 not-found`.
+      schema: { type: string }
     CsrfHeader:
       name: X-Requested-With
       in: header
@@ -1708,6 +1953,7 @@ components:
         | invalid-transition | 409 | AC-ADM-13, 16, 18, 19, 22..24, 26, 27, 33, 34, 38, 40, 50 (Slice 4; kèm `currentStatus`) |
         | order-state-changed | 409 | AC-ADM-14..17, 40 (Slice 4; kèm `order`, `currentStatus`) |
         | condition-not-met | 409 | AC-ADM-20, 24 (Slice 4) |
+        | invalid-password | 422 | AC-ACC-11 (Slice 5; `field: currentPassword`) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -1733,6 +1979,7 @@ components:
         - invalid-transition
         - order-state-changed
         - condition-not-met
+        - invalid-password
         - unavailable
     ErrorResponse:
       type: object
@@ -2626,3 +2873,70 @@ components:
       additionalProperties: false
       properties:
         note: { type: string, minLength: 1, maxLength: 500, description: 'Sau trim.' }
+    AccountProfile:
+      type: object
+      required: [email, firstName, lastName, birthDate, phone, hasPassword]
+      additionalProperties: false
+      properties:
+        email: { type: string }
+        firstName: { type: string, description: 'Tên (vd. "Minh").' }
+        lastName: { type: string, description: 'Họ và tên đệm (vd. "Nguyễn Văn"). FE hiện "Họ và tên" = lastName + " " + firstName.' }
+        birthDate: { type: [string, 'null'], format: date }
+        phone: { type: [string, 'null'], pattern: '^0(3|5|7|8|9)[0-9]{8}$' }
+        hasPassword: { type: boolean }
+    AccountProfileUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        birthDate: { type: [string, 'null'], format: date }
+        phone: { type: [string, 'null'] }
+    AccountPasswordRequest:
+      type: object
+      required: [newPassword]
+      properties:
+        currentPassword: { type: [string, 'null'], maxLength: 128 }
+        newPassword: { type: string, minLength: 8, maxLength: 64 }
+    AddressInput:
+      type: object
+      required: [recipient, phone, provinceCode, wardCode, street]
+      properties:
+        recipient: { type: string, minLength: 1, maxLength: 100, description: 'NFC, trim, gộp khoảng trắng.' }
+        phone: { type: string, description: 'BR-CHK-04.' }
+        provinceCode: { type: string, maxLength: 10 }
+        wardCode: { type: string, maxLength: 10 }
+        street: { type: string, minLength: 5, maxLength: 200 }
+        isDefault: { type: boolean, default: false }
+        isReturn: { type: boolean, description: 'Bỏ qua (Won''t, PRD Slice 5 K5).' }
+    Address:
+      type: object
+      required: [id, recipient, phone, province, ward, street, isDefault, isReturn]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        recipient: { type: string }
+        phone: { type: string }
+        province: { $ref: '#/components/schemas/Location' }
+        ward: { $ref: '#/components/schemas/Location' }
+        street: { type: string }
+        isDefault: { type: boolean }
+        isReturn: { type: boolean, const: false }
+    Membership:
+      type: object
+      required: [tier, spent, nextTierAt, reviewDate]
+      additionalProperties: false
+      properties:
+        tier: { type: string, enum: [bronze, silver, gold] }
+        spent: { type: integer, minimum: 0 }
+        nextTierAt: { type: [integer, 'null'] }
+        reviewDate: { type: string, format: date }
+    MemberVoucher:
+      type: object
+      required: [id, code, headline, subline, conditions, expiresAt]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        code: { type: string }
+        headline: { type: string, examples: ['Giảm 15%'] }
+        subline: { type: string, examples: ['tối đa 200.000 ₫'] }
+        conditions: { type: string, examples: ['Đơn từ 500.000 ₫ · Chỉ thành viên'] }
+        expiresAt: { type: [string, 'null'], format: date-time }

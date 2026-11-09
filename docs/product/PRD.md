@@ -1056,3 +1056,125 @@ Mỗi câu có mặc định để làm trước; trả lời khác thì sửa B
 | 9 | Hạng mục PO tự bổ sung ngoài nguồn: huỷ `declined_on_call`; kiểm "3 lần trong 24 giờ" (cửa sổ 24 giờ bất kỳ, BR-ADM-18); mã vận đơn không trùng; staff thấy SĐT/email đầy đủ. Đồng ý? **Mặc định PO: đồng ý.** | BR-ADM-09, 18, 19, 20 | Thắng — **nhận mặc định 2026-11-08** (được báo, không phản đối) |
 
 
+
+---
+
+## Slice 5: Account
+
+Nguồn chính: master plan mục 20 (cấu trúc Account, ràng buộc UX), Slice 1 (BR-AUTH-11, 20, 21, 26, 29, 35, 36; AC-AUTH-29, 68, 88; backlog 1.16), Slice 3 (BR-CHK-04, 06, 27; backlog 3.10 "sổ địa chỉ ở checkout"), Slice 4 (đơn `completed` là nguồn chi tiêu). Thắng chốt Slice 5 = Account (decisions 2026-11-08) và giao toàn quyền tự quyết giả định trong slice này (không hỏi lại); mọi giả định PO tự chốt ghi ở mục 7 và `decisions.md`. Hiện trạng đã đọc: FE `frontend/src/app/features/account/**` (Figma `193:2522`, chạy mock; `HttpAccountApi` gọi `/api/account/*` chưa có ở BE), `features/checkout/checkout-page.ts` (đã có ô "Địa chỉ đã lưu" nhưng chỉ bật ở mock, K21); BE: chưa có module account; bảng `addresses` (baseline: `district`, `city` NOT NULL, không có mã tỉnh/phường, 0 dòng trên Supabase), `membership_tiers` (0 dòng), `users.phone_number`, `date_of_birth`, `password_hash`. Mã BR: `BR-ACC`. Tên endpoint/trường do Backend chốt trong `openapi.yaml`. Tiền là số nguyên đồng; múi giờ Asia/Ho_Chi_Minh.
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** Khu `/account` ở bản thật (HTTP) chỉ có phần đơn hàng (Slice 3); hồ sơ hiện câu "chưa thể chỉnh sửa", không tạo/đổi được mật khẩu (thành viên đăng ký bằng mã không có cách đặt mật khẩu ngoài "quên mật khẩu"), sổ địa chỉ, hạng thành viên và ưu đãi chỉ chạy dữ liệu mock; checkout bắt thành viên gõ lại địa chỉ mỗi lần.
+
+**Mục tiêu.**
+1. Thành viên xem họ tên đầy đủ, sửa ngày sinh và số điện thoại trên dữ liệu thật.
+2. Thành viên tạo mật khẩu (nếu chưa có) hoặc đổi mật khẩu; thiết bị khác bị đăng xuất; có thư báo.
+3. Sổ địa chỉ thật (tối đa 10, đúng một mặc định) và checkout dùng được địa chỉ đã lưu.
+4. Hạng thành viên và ưu đãi hiển thị từ dữ liệu thật thay vì mock.
+5. Ở HTTP không còn dữ liệu mock trong Account; đóng AC hoãn AUTH-88 (và AUTH-29 phần hiển thị).
+
+**Không phải mục tiêu.** Đổi giao diện Account (master plan 20: giữ thiết kế); đổi email; xoá tài khoản; đăng xuất mọi thiết bị theo yêu cầu; trả hàng/hoàn tiền; ví voucher cá nhân / voucher theo hạng; tích điểm; đồng bộ wishlist (P1 riêng).
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Nguồn | Lý do |
+| --- | --- | --- | --- |
+| API account chỉ nhận phiên storefront; 401 khác 403 | Must | BR-AUTH-26, 34; AC-AUTH-88 | AC hoãn từ Slice 1. |
+| Hồ sơ: xem (email, họ tên đầy đủ, ngày sinh, SĐT, có mật khẩu chưa), sửa ngày sinh + SĐT | Must | master plan 20; AC-AUTH-29 | Thiết kế hiện có chỉ cho sửa 2 trường này. |
+| Tạo / đổi mật khẩu ở Profile | Must | backlog 1.16; BR-AUTH-20, 21, 29 | Dời từ Slice 1. |
+| Sổ địa chỉ: thêm, sửa, xoá, đặt mặc định; tỉnh/phường theo danh mục Slice 3 | Must | master plan 20; BR-CHK-06 | Một nửa màn Account. |
+| Checkout thành viên chọn địa chỉ đã lưu, tự điền địa chỉ mặc định + hồ sơ | Must | backlog 3.10 | Sổ địa chỉ không dùng ở checkout thì vô ích. |
+| Cờ `accountMode` (http bản thường / mock e2e); không mock ở HTTP | Must | backlog "Dọn mock" | Điều kiện go-live G5. |
+| Hạng thành viên từ chi tiêu đơn `completed` trong năm | Should | master plan 20 (khối membership đã thiết kế) | Có dữ liệu thật từ Slice 4; ngưỡng do PO chốt (mục 7). |
+| Ưu đãi: danh sách mã công khai đang dùng được | Should | — | Thay mock; ví cá nhân chưa có bảng. |
+| Thư "mật khẩu đã thay đổi" sau tạo/đổi | Should | BR-AUTH-22 (cùng thư) | Cảnh báo bảo mật. |
+| "Lưu địa chỉ này vào sổ" ở checkout | Won't | — | Thêm bước vào luồng đặt hàng; làm sau. |
+| Sửa họ tên, đổi email, xoá tài khoản, đăng xuất mọi thiết bị | Won't | Slice 1 Won't | Cần xác minh / quy trình riêng. |
+| Địa chỉ trả hàng (`isReturn`), yêu cầu trả hàng, ảnh trả hàng | Won't | VC-13 | Chưa có quy trình trả hàng (Slice 4 4.8). Ở HTTP ẩn. |
+| Voucher theo hạng / ví cá nhân / tích điểm | Won't | CHK-VC-08 | Chưa có bảng gán voucher cho người. |
+
+### 3. Hiện trạng và hành vi được chọn
+
+| # | Điểm | Hiện trạng | Chọn | Lý do |
+| --- | --- | --- | --- | --- |
+| K1 | Bảng `addresses` | `district`, `city` NOT NULL, chữ tự do, không mã. | Migration cộng thêm: `province_code`, `ward_code` (FK danh mục), `updated_at`; `district`, `city` cho phép NULL (được phép theo decisions 2026-11-07); index duy nhất một mặc định mỗi người; index `user_id`. Không xoá cột. | Danh mục địa giới Slice 3 là nguồn duy nhất; Supabase 0 dòng. |
+| K2 | Hồ sơ HTTP | `accountLive` chỉ hiện email + họ tên, câu "chưa thể chỉnh sửa". | Ở HTTP hiện email, "Họ và tên" (Họ + Tên, AC-AUTH-29), Mật khẩu, Sinh nhật, SĐT; bỏ câu "chưa thể chỉnh sửa". | Thiết kế mock đã có đủ. |
+| K3 | Hạng thành viên | Mock: Bronze → Silver 18.000.000 → Gold 40.000.000, "cập nhật sau" ngày xét. `membership_tiers` trống. | Ngưỡng ở `ASSUMPTIONS` BE (không seed bảng); chi tiêu = tổng `total` đơn `completed` của thành viên, `delivered_at` (hoặc `created_at` nếu thiếu) trong năm dương lịch hiện tại (giờ VN); ngày xét = 31/12. Không lưu hạng vào `users`. | Không cần job; số đúng ngay khi đơn hoàn thành. |
+| K4 | Ưu đãi | Mock: ví cá nhân có `expiresAt` bắt buộc. | HTTP: mã `is_active`, trong thời gian, còn lượt chung và lượt riêng của thành viên, không phải `first_order_only` khi đã có đơn. `expiresAt` có thể null ("Không thời hạn"). | Không có bảng gán. |
+| K5 | Trả hàng | Nút "Yêu cầu trả hàng" + màn trả hàng (mock). | Ở HTTP ẩn nút và route trả về "Chưa khả dụng" (đã ẩn sẵn ở Slice 3 theo `checkoutMode`; giữ). | Won't. |
+| K6 | Checkout | Ô "Địa chỉ đã lưu" chỉ bật ở mock. | Bật theo `accountMode`; chọn địa chỉ điền người nhận, SĐT, tỉnh, phường, số nhà; mặc định chọn sẵn địa chỉ mặc định nếu khách chưa gõ gì. SĐT hồ sơ điền ô SĐT nếu trống. | K21 Slice 3. |
+
+### 4. Business Rules
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-ACC-01 | Must | BR-AUTH-26, 34; AC-AUTH-88 | Mọi API `/account/*` chỉ nhận phiên storefront (`n2f_sid`) còn hạn của tài khoản đang hoạt động (mọi vai trò đăng nhập storefront đều dùng được, dữ liệu là của chính người đó). Không có / hết hạn / bị thu hồi / chỉ có `n2f_asid` → 401 `unauthenticated`. Phản hồi `Cache-Control: no-store`. FE gặp 401 → về `/auth/login?returnUrl=<trang hiện tại>` (BR-AUTH-26), giỏ còn nguyên. 401 (chưa đăng nhập) và 403 `forbidden` (staff gọi hành động chỉ admin, BR-ADM-02) là hai mã khác nhau. |
+| BR-ACC-02 | Must | — | Giới hạn tần suất theo tài khoản: đọc 120 / 60 giây, ghi 30 / 60 giây → 429 `rate-limited` + `retryAfterSeconds` + `Retry-After`. |
+| BR-ACC-03 | Must | AC-AUTH-29 | Hồ sơ trả: email, `firstName`, `lastName`, `birthDate` (YYYY-MM-DD hoặc null), `phone` (hoặc null), `hasPassword`. Không bao giờ trả băm mật khẩu (BR-AUTH-21). FE hiện "Họ và tên" = `lastName + " " + firstName`. |
+| BR-ACC-04 | Must | BR-AUTH-11; decisions 2026-11-07 (13 tuổi) | Sửa hồ sơ chỉ nhận `birthDate`, `phone` (trường khác bị bỏ qua; gửi không trường nào → 422 `validation`). `birthDate`: null (xoá) hoặc ngày có thật 01/01/1900 – trước hôm nay (giờ VN), sai → 422 `validation` `field: birthDate`; chưa đủ 13 tuổi → 422 `underage`. `phone`: null (xoá) hoặc SĐT di động VN theo BR-CHK-04 (chuẩn hoá `+84` → `0`, khoảng trắng bỏ), sai → 422 `validation` `field: phone`. Trả hồ sơ mới. |
+| BR-ACC-05 | Must | BR-AUTH-20, 21; backlog 1.16 | Đặt mật khẩu: `newPassword` theo BR-AUTH-20 (8–64 ký tự, ≥ 1 chữ hoa, ≥ 1 chữ số, không trùng email không phân biệt hoa thường) → sai 422 `validation` `field: newPassword`. Tài khoản chưa có mật khẩu: `currentPassword` phải null/không gửi (tạo). Đã có: `currentPassword` bắt buộc (thiếu → 422 `validation` `field: currentPassword`), sai → 422 `invalid-password` `field: currentPassword`; mật khẩu mới trùng mật khẩu hiện tại → 422 `validation` `field: newPassword` ("Mật khẩu mới phải khác mật khẩu hiện tại."). |
+| BR-ACC-06 | Must | BR-AUTH-18 (tinh thần) | Sai mật khẩu hiện tại 5 lần liên tiếp (mỗi lần cách ≤ 15 phút) → khoá đổi mật khẩu 15 phút: 429 `password-locked` + `retryAfterSeconds`, kể cả khi lần sau nhập đúng. Đổi thành công xoá bộ đếm này và bộ đếm sai mật khẩu đăng nhập của email. |
+| BR-ACC-07 | Must | BR-AUTH-29 | Tạo/đổi thành công: lưu băm mới; **mọi phiên khác** của tài khoản (storefront và admin) kết thúc ngay; phiên hiện tại giữ (khách không bị đăng xuất). Phản hồi 204. |
+| BR-ACC-08 | Should | BR-AUTH-22 | Sau tạo/đổi thành công gửi thư "mật khẩu đã thay đổi" (cùng mẫu với đặt lại mật khẩu), gửi nền, lỗi thư không làm hỏng thao tác. |
+| BR-ACC-09 | Must | BR-CHK-04, 06 | Địa chỉ gồm: người nhận (NFC, cắt khoảng trắng, gộp khoảng trắng, 1–100 ký tự), SĐT (BR-CHK-04), tỉnh/thành + phường/xã theo danh mục Slice 3 (phường phải thuộc tỉnh, sai → 422 `invalid-address`), số nhà/đường (5–200 ký tự sau cắt, gộp khoảng trắng, cùng quy tắc ô số nhà của checkout), cờ mặc định. Trả kèm tên tỉnh/phường hiện tại từ danh mục. |
+| BR-ACC-10 | Must | master plan 20 | Tối đa 10 địa chỉ mỗi tài khoản; thêm cái thứ 11 → 422 `validation` `field: addresses` ("Bạn chỉ lưu được tối đa 10 địa chỉ."). |
+| BR-ACC-11 | Must | master plan 20 ("Address có default state") | Có ít nhất 1 địa chỉ thì có **đúng 1** mặc định (DB bảo đảm). Địa chỉ đầu tiên luôn là mặc định. Thêm/sửa với `isDefault: true` hoặc "Đặt làm mặc định" → địa chỉ đó mặc định, cái cũ bỏ cờ, trong một giao dịch. Sửa địa chỉ mặc định với `isDefault: false` → vẫn mặc định (phải chọn cái khác làm mặc định). Xoá địa chỉ mặc định → địa chỉ tạo gần nhất còn lại thành mặc định. |
+| BR-ACC-12 | Must | master plan 20 ("Delete action cần confirm") | Xoá cần hộp thoại xác nhận ở FE; xoá là vĩnh viễn; đơn đã đặt không bị ảnh hưởng (đơn chụp địa chỉ riêng). Địa chỉ của người khác hoặc không tồn tại → 404 `not-found` (sửa, xoá, đặt mặc định). |
+| BR-ACC-13 | Must | — | Danh sách địa chỉ: mặc định trước, còn lại mới tạo trước. |
+| BR-ACC-14 | Must | backlog 3.10; K6 | Checkout thành viên (HTTP): tải hồ sơ + sổ địa chỉ; ô "Địa chỉ đã lưu" có các địa chỉ và "Địa chỉ mới"; khách chưa gõ ô người nhận/SĐT/số nhà/tỉnh thì chọn sẵn địa chỉ mặc định và điền các ô; ô trống họ tên/email/SĐT lấy từ hồ sơ. Lỗi tải hồ sơ/sổ địa chỉ không chặn checkout (form trống như khách). Đơn vẫn chụp địa chỉ vào đơn như Slice 3. |
+| BR-ACC-15 | Should | K3 | Hạng: `bronze` (0), `silver` (≥ 18.000.000), `gold` (≥ 40.000.000) theo chi tiêu năm hiện tại (K3); trả `tier`, `spent`, `nextTierAt` (null ở Gold), `reviewDate` (31/12 năm hiện tại). Đơn khách vãng lai trùng email không tính (CHK-05). |
+| BR-ACC-16 | Should | K4 | Ưu đãi: mã công khai đang dùng được với thành viên (K4), mới hết hạn trước (không hạn sau cùng); mỗi mã: mã, tiêu đề (vd. "Giảm 15%", "Miễn phí giao hàng", "Giảm 50.000 ₫"), dòng phụ (giảm tối đa / tên mã), điều kiện (đơn tối thiểu, chỉ thành viên, đơn đầu, danh mục), hạn (`expiresAt` hoặc null). Không có → trạng thái trống hiện có. |
+| BR-ACC-17 | Must | backlog "Dọn mock" | Cờ FE `accountMode`: `http` ở bản thường, `mock` ở e2e. Ở `http` không đọc/ghi mock Account, không hiện tài khoản demo; `isReturn` và trả hàng ẩn (K5). |
+| BR-ACC-18 | Must | BR-AUTH-38 | Nút lưu khoá khi đang gửi, lỗi giữ nội dung đã nhập, thông báo lưu thành công rõ (master plan 20 "Save feedback rõ"). |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu: thành viên M (`member@nine2fine.test`, có mật khẩu), thành viên N (đăng ký bằng mã, chưa có mật khẩu). Tỉnh `79` (TP.HCM) và một phường của nó; tỉnh `01` (Hà Nội) và một phường của nó.
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-ACC-01 | 01 | Không cookie; cookie `n2f_sid` bị thu hồi; chỉ có `n2f_asid` của staff | `GET /account/profile`, `PATCH /account/profile`, `GET /account/addresses` | 401 `unauthenticated`, `Cache-Control: no-store`, không dữ liệu hồ sơ. |
+| AC-ACC-02 | 01 | (AC-AUTH-88) | Gọi API account không phiên; staff gọi hành động chỉ admin | 401 `unauthenticated` và 403 `forbidden`: hai mã khác nhau. |
+| AC-ACC-03 | 01 | M ở `/account/addresses`, giỏ 2 món; phiên bị thu hồi | Lưu địa chỉ | Chuyển `/auth/login?returnUrl=%2Faccount%2Faddresses` + "Phiên đăng nhập đã hết hạn…"; giỏ còn 2 món. |
+| AC-ACC-04 | 02 | M đăng nhập | 31 lần `PATCH /account/profile` trong 60 giây | Lần 31: 429 `rate-limited`, có `retryAfterSeconds`, `Retry-After`. |
+| AC-ACC-05 | 03 | M (Họ "Nguyễn Văn", Tên "Minh") | `GET /account/profile`; mở `/account/profile` | JSON có đủ 6 trường, không có `passwordHash`; trang hiện "Nguyễn Văn Minh" (AC-AUTH-29). |
+| AC-ACC-06 | 04 | M | PATCH `phone: "+84 912 345 678"`; `phone: "0123"`; `phone: null` | `0912345678`; 422 `validation` `field: phone`; null. |
+| AC-ACC-07 | 04 | M; hôm nay (VN) D | PATCH `birthDate` = D; = D − 12 năm; = `2000-02-30`; = `1999-05-01`; = null | 422 `validation`; 422 `underage`; 422 `validation`; 200 lưu; 200 xoá. |
+| AC-ACC-08 | 04 | M | PATCH `{}`; PATCH `{ email: "x@y.vn" }` | Cả hai 422 `validation`; email không đổi. |
+| AC-ACC-09 | 05, 07 | N (chưa mật khẩu), đăng nhập trên 2 trình duyệt | Trình duyệt 1 tạo mật khẩu `Abcdef12` | 204; `hasPassword` true; trình duyệt 1 vẫn đăng nhập; trình duyệt 2 yêu cầu kế tiếp 401; đăng nhập mật khẩu `Abcdef12` được. |
+| AC-ACC-10 | 05 | M | PUT với `newPassword` `abcdefgh`; `ABCDEFGH`; email của M; mật khẩu hiện tại; không gửi `currentPassword` | 422 `validation` `field: newPassword` ×4; 422 `validation` `field: currentPassword`. |
+| AC-ACC-11 | 05, 06 | M | Sai mật khẩu hiện tại 5 lần; lần 6 nhập đúng | Lần 1–5: 422 `invalid-password`; lần 6: 429 `password-locked`, mật khẩu không đổi. Sau 15 phút (sửa giờ) đổi được. |
+| AC-ACC-12 | 07, 08 | M có phiên storefront + phiên admin khác (staff dùng thử bằng SQL không cần) | Đổi mật khẩu đúng | 204; phiên khác bị thu hồi; thư "mật khẩu đã thay đổi" trong outbox (Should). |
+| AC-ACC-13 | 09, 11, 13 | M chưa có địa chỉ | Thêm A (TP.HCM, `isDefault: false`); thêm B (`isDefault: true`); `GET` | A mặc định sau lần 1; sau lần 2 B mặc định, A không; danh sách: B, A; mỗi dòng có tên tỉnh/phường. |
+| AC-ACC-14 | 09 | M | Thêm địa chỉ với phường Hà Nội + tỉnh TP.HCM; SĐT `0123`; số nhà `abc`; người nhận rỗng | 422 `invalid-address`; 422 `validation` `phone`; 422 `validation` `street`; 422 `validation` `recipient`. |
+| AC-ACC-15 | 10 | M có 10 địa chỉ | Thêm cái thứ 11 | 422 `validation` `field: addresses`; vẫn 10. |
+| AC-ACC-16 | 11, 12 | M có A (mặc định), B, C (C mới nhất) | Sửa A `isDefault: false`; xoá A; xoá địa chỉ của người khác; đặt mặc định id lạ | A vẫn mặc định; sau xoá: C mặc định, còn B, C; 404 `not-found`; 404. |
+| AC-ACC-17 | 11 | M có A (mặc định), B | Hai yêu cầu đặt mặc định A và B cùng lúc (×20) | Luôn đúng 1 mặc định, không lỗi 500. |
+| AC-ACC-18 | 12, 18 | `accountMode: http`; M ở `/account/addresses` | Bấm Xoá; Huỷ; Xoá → Xác nhận | Hộp thoại xác nhận; Huỷ không gọi API; Xác nhận xoá, danh sách cập nhật, thông báo. |
+| AC-ACC-19 | 14 | M có địa chỉ mặc định A, hồ sơ có SĐT; giỏ 1 món | Mở `/checkout` | Ô "Địa chỉ đã lưu" chọn A; người nhận/SĐT/tỉnh/phường/số nhà theo A; email theo hồ sơ. Chọn B → điền theo B; chọn "Địa chỉ mới" → ô để khách nhập. Đặt COD → đơn có địa chỉ B. |
+| AC-ACC-20 | 14 | Như 19 nhưng khách đã gõ người nhận trước khi đăng nhập | Đăng nhập, quay lại checkout | Không ghi đè chữ khách gõ; ô "Địa chỉ đã lưu" ở "Địa chỉ mới". |
+| AC-ACC-21 | 14 | API sổ địa chỉ lỗi 500 | Mở checkout | Checkout vẫn đặt được (form trống), không vỡ trang. |
+| AC-ACC-22 | 15 | M có 2 đơn `completed` năm nay tổng 20.000.000, 1 đơn `completed` năm ngoái 30.000.000, 1 đơn `cancelled` 5.000.000 | `GET /account/membership` | `silver`, `spent` 20.000.000, `nextTierAt` 40.000.000, `reviewDate` 31/12 năm nay. |
+| AC-ACC-23 | 16 | Mã A công khai còn hạn; mã B hết hạn; mã C tắt; mã D hết lượt; mã E M đã dùng hết lượt riêng | `GET /account/vouchers` | Chỉ A. |
+| AC-ACC-24 | 17 | Build thường | Mở mọi trang Account, checkout thành viên | Không request nào tới mock; bundle không có dữ liệu demo Account (`demo@nine2fine.vn`) trong chunk initial; Playwright mock (`accountMode: mock`) pass nguyên. |
+| AC-ACC-25 | 18 | M ở Profile, mất mạng | Lưu SĐT | Nút khoá khi gửi; lỗi hiện, ô giữ giá trị đã nhập. |
+| AC-ACC-26 | K1 | DB có dữ liệu Slice 1–4 | `migrate deploy` 2 lần | Lần 2 không có migration mới; migration không DROP bảng/cột, không xoá dữ liệu (chỉ `DROP NOT NULL`). |
+
+### 6. Định nghĩa xong của Slice 5
+
+- AC Must đạt (test BE/E2E ghi mã AC), AC Should ghi làm hay hoãn.
+- AC-AUTH-88 kiểm bằng AC-ACC-02; AC-AUTH-29 phần hiển thị kiểm bằng AC-ACC-05; AC-AUTH-68 đã đóng ở Slice 3 (AC-CHK-33), AC-ACC-03 kiểm lại trên trang địa chỉ.
+- `openapi.yaml` có tag `account`; migration chỉ cộng thêm; `decisions.md`, `handoff.md` cập nhật.
+- FE chạy `accountMode: http` với BE thật; Playwright mock pass nguyên.
+
+### 7. Câu hỏi mở (PO tự chốt theo uỷ quyền của Thắng 2026-11-08)
+
+| # | Câu hỏi | Ảnh hưởng | Chốt |
+| --- | --- | --- | --- |
+| S5-Q1 | Ngưỡng hạng và cách tính chi tiêu | BR-ACC-15 | Theo mock: Silver 18.000.000, Gold 40.000.000; năm dương lịch; chỉ đơn `completed`. Thắng sửa được ở `ASSUMPTIONS`. |
+| S5-Q2 | Cho sửa họ tên ở Profile? | BR-ACC-04 | Không (thiết kế không có); Won't. |
+| S5-Q3 | Đổi mật khẩu có đăng xuất thiết bị khác? | BR-ACC-07 | Có, giữ phiên hiện tại. |
+| S5-Q4 | Số địa chỉ tối đa | BR-ACC-10 | 10. |
+| S5-Q5 | Địa chỉ trả hàng (`isReturn`) | K5 | Won't; ẩn ở HTTP. |
+| S5-Q6 | Ưu đãi khi chưa có ví cá nhân | BR-ACC-16 | Danh sách mã công khai dùng được. |
