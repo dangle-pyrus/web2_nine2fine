@@ -19,7 +19,8 @@ ALTER TABLE "addresses"
   ADD CONSTRAINT "chk_addresses_location" CHECK (("province_code" IS NULL) = ("ward_code" IS NULL)) NOT VALID;
 
 -- Đúng một địa chỉ mặc định mỗi người (BR-ACC-11): DB bảo đảm "không quá một".
-CREATE UNIQUE INDEX "uq_addresses_one_default" ON "addresses"("user_id") WHERE "is_default";
-CREATE INDEX "idx_addresses_user_created" ON "addresses"("user_id", "created_at");
+-- IF NOT EXISTS: Supabase đã có sẵn index cùng tên, cùng nghĩa (tạo ngoài migration, phát hiện 2026-11-09).
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_addresses_one_default" ON "addresses"("user_id") WHERE "is_default";
+CREATE INDEX IF NOT EXISTS "idx_addresses_user_created" ON "addresses"("user_id", "created_at");
 
 ALTER TABLE "addresses" ENABLE ROW LEVEL SECURITY;
