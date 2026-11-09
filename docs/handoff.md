@@ -1,5 +1,14 @@
 # Handoff
 
+## Slice 5 — Account (2026-11-09, lát 5.1–5.5 xong, orchestrator tự điều phối theo uỷ quyền của Thắng)
+- Tài liệu: PRD Slice 5 (BR-ACC-01..18, AC-ACC-01..26, S5-Q1..Q6 PO tự chốt), backlog lát 5.1–5.7, contract tag `account` (locked), `docs/api/account-implementation-plan.md`, decisions 2026-11-08.
+- BE: module `account` (hồ sơ GET/PATCH, mật khẩu PUT, sổ địa chỉ CRUD + mặc định, hạng, ưu đãi), mã lỗi `invalid-password`, migration cộng thêm `20261109000100_account_addresses`. Test `backend/test/account.test.ts` 22/22 (T-ACC ↔ AC-ACC-01, 02, 04..17, 22, 23, 26; AC-AUTH-88 bằng T-ACC-02).
+- FE: cờ `accountMode` (`http` thường / `mock` e2e), `ACCOUNT_API` vào bộ adapter storefront (HTTP / e2e), bỏ `LazyMockAccountApi`; Profile hiện Họ và tên + sửa được ở HTTP; ẩn "địa chỉ trả hàng" ở HTTP; ưu đãi không hạn; checkout luôn tải hồ sơ + sổ địa chỉ (lỗi thì quay về tên/email phiên).
+- Kiểm (container Linux, Postgres 16 cục bộ cổng 54329): BE `npm test` toàn bộ 24/24 file, 383/383 test (lần chạy liền trước Slice 5: 361/361) — lần đầu `npm test` toàn bộ pass liền mạch, không crash M2 (chạy trên Linux). FE: lint, format:check, build qua (initial 545,30 kB). Playwright mock `account` + `checkout` + `cart-checkout` (desktop + mobile): 81/82; ca hỏng AC-CART-18 chập chờn có từ trước (chạy lại x3 trên code trước Slice 5 cũng hỏng 3/6, trên code mới 2/6; nằm ở luồng giỏ/phiên, không đụng Account).
+- Chạy thật FE (`ng serve` thường, proxy) + BE (DB cục bộ `n2f_dev`) bằng kịch bản Playwright: Profile hiện "Nguyễn Văn Minh"; sửa SĐT `+84912345678` → `0912345678`; ngày sinh 2020 → "Bạn cần đủ 13 tuổi."; đổi mật khẩu sai → "Mật khẩu hiện tại chưa đúng.", đúng → "Đã đổi mật khẩu.", phiên thứ hai 401, phiên hiện tại 200; sổ địa chỉ trống → thêm A, thêm B (mặc định) → B trước A; Xoá A → Quay lại không xoá, Xác nhận xoá; không có công tắc địa chỉ trả hàng; checkout chọn sẵn B và điền người nhận/SĐT/email/số nhà; chọn C rồi đặt COD → đơn có người nhận C; Ưu đãi hiện N2FFREESHIP (N2FWELCOME15 ẩn vì đã có đơn, đúng quy tắc đơn đầu); hạng Bronze 0/18.000.000, xét 31/12/2026; không có lỗi trang.
+- Supabase: xem mục "Lệnh cho Thắng" ở báo cáo cuối thread và dòng decisions 2026-11-09.
+- Còn lại: 5.6 (nghiệm thu thật trên Supabase sau khi áp cả 2 migration Slice 4), test Playwright riêng cho HTTP chưa có (dùng kịch bản chạy thật ở trên); AC-ACC-03, 18, 19..21, 24, 25 kiểm bằng chạy thật + mock spec hiện có, chưa có spec gắn mã AC.
+
 ## Slice 4 — Admin đơn hàng: thiết kế xong, contract locked (2026-11-08)
 - Chọn slice: Thắng (decisions 2026-11-08). PRD Slice 4: 41 BR (BR-ADM-01..41), 50 AC (46 Must, 4 Should); backlog lát 4.1–4.9.
 - Câu hỏi: S4-Q1..Q7, Q9 chốt theo mặc định PO; PO thêm lý do huỷ `customer_request` (staff, `to_ship`) — Thắng có thể bác. S4-Q8 (nội dung COMMON-01..03) còn mở, không chặn.
