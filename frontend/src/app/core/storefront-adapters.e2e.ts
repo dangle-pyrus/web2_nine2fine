@@ -1,7 +1,8 @@
 // E2E build (angular.json configuration "e2e"): replaces storefront-adapters.ts so Playwright runs
-// the auth, catalog, cart, checkout and orders slices on mocks (see api-config.e2e.ts).
+// the auth, catalog, cart, checkout, orders and account slices on mocks (see api-config.e2e.ts).
 import { Provider } from '@angular/core';
 import { DEMO_VERIFICATION_CODE } from '../../mocks/accounts';
+import { MockAccountApi } from '../../mocks/mock-account-api';
 import { MockAuthApi } from '../../mocks/mock-auth-api';
 import { MockCartApi } from '../../mocks/mock-cart-api';
 import { MockCatalogApi } from '../../mocks/mock-catalog-api';
@@ -18,6 +19,7 @@ const bindings: StorefrontBindings = {
   CART_API: { useExisting: MockCartApi },
   ORDERS_API: { useExisting: MockOrdersApi },
   AUTH_API: { useExisting: MockAuthApi },
+  ACCOUNT_API: { useExisting: MockAccountApi },
 };
 
 export const storefrontAdapterProviders: Provider[] = toStorefrontProviders(bindings);

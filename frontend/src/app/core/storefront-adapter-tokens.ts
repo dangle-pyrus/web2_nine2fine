@@ -1,4 +1,5 @@
 import { ExistingProvider, Provider, Type, ValueProvider } from '@angular/core';
+import { ACCOUNT_API } from '../features/account/data-access/account-api';
 import { ORDERS_API } from '../features/account/data-access/orders-api';
 import { AUTH_API } from '../features/auth/data-access/auth-api';
 import { CART_API } from '../features/cart/data-access/cart-api';
@@ -13,6 +14,7 @@ export const STOREFRONT_TOKENS = {
   CART_API,
   ORDERS_API,
   AUTH_API,
+  ACCOUNT_API,
 };
 export type StorefrontToken = keyof typeof STOREFRONT_TOKENS;
 

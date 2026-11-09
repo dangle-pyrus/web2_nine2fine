@@ -191,7 +191,7 @@ export class VouchersPage {
   }
 
   expiry(voucher: Voucher): string {
-    return formatDate(voucher.expiresAt);
+    return voucher.expiresAt ? formatDate(voucher.expiresAt) : 'Không thời hạn';
   }
 
   copy(voucher: Voucher): void {

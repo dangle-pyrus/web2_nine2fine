@@ -861,29 +861,30 @@ export class CheckoutPage {
   }
 
   private prefillMember(): void {
-    if (!this.isMock) {
-      // The profile and saved addresses stay mock-only until their slice (K21).
+    // Slice 5: profile + address book (+ vouchers) from ACCOUNT_API in both modes (BR-ACC-14). A
+    // failure falls back to the signed-in user's name and email, so checkout never blocks on it.
+    const fallback = () => {
       const user = this.session.user();
-      if (user) {
-        const patch: Partial<{ name: string; email: string }> = {};
-        if (!this.form.controls.name.value)
-          patch.name = `${user.lastName} ${user.firstName}`.trim();
-        if (!this.form.controls.email.value) patch.email = user.email;
-        this.form.patchValue(patch);
-      }
-      return;
-    }
+      if (!user) return;
+      const patch: Partial<{ name: string; email: string }> = {};
+      if (!this.form.controls.name.value) patch.name = `${user.lastName} ${user.firstName}`.trim();
+      if (!this.form.controls.email.value) patch.email = user.email;
+      this.form.patchValue(patch);
+    };
     forkJoin({
       profile: this.account.getProfile(),
       addresses: this.account.listAddresses(),
-      vouchers: this.account.listVouchers(),
+      vouchers: this.account.listVouchers().pipe(catchError(() => of([] as Voucher[]))),
     })
       .pipe(
         catchError(() => of(null)),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((member) => {
-        if (!member) return;
+        if (!member) {
+          fallback();
+          return;
+        }
         // What the shopper already typed (a draft, or the form kept while signing in) wins.
         const controls = this.form.controls;
         // A saved address would overwrite the recipient and address fields.

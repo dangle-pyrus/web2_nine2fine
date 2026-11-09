@@ -29,6 +29,8 @@ export const API_ERROR_CODES = [
   'invalid-transition',
   'order-state-changed',
   'condition-not-met',
+  // Slice 5 (account).
+  'invalid-password',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 

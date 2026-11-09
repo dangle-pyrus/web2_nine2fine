@@ -1,7 +1,6 @@
 import {
   ApplicationConfig,
   inject,
-  Injector,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
 } from '@angular/core';
@@ -54,8 +53,6 @@ import { reiconHeartFill } from '@ng-icons/reicon/fill';
 import { routes } from './app.routes';
 import { API_CONFIG, apiConfig } from './core/api-config';
 import { apiInterceptor } from './core/api-interceptor';
-import { ACCOUNT_API, HttpAccountApi } from './features/account/data-access/account-api';
-import { LazyMockAccountApi } from '../mocks/lazy-account-api';
 import {
   applyStoreSettings,
   HttpStoreSettingsApi,
@@ -141,13 +138,6 @@ export const appConfig: ApplicationConfig = {
       provide: NEWSLETTER_API,
       useFactory: () =>
         inject(API_CONFIG).mode === 'mock' ? inject(MockNewsletterApi) : inject(HttpNewsletterApi),
-    },
-    {
-      provide: ACCOUNT_API,
-      useFactory: () =>
-        inject(API_CONFIG).mode === 'mock'
-          ? new LazyMockAccountApi(inject(Injector))
-          : inject(HttpAccountApi),
     },
   ],
 };

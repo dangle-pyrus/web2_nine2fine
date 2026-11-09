@@ -1,4 +1,5 @@
 import { Provider } from '@angular/core';
+import { HttpAccountApi } from '../features/account/data-access/account-api';
 import { HttpOrdersApi } from '../features/account/data-access/orders-api';
 import { HttpAuthApi } from '../features/auth/data-access/auth-api';
 import { HttpCartApi } from '../features/cart/data-access/cart-api';
@@ -16,10 +17,11 @@ const bindings: StorefrontBindings = {
   CART_API: { useExisting: HttpCartApi },
   ORDERS_API: { useExisting: HttpOrdersApi },
   AUTH_API: { useExisting: HttpAuthApi },
+  ACCOUNT_API: { useExisting: HttpAccountApi },
 };
 
 /**
- * Adapters of the slices that talk to the real backend (auth, catalog, cart, checkout, orders).
+ * Adapters of the slices that talk to the real backend (auth, catalog, cart, checkout, orders, account).
  * The normal build binds only the HTTP adapters, so the mock adapters and their demo data stay out
  * of the initial chunk. The e2e build (angular.json "e2e") replaces this file with
  * `storefront-adapters.e2e.ts`, which binds the mocks. Both files list the same tokens: the

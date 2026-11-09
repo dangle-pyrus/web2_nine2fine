@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, finalize, map, of, switchMap, tap } from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
+import { API_CONFIG } from '../../../core/api-config';
 import { ACCOUNT_API } from '../data-access/account-api';
 import { AddressInput, Location } from '../data-access/account-models';
 import { accountErrorMessage } from '../account-messages';
@@ -125,11 +126,13 @@ const PHONE_PATTERN = /^(?:0|\+84)\d{9}$/;
             Đây là địa chỉ mặc định. Chọn địa chỉ khác làm mặc định để thay đổi.
           </p>
         }
-        <label class="switch">
-          <input type="checkbox" role="switch" formControlName="isReturn" />
-          <span class="track" aria-hidden="true"></span>
-          Đặt làm địa chỉ trả hàng
-        </label>
+        @if (returnAddressEnabled) {
+          <label class="switch">
+            <input type="checkbox" role="switch" formControlName="isReturn" />
+            <span class="track" aria-hidden="true"></span>
+            Đặt làm địa chỉ trả hàng
+          </label>
+        }
         @if (error()) {
           <p class="form-error" role="alert">{{ error() }}</p>
         }
@@ -299,6 +302,8 @@ export class AddressFormPage {
   readonly lockedDefault = signal(false);
 
   private readonly api = inject(ACCOUNT_API);
+  /** Return address belongs to returns, which only the mock has (PRD Slice 5 K5). */
+  readonly returnAddressEnabled = inject(API_CONFIG).accountMode === 'mock';
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly builder = inject(FormBuilder).nonNullable;

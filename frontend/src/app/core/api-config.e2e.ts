@@ -18,6 +18,11 @@ export interface ApiConfig {
   checkoutMode: 'mock' | 'http';
   /** See `api-config.ts`. */
   adminOrdersMode: 'mock' | 'http' | 'contract-mock';
+  /**
+   * Account (Slice 5): profile, password, address book, membership, vouchers, and the saved
+   * addresses / profile prefill at checkout. `http` in the normal build, `mock` in e2e.
+   */
+  accountMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -40,5 +45,6 @@ export const apiConfig: ApiConfig = {
   catalogMode: 'mock',
   checkoutMode: 'mock',
   adminOrdersMode: readAdminOrdersMode(),
+  accountMode: 'mock',
   baseUrl: '/api',
 };

@@ -2,6 +2,7 @@ import { inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { catchError, filter, map, Observable, throwError } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
+import { ApiErrorCode, readApiError } from '../../../core/api-error';
 import {
   AccountProfile,
   Address,
@@ -31,6 +32,10 @@ export const MAX_RETURN_PHOTO_BYTES = 5 * 1024 * 1024;
 
 export type AccountErrorCode =
   | 'unauthorized'
+  | 'validation'
+  | 'underage'
+  | 'password-locked'
+  | 'rate-limited'
   | 'not-found'
   | 'invalid-password'
   | 'not-cancellable'
@@ -41,9 +46,37 @@ export type AccountErrorCode =
   | 'unavailable';
 
 export class AccountError extends Error {
-  constructor(readonly code: AccountErrorCode) {
+  constructor(
+    readonly code: AccountErrorCode,
+    /** Server sentence (contract `error.message`), shown for field / limit errors. */
+    readonly detail = '',
+    /** Body field the error is about (`phone`, `newPassword`, `addresses`...). */
+    readonly field?: string,
+    readonly retryAfterSeconds?: number,
+  ) {
     super(code);
   }
+}
+
+const ACCOUNT_CODES: Partial<Record<ApiErrorCode, AccountErrorCode>> = {
+  unauthenticated: 'unauthorized',
+  'not-found': 'not-found',
+  'invalid-password': 'invalid-password',
+  'invalid-address': 'invalid-address',
+  'not-cancellable': 'not-cancellable',
+  validation: 'validation',
+  underage: 'underage',
+  'password-locked': 'password-locked',
+  'rate-limited': 'rate-limited',
+};
+
+/** Contract error (`{ error: { code, message, field } }`) -> `AccountError`; anything else is `unavailable`. */
+export function toAccountError(error: unknown): Observable<never> {
+  const detail = readApiError(error);
+  const code = ACCOUNT_CODES[detail.code] ?? 'unavailable';
+  return throwError(
+    () => new AccountError(code, detail.message, detail.field, detail.retryAfterSeconds),
+  );
 }
 
 /** Signed-in shopper's data. Authorization comes from the backend session cookie. */
@@ -81,38 +114,54 @@ export class HttpAccountApi implements AccountApi {
   private readonly options = { withCredentials: true };
 
   getProfile(): Observable<AccountProfile> {
-    return this.http.get<AccountProfile>(`${this.base}/profile`, this.options);
+    return this.http
+      .get<AccountProfile>(`${this.base}/profile`, this.options)
+      .pipe(catchError(toAccountError));
   }
   updateProfile(update: ProfileUpdate): Observable<AccountProfile> {
-    return this.http.patch<AccountProfile>(`${this.base}/profile`, update, this.options);
+    return this.http
+      .patch<AccountProfile>(`${this.base}/profile`, update, this.options)
+      .pipe(catchError(toAccountError));
   }
   setPassword(currentPassword: string | null, newPassword: string): Observable<void> {
-    return this.http.put<void>(
-      `${this.base}/password`,
-      { currentPassword, newPassword },
-      this.options,
-    );
+    return this.http
+      .put<void>(`${this.base}/password`, { currentPassword, newPassword }, this.options)
+      .pipe(catchError(toAccountError));
   }
   getMembership(): Observable<Membership> {
-    return this.http.get<Membership>(`${this.base}/membership`, this.options);
+    return this.http
+      .get<Membership>(`${this.base}/membership`, this.options)
+      .pipe(catchError(toAccountError));
   }
   listVouchers(): Observable<Voucher[]> {
-    return this.http.get<Voucher[]>(`${this.base}/vouchers`, this.options);
+    return this.http
+      .get<Voucher[]>(`${this.base}/vouchers`, this.options)
+      .pipe(catchError(toAccountError));
   }
   listAddresses(): Observable<Address[]> {
-    return this.http.get<Address[]>(`${this.base}/addresses`, this.options);
+    return this.http
+      .get<Address[]>(`${this.base}/addresses`, this.options)
+      .pipe(catchError(toAccountError));
   }
   createAddress(input: AddressInput): Observable<Address> {
-    return this.http.post<Address>(`${this.base}/addresses`, input, this.options);
+    return this.http
+      .post<Address>(`${this.base}/addresses`, input, this.options)
+      .pipe(catchError(toAccountError));
   }
   updateAddress(id: string, input: AddressInput): Observable<Address> {
-    return this.http.put<Address>(`${this.base}/addresses/${id}`, input, this.options);
+    return this.http
+      .put<Address>(`${this.base}/addresses/${id}`, input, this.options)
+      .pipe(catchError(toAccountError));
   }
   deleteAddress(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/addresses/${id}`, this.options);
+    return this.http
+      .delete<void>(`${this.base}/addresses/${id}`, this.options)
+      .pipe(catchError(toAccountError));
   }
   setDefaultAddress(id: string): Observable<Address[]> {
-    return this.http.post<Address[]>(`${this.base}/addresses/${id}/default`, {}, this.options);
+    return this.http
+      .post<Address[]>(`${this.base}/addresses/${id}/default`, {}, this.options)
+      .pipe(catchError(toAccountError));
   }
   listProvinces(): Observable<Location[]> {
     return this.http.get<Location[]>(`${this.apiBase}/locations/provinces`);

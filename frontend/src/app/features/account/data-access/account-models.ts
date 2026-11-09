@@ -34,8 +34,8 @@ export interface Voucher {
   headline: string;
   subline: string;
   conditions: string;
-  /** ISO date. */
-  expiresAt: string;
+  /** ISO date; null = no end date. */
+  expiresAt: string | null;
 }
 
 export interface Location {

@@ -2,6 +2,10 @@ import { AccountError, AccountErrorCode } from './data-access/account-api';
 
 const MESSAGES: Record<AccountErrorCode, string> = {
   unauthorized: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+  validation: 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.',
+  underage: 'Bạn cần đủ 13 tuổi.',
+  'password-locked': 'Bạn đã nhập sai mật khẩu hiện tại quá nhiều lần. Vui lòng thử lại sau.',
+  'rate-limited': 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.',
   'not-found': 'Không tìm thấy thông tin yêu cầu.',
   'invalid-password': 'Mật khẩu hiện tại chưa đúng.',
   'not-cancellable':
@@ -13,6 +17,16 @@ const MESSAGES: Record<AccountErrorCode, string> = {
   unavailable: 'Không thể kết nối. Vui lòng thử lại.',
 };
 
+/** Codes whose server sentence is more precise than ours (which field, how long to wait). */
+const SERVER_WORDED: ReadonlySet<AccountErrorCode> = new Set([
+  'validation',
+  'underage',
+  'password-locked',
+  'rate-limited',
+]);
+
 export function accountErrorMessage(error: unknown): string {
-  return MESSAGES[error instanceof AccountError ? error.code : 'unavailable'];
+  if (!(error instanceof AccountError)) return MESSAGES.unavailable;
+  if (SERVER_WORDED.has(error.code) && error.detail) return error.detail;
+  return MESSAGES[error.code];
 }
