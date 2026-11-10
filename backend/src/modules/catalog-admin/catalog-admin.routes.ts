@@ -5,7 +5,15 @@ import { adminUploadLimit } from '../../middleware/rate-limit';
 import { requirePermission } from '../../middleware/require-permission';
 import { staffDisplayName } from '../order/order-event';
 import { bulkStatusSchema, parseStrict, productCreateSchema, productListQuerySchema, productUpdateSchema } from './catalog-admin.schemas';
+import {
+  adjustmentSchema, inventoryFacetsQuerySchema, inventoryListQuerySchema, promotionCreateSchema, promotionEnabledSchema,
+  promotionListQuerySchema, promotionUpdateSchema, requiredIdempotencyKey, thresholdsSchema,
+} from './inventory-promotion.schemas';
+import { inventoryFacets, listInventory, listMovements } from './inventory.query';
+import { adjustStock, setThresholds } from './inventory.service';
 import { uploadProductImage } from './media.service';
+import { listPromotions, loadPromotion } from './promotion.query';
+import { createPromotion, deletePromotion, setPromotionEnabled, updatePromotion } from './promotion.service';
 import { listCategories, listProducts, loadAdminProduct } from './product.query';
 import { Actor, createProduct, deleteProduct, setStatusBulk, updateProduct } from './product.write';
 
@@ -71,7 +79,62 @@ adminUploadsRouter.post(
   },
 );
 
-/* ---------------- Lát 6.5 - 6.7 (chưa triển khai): router rỗng để 401 / 403 nhất quán ngay từ đầu ---------------- */
+/* ---------------- /admin/inventory (lát 6.5 - 6.7) ---------------- */
 export const adminInventoryRouter = Router();
+
+adminInventoryRouter.get('/', requirePermission('catalog.read'), async (req, res) => {
+  res.json(await listInventory(parseStrict(inventoryListQuerySchema, { ...req.query })));
+});
+
+adminInventoryRouter.get('/facets', requirePermission('catalog.read'), async (req, res) => {
+  res.json(await inventoryFacets(parseStrict(inventoryFacetsQuerySchema, { ...req.query })));
+});
+
+adminInventoryRouter.put('/thresholds', requirePermission('stock.thresholds'), async (req, res) => {
+  res.json(await setThresholds(parseStrict(thresholdsSchema, req.body)));
+});
+
+adminInventoryRouter.post('/:variantId/adjustments', requirePermission('stock.adjust'), async (req, res) => {
+  // Thứ tự: quyền 403 -> Idempotency-Key 422 -> body 422 -> (giao dịch) 404 / 409 / 422.
+  const key = requiredIdempotencyKey(req.get('idempotency-key'));
+  const input = parseStrict(adjustmentSchema, req.body);
+  const variantId = String(req.params.variantId);
+  const r = await adjustStock({ actor: actorOf(req), variantId, input, key, path: `${req.baseUrl}/${variantId}/adjustments` });
+  if (r.replayed) res.set('Idempotency-Replayed', 'true');
+  res.json(r.item);
+});
+
+adminInventoryRouter.get('/:variantId/movements', requirePermission('catalog.read'), async (req, res) => {
+  res.json(await listMovements(String(req.params.variantId)));
+});
+
+/* ---------------- /admin/promotions (lát 6.6) ---------------- */
 export const adminPromotionsRouter = Router();
+
+adminPromotionsRouter.get('/', requirePermission('catalog.read'), async (req, res) => {
+  res.json(await listPromotions(parseStrict(promotionListQuerySchema, { ...req.query })));
+});
+
+adminPromotionsRouter.post('/', requirePermission('promotions.write'), async (req, res) => {
+  res.status(201).json(await createPromotion(actorOf(req), parseStrict(promotionCreateSchema, req.body)));
+});
+
+adminPromotionsRouter.get('/:promotionId', requirePermission('catalog.read'), async (req, res) => {
+  res.json(await loadPromotion(prisma, String(req.params.promotionId)));
+});
+
+adminPromotionsRouter.put('/:promotionId', requirePermission('promotions.write'), async (req, res) => {
+  const input = parseStrict(promotionUpdateSchema, req.body);
+  res.json(await updatePromotion(actorOf(req), String(req.params.promotionId), input));
+});
+
+adminPromotionsRouter.patch('/:promotionId', requirePermission('promotions.write'), async (req, res) => {
+  const { enabled, updatedAt } = parseStrict(promotionEnabledSchema, req.body);
+  res.json(await setPromotionEnabled(actorOf(req), String(req.params.promotionId), enabled, updatedAt));
+});
+
+adminPromotionsRouter.delete('/:promotionId', requirePermission('promotions.write'), async (req, res) => {
+  await deletePromotion(String(req.params.promotionId));
+  res.status(204).end();
+});
 

@@ -89,6 +89,7 @@ describe('T-INV-05 migration admin_catalog_schema (AC-INV-09)', () => {
     });
 
     it('inventory_adjustments: dấu delta khớp lý do; media_assets: loại, cỡ', async () => {
+      await prisma.$executeRawUnsafe(`DELETE FROM media_assets WHERE media_id = 'up-${'c'.repeat(32)}.png'`); // id cố định: dọn bản của lần chạy trước
       const p = await makeProduct({ name: 'Nhật ký', variants: [{ sku: 'MIG6-2', qty: 1 }] });
       const v = p.variants[0].id;
       const adj = (reason: string, delta: number, after = 5) =>

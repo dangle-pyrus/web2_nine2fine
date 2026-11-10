@@ -28,7 +28,7 @@ export function parseStrict<S extends z.ZodType>(schema: S, data: unknown): z.ou
 }
 
 /** Chuỗi một dòng đã chuẩn hoá, độ dài sau chuẩn hoá trong [min, max]. */
-const line = (msg: string, min: number, max: number) =>
+export const line = (msg: string, min: number, max: number) =>
   z
     .string({ error: msg })
     .transform(cleanText)
@@ -168,7 +168,7 @@ export const bulkStatusSchema = z.object({
 });
 
 /** Query danh sách sản phẩm: `q` <= 100 sau trim; `limit` 1..100; `page` >= 1; `view` thuộc 5 tab. */
-const intQuery = (msg: string, min: number, max: number, def: number) =>
+export const intQuery = (msg: string, min: number, max: number, def: number) =>
   z
     .union([z.string(), z.undefined()], { error: msg })
     .transform((v, ctx) => {
@@ -185,7 +185,7 @@ const intQuery = (msg: string, min: number, max: number, def: number) =>
       return n;
     });
 
-const single = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+export const single = (v: unknown) => (Array.isArray(v) ? v[0] : v);
 
 export const productListQuerySchema = z.object({
   q: z.preprocess(single, z.string({ error: 'Từ khoá tìm kiếm không hợp lệ.' }).transform(cleanText).refine((v) => v.length <= 100, { error: 'Từ khoá tối đa 100 ký tự.' }).optional()),
