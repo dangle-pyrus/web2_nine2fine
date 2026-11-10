@@ -445,7 +445,27 @@ export class CatalogApi {
     return false;
   }
 
+  /** The rules the backend checks before anything else (BR-INV-11, 12; CHECK >= 1). */
+  private invalid(route: Route, input: Json) {
+    const type = String(input['type'] ?? '');
+    if (type.length < 1 || type.length > 120)
+      return this.error(route, 422, 'validation', 'Loại sản phẩm từ 1 đến 120 ký tự.', {
+        field: 'type',
+      });
+    if (!(input['genders'] as unknown[] | undefined)?.length)
+      return this.error(route, 422, 'validation', 'Chọn ít nhất một giới tính.', {
+        field: 'genders',
+      });
+    if (!(input['moments'] as unknown[] | undefined)?.length)
+      return this.error(route, 422, 'validation', 'Chọn ít nhất một dịp mặc.', {
+        field: 'moments',
+      });
+    return null;
+  }
+
   private createProduct(route: Route, input: Json) {
+    const invalid = this.invalid(route, input);
+    if (invalid) return invalid;
     if (input['status'] === 'active') {
       const missing = this.missing(input);
       if (missing.length)
@@ -474,6 +494,8 @@ export class CatalogApi {
   }
 
   private updateProduct(route: Route, found: Json, input: Json) {
+    const invalid = this.invalid(route, input);
+    if (invalid) return invalid;
     if (input['updatedAt'] !== found['updatedAt'])
       return this.error(route, 409, 'version-conflict', 'Dữ liệu đã đổi.');
     if (input['status'] === 'active') {
@@ -592,6 +614,22 @@ export class CatalogApi {
         reserved: item['reserved'],
       });
     const quantity = input['quantity'] as number;
+    // BR-INV-32: reason must fit the way and the sign.
+    const reason = input['reason'];
+    const fits =
+      input['mode'] === 'set'
+        ? reason === 'count' || reason === 'correction'
+        : reason === 'correction' ||
+          (['received', 'return'].includes(String(reason)) && quantity > 0) ||
+          (reason === 'damaged' && quantity < 0);
+    if (!fits)
+      return this.error(
+        route,
+        422,
+        'validation',
+        'Lý do không khớp với cách và dấu của số lượng.',
+        { field: 'reason' },
+      );
     const reserved = item['reserved'] as number;
     const available =
       input['mode'] === 'set' ? quantity - reserved : (item['available'] as number) + quantity;

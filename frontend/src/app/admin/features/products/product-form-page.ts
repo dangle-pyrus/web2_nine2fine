@@ -187,6 +187,10 @@ export class ProductFormPage implements HasUnsavedChanges {
         errors['price'] = 'Giá bán từ 1.000 đến 100.000.000 ₫.';
       if (draft.compareAtPrice !== null && draft.compareAtPrice > 100_000_000)
         errors['compareAtPrice'] = 'Giá gốc tối đa 100.000.000 ₫.';
+      if (!draft.type.trim()) errors['type'] = 'Loại sản phẩm từ 1 đến 120 ký tự.';
+      else if (draft.type.length > 120) errors['type'] = 'Loại sản phẩm từ 1 đến 120 ký tự.';
+      if (!draft.genders.length) errors['genders'] = 'Chọn ít nhất một giới tính.';
+      if (!draft.moments.length) errors['moments'] = 'Chọn ít nhất một dịp mặc.';
       if (draft.variants.length > MAX_VARIANTS)
         errors['variants'] = `Tối đa ${MAX_VARIANTS} biến thể.`;
     }
@@ -333,7 +337,21 @@ export class ProductFormPage implements HasUnsavedChanges {
   }
 
   patch(change: Partial<ProductInput>): void {
-    this.draft.update((draft) => ({ ...draft, ...change }));
+    this.draft.update((draft) => {
+      const next = { ...draft, ...change };
+      // SKUs the user has not typed follow the product name (until they are saved).
+      if (change.name !== undefined && !change.variants && this.autoSkus.size) {
+        next.variants = next.variants.map((variant) => {
+          if (!this.autoSkus.has(variant.id)) return variant;
+          const colorIndex = Math.max(
+            0,
+            next.colors.findIndex((color) => color.name === variant.color.name),
+          );
+          return { ...variant, sku: this.autoSku(next.name, colorIndex, variant.size) };
+        });
+      }
+      return next;
+    });
     if (Object.keys(change).some((key) => this.serverErrors()[key])) {
       this.serverErrors.update((errors) => {
         const next = { ...errors };
@@ -439,36 +457,50 @@ export class ProductFormPage implements HasUnsavedChanges {
     this.patch({ ...change, variants: this.buildVariants(next) });
   }
 
+  /** Ids of variants whose SKU was generated here and not yet edited by hand. */
+  private readonly autoSkus = new Set<string>();
+  /** Short random part so two products with the same initials never share SKUs. */
+  private readonly skuSuffix = Array.from(
+    { length: 4 },
+    () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)],
+  ).join('');
+
+  private autoSku(name: string, colorIndex: number, size: string): string {
+    const prefix =
+      slugify(name)
+        .split('-')
+        .map((part) => part[0] ?? '')
+        .join('')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 4) || 'SP';
+    return `N2F-${prefix}-${this.skuSuffix}-${colorIndex + 1}-${size}`;
+  }
+
   /** Colour × size matrix; existing rows keep their SKU, price and stock. */
   private buildVariants(input: ProductInput): AdminVariant[] {
-    const prefix = (
-      slugify(input.name)
-        .split('-')
-        .map((part) => part[0])
-        .join('') || 'sp'
-    )
-      .toUpperCase()
-      .slice(0, 4);
     return input.colors.flatMap((color, colorIndex) =>
       input.sizes.map((size) => {
         const existing = input.variants.find(
           (variant) => variant.color.name === color.name && variant.size === size,
         );
-        return (
-          existing ?? {
-            id: `new-${slugify(color.name)}-${size}-${Math.random().toString(36).slice(2, 7)}`,
-            sku: `N2F-${prefix}-${colorIndex + 1}-${size}`,
-            color,
-            size,
-            price: null,
-            inventory: 0,
-          }
-        );
+        if (existing) return existing;
+        const id = `new-${slugify(color.name)}-${size}-${Math.random().toString(36).slice(2, 7)}`;
+        this.autoSkus.add(id);
+        return {
+          id,
+          sku: this.autoSku(input.name, colorIndex, size),
+          color,
+          size,
+          price: null,
+          inventory: 0,
+        };
       }),
     );
   }
 
   updateVariant(id: string, change: Partial<AdminVariant>): void {
+    if (change.sku !== undefined) this.autoSkus.delete(id);
     this.patch({
       variants: this.draft().variants.map((variant) =>
         variant.id === id ? { ...variant, ...change } : variant,
@@ -580,6 +612,9 @@ export class ProductFormPage implements HasUnsavedChanges {
       compareAtPrice: true,
       variants: true,
       images: true,
+      type: true,
+      genders: true,
+      moments: true,
     });
     const local = { ...this.errors() };
     for (const key of Object.keys(this.serverErrors())) delete local[key];

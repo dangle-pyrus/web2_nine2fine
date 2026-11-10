@@ -99,14 +99,20 @@
         }
       </div>
       <div class="field">
-        <label for="p-type">Dòng mô tả ngắn</label>
+        <label [class.req]="contract" for="p-type">Dòng mô tả ngắn</label>
         <input
           id="p-type"
           class="input"
           [value]="draft().type"
           (input)="patch({ type: $any($event.target).value })"
+          (blur)="touch('type')"
+          [attr.aria-invalid]="!!showError('type')"
+          [attr.maxlength]="contract ? 120 : null"
           placeholder="Ví dụ: Áo blazer dáng suông"
         />
+        @if (showError('type'); as error) {
+        <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+        }
         <p class="hint">Hiện dưới tên sản phẩm trên trang chi tiết.</p>
       </div>
       <div class="field">
@@ -703,7 +709,7 @@
         </select>
       </div>
       <div class="field">
-        <span class="field-label">Dành cho</span>
+        <span class="field-label" [class.req]="contract">Dành cho</span>
         <div class="checks">
           @for (item of genders; track item.value) {
           <label class="check"
@@ -715,9 +721,14 @@
           >
           }
         </div>
+        @if (showError('genders'); as error) {
+        <p class="error" role="alert">
+          <adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}
+        </p>
+        }
       </div>
       <div class="field">
-        <span class="field-label">Dịp mặc</span>
+        <span class="field-label" [class.req]="contract">Dịp mặc</span>
         <div class="checks">
           @for (item of moments; track item.value) {
           <label class="check"
@@ -729,6 +740,11 @@
           >
           }
         </div>
+        @if (showError('moments'); as error) {
+        <p class="error" role="alert">
+          <adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}
+        </p>
+        }
       </div>
       @if (!contract) {
       <div class="field">

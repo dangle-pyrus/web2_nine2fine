@@ -75,11 +75,11 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
               <button
                 type="button"
                 [class.is-active]="mode() === 'delta'"
-                (click)="mode.set('delta')"
+                (click)="setMode('delta')"
               >
                 Thêm / bớt
               </button>
-              <button type="button" [class.is-active]="mode() === 'set'" (click)="mode.set('set')">
+              <button type="button" [class.is-active]="mode() === 'set'" (click)="setMode('set')">
                 Đặt số đếm được
               </button>
             </div>
@@ -95,7 +95,7 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
                 [min]="mode() === 'set' ? 0 : null"
                 step="1"
                 [ngModel]="quantity()"
-                (ngModelChange)="quantity.set($event); changed()"
+                (ngModelChange)="setQuantity($event)"
                 [attr.aria-invalid]="tried() && !!error()"
               />
               @if (tried() && error(); as message) {
@@ -114,12 +114,16 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
                 class="select"
                 name="reason"
                 [ngModel]="reason()"
-                (ngModelChange)="reason.set($event); changed()"
+                (ngModelChange)="reason.set($event); reasonError.set(''); changed()"
+                [attr.aria-invalid]="!!reasonError()"
               >
-                @for (item of reasons; track item.value) {
+                @for (item of allowedReasons(); track item.value) {
                   <option [value]="item.value">{{ item.label }}</option>
                 }
               </select>
+              @if (reasonError(); as message) {
+                <p class="error" role="alert">{{ message }}</p>
+              }
             </div>
             <div class="field">
               <label for="adj-note" [class.req]="reason() === 'correction'">Ghi chú</label>
@@ -271,7 +275,6 @@ export class AdjustStockDrawer {
   readonly item = signal<InventoryItem>(this.data.item);
   /** One key per intent (BR-INV-33): kept on a retry, renewed when the person edits the form. */
   private idempotencyKey = newIdempotencyKey();
-  protected readonly reasons = REASONS;
   protected readonly labels = MOVEMENT_LABELS;
   readonly mode = signal<'delta' | 'set'>('delta');
   readonly quantity = signal<number | null>(null);
@@ -280,6 +283,7 @@ export class AdjustStockDrawer {
   readonly tried = signal(false);
   readonly saving = signal(false);
   readonly serverError = signal('');
+  readonly reasonError = signal('');
   readonly history = signal<InventoryMovement[] | null>(null);
 
   readonly after = computed(() => {
@@ -302,6 +306,42 @@ export class AdjustStockDrawer {
       return `Không thể thấp hơn ${this.item().reserved} đang giữ cho đơn chưa giao.`;
     return '';
   });
+  /** BR-INV-32: which reasons fit the way (add/remove or set) and the sign of the quantity. */
+  readonly allowedReasons = computed(() => {
+    const quantity = Number(this.quantity() ?? 0) || 0;
+    const mode = this.mode();
+    return REASONS.filter(({ value }) => {
+      if (mode === 'set') return value === 'count' || value === 'correction';
+      if (value === 'count') return false;
+      if (quantity > 0) return value !== 'damaged';
+      if (quantity < 0) return value === 'damaged' || value === 'correction';
+      return true;
+    });
+  });
+
+  protected setMode(mode: 'delta' | 'set'): void {
+    this.mode.set(mode);
+    this.syncReason();
+    this.changed();
+  }
+
+  protected setQuantity(value: number | null): void {
+    this.quantity.set(value);
+    this.syncReason();
+    this.changed();
+  }
+
+  /** Keeps the reason valid for the chosen way and sign; picks the natural one when it is not. */
+  private syncReason(): void {
+    const allowed = this.allowedReasons();
+    if (allowed.some((item) => item.value === this.reason())) return;
+    const quantity = Number(this.quantity() ?? 0) || 0;
+    const preferred: AdjustmentReason =
+      this.mode() === 'set' ? 'count' : quantity < 0 ? 'damaged' : 'received';
+    this.reason.set(allowed.find((item) => item.value === preferred)?.value ?? allowed[0].value);
+    this.reasonError.set('');
+  }
+
   /** "Sửa sai" needs a note (S6-Q6). */
   readonly noteError = computed(() =>
     this.contract && this.reason() === 'correction' && !this.note().trim()
@@ -325,6 +365,7 @@ export class AdjustStockDrawer {
     if (this.error() || this.noteError()) return;
     this.saving.set(true);
     this.serverError.set('');
+    this.reasonError.set('');
     const mode = this.mode();
     this.api
       .adjust(this.item().variantId, {
@@ -361,6 +402,11 @@ export class AdjustStockDrawer {
             this.serverError.set(
               `Tồn kho vừa thay đổi: còn ${available} có thể bán, ${reserved} đang giữ. Kiểm tra số đếm rồi lưu lại.`,
             );
+            return;
+          }
+          const reasonMessage = error instanceof AdminApiError ? error.fields['reason'] : '';
+          if (reasonMessage) {
+            this.reasonError.set(reasonMessage);
             return;
           }
           this.serverError.set(errorMessage(error));

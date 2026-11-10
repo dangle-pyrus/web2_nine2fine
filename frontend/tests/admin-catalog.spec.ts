@@ -140,6 +140,8 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await page.goto('/admin/products/new');
     await page.getByLabel('Tên sản phẩm').fill('Váy lụa mới');
     await page.getByLabel('Giá bán').fill('450000');
+    await page.getByLabel('Dòng mô tả ngắn').fill('Váy lụa dáng dài');
+    await page.getByRole('checkbox', { name: 'Work' }).check();
     await page.getByLabel('Đường dẫn sản phẩm').fill('vay-nhap');
     await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
     await expect(page.locator('p.error', { hasText: 'Đường dẫn đã được dùng.' })).toBeVisible();
@@ -164,6 +166,74 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const variants = created['variants'] as Record<string, unknown>[];
     expect(variants).toHaveLength(3);
     expect(Object.keys(variants[0]).sort()).toEqual(['color', 'inventory', 'size', 'sku']);
+  });
+
+  test('AC-INV-11, 12: type, gender and moment are required, on the client and from the server', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    await signIn(page);
+    await page.goto('/admin/products/new');
+    await page.getByLabel('Tên sản phẩm').fill('Áo thử');
+    await page.getByLabel('Giá bán').fill('450000');
+    await page.getByRole('checkbox', { name: 'Nữ' }).uncheck();
+    await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
+    await expect(
+      page.locator('p.error', { hasText: 'Loại sản phẩm từ 1 đến 120 ký tự.' }),
+    ).toBeVisible();
+    await expect(page.locator('p.error', { hasText: 'Chọn ít nhất một giới tính.' })).toBeVisible();
+    await expect(page.locator('p.error', { hasText: 'Chọn ít nhất một dịp mặc.' })).toBeVisible();
+    expect(api.find('POST', /\/admin\/products$/)).toHaveLength(0);
+
+    await page.getByLabel('Dòng mô tả ngắn').fill('Áo thử nghiệm');
+    await page.getByRole('checkbox', { name: 'Nữ' }).check();
+    await page.getByRole('checkbox', { name: 'Work' }).check();
+    await expect(page.locator('p.error', { hasText: 'Chọn ít nhất' })).toHaveCount(0);
+
+    // A server answer with `field: type` or `moments` lands on that field, not only in the toast.
+    await page.route(/\/api\/admin\/products$/, (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({
+            status: 422,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error: {
+                code: 'validation',
+                message: 'Chọn ít nhất một dịp mặc.',
+                field: 'moments',
+              },
+            }),
+          })
+        : route.fallback(),
+    );
+    await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
+    await expect(page.locator('p.error', { hasText: 'Chọn ít nhất một dịp mặc.' })).toBeVisible();
+  });
+
+  test('AC-INV-13: generated SKUs follow the name and two products with the same initials do not clash', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    await signIn(page);
+    for (const price of ['450000', '500000']) {
+      await page.goto('/admin/products/new');
+      await page.getByLabel('Tên sản phẩm').fill('Váy lụa');
+      await page.getByLabel('Giá bán').fill(price);
+      await page.getByLabel('Dòng mô tả ngắn').fill('Váy lụa dáng dài');
+      await page.getByRole('checkbox', { name: 'Work' }).check();
+      await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
+      await expect(page).toHaveURL(/\/admin\/products\/p-new-/);
+    }
+    const sent = api.find('POST', /\/admin\/products$/);
+    expect(sent).toHaveLength(2);
+    const skus = sent.map((item) =>
+      ((item.body as { variants: { sku: string }[] }).variants ?? []).map((row) => row.sku),
+    );
+    for (const list of skus) {
+      expect(list.length).toBeGreaterThan(0);
+      for (const sku of list) expect(sku).toMatch(/^N2F-VL-[A-Z0-9]{4}-\d-[A-Z]+$/);
+    }
+    expect(skus[0].some((sku) => skus[1].includes(sku))).toBe(false);
   });
 
   test('AC-INV-06: a version conflict says so, keeps the form and reloads on request', async ({
@@ -377,6 +447,64 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await drawer.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
     await expect(drawer.getByText('Ghi chú là bắt buộc')).toBeVisible();
     expect(api.find('POST', /adjustments$/)).toHaveLength(0);
+  });
+
+  test('AC-INV-32: the reason list follows the way and sign, and a server reason error lands on the field', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    await signIn(page);
+    await page.goto('/admin/inventory');
+    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    const drawer = page.locator('.drawer');
+    const reason = drawer.getByLabel('Lý do');
+    await expect(reason).toHaveValue('received');
+    await drawer.getByLabel('Số lượng thay đổi').fill('-2');
+    await expect(reason).toHaveValue('damaged');
+    await expect(reason.locator('option[value="received"]')).toHaveCount(0);
+    await drawer.getByRole('button', { name: 'Đặt số đếm được' }).click();
+    await expect(reason).toHaveValue('count');
+    await expect(reason.locator('option')).toHaveCount(2);
+    await drawer.getByLabel('Số lượng thực tế').fill('9');
+    await drawer.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
+    await expect(toast(page)).toContainText('Đã cập nhật tồn kho');
+    const sent = api.find('POST', /adjustments$/);
+    expect(sent[0].body).toMatchObject({ mode: 'set', quantity: 9, reason: 'count' });
+  });
+
+  test('AC-INV-32: a reason refused by the server shows under the reason field and the key is renewed', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    await signIn(page);
+    await page.goto('/admin/inventory');
+    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    const drawer = page.locator('.drawer');
+    await drawer.getByLabel('Số lượng thay đổi').fill('3');
+    let refuse = true;
+    await page.route(/\/inventory\/[^/]+\/adjustments$/, (route) => {
+      if (!refuse) return route.fallback();
+      refuse = false;
+      return route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: {
+            code: 'validation',
+            message: 'Lý do không khớp với cách và dấu của số lượng.',
+            field: 'reason',
+          },
+        }),
+      });
+    });
+    await drawer.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
+    await expect(
+      drawer.locator('p.error', { hasText: 'Lý do không khớp với cách và dấu của số lượng.' }),
+    ).toBeVisible();
+    await drawer.getByLabel('Lý do').selectOption('return');
+    await drawer.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
+    await expect(toast(page)).toContainText('Đã cập nhật tồn kho');
+    expect(api.find('POST', /adjustments$/)).toHaveLength(1);
   });
 
   test('AC-INV-37: the admin changes the default threshold and can drop the custom ones', async ({
