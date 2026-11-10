@@ -3,6 +3,7 @@ import prisma from '../../config/prisma';
 import { now as clockNow } from '../../lib/clock';
 import { AppError, Errors } from '../../lib/errors';
 import { logger } from '../../lib/logger';
+import { isRetryable } from '../../lib/retry';
 import type { Db } from '../../lib/sql';
 import { UUID_RE } from '../../lib/validate';
 import type { PromotionCreateInput, PromotionUpdateInput } from './inventory-promotion.schemas';
@@ -18,10 +19,6 @@ import type { Actor } from './product.write';
 const TX = { timeout: 10_000, maxWait: 5_000 } as const;
 const DB_KIND = { percent: 'percent', fixed: 'fixed', 'free-shipping': 'free_shipping' } as const;
 
-const isRetryable = (err: unknown): boolean => {
-  const e = err as { code?: string; meta?: { code?: string }; message?: string };
-  return e?.code === 'P2034' || e?.meta?.code === '40P01' || e?.meta?.code === '40001' || /\b40P01\b/.test(String(e?.message ?? ''));
-};
 async function inTx<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {

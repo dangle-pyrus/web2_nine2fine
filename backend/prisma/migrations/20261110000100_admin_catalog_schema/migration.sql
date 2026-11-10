@@ -17,7 +17,7 @@ ADD COLUMN     "updated_by" UUID;
 CREATE TABLE "inventory_adjustments" (
     "adjustment_id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "variant_id" UUID NOT NULL,
-    "at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "at" TIMESTAMP(6) NOT NULL DEFAULT (now() AT TIME ZONE 'UTC'),
     "delta" INTEGER NOT NULL,
     "available_after" INTEGER NOT NULL,
     "reason" VARCHAR(12) NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE "media_assets" (
     "width" INTEGER NOT NULL,
     "height" INTEGER NOT NULL,
     "created_by" UUID,
-    "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(6) NOT NULL DEFAULT (now() AT TIME ZONE 'UTC'),
 
     CONSTRAINT "media_assets_pkey" PRIMARY KEY ("media_id")
 );
@@ -120,4 +120,4 @@ ALTER TABLE "inventory_adjustments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "media_assets" ENABLE ROW LEVEL SECURITY;
 
 -- Điền published_at cho sản phẩm đang công khai (K8). Không xoá dữ liệu; chạy lại không đổi gì.
-UPDATE "products" SET "published_at" = now() WHERE "status" = 'ACTIVE' AND "published_at" IS NULL;
+UPDATE "products" SET "published_at" = (now() AT TIME ZONE 'UTC') WHERE "status" = 'ACTIVE' AND "published_at" IS NULL;

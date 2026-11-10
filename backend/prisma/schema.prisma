@@ -619,7 +619,7 @@ model OrderAccessGrant {
 model InventoryAdjustment {
   adjustment_id  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   variantId      String         @map("variant_id") @db.Uuid
-  at             DateTime       @default(now()) @db.Timestamp(6)
+  at             DateTime       @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @db.Timestamp(6)
   delta          Int
   availableAfter Int            @map("available_after")
   reason         String         @db.VarChar(12)
@@ -642,7 +642,7 @@ model MediaAsset {
   width       Int
   height      Int
   createdById String?  @map("created_by") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  createdAt   DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(6)
   createdBy   User?    @relation("MediaAssetCreator", fields: [createdById], references: [user_id], onDelete: SetNull)
 
   @@map("media_assets")

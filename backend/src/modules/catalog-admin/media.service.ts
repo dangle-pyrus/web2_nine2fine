@@ -3,6 +3,7 @@ import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import prisma from '../../config/prisma';
 import { Errors } from '../../lib/errors';
 import { sniffImage } from '../../lib/image-info';
+import { stripImageMetadata } from '../../lib/image-strip';
 import { logger } from '../../lib/logger';
 import { getImageStorage } from '../../lib/storage';
 import { MEDIA_ID_RE } from '../../lib/storage/types';
@@ -36,23 +37,25 @@ export async function uploadProductImage(body: unknown, userId: string): Promise
   const long = Math.max(info.width, info.height);
   if (short < cfg.minShort || long > cfg.maxLong) throw Errors.invalidImage('dimensions');
 
+  const clean = stripImageMetadata(buf, info.type); // m-4: gỡ EXIF/XMP/COM...; kích thước đọc lại bằng sniffImage
+  const out = sniffImage(clean) ? clean : buf;
   const storage = getImageStorage();
   const id = `up-${randomBytes(16).toString('hex')}.${info.ext}`;
   try {
-    await storage.put(id, buf, info.type);
+    await storage.put(id, out, info.type);
   } catch {
     logger.error('media-put-failed', { driver: storage.name });
     throw Errors.unavailable();
   }
   try {
     await prisma.mediaAsset.create({
-      data: { mediaId: id, storage: storage.name, contentType: info.type, byteSize: buf.length, width: info.width, height: info.height, createdById: userId },
+      data: { mediaId: id, storage: storage.name, contentType: info.type, byteSize: out.length, width: info.width, height: info.height, createdById: userId },
     });
   } catch {
     logger.error('media-record-failed', { mediaId: id });
     throw Errors.unavailable();
   }
-  return { id, url: `/api/media/${id}`, alt: '', color: '', width: info.width, height: info.height, size: buf.length, contentType: info.type };
+  return { id, url: `/api/media/${id}`, alt: '', color: '', width: info.width, height: info.height, size: out.length, contentType: info.type };
 }
 
 export type ResolvedMedia = { kind: 'bytes'; data: Buffer; contentType: string } | { kind: 'redirect'; url: string };

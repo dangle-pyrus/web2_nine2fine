@@ -101,6 +101,8 @@ export const CATALOG_ASSUMPTIONS = {
   defaultLowStockThreshold: 5,
   /** S6-Q9: khoảng giá (đồng). Đổi cần migration mới cho CHECK `chk_products_*`. */
   price: { min: 1000, max: 100_000_000 },
+  /** BR-CAT-19 / M-1: /api/media có bộ đếm riêng (cao hơn catalog) để duyệt trang nhiều ảnh không làm 429 catalog. */
+  mediaRateLimit: { max: 600, windowMs: 60_000 },
   /** BR-INV-19 / 21. */
   variant: { maxVariants: 32, maxColors: 8, sizes: ['S', 'M', 'L', 'XL'] as readonly string[] },
 } as const;

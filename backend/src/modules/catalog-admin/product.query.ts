@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { Errors } from '../../lib/errors';
+import { escapeLike } from '../../lib/like';
 import type { Db } from '../../lib/sql';
 import { parseSearchTokens } from '../../lib/text';
 import { UUID_RE } from '../../lib/validate';
@@ -8,7 +9,6 @@ import type { ProductListQuery } from './catalog-admin.schemas';
 import { ADMIN_PRODUCT_INCLUDE, SummaryRow, toAdminProduct, toAdminSummary } from './product.mapper';
 
 /** Thoát `%`, `_`, `\` để dùng với `LIKE ... ESCAPE '\'`. */
-const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /** Một hàm dựng WHERE dùng chung cho `list` và `counts` (không gồm `view`). */
 function buildWhere(q: ProductListQuery): Prisma.Sql {

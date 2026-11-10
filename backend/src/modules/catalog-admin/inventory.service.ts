@@ -4,6 +4,7 @@ import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import { now as clockNow } from '../../lib/clock';
 import { AppError, Errors } from '../../lib/errors';
 import { logger } from '../../lib/logger';
+import { isRetryable } from '../../lib/retry';
 import type { Db } from '../../lib/sql';
 import { ts } from '../../lib/sql';
 import { UUID_RE } from '../../lib/validate';
@@ -21,10 +22,6 @@ import type { Actor } from './product.write';
 const TX = { timeout: 10_000, maxWait: 5_000 } as const;
 const { stock: STOCK } = CATALOG_ASSUMPTIONS;
 
-const isRetryable = (err: unknown): boolean => {
-  const e = err as { code?: string; meta?: { code?: string }; message?: string };
-  return e?.code === 'P2034' || e?.meta?.code === '40P01' || e?.meta?.code === '40001' || /\b40P01\b/.test(String(e?.message ?? ''));
-};
 
 export interface AdjustResult {
   item: AdminInventoryItemDto;

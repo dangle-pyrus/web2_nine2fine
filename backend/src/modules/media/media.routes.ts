@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { Errors } from '../../lib/errors';
-import { catalogRateLimit } from '../../middleware/catalog-rate-limit';
+import { mediaRateLimit } from '../../middleware/catalog-rate-limit';
 import { resolveMedia } from '../catalog-admin/media.service';
 
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -10,7 +10,7 @@ const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
  * phương thức ghi -> 404 not-found. Tên tệp ngẫu nhiên, nội dung không đổi -> cache immutable.
  */
 export const mediaRouter = Router();
-mediaRouter.use('/media', catalogRateLimit, (req: Request, _res: Response, next: NextFunction) =>
+mediaRouter.use('/media', mediaRateLimit, (req: Request, _res: Response, next: NextFunction) =>
   SAFE.has(req.method) ? next() : next(Errors.notFound()),
 );
 

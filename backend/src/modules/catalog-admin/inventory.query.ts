@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import { Errors } from '../../lib/errors';
+import { escapeLike } from '../../lib/like';
 import type { Db } from '../../lib/sql';
 import { parseSearchTokens } from '../../lib/text';
 import { UUID_RE } from '../../lib/validate';
@@ -10,7 +11,6 @@ import { mediaUrlOf } from './media.service';
 import { toAdminStatus } from './product.mapper';
 
 /** Thoát `%`, `_`, `\` để dùng với `LIKE ... ESCAPE '\'`. */
-const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /** Đang giữ = tổng số lượng dòng đơn chưa giao (BR-INV-29): `to_pay`, `to_ship`, `cancel_requested`. */
 export const RESERVED_SQL = Prisma.sql`COALESCE((

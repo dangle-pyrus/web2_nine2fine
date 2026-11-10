@@ -5,6 +5,7 @@ import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import prisma from '../../config/prisma';
 import { now } from '../../lib/clock';
 import { AppError, Errors } from '../../lib/errors';
+import { isRetryable } from '../../lib/retry';
 import { buildSearchText } from '../../lib/search-text';
 import { nextFreeSlug, slugify } from '../../lib/slug';
 import type { Db } from '../../lib/sql';
@@ -33,11 +34,6 @@ const TX = { timeout: 10_000, maxWait: 5_000 } as const;
 
 /** Chỉ cho test (T-INV-33): chạy giữa ghi sản phẩm và ghi biến thể để chứng minh rollback trọn gói. */
 export const writeHooks: { beforeVariants?: () => void } = {};
-
-function isRetryable(e: unknown): boolean {
-  const x = e as { code?: string; meta?: { code?: string }; message?: string } | null;
-  return x?.code === 'P2034' || x?.meta?.code === '40P01' || x?.meta?.code === '40001' || /\b40P01\b/.test(String(x?.message ?? ''));
-}
 
 async function withRetry<T>(fn: () => Promise<T>, max = 3): Promise<T> {
   for (let attempt = 1; ; attempt++) {
