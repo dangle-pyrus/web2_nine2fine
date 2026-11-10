@@ -1,5 +1,11 @@
 # Handoff
 
+## Slice 6 — Admin kho & sản phẩm (2026-11-10, thiết kế xong, contract locked)
+- Thắng (2026-11-10): tạm hoãn nghiệm thu 4.7 và 5.6; bắt đầu Slice 6. Không push, không áp migration lên Supabase khi chưa hỏi Thắng.
+- PRD Slice 6: BR-INV-01..44, AC-INV-01..48, lát 6.1–6.9 (commit 6c3da03). S6-Q2..Q9 theo mặc định PO; **S6-Q1 (nơi lưu ảnh bản thật) chờ Thắng**, đề xuất Supabase Storage bucket công khai, chỉ chặn 6.8.
+- Contract: `docs/api/openapi.yaml` 20 operation (tag `admin-products`, `admin-inventory`, `admin-promotions`, `admin-media`, `media`), 7 mã lỗi mới (`publish-incomplete`, `invalid-image`, `duplicate`, `version-conflict`, `product-in-use`, `variant-in-use`, `voucher-in-use`), **locked 2026-11-10** sau khi Orchestrator duyệt 9 điểm ở plan mục 15. Kế hoạch: `docs/api/admin-catalog-implementation-plan.md`.
+- Điểm duyệt đáng chú ý: tải ảnh bằng thân byte thô (không thêm multer); seed catalog chỉ chạy trên DB rỗng hoặc `--force` (không đè dữ liệu admin sửa); JSON 64 KB riêng cho POST/PUT sản phẩm; idempotency dùng lại scope `admin-action`.
+
 ## Slice 5 — Account (2026-11-09, lát 5.1–5.5 xong, orchestrator tự điều phối theo uỷ quyền của Thắng)
 - Tài liệu: PRD Slice 5 (BR-ACC-01..18, AC-ACC-01..26, S5-Q1..Q6 PO tự chốt), backlog lát 5.1–5.7, contract tag `account` (locked), `docs/api/account-implementation-plan.md`, decisions 2026-11-08.
 - BE: module `account` (hồ sơ GET/PATCH, mật khẩu PUT, sổ địa chỉ CRUD + mặc định, hạng, ưu đãi), mã lỗi `invalid-password`, migration cộng thêm `20261109000100_account_addresses`. Test `backend/test/account.test.ts` 22/22 (T-ACC ↔ AC-ACC-01, 02, 04..17, 22, 23, 26; AC-AUTH-88 bằng T-ACC-02).

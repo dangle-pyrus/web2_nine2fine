@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -107,6 +107,15 @@ info:
     - **Giới hạn tần suất theo tài khoản:** đọc 120 / 60 giây, ghi 30 / 60 giây -> `429 rate-limited` + `Retry-After`.
     - **Thứ tự kiểm ở yêu cầu ghi:** `403 origin-not-allowed` -> `401` -> `429` -> `422 validation` -> `404 not-found` -> `422 invalid-address` / `invalid-password` / `password-locked` -> thành công.
     - **Mã lỗi mới:** `invalid-password` (422, mật khẩu hiện tại sai khi đổi mật khẩu, `field: currentPassword`). Tái dùng: `validation`, `underage`, `password-locked`, `invalid-address`, `not-found`, `rate-limited`, `unauthenticated`, `unavailable`.
+    ## Slice 6 - Admin kho & sản phẩm (status: locked, 2026-11-10, Orchestrator duyệt plan mục 15)
+    Tag `admin-products`, `admin-inventory`, `admin-promotions`, `admin-media`, `media`; BR/AC `docs/product/PRD.md` Slice 6 (BR-INV-01..44, AC-INV-01..48); kế hoạch `docs/api/admin-catalog-implementation-plan.md`. Locked 2026-11-10: Orchestrator duyệt 9 điểm lệch ở plan mục 15.
+    - **Phiên và quyền:** cookie `n2f_asid`; vai trò đọc từ DB mỗi yêu cầu; mọi phản hồi admin có `Cache-Control: no-store` (kể cả 401/403). Staff: mọi `GET` + điều chỉnh tồn; admin: còn lại. Ghi cần `X-Requested-With: n2f` + `Origin` hợp lệ. Giới hạn theo tài khoản: đọc 120/60 giây, ghi 60/60 giây (dùng chung bộ đếm admin), tải ảnh 30 tệp/10 phút.
+    - **Phân trang:** `page` + `limit` (1..100, mặc định 20), trả `{items, total, page, limit}` (+ `counts` theo tab). Tìm kiếm tham số `q`.
+    - **Chống ghi chồng:** `PUT` sản phẩm / voucher gửi `updatedAt` đã đọc; khác -> `409 version-conflict`.
+    - **Tiền** số nguyên đồng; **thời gian** ISO 8601 UTC (hiển thị giờ Asia/Ho_Chi_Minh).
+    - **Kích thước thân JSON:** `POST` / `PUT /admin/products` tối đa 64 KB (các route còn lại 16 KB); vượt -> `422 validation`.
+    - **Mã lỗi mới (7):** `publish-incomplete`, `invalid-image`, `duplicate`, `version-conflict`, `product-in-use`, `variant-in-use`, `voucher-in-use`. Dùng lại `unauthenticated`, `forbidden`, `not-found`, `validation`, `stock-changed` (kèm `available`, `reserved`), `idempotency-conflict`, `rate-limited`, `unavailable`. `ErrorResponse.error` thêm `missing`, `productId`, `reason`, `sku`, `available`, `reserved`.
+    - **Ảnh:** API sản phẩm trả `{id, url}`; `url` null nghĩa là ảnh thư viện (FE tra media manifest). Ảnh tải lên có `id` dạng `up-<32 hex>.<jpg|png|webp>` và `url = /api/media/{id}`; storefront dùng `/api/media/{mediaId}` cho mọi `mediaId` không có trong manifest (API catalog / cart / order không đổi).
   license:
     name: Proprietary
 servers:
@@ -131,6 +140,16 @@ tags:
     description: 'Slice 4, status: locked (2026-11-08). Staff / admin xem và xử lý đơn (cookie `n2f_asid`): danh sách, đếm tab, chi tiết + timeline, gọi xác nhận COD, bàn giao, giao xong, huỷ do shop, hàng hoàn, duyệt / từ chối yêu cầu huỷ, ghi chú nội bộ.'
   - name: account
     description: 'Slice 5, status: locked (2026-11-08). Hồ sơ, mật khẩu, sổ địa chỉ, hạng thành viên, ưu đãi của thành viên (cookie `n2f_sid`). Đơn của thành viên vẫn ở tag `order`.'
+  - name: admin-products
+    description: 'Slice 6, status: locked. Admin xem / tạo / sửa / đổi trạng thái / xoá sản phẩm và biến thể, danh sách danh mục (cookie `n2f_asid`). Staff chỉ đọc.'
+  - name: admin-inventory
+    description: 'Slice 6, status: locked. Tồn kho theo biến thể: danh sách, facets, điều chỉnh có lý do (staff + admin), lịch sử, ngưỡng sắp hết (admin).'
+  - name: admin-promotions
+    description: 'Slice 6, status: locked. Khuyến mãi = bảng `vouchers` mà checkout đang dùng: danh sách + trạng thái, tạo, sửa, bật / tắt, xoá mã chưa dùng. Staff chỉ đọc.'
+  - name: admin-media
+    description: 'Slice 6, status: locked. Tải ảnh sản phẩm lên (chỉ admin) qua lớp lưu trữ `local` / `supabase`.'
+  - name: media
+    description: 'Slice 6, status: locked. Công khai. Địa chỉ ổn định của ảnh tải lên, storefront dùng cho mọi `mediaId` không có trong media manifest.'
 security: []
 paths:
   /auth/lookup:
@@ -1731,6 +1750,553 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/categories:
+    get:
+      tags: [admin-products]
+      operationId: adminListCategories
+      x-status: locked
+      summary: Danh mục để chọn trong form sản phẩm / bộ lọc (BR-INV-10)
+      description: 'Chỉ đọc, 4 danh mục hiện có (tạo / sửa danh mục là Won''t). Sắp theo `sort_order`. Quyền: staff, admin.'
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Danh mục.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminCategory' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/products:
+    get:
+      tags: [admin-products]
+      operationId: adminListProducts
+      x-status: locked
+      summary: Danh sách sản phẩm mọi trạng thái, tab, tìm, lọc (BR-INV-09)
+      description: |
+        Quyền: staff, admin. `q` (trim, chuẩn hoá `foldVi`, <= 100 ký tự sau trim, dài hơn -> `422`, `field: q`) khớp tên, loại hoặc SKU của bất kỳ biến thể. `view`: `all` | `active` | `draft` | `hidden` | `out-of-stock` (có >= 1 biến thể có thể bán = 0). Sắp `updatedAt` giảm, hoà theo `id`. `counts` đếm cả 5 tab theo cùng `q` + `category` (không theo `view`) nên khớp số dòng của từng tab.
+      security:
+        - adminSession: []
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: view, in: query, schema: { type: string, enum: [all, active, draft, hidden, out-of-stock], default: all } }
+        - { name: category, in: query, schema: { type: string }, description: 'Slug danh mục; slug lạ -> danh sách rỗng.' }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 }, description: 'Ngoài 1..100 -> `422 validation`, `field: limit`.' }
+      responses:
+        '200':
+          description: Một trang sản phẩm.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProductPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [admin-products]
+      operationId: adminCreateProduct
+      x-status: locked
+      summary: Tạo sản phẩm + biến thể (BR-INV-11..14, 19, 22)
+      description: |
+        Chỉ admin (staff -> `403 forbidden`). Một giao dịch: sản phẩm, biến thể, nhật ký tồn ban đầu (`received`, ghi chú "Tồn ban đầu", bỏ qua nếu 0), `search_text = foldVi(name + ' ' + type)`. `badge` null, `fit_model` "", `looks` [], `display_order` / `sales_rank` = lớn nhất + 1 (BR-INV-12). `slug` trống -> sinh từ tên (`-2`, `-3` khi trùng); tự gõ mà trùng -> `409 duplicate` (`field: slug`). `status` mặc định `draft`; `active` cần đủ điều kiện (BR-INV-14) và ghi `published_at`. Trường FE không có cột (giá riêng biến thể, giá vốn, tags, SEO, bộ sưu tập) bị bỏ qua.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProductInput' }
+      responses:
+        '201':
+          description: Sản phẩm vừa tạo.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminProduct' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/products/bulk-status:
+    post:
+      tags: [admin-products]
+      operationId: adminBulkSetProductStatus
+      x-status: locked
+      summary: Đổi trạng thái hàng loạt, tất cả hoặc không (BR-INV-15)
+      description: 'Chỉ admin. 1..50 id (ngoài khoảng -> `422`, `field: ids`; id trùng được gộp). Một id không tồn tại -> `404 not-found`; một sản phẩm không đủ điều kiện `active` -> `422 publish-incomplete` kèm `productId`, `missing`; không sản phẩm nào đổi. Đặt trạng thái đang có là hợp lệ (không đổi, không báo lỗi). Lần đầu vào `active` ghi `published_at`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, status]
+              properties:
+                ids: { type: array, minItems: 1, maxItems: 50, items: { type: string } }
+                status: { $ref: '#/components/schemas/AdminProductStatus' }
+      responses:
+        '200':
+          description: Đã đổi.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updated]
+                additionalProperties: false
+                properties:
+                  updated: { type: integer, minimum: 0, description: 'Số sản phẩm thực sự đổi trạng thái.' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [admin-products]
+      operationId: adminGetProduct
+      x-status: locked
+      summary: Chi tiết sản phẩm cho form (BR-INV-10)
+      description: 'Quyền: staff, admin. Gồm ảnh (thứ tự, màu), biến thể kèm `inventory` (= có thể bán) và `hasOrders`, `published`, `slugLocked`, `updatedBy`. Id lạ -> `404`.'
+      security:
+        - adminSession: []
+      responses:
+        '200': { $ref: '#/components/responses/AdminProductDetail' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [admin-products]
+      operationId: adminUpdateProduct
+      x-status: locked
+      summary: Sửa sản phẩm, biến thể, ảnh, trạng thái trong một giao dịch (BR-INV-05, 11..14, 19..22, 26)
+      description: |
+        Chỉ admin. Thay thế toàn bộ phần sửa được; bắt buộc `updatedAt` đã đọc (khác bản hiện tại -> `409 version-conflict`, không ghi gì). `badge`, `fit_model`, `looks`, `sales_rank`, `display_order` giữ nguyên (BR-INV-12).
+        **Biến thể:** có `id` -> sửa (tồn gửi lên bị bỏ qua, chỉ đổi qua điều chỉnh tồn; đổi SKU khi đã có đơn -> `422 variants[i].sku`; đổi tên / hex màu áp cho mọi biến thể màu đó); không có `id` -> tạo (tồn ban đầu 0..100.000 + 1 dòng nhật ký); biến thể hiện có mà không gửi -> bỏ: xoá nếu chưa có dòng đơn, ngược lại `409 variant-in-use` (kèm `sku`). Sản phẩm `active` không được còn 0 biến thể.
+        **Slug:** đã từng công khai (`published`) mà gửi slug khác -> `422` `field: slug`. Bỏ trống / không gửi = giữ nguyên.
+        **Ảnh:** tối đa 12 (`422 images`), phần tử đầu = ảnh bìa; `color` rỗng hoặc đúng 1 tên màu của sản phẩm; `id` phải là ảnh đã tải lên hoặc ảnh thư viện sẵn có. Không xoá tệp (BR-INV-28).
+        Cập nhật `search_text` và `updated_by` cùng giao dịch.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProductUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminProductDetail' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [admin-products]
+      operationId: adminDeleteProduct
+      x-status: locked
+      summary: Xoá cứng sản phẩm chưa từng công khai và chưa có đơn (BR-INV-18)
+      description: 'Chỉ admin. Điều kiện: `published_at` trống VÀ không biến thể nào có dòng đơn. Xoá kèm biến thể, dòng giỏ, nhật ký kho của chúng. Không đạt -> `409 product-in-use`. Không cần `updatedAt`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '204': { description: Đã xoá. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/uploads/product-images:
+    post:
+      tags: [admin-media]
+      operationId: adminUploadProductImage
+      x-status: locked
+      summary: Tải 1 ảnh sản phẩm (BR-INV-24, 25)
+      description: |
+        Chỉ admin. **Thân yêu cầu là byte thô của đúng 1 tệp** (không multipart; không thêm thư viện), `Content-Type` bất kỳ trong `image/jpeg`, `image/png`, `image/webp`, `application/octet-stream`; định dạng xác định theo nội dung (magic bytes), không theo đuôi hay `Content-Type`. Giới hạn: <= 5 MB, cạnh ngắn >= 600 px, cạnh dài <= 6.000 px; sai -> `422 invalid-image` với `reason` = `format` | `size` | `dimensions`. Tên lưu do máy chủ sinh. Giới hạn tần suất riêng: 30 tệp / 10 phút / tài khoản (`429 rate-limited`). Chưa gắn vào sản phẩm nào cho tới khi lưu sản phẩm.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Ảnh đã lưu.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadedImage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /media/{mediaId}:
+    get:
+      tags: [media]
+      operationId: getUploadedMedia
+      x-status: locked
+      summary: Địa chỉ công khai của ảnh tải lên (BR-INV-27)
+      description: 'Không cần đăng nhập. Driver `local`: trả byte ảnh (`Content-Type` theo tệp). Driver `supabase`: `302` tới URL công khai của bucket. Cả hai có `Cache-Control: public, max-age=31536000, immutable` (tên tệp không đổi nội dung). `mediaId` không khớp mẫu hoặc không có -> `404 not-found`. Chỉ phục vụ ảnh đã tải lên; id thư viện (media manifest) không đi qua đây.'
+      security: []
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema: { type: string, pattern: '^up-[0-9a-f]{32}\.(jpg|png|webp)$' }
+      responses:
+        '200':
+          description: Byte ảnh (driver `local`).
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '302':
+          description: Chuyển tới URL công khai (driver `supabase`).
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/inventory:
+    get:
+      tags: [admin-inventory]
+      operationId: adminListInventory
+      x-status: locked
+      summary: Tồn kho, 1 dòng / biến thể (BR-INV-29, 30)
+      description: |
+        Quyền: staff, admin. Mọi trạng thái sản phẩm. `q` khớp SKU hoặc tên sản phẩm (`foldVi`, <= 100 ký tự). `view`: `all` | `in` | `low` | `out` theo `status` (BR-INV-29, ngưỡng BR-INV-35). Sắp có thể bán tăng, rồi SKU. Đang giữ = tổng số lượng dòng đơn `to_pay`, `to_ship`, `cancel_requested`.
+      security:
+        - adminSession: []
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: view, in: query, schema: { type: string, enum: [all, in, low, out], default: all } }
+        - { name: category, in: query, schema: { type: string }, description: Slug danh mục. }
+        - { name: color, in: query, schema: { type: string }, description: 'Tên màu (khớp không phân biệt hoa thường).' }
+        - { name: size, in: query, schema: { type: string, enum: [S, M, L, XL] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Một trang dòng tồn kho.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminInventoryPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/inventory/facets:
+    get:
+      tags: [admin-inventory]
+      operationId: adminInventoryFacets
+      x-status: locked
+      summary: Bộ lọc, số đếm tab, ngưỡng mặc định (BR-INV-30)
+      description: 'Quyền: staff, admin. `counts` theo cùng `q`, `category`, `color`, `size` (không theo `view`), tổng `in` + `low` + `out` = `all`. `categories`, `colors`, `sizes` luôn là toàn bộ lựa chọn. Lỗi `422` như danh sách.'
+      security:
+        - adminSession: []
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string } }
+        - { name: color, in: query, schema: { type: string } }
+        - { name: size, in: query, schema: { type: string, enum: [S, M, L, XL] } }
+      responses:
+        '200':
+          description: Facets.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminInventoryFacets' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/inventory/thresholds:
+    put:
+      tags: [admin-inventory]
+      operationId: adminSetInventoryThresholds
+      x-status: locked
+      summary: Sửa ngưỡng sắp hết (BR-INV-36, Should)
+      description: 'Chỉ admin. Ít nhất một trong `defaultThreshold`, `clearCustom`, `items`. `defaultThreshold` 0..1.000; `clearCustom: true` bỏ mọi ngưỡng riêng; `items` 1..100 SKU, `threshold` 0..1.000 hoặc `null` (theo mặc định). Ngoài khoảng / biến thể lạ -> `422` (`field: defaultThreshold` | `items[i].threshold` | `items[i].variantId`). Một giao dịch, tất cả hoặc không. Chỉ ảnh hưởng màn admin; storefront luôn theo BR-CAT-04 (<= 5).'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                defaultThreshold: { type: integer, minimum: 0, maximum: 1000 }
+                clearCustom: { type: boolean }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [variantId, threshold]
+                    properties:
+                      variantId: { type: string }
+                      threshold: { type: [integer, 'null'], minimum: 0, maximum: 1000 }
+      responses:
+        '200':
+          description: Ngưỡng sau khi sửa.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [defaultThreshold, customCount]
+                additionalProperties: false
+                properties:
+                  defaultThreshold: { type: integer }
+                  customCount: { type: integer, minimum: 0 }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/inventory/{variantId}/adjustments:
+    post:
+      tags: [admin-inventory]
+      operationId: adminAdjustInventory
+      x-status: locked
+      summary: Điều chỉnh tồn có lý do, nguyên tử, có nhật ký (BR-INV-31..34)
+      description: |
+        Quyền: staff, admin. Bắt buộc `Idempotency-Key`. Một giao dịch: khoá dòng biến thể, đổi tồn, ghi đúng 1 dòng nhật ký (thời điểm, biến thể, thay đổi, có thể bán sau, lý do, ghi chú, người + vai trò).
+        **`mode: delta`:** `quantity` nguyên, khác 0, |quantity| <= 10.000, cộng vào Có thể bán bằng 1 phép cộng có điều kiện (kết quả phải 0..100.000), không cần `expectedAvailable`. Âm -> `422 quantity` ("Chỉ còn N có thể bán.").
+        **`mode: set`:** `quantity` = số Trong kho đếm được (0..100.000); Có thể bán mới = quantity - Đang giữ (tính trong giao dịch). `expectedAvailable` bắt buộc; khác số hiện tại -> `409 stock-changed` kèm `available`, `reserved`, không ghi. quantity < Đang giữ -> `422 quantity`; kết quả bằng số hiện tại -> `422 quantity` ("Số lượng không thay đổi.").
+        **Lý do <-> cách:** `received` và `return` chỉ delta > 0; `damaged` chỉ delta < 0; `count` chỉ `set`; `correction` cả hai và `note` bắt buộc >= 5 ký tự. Sai cặp -> `422 reason`. `note` <= 200 ký tự (`422 note`).
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/VariantId'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/StockIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminInventoryAdjustment' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminInventoryItemUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/inventory/{variantId}/movements:
+    get:
+      tags: [admin-inventory]
+      operationId: adminInventoryMovements
+      x-status: locked
+      summary: Lịch sử kho của một biến thể, 50 dòng mới nhất (BR-INV-34, 37)
+      description: 'Quyền: staff, admin. Mới trước. Gồm điều chỉnh tay và tồn ban đầu; (Should) gộp biến động do đơn (`reason: order` -N lúc đặt, `cancel` +N khi hoàn kho; `after` null vì không lưu). Không có `PUT` / `DELETE` trên dòng nhật ký (`404`).'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/VariantId'
+      responses:
+        '200':
+          description: Tối đa 50 dòng.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items: { $ref: '#/components/schemas/AdminInventoryMovement' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/promotions:
+    get:
+      tags: [admin-promotions]
+      operationId: adminListPromotions
+      x-status: locked
+      summary: Danh sách khuyến mãi + trạng thái tính lúc đọc (BR-INV-43)
+      description: 'Quyền: staff, admin. `q` khớp mã hoặc tên (<= 100 ký tự). `state` lọc theo trạng thái. Sắp ngày tạo giảm, hoà theo `id`. `counts` theo cùng `q`, không theo `state`.'
+      security:
+        - adminSession: []
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/AdminPromotionState' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: Một trang khuyến mãi.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminPromotionPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [admin-promotions]
+      operationId: adminCreatePromotion
+      x-status: locked
+      summary: Tạo khuyến mãi (BR-INV-38, 39, 44)
+      description: 'Chỉ admin. Mã chuẩn hoá (bỏ khoảng trắng, chữ hoa) phải khớp `^[A-Z0-9]{4,20}$` (`422 code`), trùng -> `409 duplicate` (`field: code`). Quy tắc giá trị theo `type`: xem schema. `startsAt` trống = lúc tạo; `endsAt` null hoặc > `startsAt`; tạo mới với `endsAt` <= bây giờ -> `422`. Thay đổi có hiệu lực từ báo giá kế tiếp (không cache).'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminPromotionInput' }
+      responses:
+        '201':
+          description: Khuyến mãi vừa tạo.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminPromotion' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/promotions/{promotionId}:
+    parameters:
+      - $ref: '#/components/parameters/PromotionId'
+    get:
+      tags: [admin-promotions]
+      operationId: adminGetPromotion
+      x-status: locked
+      summary: Chi tiết khuyến mãi
+      description: 'Quyền: staff, admin. Id lạ -> `404`.'
+      security:
+        - adminSession: []
+      responses:
+        '200': { $ref: '#/components/responses/AdminPromotionDetail' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [admin-promotions]
+      operationId: adminUpdatePromotion
+      x-status: locked
+      summary: Sửa khuyến mãi (BR-INV-05, 40)
+      description: 'Chỉ admin. Bắt buộc `updatedAt` đã đọc (khác -> `409 version-conflict`). `code` gửi lên phải bằng mã hiện tại (đổi -> `422 code`). Khi đã có >= 1 bản ghi lượt dùng (kể cả đã trả lượt): đổi `type`, `value` hoặc `maxDiscount` -> `409 voucher-in-use`; `usageLimit` < số đã dùng -> `422 totalLimit`. Trường khác sửa được và áp từ báo giá kế tiếp; đơn đã đặt giữ số tiền giảm.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminPromotionUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminPromotionDetail' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      tags: [admin-promotions]
+      operationId: adminSetPromotionEnabled
+      x-status: locked
+      summary: Bật / tắt khuyến mãi (BR-INV-41)
+      description: 'Chỉ admin. `updatedAt` tuỳ chọn (có thì kiểm như `PUT`; không có thì ghi đè, vì công tắc không mất dữ liệu). Tắt: báo giá kế tiếp gỡ mã kèm lý do, đặt hàng với mã vừa tắt -> `409 voucher-changed` (Slice 3), đơn đã tạo không đổi. Đặt đúng giá trị đang có là hợp lệ.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+                updatedAt: { type: string, format: date-time }
+      responses:
+        '200': { $ref: '#/components/responses/AdminPromotionDetail' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '422': { $ref: '#/components/responses/CatalogValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [admin-promotions]
+      operationId: adminDeletePromotion
+      x-status: locked
+      summary: Xoá cứng mã chưa có lượt dùng (BR-INV-42)
+      description: 'Chỉ admin. Chỉ khi chưa có bản ghi lượt dùng nào (kể cả đã trả lượt); ngược lại `409 voucher-in-use` ("hãy tắt thay vì xoá").'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '204': { description: Đã xoá. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CatalogConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -1779,6 +2345,30 @@ components:
       required: false
       schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
       description: 'Slice 4. Tuỳ chọn. FE sinh một khoá cho mỗi ý định bấm nút (dùng lại khi "Thử lại" cùng thao tác). Cùng khoá + cùng người + cùng đường dẫn + cùng body trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`); khác nội dung -> `409 idempotency-conflict`. Sai dạng -> `422 validation`, `field: Idempotency-Key`.'
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      description: 'Slice 6. UUID sản phẩm; sai dạng hoặc không có -> `404 not-found`.'
+      schema: { type: string }
+    VariantId:
+      name: variantId
+      in: path
+      required: true
+      description: 'Slice 6. UUID biến thể; sai dạng hoặc không có -> `404 not-found`.'
+      schema: { type: string }
+    PromotionId:
+      name: promotionId
+      in: path
+      required: true
+      description: 'Slice 6. UUID voucher; sai dạng hoặc không có -> `404 not-found`.'
+      schema: { type: string }
+    StockIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
+      description: 'Slice 6, BẮT BUỘC cho điều chỉnh tồn (BR-INV-33). FE sinh một khoá cho mỗi ý định, dùng lại khi "Thử lại". Cùng khoá + cùng người + cùng đường dẫn + cùng body trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`), không áp lần hai; khác nội dung -> `409 idempotency-conflict`. Thiếu / sai dạng -> `422 validation`, `field: Idempotency-Key`.'
   headers:
     RetryAfter:
       description: Số giây chờ, bằng `error.retryAfterSeconds`.
@@ -1883,6 +2473,50 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+    CatalogValidation:
+      description: |
+        Slice 6. Một trong:
+        - `validation` (+ `field`, ví dụ `name`, `price`, `slug`, `variants[2].sku`, `images`, `quantity`, `reason`, `note`, `code`, `totalLimit`, `q`, `limit`).
+        - `publish-incomplete` (+ `missing[]`, và `productId` khi đổi hàng loạt): vào `active` mà thiếu điều kiện (BR-INV-14, 15, 21). Không đổi gì.
+        - `invalid-image` (+ `reason`: `format` | `size` | `dimensions`) khi tải ảnh (BR-INV-24).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    CatalogConflict:
+      description: |
+        Slice 6. Mọi trường hợp: không đổi dữ liệu, không dòng nhật ký.
+        - `duplicate` (+ `field`: `slug`, `code`, `variants[i].sku`).
+        - `version-conflict`: `updatedAt` gửi lên khác bản hiện tại (BR-INV-05).
+        - `stock-changed` (+ `available`, `reserved`): điều chỉnh kiểu `set` mà `expectedAvailable` khác số hiện tại (BR-INV-33).
+        - `product-in-use`: xoá sản phẩm đã từng công khai hoặc đã có đơn (BR-INV-18).
+        - `variant-in-use` (+ `sku`): bỏ biến thể đã có dòng đơn (BR-INV-21).
+        - `voucher-in-use`: xoá voucher đã có lượt dùng, hoặc đổi loại / giá trị / giảm tối đa của voucher đã dùng (BR-INV-40, 42).
+        - `idempotency-conflict`: cùng `Idempotency-Key` nhưng nội dung khác.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AdminProductDetail:
+      description: 'Slice 6. Sản phẩm (dạng admin).'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminProduct' }
+    AdminPromotionDetail:
+      description: 'Slice 6. Khuyến mãi (dạng admin).'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminPromotion' }
+    AdminInventoryItemUpdated:
+      description: 'Slice 6. Dòng tồn kho sau điều chỉnh. Gửi lại cùng `Idempotency-Key` + cùng nội dung: cùng kết quả đầu tiên, header `Idempotency-Replayed: true`, không áp lần hai, không thêm dòng nhật ký.'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+        Idempotency-Replayed: { schema: { type: string, const: 'true' }, description: 'Chỉ có khi là bản phát lại.' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminInventoryItem' }
   schemas:
     Email:
       type: string
@@ -1954,6 +2588,14 @@ components:
         | order-state-changed | 409 | AC-ADM-14..17, 40 (Slice 4; kèm `order`, `currentStatus`) |
         | condition-not-met | 409 | AC-ADM-20, 24 (Slice 4) |
         | invalid-password | 422 | AC-ACC-11 (Slice 5; `field: currentPassword`) |
+        | publish-incomplete | 422 | AC-INV-16, 17 (Slice 6, draft; kèm `missing`, `productId`) |
+        | invalid-image | 422 | AC-INV-25 (Slice 6, draft; kèm `reason`: `format` / `size` / `dimensions`) |
+        | duplicate | 409 | AC-INV-14, 21, 41 (Slice 6, draft; kèm `field`) |
+        | version-conflict | 409 | AC-INV-06 (Slice 6, draft) |
+        | product-in-use | 409 | AC-INV-20 (Slice 6, draft) |
+        | variant-in-use | 409 | AC-INV-23 (Slice 6, draft; kèm `sku`) |
+        | voucher-in-use | 409 | AC-INV-42, 44 (Slice 6, draft) |
+        | stock-changed (dùng lại) | 409 | AC-INV-34 (Slice 6: điều chỉnh `set`; kèm `available`, `reserved`, không có `stockIssues`) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -1980,6 +2622,13 @@ components:
         - order-state-changed
         - condition-not-met
         - invalid-password
+        - publish-incomplete
+        - invalid-image
+        - duplicate
+        - version-conflict
+        - product-in-use
+        - variant-in-use
+        - voucher-in-use
         - unavailable
     ErrorResponse:
       type: object
@@ -2001,7 +2650,7 @@ components:
               description: Có khi `code` in (`rate-limited`, `code-locked`, `password-locked`).
             field:
               type: string
-              description: Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`). Catalog (tên tham số query, gồm `sort`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids`) (`sort`, `gender`, `page`, `pageSize`, `ids`, ...).
+              description: 'Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`). Catalog: tên tham số query (`sort`, `gender`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids`). Slice 6: đường dẫn có chỉ số, ví dụ `variants[2].sku`, `images`, `items[0].threshold`, `quantity`, `reason`, `note`, `code`, `totalLimit`, `slug`.'
             quote:
               description: 'Slice 3: báo giá mới nhất, có ở `price-changed`, `voucher-changed`, `stock-changed` (đặt hàng).'
               $ref: '#/components/schemas/Quote'
@@ -2028,6 +2677,28 @@ components:
             order:
               description: 'Slice 4: đơn hiện tại (dạng admin), luôn có ở `order-state-changed` để FE vẽ lại không gọi thêm (BR-ADM-14).'
               $ref: '#/components/schemas/AdminOrder'
+            missing:
+              type: array
+              description: 'Slice 6, `publish-incomplete`: điều kiện còn thiếu để vào `active`.'
+              items: { type: string, enum: [images, variants, name, type, category, price] }
+            productId:
+              type: string
+              description: 'Slice 6, `publish-incomplete` khi đổi hàng loạt: sản phẩm đầu tiên không đủ điều kiện.'
+            reason:
+              type: string
+              enum: [format, size, dimensions]
+              description: 'Slice 6, `invalid-image`.'
+            sku:
+              type: string
+              description: 'Slice 6, `variant-in-use`: SKU của biến thể có đơn.'
+            available:
+              type: integer
+              minimum: 0
+              description: 'Slice 6, `stock-changed` của điều chỉnh tồn: Có thể bán hiện tại.'
+            reserved:
+              type: integer
+              minimum: 0
+              description: 'Slice 6, `stock-changed` của điều chỉnh tồn: Đang giữ hiện tại.'
     Category:
       type: string
       enum: [tops, bottoms, dresses, outerwear]
@@ -2940,3 +3611,364 @@ components:
         subline: { type: string, examples: ['tối đa 200.000 ₫'] }
         conditions: { type: string, examples: ['Đơn từ 500.000 ₫ · Chỉ thành viên'] }
         expiresAt: { type: [string, 'null'], format: date-time }
+    AdminCategory:
+      type: object
+      required: [id, slug, name]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string, examples: [tops] }
+        name: { type: string }
+    AdminProductStatus:
+      type: string
+      enum: [active, draft, hidden]
+      description: 'Slice 6, K1: `active` = `ACTIVE`, `draft` = `DRAFT`, `hidden` = `ARCHIVED` (chữ FE "Đã ẩn").'
+    AdminImageRef:
+      type: object
+      required: [id, url]
+      additionalProperties: false
+      properties:
+        id: { type: string, maxLength: 100 }
+        url:
+          type: [string, 'null']
+          description: 'Ảnh tải lên: đường dẫn công khai `/api/media/{id}`. Ảnh thư viện (id có trong media manifest của FE): `null`, FE tự tra manifest (BR-INV-27).'
+    AdminProductImage:
+      type: object
+      required: [id, url, alt, color]
+      additionalProperties: false
+      properties:
+        id: { type: string, maxLength: 100 }
+        url: { type: [string, 'null'] }
+        alt: { type: string, maxLength: 125, description: 'Trống = dùng tên sản phẩm khi hiển thị.' }
+        color: { type: string, maxLength: 50, description: 'Tên màu của sản phẩm mà ảnh này thể hiện; rỗng = mọi màu.' }
+    UploadedImage:
+      type: object
+      required: [id, url, alt, color, width, height, size, contentType]
+      additionalProperties: false
+      properties:
+        id: { type: string, maxLength: 100, pattern: '^up-[0-9a-f]{32}\.(jpg|png|webp)$' }
+        url: { type: string, examples: ['/api/media/up-0123456789abcdef0123456789abcdef.webp'] }
+        alt: { type: string, const: '' }
+        color: { type: string, const: '' }
+        width: { type: integer }
+        height: { type: integer }
+        size: { type: integer, description: Byte. }
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+    AdminColor:
+      type: object
+      required: [name, hex]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 50 }
+        hex: { type: string, pattern: '^#[0-9A-Fa-f]{6}$', description: 'Lưu và trả chữ hoa.' }
+    AdminVariantInput:
+      type: object
+      required: [sku, color, size]
+      description: 'Trường lạ (`price`, `cost`...) bị bỏ qua.'
+      properties:
+        id: { type: string, description: 'Có = sửa biến thể này; không = tạo mới.' }
+        sku: { type: string, minLength: 3, maxLength: 64, pattern: '^[A-Za-z0-9-]+$', description: 'Chuyển chữ hoa; duy nhất toàn hệ thống.' }
+        color: { $ref: '#/components/schemas/AdminColor' }
+        size: { type: string, enum: [S, M, L, XL] }
+        inventory: { type: integer, minimum: 0, maximum: 100000, description: 'Chỉ dùng cho biến thể MỚI (tồn ban đầu, mặc định 0). Với biến thể đã có: bỏ qua.' }
+    AdminVariant:
+      type: object
+      required: [id, sku, color, size, inventory, hasOrders]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        color: { $ref: '#/components/schemas/AdminColor' }
+        size: { type: string }
+        inventory: { type: integer, minimum: 0, description: 'Có thể bán (`inventory_qty`).' }
+        hasOrders: { type: boolean, description: 'Đã có dòng đơn: khoá SKU, không bỏ được (FE `stockLocked`).' }
+    AdminProductInput:
+      type: object
+      required: [name, type, category, price, variants]
+      description: 'Phần sửa được của sản phẩm. Quy tắc BR-INV-11: chuỗi NFC, cắt hai đầu, gộp khoảng trắng; `name` 1-120; `type` 1-120; `description` <= 5.000; `material` <= 500; `care` <= 10 dòng, mỗi dòng 1-200; `fitSummary` <= 500; `price` nguyên 1.000..100.000.000; `compareAtPrice` null hoặc nguyên > `price` và <= 100.000.000. Sai -> `422 validation` + `field`.'
+      properties:
+        slug: { type: string, minLength: 3, maxLength: 80, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', description: 'Trống / vắng = tự sinh (tạo) hoặc giữ nguyên (sửa).' }
+        name: { type: string }
+        type: { type: string, description: 'FE `type` = cột `type_label`.' }
+        description: { type: string, default: '' }
+        status: { $ref: '#/components/schemas/AdminProductStatus' }
+        category: { type: string, description: 'Slug danh mục (phải tồn tại).' }
+        genders: { type: array, items: { $ref: '#/components/schemas/Gender' }, uniqueItems: true }
+        moments: { type: array, items: { $ref: '#/components/schemas/Moment' }, uniqueItems: true }
+        price: { type: integer }
+        compareAtPrice: { type: [integer, 'null'] }
+        material: { type: string, default: '' }
+        care: { type: array, maxItems: 10, items: { type: string } }
+        fitSummary: { type: string, default: '' }
+        images:
+          type: array
+          maxItems: 12
+          description: 'Thứ tự = thứ tự hiển thị; phần tử đầu = ảnh bìa; gallery = toàn bộ; `color_media[màu]` = ảnh đầu tiên gắn màu đó.'
+          items:
+            type: object
+            required: [id]
+            properties:
+              id: { type: string, maxLength: 100 }
+              alt: { type: string, maxLength: 125 }
+              color: { type: string, maxLength: 50 }
+        variants:
+          type: array
+          minItems: 0
+          maxItems: 32
+          items: { $ref: '#/components/schemas/AdminVariantInput' }
+          description: '<= 32 biến thể, <= 8 màu (tên không trùng, không phân biệt hoa thường), size thuộc S/M/L/XL, (màu, size) không trùng.'
+    AdminProductUpdate:
+      allOf:
+        - $ref: '#/components/schemas/AdminProductInput'
+        - type: object
+          required: [updatedAt]
+          properties:
+            updatedAt: { type: string, format: date-time, description: '`updatedAt` của lần đọc gần nhất (so ở mức mili-giây). Khác bản hiện tại -> `409 version-conflict`.' }
+    AdminProduct:
+      type: object
+      required: [id, slug, name, type, description, status, category, genders, moments, price, compareAtPrice, material, care, fitSummary, images, colors, sizes, variants, published, slugLocked, publishedAt, createdAt, updatedAt, updatedBy]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        type: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/AdminProductStatus' }
+        category: { type: string, description: Slug. }
+        genders: { type: array, items: { $ref: '#/components/schemas/Gender' } }
+        moments: { type: array, items: { $ref: '#/components/schemas/Moment' } }
+        price: { type: integer }
+        compareAtPrice: { type: [integer, 'null'] }
+        material: { type: string }
+        care: { type: array, items: { type: string } }
+        fitSummary: { type: string }
+        images: { type: array, items: { $ref: '#/components/schemas/AdminProductImage' } }
+        colors: { type: array, items: { $ref: '#/components/schemas/AdminColor' }, description: 'Suy ra từ biến thể, theo thứ tự xuất hiện.' }
+        sizes: { type: array, items: { type: string }, description: 'Suy ra từ biến thể (S, M, L, XL).' }
+        variants: { type: array, items: { $ref: '#/components/schemas/AdminVariant' } }
+        published: { type: boolean, description: '`published_at` có giá trị (đã từng công khai).' }
+        slugLocked: { type: boolean, description: 'Bằng `published` (BR-INV-13).' }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        updatedBy:
+          description: 'BR-INV-23 (Should). Null nếu chưa có hoặc tài khoản đã xoá.'
+          oneOf:
+            - type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string }
+            - type: 'null'
+    AdminProductSummary:
+      type: object
+      required: [id, slug, name, coverImage, status, category, categoryName, price, compareAtPrice, inventory, variantCount, updatedAt]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        coverImage:
+          oneOf:
+            - $ref: '#/components/schemas/AdminImageRef'
+            - type: 'null'
+        status: { $ref: '#/components/schemas/AdminProductStatus' }
+        category: { type: string, description: Slug. }
+        categoryName: { type: string }
+        price: { type: integer }
+        compareAtPrice: { type: [integer, 'null'] }
+        inventory: { type: integer, minimum: 0, description: 'Tổng có thể bán của mọi biến thể.' }
+        variantCount: { type: integer, minimum: 0 }
+        updatedAt: { type: string, format: date-time }
+    AdminProductPage:
+      type: object
+      required: [items, total, page, limit, counts]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminProductSummary' }, maxItems: 100 }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        counts:
+          type: object
+          required: [all, active, draft, hidden, out-of-stock]
+          additionalProperties: false
+          properties:
+            all: { type: integer, minimum: 0 }
+            active: { type: integer, minimum: 0 }
+            draft: { type: integer, minimum: 0 }
+            hidden: { type: integer, minimum: 0 }
+            out-of-stock: { type: integer, minimum: 0, description: 'Mọi trạng thái sản phẩm có >= 1 biến thể có thể bán = 0.' }
+    AdminStockStatus:
+      type: string
+      enum: [in, low, out]
+      description: '`out`: có thể bán = 0; `low`: 1..ngưỡng; `in`: > ngưỡng (BR-INV-29).'
+    AdminInventoryItem:
+      type: object
+      required: [variantId, productId, productName, productStatus, image, color, size, sku, onHand, reserved, available, lowStockThreshold, thresholdCustom, category, status]
+      additionalProperties: false
+      properties:
+        variantId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        productName: { type: string }
+        productStatus: { $ref: '#/components/schemas/AdminProductStatus' }
+        image:
+          oneOf:
+            - $ref: '#/components/schemas/AdminImageRef'
+            - type: 'null'
+          description: 'Ảnh theo màu của biến thể, thiếu thì ảnh bìa.'
+        color: { $ref: '#/components/schemas/AdminColor' }
+        size: { type: string }
+        sku: { type: string }
+        onHand: { type: integer, minimum: 0, description: 'Trong kho = available + reserved.' }
+        reserved: { type: integer, minimum: 0, description: 'Đang giữ: tổng số lượng dòng đơn `to_pay`, `to_ship`, `cancel_requested`.' }
+        available: { type: integer, minimum: 0, description: 'Có thể bán = `inventory_qty`.' }
+        lowStockThreshold: { type: integer, minimum: 0, maximum: 1000 }
+        thresholdCustom: { type: boolean }
+        category: { type: string, description: Slug. }
+        status: { $ref: '#/components/schemas/AdminStockStatus' }
+    AdminInventoryPage:
+      type: object
+      required: [items, total, page, limit]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminInventoryItem' }, maxItems: 100 }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+    AdminInventoryFacets:
+      type: object
+      required: [categories, colors, sizes, counts, defaultThreshold, customCount]
+      additionalProperties: false
+      properties:
+        categories:
+          type: array
+          items:
+            type: object
+            required: [value, label]
+            additionalProperties: false
+            properties:
+              value: { type: string, description: Slug. }
+              label: { type: string }
+        colors: { type: array, items: { $ref: '#/components/schemas/AdminColor' }, description: 'Màu phân biệt theo tên (không phân biệt hoa thường).' }
+        sizes: { type: array, items: { type: string } }
+        counts:
+          type: object
+          required: [all, in, low, out]
+          additionalProperties: false
+          properties:
+            all: { type: integer, minimum: 0 }
+            in: { type: integer, minimum: 0 }
+            low: { type: integer, minimum: 0 }
+            out: { type: integer, minimum: 0 }
+        defaultThreshold: { type: integer, minimum: 0, maximum: 1000, description: 'Mặc định 5.' }
+        customCount: { type: integer, minimum: 0, description: 'Số SKU có ngưỡng riêng.' }
+    AdminInventoryAdjustment:
+      type: object
+      required: [mode, quantity, reason]
+      description: 'Trường lạ bị bỏ qua.'
+      properties:
+        mode: { type: string, enum: [delta, set] }
+        quantity: { type: integer, description: '`delta`: số có dấu khác 0, |.| <= 10.000. `set`: số Trong kho đếm được 0..100.000.' }
+        reason: { type: string, enum: [received, return, damaged, count, correction] }
+        note: { type: string, maxLength: 200, default: '' }
+        expectedAvailable: { type: integer, minimum: 0, description: 'Bắt buộc khi `mode = set`: Có thể bán FE đang thấy. Với `delta`: bỏ qua.' }
+    AdminInventoryMovement:
+      type: object
+      required: [id, at, change, after, reason, note, author]
+      additionalProperties: false
+      properties:
+        id: { type: string }
+        at: { type: string, format: date-time }
+        change: { type: integer }
+        after: { type: [integer, 'null'], description: 'Có thể bán sau thay đổi. Null với biến động do đơn (`order`, `cancel`).' }
+        reason: { type: string, enum: [received, return, damaged, count, correction, order, cancel] }
+        note: { type: string }
+        author: { type: string, description: 'Tên người làm lúc đó (chụp lại); "Hệ thống" / "Khách" với biến động do đơn.' }
+        authorRole: { type: [string, 'null'], enum: [staff, admin, null] }
+    AdminPromotionState:
+      type: string
+      enum: [running, scheduled, expired, disabled]
+      description: 'Tính lúc đọc, theo thứ tự: `disabled` -> `scheduled` (bắt đầu > bây giờ) -> `expired` (kết thúc <= bây giờ, hoặc tổng lượt có giá trị và `used` >= tổng lượt) -> `running`. `startsAt` null (voucher cũ) coi như đã bắt đầu.'
+    AdminPromotionInput:
+      type: object
+      required: [code, title, type, minSubtotal, perCustomerLimit, enabled]
+      description: |
+        Chuẩn hoá: `code` bỏ khoảng trắng + chữ hoa. Quy tắc theo `type` (BR-INV-39): `percent`: `value` 1..90, `maxDiscount` null hoặc 1.000..10.000.000; `fixed`: `value` 1.000..10.000.000, `maxDiscount` null; `free-shipping`: `value` và `maxDiscount` null. `title` 1..100; `minSubtotal` 0..100.000.000; `usageLimit` null hoặc 1..1.000.000; `perCustomerLimit` 1..10; `categories` <= 1 slug tồn tại; `audience` chỉ `everyone` | `members` (giá trị khác của FE như `tiers`, `customers`, `private` -> `422 audience`); giờ Việt Nam khi hiển thị, API dùng ISO 8601 có múi giờ. Trường FE `tiers`, `customerIds` bị bỏ qua / 422 nếu khác rỗng.
+      properties:
+        code: { type: string }
+        title: { type: string }
+        type: { type: string, enum: [percent, fixed, free-shipping] }
+        value: { type: [integer, 'null'] }
+        maxDiscount: { type: [integer, 'null'] }
+        minSubtotal: { type: integer }
+        categories: { type: array, maxItems: 1, items: { type: string }, description: 'Rỗng = mọi danh mục (`category_id` null).' }
+        usageLimit: { type: [integer, 'null'] }
+        perCustomerLimit: { type: integer }
+        audience: { type: string, enum: [everyone, members], default: everyone }
+        firstOrderOnly: { type: boolean, default: false }
+        excludeSaleItems: { type: boolean, default: false }
+        startsAt: { type: [string, 'null'], format: date-time, description: 'Trống / null khi tạo = lúc tạo.' }
+        endsAt: { type: [string, 'null'], format: date-time }
+        enabled: { type: boolean }
+    AdminPromotionUpdate:
+      allOf:
+        - $ref: '#/components/schemas/AdminPromotionInput'
+        - type: object
+          required: [updatedAt]
+          properties:
+            updatedAt: { type: string, format: date-time }
+    AdminPromotion:
+      type: object
+      required: [id, code, title, type, value, maxDiscount, minSubtotal, categories, usageLimit, perCustomerLimit, audience, firstOrderOnly, excludeSaleItems, used, hasRedemptions, startsAt, endsAt, enabled, state, createdAt, updatedAt, updatedBy]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        title: { type: string }
+        type: { type: string, enum: [percent, fixed, free-shipping] }
+        value: { type: [integer, 'null'] }
+        maxDiscount: { type: [integer, 'null'] }
+        minSubtotal: { type: integer }
+        categories: { type: array, maxItems: 1, items: { type: string } }
+        usageLimit: { type: [integer, 'null'] }
+        perCustomerLimit: { type: integer }
+        audience: { type: string, enum: [everyone, members] }
+        firstOrderOnly: { type: boolean }
+        excludeSaleItems: { type: boolean }
+        used: { type: integer, minimum: 0, description: '`used_count`.' }
+        hasRedemptions: { type: boolean, description: 'Có >= 1 bản ghi lượt dùng (kể cả đã trả): khoá loại / giá trị / giảm tối đa và không xoá được.' }
+        startsAt: { type: [string, 'null'], format: date-time }
+        endsAt: { type: [string, 'null'], format: date-time }
+        enabled: { type: boolean }
+        state: { $ref: '#/components/schemas/AdminPromotionState' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        updatedBy:
+          oneOf:
+            - type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string }
+            - type: 'null'
+    AdminPromotionPage:
+      type: object
+      required: [items, total, page, limit, counts]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminPromotion' }, maxItems: 100 }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        counts:
+          type: object
+          required: [all, running, scheduled, expired, disabled]
+          additionalProperties: false
+          properties:
+            all: { type: integer, minimum: 0 }
+            running: { type: integer, minimum: 0 }
+            scheduled: { type: integer, minimum: 0 }
+            expired: { type: integer, minimum: 0 }
+            disabled: { type: integer, minimum: 0 }
