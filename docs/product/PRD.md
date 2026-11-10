@@ -1178,3 +1178,200 @@ Dữ liệu tham chiếu: thành viên M (`member@nine2fine.test`, có mật kh�
 | S5-Q4 | Số địa chỉ tối đa | BR-ACC-10 | 10. |
 | S5-Q5 | Địa chỉ trả hàng (`isReturn`) | K5 | Won't; ẩn ở HTTP. |
 | S5-Q6 | Ưu đãi khi chưa có ví cá nhân | BR-ACC-16 | Danh sách mã công khai dùng được. |
+
+---
+
+## Slice 6: Admin kho & sản phẩm
+
+Nguồn: backlog 4.9 (phần sản phẩm, tồn kho thủ công, khuyến mãi), backlog 2.19 (`search_text` thành Must), Slice 2 (BR-CAT-02..05, 09..11), Slice 3 (BR-CART-08 dòng ngừng kinh doanh, BR-VOU-01..13), Slice 4 (BR-ADM-01..04, 34, 36, 37, 41). Thắng yêu cầu 2026-11-10: sản phẩm, tồn kho, ảnh, khuyến mãi; nối FE admin hiện có (đang mock) với BE thật; phạm vi khác giữ Won't. Hiện trạng đã đọc: `schema.prisma` (Category, Product: `status` ACTIVE/DRAFT/ARCHIVED, `price` Decimal, `cover_media_id`, `gallery_media_ids`, `color_media` = {tên màu: id ảnh}, `search_text`; ProductVariant: `inventory_qty`, `sku` unique, unique sản phẩm+màu+size, `cart_lines` xoá theo biến thể, `order_items` chặn xoá; Voucher; VoucherRedemption có `released_at`; OrderItem snapshot `media_id` VarChar(100)); FE `admin/features/{products,inventory,promotions}`, `admin-apis.ts`, `models.ts`, `core/permissions.ts`; ảnh storefront tra `media-manifest` tĩnh. Mã BR: `BR-INV` (cả slice: sản phẩm, ảnh, tồn kho, khuyến mãi). Tên endpoint/trường do Backend chốt trong `openapi.yaml`. Tiền là số nguyên đồng; múi giờ Asia/Ho_Chi_Minh. Mọi mặc định PO ghi ở mục 7 (S6-Q#).
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** Ở bản thật, sản phẩm chỉ vào DB qua file seed (backlog 2.13); đổi giá, ẩn sản phẩm, nhập hàng, tạo mã giảm giá đều phải sửa SQL. Màn admin Sản phẩm, Tồn kho, Khuyến mãi đã thiết kế nhưng chạy mock và hiện "Chưa khả dụng" ở HTTP. Tồn kho chỉ đổi qua đơn, không có cách ghi nhận nhập hàng, hư hỏng, kiểm kho; sửa tên bằng SQL làm lệch tìm kiếm (QA Slice 2 m2).
+
+**Mục tiêu.**
+1. Admin tạo, sửa, công khai, ẩn sản phẩm và biến thể trên dữ liệu thật; storefront thấy thay đổi trong ≤ 30 giây; đơn cũ không đổi.
+2. Admin tải ảnh sản phẩm lên, chọn ảnh bìa và ảnh theo màu.
+3. Staff/admin điều chỉnh tồn kho có lý do, không âm, không mất cập nhật khi đua với đơn; mỗi lần có người/giờ/lý do.
+4. Admin quản lý mã giảm giá dùng chung bảng `vouchers` checkout đang chạy.
+5. Ở HTTP, ba màn này không còn dữ liệu mock; tìm kiếm luôn khớp tên mới (đóng 2.19).
+
+**Không phải mục tiêu.** Khách hàng, báo cáo/tổng quan, nội dung trang chủ, bộ sưu tập, bảng size, đánh giá, cài đặt, nhân viên, trả hàng, nhật ký toàn hệ thống, xuất/nhập file; đổi giao diện admin.
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Lý do |
+| --- | --- | --- |
+| Quyền API (phiên `n2f_asid`, ma trận staff/admin), cờ FE `adminCatalogMode`, migration cộng thêm | Must | Nền an toàn, giống Slice 4. |
+| Sản phẩm: danh sách, chi tiết, tạo, sửa, đổi trạng thái (đơn lẻ + hàng loạt), xoá nháp chưa từng bán | Must | Lý do chính của slice. |
+| Biến thể: màu × size, SKU, tồn ban đầu; không xoá biến thể đã có đơn | Must | Gắn với sản phẩm. |
+| `search_text` đồng bộ mọi đường ghi | Must | Backlog 2.19. |
+| Ảnh: tải lên, ảnh bìa, thứ tự, ảnh theo màu; giữ ảnh thư viện cũ | Must | Không có ảnh thì không công khai được. Nơi lưu thật: S6-Q1. |
+| Tồn kho: danh sách, điều chỉnh có lý do, nhật ký, chống ghi chồng, ngưỡng mặc định 5 | Must | Mục tiêu 3. |
+| Khuyến mãi = voucher: danh sách + trạng thái, tạo, sửa, bật/tắt, xoá mã chưa dùng | Must | Mục tiêu 4. |
+| Sửa ngưỡng sắp hết (mặc định + riêng SKU); lịch sử kho gộp biến động do đơn; "cập nhật bởi" trên sản phẩm/voucher | Should | Hữu ích, không chặn vận hành. |
+| Giá riêng từng biến thể, giá vốn, thẻ (tags), SEO title/description, bộ sưu tập | Won't | Không có cột/bảng; checkout tính giá theo sản phẩm. Ẩn ở HTTP. |
+| Đối tượng voucher theo hạng / danh sách khách / mã riêng tư; nhiều danh mục cho một mã | Won't | BE chưa có (S5-Q6, CHK-VC-08); `vouchers.category_id` chỉ một danh mục. |
+| Tạo/sửa danh mục, bảng size, dọn ảnh mồ côi, xoá tệp ảnh | Won't | Ngoài phạm vi; ảnh còn được đơn cũ tham chiếu. |
+
+### 3. Hiện trạng và hành vi được chọn
+
+| # | Điểm | Hiện trạng | Chọn | Lý do |
+| --- | --- | --- | --- | --- |
+| K1 | Trạng thái | FE `active/draft/hidden`; DB `ACTIVE/DRAFT/ARCHIVED`. | `hidden` ↔ `ARCHIVED`, chữ FE giữ "Đã ẩn". | Không đổi enum. |
+| K2 | Trường FE có, DB không | Giá biến thể, giá vốn, tags, SEO, bộ sưu tập. | Won't; ở HTTP ẩn các ô này, BE bỏ qua nếu gửi. | Không thêm cột cho tính năng chưa dùng. |
+| K3 | Trường DB có, FE không | `badge`, `fit_model`, `looks`, `sales_rank`, `display_order`. | Sửa sản phẩm giữ nguyên; tạo mới theo BR-INV-12. | Không mất nội dung seed. |
+| K4 | Ba con số tồn | FE: Trong kho / Đang giữ / Có thể bán. DB chỉ `inventory_qty`, đã trừ lúc đặt. | `inventory_qty` = Có thể bán; Đang giữ = tổng số lượng dòng đơn `to_pay`, `to_ship`, `cancel_requested`; Trong kho = cộng hai số (BR-INV-29). | Khớp cách Slice 3/4 trừ và hoàn kho, không đổi checkout. |
+| K5 | Ảnh | Storefront tra `media-manifest` tĩnh; FE admin gọi `uploads/product-images`. | Ảnh tải lên có id ≤ 100 ký tự (vừa `order_items.media_id`) và URL; storefront hiện được cả id thư viện lẫn ảnh tải lên. Nơi lưu: S6-Q1. | Đơn cũ giữ ảnh cũ. |
+| K6 | Voucher FE ↔ DB | FE: `categories[]`, `audience`, `tiers`, `customerIds`, mã 3–20 có `-`/`_`, % 1–100. DB: một `category_id`, `members_only`, `first_order_only`, `exclude_sale_items`; checkout chỉ nhận `^[A-Z0-9]{4,20}$`, % 1–90. | Theo DB và BR-VOU-02. Ở HTTP: tối đa 1 danh mục; đối tượng chỉ "Mọi khách" / "Chỉ thành viên"; thêm 2 tuỳ chọn "Chỉ đơn đầu tiên", "Không áp dụng hàng đang giảm". | Mã tạo ở admin phải dùng được ở checkout. |
+| K7 | Cờ FE | `adminOrdersMode: http` chỉ mở Đơn hàng (BR-ADM-36). | Cờ mới `adminCatalogMode` (`http`/`mock`), độc lập; `http` mở thêm Sản phẩm, Tồn kho, Khuyến mãi. | Phát hành tách khỏi Slice 4. |
+| K8 | Slug sau công khai | Không có dấu "đã từng công khai". | Cột cộng thêm `published_at`; migration điền cho sản phẩm đang `ACTIVE`. | Khoá slug (S6-Q3), quyết định được xoá cứng (BR-INV-18). |
+
+### 4. Business Rules
+
+**Chung**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-INV-01 | Must | BR-ADM-01, 03 | Mọi API admin sản phẩm, danh mục, ảnh, tồn kho, khuyến mãi chỉ nhận phiên `n2f_asid` còn hạn của tài khoản staff/admin đang hoạt động; vai trò đọc từ DB mỗi yêu cầu. Không phiên / hết hạn / thu hồi / chỉ có `n2f_sid` / `is_active = false` → 401 `unauthenticated`. `Cache-Control: no-store`. |
+| BR-INV-02 | Must | BR-ADM-02; S6-Q2 | Ma trận quyền, kiểm ở mọi yêu cầu. **staff**: xem sản phẩm, danh mục, tồn kho, lịch sử kho, khuyến mãi; điều chỉnh tồn kho. **admin**: mọi việc của staff + tạo/sửa sản phẩm, biến thể, giá, ảnh (tải lên); đổi trạng thái; xoá sản phẩm; tạo/sửa/bật-tắt/xoá khuyến mãi; sửa ngưỡng sắp hết. Thiếu quyền → 403 `forbidden`, dữ liệu không đổi, không có dòng nhật ký. |
+| BR-INV-03 | Must | BR-ADM-04; BR-ACC-18 | FE ẩn nút/route không đủ quyền theo `permissions.ts` (khớp BR-INV-02): staff không thấy "Thêm sản phẩm", "Tạo mã", nút lưu/xoá/đổi trạng thái; trang sản phẩm và mã giảm giá ở chế độ chỉ xem. Nút lưu khoá khi đang gửi; lỗi (kể cả mất mạng) hiện thông báo, form giữ nguyên dữ liệu đã nhập. |
+| BR-INV-04 | Must | BR-ADM-41 | Giới hạn theo tài khoản, dùng chung bộ đếm admin: đọc 120 / 60 giây, ghi 60 / 60 giây; tải ảnh 30 tệp / 10 phút. Vượt → 429 `rate-limited` + `retryAfterSeconds` + `Retry-After`. |
+| BR-INV-05 | Must | — | Chống ghi chồng khi sửa sản phẩm và voucher: yêu cầu ghi gửi `updatedAt` đã đọc; khác giá trị hiện tại → 409 `version-conflict`, không ghi gì. FE: "Dữ liệu vừa được người khác cập nhật. Tải lại để xem bản mới; thay đổi của bạn chưa được lưu." (giữ form để chép lại). |
+| BR-INV-06 | Must | BR-ADM-36; K7 | Cờ `adminCatalogMode` (`http` bản thường / `mock` e2e). `http`: Sản phẩm, Tồn kho, Khuyến mãi gọi API thật, không đọc/ghi mock; menu gồm Đơn hàng + ba mục này; các route admin khác vẫn "Chưa khả dụng"; ô thuộc Won't (K2, K6) ẩn. `mock`: như hiện tại, Playwright mock pass nguyên. |
+| BR-INV-07 | Must | BR-ADM-37 | Migration chỉ cộng thêm (không `DROP`/`TRUNCATE`/đổi kiểu, không xoá dữ liệu); bảng mới bật RLS; chạy `migrate deploy` 2 lần thì lần 2 không có gì. Cần lưu thêm: nhật ký điều chỉnh kho; `products.published_at` (điền cho sản phẩm đang `ACTIVE`); (Should) ngưỡng sắp hết mặc định và riêng SKU, người sửa cuối của sản phẩm/voucher. |
+| BR-INV-08 | Must | BR-ADM-34 | Mã lỗi ổn định (FE map theo `code`): `unauthenticated` 401, `forbidden` 403, `not-found` 404, `validation` 422 (+`field`), `publish-incomplete` 422 (+`missing[]`), `invalid-image` 422 (+`reason`), `duplicate` 409 (+`field`), `version-conflict` 409, `stock-changed` 409 (+ số hiện tại), `product-in-use` 409, `variant-in-use` 409 (+`sku`), `voucher-in-use` 409, `rate-limited` 429, lỗi máy chủ; không stack trace, SQL. |
+
+**Sản phẩm và biến thể**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-INV-09 | Must | FE product-list | Danh sách gồm mọi trạng thái. Tìm theo tên, loại, SKU (chuẩn hoá `foldVi`, ≤ 100 ký tự, quá → 422 `field: q`); tab `all` / `active` / `draft` / `hidden` / `out-of-stock` (≥ 1 biến thể có thể bán = 0) kèm số đếm; lọc danh mục; sắp `updatedAt` giảm, hoà theo id; `limit` 1–100 (mặc định 20). Mỗi dòng: ảnh bìa, tên, trạng thái, danh mục, giá, giá gốc, tổng có thể bán, số biến thể, `updatedAt`. |
+| BR-INV-10 | Must | — | Chi tiết trả mọi trường form (trừ K2), ảnh (BR-INV-26), biến thể kèm `inventory` (= có thể bán), `hasOrders`; `published` (có `published_at`), `slugLocked`; danh mục chọn từ bảng `categories` (API danh sách danh mục, staff/admin đọc được). Id lạ → 404. |
+| BR-INV-11 | Must | BR-CAT-03; S6-Q9 | Kiểm dữ liệu (chuỗi: NFC, cắt hai đầu, gộp khoảng trắng): tên 1–120 ký tự; loại (`typeLabel`) 1–120; mô tả ≤ 5.000; chất liệu ≤ 500; bảo quản ≤ 10 dòng, mỗi dòng 1–200; dáng (`fitSummary`) ≤ 500; danh mục phải tồn tại; `genders` ⊆ {nam, nu}; `moments` ⊆ {work, dinner, event, weekend}; giá số nguyên 1.000–100.000.000; giá gốc null hoặc số nguyên > giá và ≤ 100.000.000. Sai → 422 `validation` + `field`. |
+| BR-INV-12 | Must | K3 | Sửa sản phẩm không đổi `badge`, `fit_model`, `looks`, `sales_rank`, `display_order`. Tạo mới: `badge` null, `fit_model` "", `looks` [], `display_order` và `sales_rank` = giá trị lớn nhất hiện có + 1 (đứng cuối "Nổi bật" và "Bán chạy"). |
+| BR-INV-13 | Must | BR-CAT-09; S6-Q3 | Slug: `a-z 0-9 -`, 3–80 ký tự, không bắt đầu/kết thúc bằng `-`, sai → 422 `field: slug`. Bỏ trống → sinh từ tên (bỏ dấu); trùng thì thêm `-2`, `-3`… Admin tự gõ slug đã có → 409 `duplicate` `field: slug`. Sau lần công khai đầu (`published_at` có giá trị) slug bị khoá: gửi slug khác → 422 `validation` `field: slug` ("Không đổi đường dẫn của sản phẩm đã từng hiển thị."). |
+| BR-INV-14 | Must | BR-CAT-02, 03 | Chuyển tự do giữa `DRAFT` / `ACTIVE` / `ARCHIVED`. Vào `ACTIVE` cần đủ: ≥ 1 ảnh, ≥ 1 biến thể, giá hợp lệ, tên, loại, danh mục; thiếu → 422 `publish-incomplete` + `missing[]` (`images`, `variants`, …), không đổi gì. Không yêu cầu tồn > 0. Lần đầu vào `ACTIVE` ghi `published_at`. |
+| BR-INV-15 | Must | FE bulk | Đổi trạng thái hàng loạt: 1–50 id (ngoài khoảng → 422); tất cả hoặc không: một id không tồn tại → 404, một sản phẩm không đủ điều kiện `ACTIVE` → 422 `publish-incomplete` kèm id đó; không sản phẩm nào đổi. |
+| BR-INV-16 | Must | BR-CAT-02, 11; BR-CART-08 | Sản phẩm rời `ACTIVE`: trong ≤ 30 giây không còn trong danh sách, tìm kiếm, tổng số; PDP 404. Dòng giỏ chứa nó thành "Sản phẩm không còn kinh doanh" (`discontinued`, Slice 3), không đặt được. Đơn đã đặt giữ nguyên (snapshot), khách và admin vẫn xem đủ. |
+| BR-INV-17 | Must | BR-CAT-11; BR-CHK (giá đổi khi đặt) | Đổi giá/giá gốc: giỏ và báo giá dùng giá mới ở lần làm tươi kế tiếp; khách đang checkout gặp giá đổi lúc đặt → hành vi Slice 3 hiện có; đơn đã đặt giữ `unit_price`, `compare_at_price` đã chụp. Không gửi thư cho khách. |
+| BR-INV-18 | Must | — | Xoá cứng (chỉ admin) chỉ khi sản phẩm chưa từng công khai (`published_at` trống) **và** không biến thể nào có dòng đơn → 204, xoá kèm biến thể và nhật ký kho của chúng. Ngược lại → 409 `product-in-use` ("Sản phẩm đã từng hiển thị hoặc đã có đơn; hãy Ẩn thay vì xoá."). |
+| BR-INV-19 | Must | BR-CAT-03 | Biến thể = tổ hợp màu × size admin bật. Size ⊆ {S, M, L, XL}; 1–8 màu, tên màu 1–50 ký tự, không trùng trong sản phẩm (không phân biệt hoa thường, có dấu), hex `#RRGGBB`; tối đa 32 biến thể. SKU 3–64 ký tự `A-Z 0-9 -` (chuyển chữ hoa), duy nhất toàn hệ thống → trùng 409 `duplicate` `field: variants[i].sku`. Biến thể mới có tồn ban đầu 0–100.000, ghi 1 dòng nhật ký kho lý do `received`, ghi chú "Tồn ban đầu", người tạo (bỏ qua nếu 0). |
+| BR-INV-20 | Must | FE `stockLocked` | Lưu sản phẩm không đổi tồn của biến thể đã có (giá trị gửi lên bị bỏ qua; chỉ đổi qua BR-INV-31). SKU khoá khi biến thể đã có dòng đơn → 422 `field: variants[i].sku`. Đổi tên/hex màu áp cho mọi biến thể màu đó và khoá `color_media`; dòng đơn cũ giữ tên màu đã chụp. |
+| BR-INV-21 | Must | — | Bỏ biến thể (tắt màu/size): biến thể không có dòng đơn → xoá (dòng giỏ thành viên của nó bị xoá theo; giỏ khách thấy "không còn kinh doanh"); có dòng đơn → 409 `variant-in-use` kèm SKU, không đổi gì; FE gợi ý "Đặt tồn về 0 để ngừng bán size này". Sản phẩm `ACTIVE` không được còn 0 biến thể (422 `publish-incomplete`). |
+| BR-INV-22 | Must | backlog 2.19; BR-CAT-13 | Mọi đường ghi sản phẩm (tạo, sửa) cập nhật `search_text = foldVi(tên + ' ' + loại)` trong cùng giao dịch; lỗi giữa chừng thì không để lại thay đổi nửa vời. Đóng 2.19. |
+| BR-INV-23 | Should | — | Lưu người sửa cuối + thời điểm trên sản phẩm và voucher; form hiện "Cập nhật bởi {tên} lúc {giờ}". |
+
+**Ảnh**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-INV-24 | Must | S6-Q5 | Tải ảnh (chỉ admin), 1 tệp / yêu cầu: JPEG, PNG hoặc WebP xác định theo nội dung tệp (không theo đuôi); ≤ 5 MB; cạnh ngắn ≥ 600 px, cạnh dài ≤ 6.000 px. Sai → 422 `invalid-image` `reason` ∈ {`format`, `size`, `dimensions`}. Tên lưu do máy chủ sinh (không dùng tên gốc). Trả `id` (≤ 100 ký tự) và `url` công khai. |
+| BR-INV-25 | Must (chờ xác nhận nơi lưu) | S6-Q1 | Lưu ảnh qua lớp lưu trữ đổi được bằng cấu hình. Dev/test: đĩa cục bộ. Bản thật: S6-Q1 (mặc định PO: Supabase Storage, bucket công khai). Không chặn lát khác; chặn 6.8. |
+| BR-INV-26 | Must | BR-CAT-10; K5 | Sản phẩm có 0–12 ảnh (`ACTIVE` cần ≥ 1; > 12 → 422 `field: images`), thứ tự do admin sắp; ảnh đầu = ảnh bìa (`cover_media_id`), toàn bộ theo thứ tự = gallery. Mỗi ảnh gắn 0 hoặc 1 màu của sản phẩm (màu không có → 422); `color_media[màu]` = ảnh đầu tiên gắn màu đó. Alt ≤ 125 ký tự (trống = tên sản phẩm). Id ảnh không phải ảnh đã tải lên hay id thư viện có sẵn → 422 `field: images`. |
+| BR-INV-27 | Must | K5 | Ảnh thư viện của sản phẩm seed hiện trong form admin và giữ nguyên id khi lưu. Storefront (thẻ sản phẩm, PDP, giỏ, checkout, đơn) hiện đúng cả ảnh tải lên lẫn ảnh thư viện; dòng đơn cũ giữ ảnh đã chụp. |
+| BR-INV-28 | Must | — | Không xoá tệp ảnh trong slice này: bỏ ảnh khỏi sản phẩm chỉ gỡ tham chiếu (đơn cũ vẫn hiện ảnh). Dọn ảnh mồ côi: Won't. |
+
+**Tồn kho**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-INV-29 | Must | K4; BR-CAT-04 | Có thể bán = `inventory_qty`. Đang giữ = tổng số lượng các dòng đơn ở `to_pay`, `to_ship`, `cancel_requested` của biến thể. Trong kho = Có thể bán + Đang giữ. Trạng thái admin: `out` khi có thể bán = 0; `low` khi 1..ngưỡng (BR-INV-35); `in` khi > ngưỡng. |
+| BR-INV-30 | Must | FE inventory | Danh sách: 1 dòng / biến thể (mọi trạng thái sản phẩm, ghi rõ trạng thái), tìm theo SKU/tên (≤ 100 ký tự), tab `all`/`in`/`low`/`out` + đếm, lọc danh mục/màu/size, sắp có thể bán tăng rồi SKU; `limit` 1–100 (mặc định 20). Facets: danh mục, màu, size, số đếm từng tab, ngưỡng mặc định, số SKU có ngưỡng riêng. |
+| BR-INV-31 | Must | S6-Q6 | Điều chỉnh (staff + admin), hai cách: **Thêm/bớt** `delta` nguyên, ≠ 0, \|delta\| ≤ 10.000, cộng vào Có thể bán; **Đặt số đếm được** `set` = số Trong kho đếm thực tế 0–100.000 → Có thể bán mới = số đếm − Đang giữ (tính trong giao dịch). Kết quả Có thể bán phải 0–100.000. Delta làm âm → 422 `field: quantity` ("Chỉ còn N có thể bán."); số đếm < Đang giữ → 422 ("Không thể thấp hơn N đang giữ cho đơn chưa giao."); không đổi gì → 422 ("Số lượng không thay đổi."). |
+| BR-INV-32 | Must | FE `REASONS` | Lý do cố định: `received` Nhập hàng (chỉ delta > 0), `return` Hàng trả về nhập lại (chỉ delta > 0), `damaged` Hư hỏng (chỉ delta < 0), `count` Kiểm kho (chỉ `set`), `correction` Sửa sai (± hoặc `set`, ghi chú bắt buộc ≥ 5 ký tự). Sai cặp → 422 `field: reason`. Ghi chú ≤ 200 ký tự (NFC, cắt). |
+| BR-INV-33 | Must | BR-CHK-15 (tinh thần) | Không mất cập nhật, không âm (DB bảo đảm): delta là phép cộng nguyên tử có điều kiện ≥ 0, đua với đặt hàng/huỷ đơn vẫn đúng tổng. `set` gửi kèm `expectedAvailable` (số đang thấy); khác hiện tại → 409 `stock-changed` + Có thể bán, Đang giữ hiện tại, không ghi; FE hiện số mới, giữ ô nhập. Mỗi điều chỉnh có `Idempotency-Key`: gửi lại cùng khoá trong 24 giờ → trả kết quả lần đầu, không áp lần hai. |
+| BR-INV-34 | Must | — | Nhật ký: mỗi điều chỉnh (và tồn ban đầu BR-INV-19) ghi đúng 1 dòng trong cùng giao dịch: thời điểm, biến thể, thay đổi (±), Có thể bán sau, lý do, ghi chú, người (id, tên, vai trò). Không sửa/xoá qua API. Lịch sử biến thể: 50 dòng mới nhất, mới trước; staff xem được. |
+| BR-INV-35 | Must | BR-CAT-04; S6-Q8 | Ngưỡng sắp hết mặc định toàn shop = 5 (khớp storefront). Ngưỡng admin chỉ ảnh hưởng màn admin; storefront luôn theo BR-CAT-04. |
+| BR-INV-36 | Should | FE threshold-dialogs | Admin sửa ngưỡng mặc định (0–1.000) kèm tuỳ chọn "bỏ mọi ngưỡng riêng", và ngưỡng riêng cho 1–100 SKU (0–1.000, hoặc null = theo mặc định). Ngoài khoảng → 422. |
+| BR-INV-37 | Should | FE `InventoryMovement` | Lịch sử gộp biến động do đơn: đặt hàng (−, "Bán theo đơn {mã}"), huỷ/hàng hoàn nhập lại (+, "Đơn huỷ, hoàn kho {mã}"). Không làm đổi kết quả hay tăng lỗi của đặt hàng/huỷ đơn. |
+
+**Khuyến mãi (voucher)**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-INV-38 | Must | BR-VOU-02; K6 | Khuyến mãi = bảng `vouchers` checkout dùng; thay đổi áp ở lần báo giá kế tiếp (không chờ cache). Trường sửa được: mã, tên (1–100), loại, giá trị, giảm tối đa, đơn tối thiểu (0–100.000.000), bắt đầu, kết thúc, tổng lượt (null hoặc 1–1.000.000), lượt mỗi khách (1–10), chỉ thành viên, chỉ đơn đầu tiên, danh mục (null hoặc đúng 1), không áp dụng hàng đang giảm, bật/tắt. |
+| BR-INV-39 | Must | BR-VOU-02 | Mã chuẩn hoá (bỏ khoảng trắng, chữ hoa) phải khớp `^[A-Z0-9]{4,20}$` → sai 422 `field: code`; trùng (không phân biệt hoa thường) → 409 `duplicate` `field: code`. `percent`: giá trị 1–90, giảm tối đa null hoặc 1.000–10.000.000. `fixed`: giá trị 1.000–10.000.000, giảm tối đa null. `free_shipping`: giá trị và giảm tối đa null. Bắt đầu trống = lúc tạo; kết thúc null hoặc > bắt đầu; tạo mới với kết thúc ≤ bây giờ → 422. Giờ VN. |
+| BR-INV-40 | Must | S6-Q4 | Mã không đổi sau khi tạo (422 `field: code`). Khi voucher đã có ≥ 1 bản ghi lượt dùng (kể cả đã trả lượt): loại, giá trị, giảm tối đa không đổi được → 409 `voucher-in-use` ("Mã đã được dùng; hãy tạo mã mới."). Tổng lượt không được < số đã dùng → 422 `field: totalLimit`. Trường khác sửa được, áp từ báo giá kế tiếp; đơn đã đặt giữ số tiền giảm. |
+| BR-INV-41 | Must | BR-VOU-08, 10 | Tắt mã: báo giá kế tiếp gỡ mã kèm lý do; khách bấm Đặt hàng với mã vừa tắt → 409 `voucher-changed` (Slice 3); đơn đã tạo không đổi. Bật lại dùng được ngay nếu còn hạn, còn lượt. |
+| BR-INV-42 | Must | — | Xoá cứng (chỉ admin) chỉ khi chưa có bản ghi lượt dùng nào → 204; ngược lại 409 `voucher-in-use` ("Mã đã được dùng; hãy tắt thay vì xoá."). |
+| BR-INV-43 | Must | FE `PromotionState` | Trạng thái tính lúc đọc (giờ VN), theo thứ tự: `disabled` (đang tắt) → `scheduled` (bắt đầu > bây giờ) → `expired` (kết thúc ≤ bây giờ, hoặc tổng lượt có giá trị và đã dùng ≥ tổng lượt) → `running`. Danh sách: tab theo trạng thái + đếm, tìm theo mã/tên, sắp ngày tạo giảm; `used` = `used_count`. Voucher cũ có bắt đầu null coi như đã bắt đầu. |
+| BR-INV-44 | Must | K6 | Ở HTTP chỉ hỗ trợ đối tượng "Mọi khách" / "Chỉ thành viên" và ≤ 1 danh mục; gửi `audience` khác hoặc > 1 danh mục → 422. Tiers / khách cụ thể / riêng tư: Won't. |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu: admin A, A2; staff S. Sản phẩm P (seed, `ACTIVE`, đã có đơn), biến thể V của P: Có thể bán 10, có 2 trong 1 đơn `to_ship` và 1 trong 1 đơn `to_pay`. Sản phẩm D (`DRAFT`, mới tạo, chưa có đơn). Voucher W = `N2FWELCOME15` (đã có lượt dùng), voucher X mới tạo chưa dùng.
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-INV-01 | 01 | Không cookie; chỉ `n2f_sid` của thành viên; `n2f_asid` của S sau khi `is_active = false` (SQL) | `GET /admin/products`, `POST` điều chỉnh kho, `POST` khuyến mãi | 401 `unauthenticated`, `Cache-Control: no-store`, không dữ liệu. |
+| AC-INV-02 | 02 | S đăng nhập admin | Xem danh sách SP, chi tiết P, tồn kho, lịch sử V, khuyến mãi; điều chỉnh V; sửa P; đổi trạng thái; xoá D; tải ảnh; tạo/sửa/tắt/xoá voucher; sửa ngưỡng | Xem + điều chỉnh: 200. Còn lại: 403 `forbidden`; DB không đổi, không có dòng nhật ký. |
+| AC-INV-03 | 03 | `adminCatalogMode: http`; S đăng nhập | Mở Sản phẩm, `/admin/products/new`, P, Khuyến mãi, Tồn kho | Không có nút Thêm/Tạo/Lưu/Xoá/đổi trạng thái; `/new` bị chặn; P và voucher chỉ xem; ngăn điều chỉnh kho có form. |
+| AC-INV-04 | 02 | A bị hạ thành staff qua SQL | Lưu P | 403 `forbidden` ngay yêu cầu kế tiếp. |
+| AC-INV-05 | 04 | A | 61 yêu cầu ghi trong 60 giây; 31 lần tải ảnh trong 10 phút | Lần 61 và lần tải 31: 429 `rate-limited` + `retryAfterSeconds`, `Retry-After`. |
+| AC-INV-06 | 05 | A và A2 cùng mở P (và cùng mở X) | A lưu giá mới; A2 lưu tên mới với `updatedAt` cũ (tương tự với X) | A2: 409 `version-conflict`, tên không đổi, giá là của A; FE A2 hiện câu BR-INV-05, form còn nguyên. |
+| AC-INV-07 | 06 | Build thường | Mở admin với A | Menu: Đơn hàng, Sản phẩm, Tồn kho, Khuyến mãi; `/admin/customers` → "Chưa khả dụng"; không request nào tới mock ở ba màn; Playwright `adminCatalogMode: mock` pass nguyên. |
+| AC-INV-08 | 06, 44 | `http`; A mở form SP và form voucher | Xem các ô | Không có Giá vốn, SEO, Thẻ, Bộ sưu tập, giá riêng biến thể; voucher không có Hạng/Khách cụ thể/Riêng tư, chọn tối đa 1 danh mục, có "Chỉ đơn đầu tiên", "Không áp dụng hàng đang giảm". |
+| AC-INV-09 | 07 | DB có dữ liệu Slice 1–5 | `migrate deploy` 2 lần | Lần 2 không có migration mới; không DROP/TRUNCATE/đổi kiểu; bảng mới bật RLS; mọi SP `ACTIVE` có `published_at`. |
+| AC-INV-10 | 09 | Có "Áo Sơ Mi Lụa" và SP có 1 biến thể Có thể bán 0 | Tìm `ao so mi`; tìm SKU của V; mở tab `draft`, `out-of-stock` | Ra đúng SP; ra P; số đếm tab khớp số dòng; SP có biến thể 0 nằm trong `out-of-stock`. |
+| AC-INV-11 | 09 | A | `q` 101 ký tự; `limit=101`; `limit=0` | 422 `validation` `field: q`; 422; 422. |
+| AC-INV-12 | 11 | A tạo SP | Giá 999; giá 100.000.001; giá gốc = giá; tên 121 ký tự; danh mục id lạ; `genders: ["kid"]` | Mỗi trường 422 `validation` đúng `field`; không tạo gì. |
+| AC-INV-13 | 12 | P có `badge`, `looks`, `fit_model` | A sửa mô tả P; tạo SP mới rồi công khai | `badge`, `looks`, `fit_model`, `sales_rank`, `display_order` của P không đổi; SP mới đứng cuối "Nổi bật" trên PLP. |
+| AC-INV-14 | 13 | A | Tạo "Áo Len Cổ Lọ" slug trống; tạo SP cùng tên; tạo với slug gõ tay = slug của P; slug `Ao_Len` | `ao-len-co-lo`; `ao-len-co-lo-2`; 409 `duplicate` `field: slug`; 422 `field: slug`. |
+| AC-INV-15 | 13 | P (đã công khai), D (chưa) | Đổi slug P; đổi slug D | P: 422 `field: slug`, slug cũ giữ; D: 200 slug mới. |
+| AC-INV-16 | 14 | D chưa có ảnh, có 2 biến thể tồn 0 | Chuyển `ACTIVE`; thêm 1 ảnh rồi chuyển `ACTIVE` | 422 `publish-incomplete` `missing: ["images"]`; sau đó 200, `published_at` được ghi, PLP thấy D (hết hàng) trong ≤ 30 giây. |
+| AC-INV-17 | 15 | P, D (không ảnh), E (`DRAFT` đủ điều kiện) | Hàng loạt `ACTIVE` [P, D, E]; 51 id; [P, id lạ] | 422 kèm id D, cả ba không đổi; 422; 404, P không đổi. |
+| AC-INV-18 | 16 | Thành viên M có P trong giỏ; đơn cũ O của P | A ẩn P | ≤ 30 giây: P không còn ở PLP/tìm kiếm/tổng số, PDP 404; giỏ M: P "Sản phẩm không còn kinh doanh", đặt hàng bị chặn đúng lỗi Slice 3; O ở trang khách và admin hiển thị đủ như trước. |
+| AC-INV-19 | 17 | P giá 500.000; đơn O1 đặt trước | A đổi giá 450.000 | Giỏ hiện 450.000 sau làm tươi; báo giá dùng 450.000; O1 vẫn 500.000 ở chi tiết đơn. |
+| AC-INV-20 | 18 | D; P; F đã từng `ACTIVE` rồi về `DRAFT`, chưa có đơn | Xoá D; xoá P; xoá F | D: 204, `GET` 404; P: 409 `product-in-use`; F: 409 `product-in-use`. |
+| AC-INV-21 | 19 | A sửa D | Thêm màu "Be" `#F5F5DC` × S, M tồn ban đầu 5; SKU trùng SKU của P; 9 màu; size `XXL`; hex `#FFF`; màu "Đen" và "đen" | 2 biến thể, 2 dòng nhật ký `received` "Tồn ban đầu" người A; 409 `duplicate` `field: variants[i].sku`; 422 ×4. |
+| AC-INV-22 | 20 | V có đơn | Lưu P với `inventory: 999` cho V; đổi SKU V; đổi tên màu "Đen" → "Đen tuyền" | V vẫn 10; 422 `field: variants[i].sku`; các biến thể màu đó đổi tên, `color_media` theo tên mới, đơn cũ vẫn ghi "Đen". |
+| AC-INV-23 | 21 | P: size XL có đơn ở 1 màu; size M màu Trắng không có đơn, nằm trong giỏ thành viên M và giỏ khách G | Bỏ size XL; bỏ biến thể M-Trắng | XL: 409 `variant-in-use` kèm SKU, không đổi gì; M-Trắng bị xoá, dòng giỏ M biến mất, giỏ G hiện "không còn kinh doanh". |
+| AC-INV-24 | 22 | P tên "Áo Thun Basic" | A đổi tên "Áo Phông Trơn"; đổi loại "Áo thun cổ tròn" | ≤ 30 giây: `q=phong tron` ra P, `q=thun basic` không ra (trừ khi loại chứa); `search_text` = `foldVi(tên + ' ' + loại)`. |
+| AC-INV-25 | 24 | A | Tải JPG 6 MB; tệp `.exe` đổi đuôi `.jpg`; PNG 400×500; WebP 1200×1600; S tải WebP | 422 `invalid-image` `size`; `format`; `dimensions`; 201 có `id` ≤ 100 ký tự và `url` mở được; S: 403. |
+| AC-INV-26 | 26 | A sửa P (màu Đen, Trắng) | Lưu 13 ảnh; lưu [i1 Đen, i2, i3 Trắng, i4 Đen]; gắn ảnh màu "Xanh"; id ảnh bịa | 422 `field: images`; bìa i1, gallery i1–i4 đúng thứ tự, `color_media` {Đen: i1, Trắng: i3}; 422; 422. |
+| AC-INV-27 | 27 | P (ảnh thư viện); SP Q có ảnh tải lên, đã có đơn O với ảnh cũ | Mở P, lưu không đổi; xem Q ở PLP, PDP, giỏ, checkout; đổi ảnh bìa Q | Id ảnh P giữ nguyên; Q hiện ảnh tải lên ở mọi nơi; O vẫn hiện ảnh cũ. |
+| AC-INV-28 | 28 | Ảnh i1 của Q nằm trong đơn O | A bỏ i1 khỏi Q | O vẫn hiện i1; URL i1 vẫn mở được. |
+| AC-INV-29 | 29, 35 | V như dữ liệu tham chiếu | Xem dòng V; đặt Có thể bán 5; đặt 0 | Trong kho 13, Đang giữ 3, Có thể bán 10, `in`; `low`; `out`. |
+| AC-INV-30 | 30 | Có 4 biến thể Có thể bán 1–5 | Mở tab `low`; lọc màu Đen + size M; tìm SKU V | Tab `low` đếm 4 và hiện 4 dòng; lọc đúng; ra V. |
+| AC-INV-31 | 31 | V Có thể bán 10, Đang giữ 3 | Delta +5 `received`; delta −16 `damaged` (khi 15); set 18 `count`; set 2; set 20; delta 10.001; delta 0 | 15; 422 "Chỉ còn 15…"; 422 "không thay đổi"; 422 "thấp hơn 3…"; Có thể bán 17; 422; 422. |
+| AC-INV-32 | 32 | V | `received` −2; `damaged` +2; `count` với delta; `correction` không ghi chú; ghi chú 201 ký tự | 422 `field: reason` ×3; 422 `field: note` ×2. |
+| AC-INV-33 | 33 | V Có thể bán 3 | 20 lần chạy song song: 3 khách đặt mỗi người 1 cùng lúc S điều chỉnh −1 `damaged` ×3 | Không lần nào âm; Có thể bán cuối = 3 − (số đơn tạo được) − (số điều chỉnh thành công) ≥ 0; mỗi điều chỉnh thành công có đúng 1 dòng nhật ký; không lỗi 500. |
+| AC-INV-34 | 33 | S mở V thấy 10 | Một đơn trừ 1 (còn 9); S gửi set 13 với `expectedAvailable: 10` | 409 `stock-changed` kèm Có thể bán 9, Đang giữ 4; không ghi, không có dòng nhật ký; FE hiện số mới, ô nhập còn 13. |
+| AC-INV-35 | 33 | S, mất mạng sau khi gửi delta +5 | FE gửi lại cùng `Idempotency-Key` | Có thể bán chỉ tăng 5; đúng 1 dòng nhật ký. |
+| AC-INV-36 | 34 | V có 3 điều chỉnh, rồi 60 điều chỉnh | Xem lịch sử; `PUT`/`DELETE` một dòng nhật ký | 3 dòng mới trước, đủ người/vai trò/lý do/ghi chú/thay đổi/sau; khi 63 dòng: trả 50; `PUT`/`DELETE` → 404 hoặc 405. |
+| AC-INV-37 | 36 | A | Ngưỡng mặc định 8; V Có thể bán 7; ngưỡng riêng V = 2; đặt null; ngưỡng 1.001; S sửa ngưỡng | V `low` ở admin, PDP vẫn `IN_STOCK`; V `in`; V về 8; 422; 403. (Should) |
+| AC-INV-38 | 37 | V | Khách đặt 2 V (đơn O); huỷ O | Lịch sử có "Bán theo đơn O" −2 và "Đơn huỷ, hoàn kho O" +2. (Should) |
+| AC-INV-39 | 23 | A sửa P | S mở P | Hiện "Cập nhật bởi A lúc {giờ}". (Should) |
+| AC-INV-40 | 38 | Giỏ 400.000 ở checkout | A tạo `SALE50K` fixed 50.000, tối thiểu 300.000; khách áp mã | Báo giá −50.000 ngay; `/account/vouchers` có `SALE50K` (BR-ACC-16). |
+| AC-INV-41 | 39 | A tạo voucher | Mã `sale-10`; `AB1`; ` sale 10 `; `n2ffreeship`; percent 95; free-ship có giá trị 10; kết thúc ≤ bắt đầu; kết thúc hôm qua | 422 `code`; 422 `code`; lưu `SALE10`; 409 `duplicate` `field: code`; 422 ×4. |
+| AC-INV-42 | 40 | W đã dùng; đơn O1 đã giảm 15% | Đổi giá trị 15 → 20; đổi mã; tổng lượt < đã dùng; đổi đơn tối thiểu | 409 `voucher-in-use`; 422 `code`; 422 `totalLimit`; 200, báo giá kế tiếp theo mức mới; O1 giữ số tiền giảm. |
+| AC-INV-43 | 41 | Khách đang ở checkout có X đã áp | A tắt X; khách đổi số lượng; khách bấm Đặt hàng; A bật lại | Báo giá gỡ X kèm lý do; đặt hàng 409 `voucher-changed`; bật lại áp được. |
+| AC-INV-44 | 42 | X chưa dùng; W; Y dùng 1 lần rồi đơn huỷ (đã trả lượt) | Xoá X; xoá W; xoá Y | 204; 409 `voucher-in-use`; 409 `voucher-in-use`. |
+| AC-INV-45 | 43 | Mã tắt; mã bắt đầu ngày mai; kết thúc hôm qua; tổng lượt 5 đã dùng 5; mã kết thúc đúng bây giờ; mã bình thường | Mở danh sách | `disabled`; `scheduled`; `expired`; `expired`; `expired`; `running`; số đếm tab khớp. |
+| AC-INV-46 | 44 | A | Lưu voucher với 2 danh mục; `audience: "tiers"` | 422 ×2, không lưu. |
+| AC-INV-47 | 08 | Mọi lỗi ở trên | Đọc body | Có `code` ổn định theo BR-INV-08; không stack trace, không SQL. |
+| AC-INV-48 | 03 | A ở form P, mất mạng | Bấm Lưu | Nút khoá khi gửi; lỗi hiện; form giữ dữ liệu; có mạng lại bấm Lưu được. |
+
+### 6. Định nghĩa xong của Slice 6
+
+- AC Must đạt (test BE/E2E ghi mã AC), AC Should ghi làm hay hoãn.
+- `openapi.yaml` có tag cho sản phẩm, tồn kho, ảnh, khuyến mãi (locked trước khi FE nối); migration chỉ cộng thêm; `decisions.md`, `handoff.md` cập nhật.
+- Ở `adminCatalogMode: http` ba màn không có dữ liệu mock; Playwright mock pass nguyên; backlog 2.19 đóng (AC-INV-24).
+- Tồn kho không bao giờ âm và mỗi thay đổi tay có đúng 1 dòng nhật ký (AC-INV-33..36); mã tạo ở admin dùng được ở checkout (AC-INV-40).
+
+### 7. Câu hỏi mở
+
+Mặc định PO, làm trước theo mặc định; Thắng đổi được bằng cách trả lời. Chỉ S6-Q1 chờ Thắng và chỉ chặn lát 6.8.
+
+| # | Câu hỏi | Ảnh hưởng | Mặc định PO | Trạng thái |
+| --- | --- | --- | --- | --- |
+| S6-Q1 | Lưu ảnh ở đâu (bản thật)? | BR-INV-25; lát 6.4 (phần bản thật), 6.8 | Supabase Storage, bucket công khai `product-images`; dev/test đĩa cục bộ qua lớp lưu trữ đổi được. | Chờ Thắng (không chặn 6.1–6.7) |
+| S6-Q2 | Ma trận quyền staff/admin | BR-INV-02 | Staff: xem + điều chỉnh tồn; admin: mọi việc còn lại. | Mặc định PO |
+| S6-Q3 | Slug có được đổi sau khi công khai? | BR-INV-13 | Không (khoá sau lần công khai đầu; không làm chuyển hướng slug cũ). | Mặc định PO |
+| S6-Q4 | Sửa voucher đã có lượt dùng | BR-INV-40, 42 | Mã không bao giờ đổi; loại/giá trị/giảm tối đa khoá khi đã có lượt; không xoá mã đã dùng (tắt thay vì xoá). | Mặc định PO |
+| S6-Q5 | Giới hạn ảnh | BR-INV-24, 26 | JPEG/PNG/WebP, ≤ 5 MB, cạnh ngắn ≥ 600 px, cạnh dài ≤ 6.000 px, ≤ 12 ảnh/SP. | Mặc định PO |
+| S6-Q6 | Điều chỉnh kho: giới hạn, lý do, ý nghĩa "đặt số đếm" | BR-INV-31, 32 | \|delta\| ≤ 10.000; số đếm 0–100.000 là Trong kho (gồm hàng đang giữ); 5 lý do cố định; ghi chú bắt buộc với "Sửa sai". | Mặc định PO |
+| S6-Q7 | Giá biến thể, giá vốn, tags, SEO, bộ sưu tập, đối tượng voucher theo hạng/khách/riêng tư, nhiều danh mục | K2, K6, BR-INV-44 | Won't; ẩn ở HTTP. | Mặc định PO |
+| S6-Q8 | Ngưỡng sắp hết | BR-INV-35, 36 | Mặc định 5 (Must); sửa ngưỡng: Should; storefront không đổi. | Mặc định PO |
+| S6-Q9 | Khoảng giá | BR-INV-11 | Số nguyên 1.000–100.000.000 đồng; giá gốc > giá. | Mặc định PO |

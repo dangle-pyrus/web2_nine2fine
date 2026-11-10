@@ -150,7 +150,7 @@ Ghi chú: K11 dùng the-straight-trousers thay weekend-shirt cho AC-30; cùng qu
 | 2.16 | AC-51, m5 | Chạy toàn bộ Playwright mock (`catalogMode: mock`), ghi số pass/fail vào `docs/handoff.md`; test nào fail thì kiểm ở commit trước Slice 2 (`dc488d3^` hoặc cũ hơn) xem có sẵn từ trước không. Đổi tên test "AC-CAT-44", "AC-CAT-41" trong `catalog.spec.ts` cho đúng cái chúng kiểm (mock, không chạm API) | Must | frontend-dev | 0 test fail mới do Slice 2; không có request `/api/products` ở chế độ mock. **Xong 2026-11-07: 178 pass / 1 fail flaky có từ trước / 7 skip, xem handoff** |
 | 2.17 | m3 | Trang Yêu thích không cắt lặng lẽ ở 48: chia `ids` thành nhiều request ≤ 48 id rồi gộp | Should | frontend-dev | 60 mục yêu thích hiện đủ 60 thẻ, mỗi request ≤ 48 id |
 | 2.18 | m4 | Tham số URL không hợp lệ (`maxPrice` âm/không nguyên/chữ, `page`, `limit` sai) bị bỏ qua trước khi gọi API, như `sort=hot` | Should | frontend-dev | `/shop?maxPrice=1.5` hiện đủ 8 sản phẩm, không lỗi, không request 422 |
-| 2.19 | m2 | `search_text` luôn đồng bộ với `name`/`type_label`: seed tính lại mỗi lần chạy; ghi rõ trong kế hoạch BE rằng mọi đường ghi sản phẩm sau này (Admin) phải cập nhật cột này (hoặc dùng trigger DB) | Should; thành Must ở slice Admin | backend-dev | Sửa `name` rồi chạy seed: `q` theo tên mới tìm ra sản phẩm |
+| 2.19 | m2 | `search_text` luôn đồng bộ với `name`/`type_label`: seed tính lại mỗi lần chạy; ghi rõ trong kế hoạch BE rằng mọi đường ghi sản phẩm sau này (Admin) phải cập nhật cột này (hoặc dùng trigger DB) | Should; thành Must ở slice Admin (Slice 6 lát 6.3, BR-INV-22, AC-INV-24) | backend-dev | Sửa `name` rồi chạy seed: `q` theo tên mới tìm ra sản phẩm |
 | 2.20 | m7 | `getSizeChart`/`toSizeChartDto` trả kiểu DTO cụ thể thay `unknown` | Should | backend-dev | `npm run typecheck` exit 0, không còn `unknown` ở hai hàm |
 | 2.21 | m6 | Ghi `TRUST_PROXY` và giới hạn "bộ đếm RAM, 1 tiến trình" vào checklist deploy | Should (Must trước go-live, xem G6) | backend-dev | Có mục trong tài liệu deploy |
 
@@ -253,6 +253,42 @@ PRD: `docs/product/PRD.md` › Slice 5 (BR-ACC-01..18, AC-ACC-01..26). Thắng c
 | 5.7 | Sửa họ tên, đổi email, xoá tài khoản, đăng xuất mọi thiết bị, địa chỉ trả hàng, trả hàng, ví voucher / voucher theo hạng, tích điểm, "lưu địa chỉ vào sổ" ở checkout | Won't | — | — | slice sau | — |
 
 DoD: theo DoD chung; thêm: ở `accountMode: http` không có dữ liệu mock Account; đúng 1 địa chỉ mặc định do DB bảo đảm (AC-ACC-17); AC-AUTH-88 kiểm.
+
+---
+
+## Slice 6 — Admin kho & sản phẩm (P0)
+
+PRD: `docs/product/PRD.md` › Slice 6 (BR-INV-01..44, AC-INV-01..48). Thắng yêu cầu 2026-11-10 (nhận phần sản phẩm, tồn kho thủ công, khuyến mãi của 4.9; ảnh). Mục tiêu: admin tạo/sửa/công khai/ẩn sản phẩm, biến thể, ảnh; staff/admin điều chỉnh tồn có lý do và nhật ký, không âm; admin quản lý voucher dùng chung với checkout; ba màn admin (đang mock) chạy BE thật sau cờ `adminCatalogMode`. Đóng 2.19 (`search_text`).
+
+| # | Hạng mục | Mức | BR | AC | Người làm | Phụ thuộc | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 6.1 | Nền: kiểm quyền API (phiên `n2f_asid`, ma trận staff/admin), giới hạn tần suất, chống ghi chồng `updatedAt`, mã lỗi mới, migration cộng thêm (nhật ký kho, `published_at`), contract `openapi.yaml`, cờ FE `adminCatalogMode`, menu, `permissions.ts` khớp ma trận | Must | 01..08 | 01..05, 07, 09, 47 | BE → FE | Slice 5 | Chưa |
+| 6.2 | Sản phẩm (đọc): danh sách, tìm, tab + đếm, lọc danh mục, chi tiết, API danh mục; FE danh sách + form chỉ xem ở HTTP | Must | 09, 10 | 10, 11 | BE, FE | 6.1 | Chưa |
+| 6.3 | Sản phẩm (ghi): tạo, sửa, giá, slug + khoá, trạng thái đơn lẻ + hàng loạt, điều kiện công khai, xoá nháp, biến thể (màu × size, SKU, tồn ban đầu, không xoá biến thể có đơn), `search_text` (**đóng 2.19**); ẩn ô Won't. Ảnh: chỉ dùng id thư viện có sẵn cho tới 6.4 | Must | 11..22 | 06, 08 (phần SP), 12..24, 48 | BE, FE | 6.2 | Chưa |
+| 6.4 | Ảnh: tải lên (định dạng, dung lượng, kích thước), lớp lưu trữ (đĩa cục bộ ở dev/test), ảnh bìa, thứ tự, ảnh theo màu, giữ ảnh thư viện; storefront hiện ảnh tải lên (thẻ, PDP, giỏ, checkout, đơn) | Must | 24..28 | 25..28 | BE, FE (admin + storefront) | 6.3; S6-Q1 chỉ cho bản thật | Chưa |
+| 6.5 | Tồn kho: danh sách + facets, ba con số (có thể bán / đang giữ / trong kho), điều chỉnh delta/set + lý do cố định, nguyên tử, `expectedAvailable`, Idempotency-Key, nhật ký 50 dòng, ngưỡng mặc định 5 | Must | 29..35 | 29..36 | BE, FE | 6.1 (song song 6.2–6.4) | Chưa |
+| 6.6 | Khuyến mãi = voucher: danh sách + trạng thái tính từ ngày, tạo, sửa (khoá khi đã dùng), bật/tắt, xoá mã chưa dùng; form HTTP theo model `vouchers` (1 danh mục, Mọi khách / Chỉ thành viên, đơn đầu, loại trừ hàng giảm) | Must | 38..44 | 06 (phần voucher), 08 (phần voucher), 40..46 | BE, FE | 6.1 (song song) | Chưa |
+| 6.7 | Sửa ngưỡng sắp hết (mặc định + riêng SKU); lịch sử kho gộp biến động do đơn; "Cập nhật bởi" trên SP/voucher | Should | 23, 36, 37 | 37..39 | BE, FE | 6.3, 6.5, 6.6 | Chưa |
+| 6.8 | Nghiệm thu thật trên Supabase: áp migration Slice 6 (**cần Thắng duyệt**), nơi lưu ảnh theo S6-Q1; 1 SP tạo mới có ảnh tải lên → công khai → khách đặt COD → staff điều chỉnh tồn; 1 voucher tạo ở admin dùng trong đơn thật; migrate 2 lần | Must | 07, 22, 25, 33, 38 | 09, 16, 24, 27, 33, 40 | Thắng, Orchestrator, qa-reviewer | 6.1..6.6; S6-Q1 | Chưa |
+| 6.9 | Giá riêng biến thể, giá vốn, tags, SEO, bộ sưu tập, bảng size, danh mục; voucher theo hạng / khách cụ thể / riêng tư, nhiều danh mục; dọn/xoá tệp ảnh; khách hàng, báo cáo, nội dung, cài đặt, nhân viên, trả hàng, nhật ký toàn hệ thống, xuất/nhập file | Won't | — | — | slice sau | — | Không có cột/bảng hoặc ngoài phạm vi Thắng chốt |
+
+Câu hỏi mở (chi tiết PRD Slice 6 mục 7). S6-Q2..Q9 làm theo mặc định PO (Thắng đổi được); chỉ S6-Q1 chờ Thắng:
+
+| # | Câu hỏi | Chặn lát | Làm trước theo mặc định? |
+| --- | --- | --- | --- |
+| S6-Q1 | Nơi lưu ảnh bản thật (mặc định: Supabase Storage bucket công khai; dev/test đĩa cục bộ) | 6.8 | Có: 6.4 làm với đĩa cục bộ qua lớp lưu trữ đổi được |
+| S6-Q2 | Ma trận quyền (staff xem + điều chỉnh tồn; admin còn lại) | — | Có |
+| S6-Q3 | Khoá slug sau lần công khai đầu | — | Có |
+| S6-Q4 | Voucher đã dùng: khoá loại/giá trị/giảm tối đa, mã không đổi, không xoá | — | Có |
+| S6-Q5 | Ảnh: JPEG/PNG/WebP ≤ 5 MB, cạnh ngắn ≥ 600 px, ≤ 12 ảnh | — | Có |
+| S6-Q6 | Điều chỉnh kho: \|delta\| ≤ 10.000, số đếm = trong kho, 5 lý do | — | Có |
+| S6-Q7 | Các trường FE không có cột → Won't | — | Có |
+| S6-Q8 | Ngưỡng sắp hết mặc định 5; sửa ngưỡng Should | — | Có |
+| S6-Q9 | Giá 1.000–100.000.000 đồng | — | Có |
+
+Điều kiện bắt đầu code (PO): Slice 5 đóng (5.6 hoặc ghi rõ hoãn). Thứ tự: 6.1 → (6.2 → 6.3 → 6.4) song song 6.5, 6.6 → 6.7 → 6.8. Không lát nào trước 6.8 bị chặn bởi câu hỏi mở.
+
+DoD: theo DoD chung; thêm: ở `adminCatalogMode: http` ba màn Sản phẩm, Tồn kho, Khuyến mãi không dùng mock; tồn không bao giờ âm, mỗi điều chỉnh tay có đúng 1 dòng nhật ký có người/giờ/lý do (AC-INV-33..36); mã tạo ở admin dùng được ngay ở checkout (AC-INV-40); 2.19 đóng (AC-INV-24).
 
 ---
 
