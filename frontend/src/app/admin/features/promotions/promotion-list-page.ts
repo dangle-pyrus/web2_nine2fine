@@ -60,6 +60,9 @@ const VIEWS: { value: PromotionState | ''; label: string }[] = [
             (click)="list.update({ state: item.value })"
           >
             {{ item.label }}
+            @if (page()?.counts; as counts) {
+              <span class="count">{{ counts[item.value || 'all'] ?? 0 | admNum }}</span>
+            }
           </button>
         }
       </nav>
@@ -193,7 +196,8 @@ export class PromotionListPage {
   protected readonly summary = promotionSummary;
 
   badge(promo: Promotion) {
-    return promotionBadge(promotionState(promo));
+    // The API computes the state; the earlier mock leaves it to this rule.
+    return promotionBadge(promo.state ?? promotionState(promo));
   }
 
   open(promo: Promotion, event: MouseEvent): void {

@@ -1,5 +1,8 @@
 /**
  * Fixed role × permission matrix (guideline 6.13, Phụ lục A.4: roles match the backend `Role` enum).
+ * Slice 6 (S6-Q2, docs/api/admin-catalog-implementation-plan.md section 10): staff only views products,
+ * stock and promotions and adjusts stock; every other catalog write (products, status, delete,
+ * images, thresholds, promotions) is admin only.
  * Slice 4: staff may cancel with the five fixed reasons (`orders.cancel`); only admin has
  * `orders.cancel-other`. The server is the real gate (BR-ADM-04). Hidden, not disabled: UI checks these to hide menus and buttons (8.2); the backend must enforce
  * the same matrix.
@@ -20,6 +23,7 @@ export type Permission =
   | 'products.cost'
   | 'inventory.view'
   | 'inventory.adjust'
+  | 'inventory.thresholds'
   | 'customers.view'
   | 'customers.edit'
   | 'customers.contact'
@@ -43,6 +47,7 @@ const ALL: readonly Permission[] = [
   'products.cost',
   'inventory.view',
   'inventory.adjust',
+  'inventory.thresholds',
   'customers.view',
   'customers.edit',
   'customers.contact',
@@ -104,6 +109,7 @@ export const PERMISSION_MATRIX: {
       { permission: 'products.delete', label: 'Xóa' },
       { permission: 'products.cost', label: 'Xem giá vốn' },
       { permission: 'inventory.adjust', label: 'Điều chỉnh tồn kho' },
+      { permission: 'inventory.thresholds', label: 'Sửa ngưỡng sắp hết' },
     ],
   },
   {

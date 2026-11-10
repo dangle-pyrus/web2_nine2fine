@@ -51,6 +51,26 @@
   (save)="save()"
   (discard)="discard()"
 />
+} @if (notice(); as current) {
+<div class="banner banner--critical" role="alert">
+  <adm-icon name="reiconAlertCircle" />
+  <div class="banner-body">
+    @if (current.kind === 'conflict') {
+    <p class="banner-title">Dữ liệu đã thay đổi</p>
+    <p>
+      Dữ liệu vừa được người khác cập nhật. Tải lại để xem bản mới; thay đổi của bạn chưa được lưu.
+    </p>
+    } @else {
+    <p class="banner-title">Chưa chuyển sang "Đang bán" được</p>
+    <p>
+      Còn thiếu: {{ missingText(current.missing) }}. Bổ sung rồi lưu lại, hoặc chọn trạng thái khác.
+    </p>
+    }
+  </div>
+  @if (current.kind === 'conflict') {
+  <button type="button" class="adm-btn banner-action" (click)="load(id()!)">Tải lại dữ liệu</button>
+  }
+</div>
 } @if (!canEdit) {
 <div class="readonly-note">
   <adm-icon name="reiconInfoCircle" [size]="16" /> Bạn chỉ có quyền xem sản phẩm. Liên hệ quản trị
@@ -367,6 +387,7 @@
       <div class="bulkbar" role="region" aria-label="Sửa hàng loạt biến thể">
         <span>Đã chọn {{ selectedVariants().size }}</span>
         <span class="spacer"></span>
+        @if (!contract) {
         <input
           class="input input--sm bulk-input"
           type="number"
@@ -376,7 +397,7 @@
           [value]="bulkPrice() ?? ''"
           (input)="bulkPrice.set(numberOrNull($any($event.target).value))"
         />
-        @if (bulkStockAllowed()) {
+        } @if (bulkStockAllowed()) {
         <input
           class="input input--sm bulk-input"
           type="number"
@@ -415,7 +436,9 @@
               }
               <th>Biến thể</th>
               <th>SKU</th>
+              @if (!contract) {
               <th class="num">Giá</th>
+              }
               <th class="num">Tồn kho</th>
             </tr>
           </thead>
@@ -433,7 +456,7 @@
                 /></label>
               </td>
               }
-              <td colspan="3">
+              <td [attr.colspan]="contract ? 2 : 3">
                 @if (group.hex) {<span class="swatch" [style.background]="group.hex"></span>}
                 <strong>{{ group.label }}</strong>
                 <span class="small tertiary">({{ group.rows.length }} biến thể)</span>
@@ -461,9 +484,12 @@
                   class="input input--sm mono cell-input"
                   [attr.aria-label]="'SKU ' + variant.color.name + ' ' + variant.size"
                   [value]="variant.sku"
-                  (change)="updateVariant(variant.id, { sku: $any($event.target).value.trim() })"
+                  [disabled]="!!variant.hasOrders"
+                  [attr.title]="variant.hasOrders ? 'SKU đã có đơn hàng, không đổi được' : null"
+                  (change)="updateVariant(variant.id, { sku: $any($event.target).value.trim().toUpperCase() })"
                 />
               </td>
+              @if (!contract) {
               <td class="num">
                 <input
                   class="input input--sm num-input cell-input price-input"
@@ -476,6 +502,7 @@
                   (change)="updateVariant(variant.id, { price: numberOrNull($any($event.target).value) })"
                 />
               </td>
+              }
               <td class="num">
                 @if (stockLocked(variant)) {
                 <button
@@ -509,8 +536,8 @@
         </table>
       </div>
       <p class="hint table-hint">
-        Để trống giá biến thể để dùng giá sản phẩm. Tồn kho của biến thể đã lưu chỉ đổi qua "Điều
-        chỉnh" (có lý do, có lịch sử): bấm vào số tồn để mở.
+        @if (!contract) { Để trống giá biến thể để dùng giá sản phẩm. } Tồn kho của biến thể đã lưu
+        chỉ đổi qua "Điều chỉnh" (có lý do, có lịch sử): bấm vào số tồn để mở.
       </p>
       }
     </section>
@@ -552,6 +579,37 @@
       </div>
     </section>
 
+    @if (contract) {
+    <section class="section stack" aria-labelledby="slug-title">
+      <header><h2 id="slug-title">Đường dẫn</h2></header>
+      <div class="field">
+        <label for="p-slug-input">Đường dẫn sản phẩm</label>
+        <div class="row slug-row">
+          <span class="secondary small slug-prefix">{{ slugPrefix }}</span>
+          <input
+            id="p-slug-input"
+            class="input mono"
+            [value]="draft().slug"
+            [disabled]="!!product()?.slugLocked"
+            [attr.aria-invalid]="!!showError('slug')"
+            (input)="patch({ slug: $any($event.target).value.trim().toLowerCase() })"
+            placeholder="ten-san-pham"
+          />
+        </div>
+        @if (showError('slug'); as error) {
+        <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+        } @else if (product()?.slugLocked) {
+        <p class="hint">Không đổi đường dẫn của sản phẩm đã từng hiển thị.</p>
+        } @else if (isNew()) {
+        <p class="hint">
+          Để trống để tự tạo từ tên sản phẩm. Chữ thường không dấu, số, gạch ngang.
+        </p>
+        } @else {
+        <p class="hint">Đổi được cho đến lần đầu sản phẩm được chuyển sang Đang bán.</p>
+        }
+      </div>
+    </section>
+    } @else {
     <!-- SEO -->
     <section class="section stack" aria-labelledby="seo-title">
       <header><h2 id="seo-title">Hiển thị trên Google</h2></header>
@@ -598,8 +656,7 @@
         }
       </div>
     </section>
-
-    @if (!isNew() && canDelete) {
+    } @if (!isNew() && canDelete) {
     <div class="danger-zone">
       <button type="button" class="adm-btn adm-btn--danger" (click)="remove()">
         <adm-icon name="reiconTrash" [size]="16" /> Xóa sản phẩm
@@ -673,6 +730,7 @@
           }
         </div>
       </div>
+      @if (!contract) {
       <div class="field">
         <label for="p-tags">Tag</label>
         <adm-chip-input
@@ -683,9 +741,10 @@
           (valuesChange)="patch({ tags: $event })"
         />
       </div>
+      }
     </section>
 
-    @if (!isNew()) {
+    @if (!isNew() && !contract) {
     <section class="section stack" aria-labelledby="coll-title">
       <header>
         <h2 id="coll-title">Bộ sưu tập</h2>

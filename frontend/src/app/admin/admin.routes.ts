@@ -13,6 +13,12 @@ import { unsavedChangesGuard } from './ui/unsaved-changes';
 const deskMode: CanMatchFn = () => inject(API_CONFIG).adminOrdersMode !== 'mock';
 const legacyMode: CanMatchFn = () => inject(API_CONFIG).adminOrdersMode === 'mock';
 
+/**
+ * Slice 6: Sản phẩm, Tồn kho, Khuyến mãi join the order desk when `adminCatalogMode` is `http`
+ * (BR-INV-06); with `mock` they stay "Chưa khả dụng" there.
+ */
+const catalogHttp: CanMatchFn = () => inject(API_CONFIG).adminCatalogMode === 'http';
+
 const T = (title: string) => `${title} | nine2fine Admin`;
 
 /**
@@ -80,6 +86,82 @@ export const ADMIN_ROUTES: Routes = [
                     loadComponent: () =>
                       import('./features/order-desk/order-desk-detail-page').then(
                         (m) => m.OrderDeskDetailPage,
+                      ),
+                  },
+                ],
+              },
+              {
+                path: 'products',
+                canMatch: [catalogHttp],
+                canActivate: [requirePermission('products.view')],
+                children: [
+                  {
+                    path: '',
+                    title: T('Sản phẩm'),
+                    loadComponent: () =>
+                      import('./features/products/product-list-page').then(
+                        (m) => m.ProductListPage,
+                      ),
+                  },
+                  {
+                    path: 'new',
+                    title: T('Thêm sản phẩm'),
+                    canActivate: [requirePermission('products.edit')],
+                    canDeactivate: [unsavedChangesGuard],
+                    loadComponent: () =>
+                      import('./features/products/product-form-page').then(
+                        (m) => m.ProductFormPage,
+                      ),
+                  },
+                  {
+                    path: ':id',
+                    title: T('Sản phẩm'),
+                    canDeactivate: [unsavedChangesGuard],
+                    loadComponent: () =>
+                      import('./features/products/product-form-page').then(
+                        (m) => m.ProductFormPage,
+                      ),
+                  },
+                ],
+              },
+              {
+                path: 'inventory',
+                canMatch: [catalogHttp],
+                title: T('Tồn kho'),
+                canActivate: [requirePermission('inventory.view')],
+                loadComponent: () =>
+                  import('./features/inventory/inventory-page').then((m) => m.InventoryPage),
+              },
+              {
+                path: 'promotions',
+                canMatch: [catalogHttp],
+                canActivate: [requirePermission('promotions.view')],
+                children: [
+                  {
+                    path: '',
+                    title: T('Khuyến mãi'),
+                    loadComponent: () =>
+                      import('./features/promotions/promotion-list-page').then(
+                        (m) => m.PromotionListPage,
+                      ),
+                  },
+                  {
+                    path: 'new',
+                    title: T('Tạo mã giảm giá'),
+                    canActivate: [requirePermission('promotions.edit')],
+                    canDeactivate: [unsavedChangesGuard],
+                    loadComponent: () =>
+                      import('./features/promotions/promotion-form-page').then(
+                        (m) => m.PromotionFormPage,
+                      ),
+                  },
+                  {
+                    path: ':id',
+                    title: T('Mã giảm giá'),
+                    canDeactivate: [unsavedChangesGuard],
+                    loadComponent: () =>
+                      import('./features/promotions/promotion-form-page').then(
+                        (m) => m.PromotionFormPage,
                       ),
                   },
                 ],

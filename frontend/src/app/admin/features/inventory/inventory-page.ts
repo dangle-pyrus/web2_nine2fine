@@ -1,7 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { of } from 'rxjs';
+import { API_CONFIG } from '../../../core/api-config';
 import { AdminSession } from '../../core/admin-session';
 import { NumPipe } from '../../core/format.pipes';
 import { ADMIN_INVENTORY_API } from '../../data-access/admin-apis';
@@ -74,7 +83,7 @@ const SORTS: { value: string; label: string }[] = [
   template: `
     <adm-page-header heading="Tồn kho">
       <ng-container actions>
-        @if (canAdjust) {
+        @if (canThresholds) {
           <button
             type="button"
             class="adm-btn adm-btn--lg"
@@ -117,7 +126,7 @@ const SORTS: { value: string; label: string }[] = [
             hiện là <strong>{{ f.defaultThreshold }}</strong
             >{{ f.customCount ? ', ' + f.customCount + ' SKU dùng ngưỡng riêng' : '' }}.</span
           >
-          @if (canAdjust) {
+          @if (canThresholds) {
             <button type="button" class="link" (click)="editDefault()">Đổi ngưỡng</button>
           }
         </p>
@@ -171,20 +180,22 @@ const SORTS: { value: string; label: string }[] = [
             <option [value]="item">{{ item }}</option>
           }
         </select>
-        <label class="sort-select">
-          <span class="small secondary">Sắp xếp</span>
-          <select
-            class="select select--sm"
-            name="sort"
-            aria-label="Sắp xếp tồn kho"
-            [ngModel]="query().sort + ':' + query().dir"
-            (ngModelChange)="sort($event)"
-          >
-            @for (item of sorts; track item.value) {
-              <option [value]="item.value">{{ item.label }}</option>
-            }
-          </select>
-        </label>
+        @if (!contract) {
+          <label class="sort-select">
+            <span class="small secondary">Sắp xếp</span>
+            <select
+              class="select select--sm"
+              name="sort"
+              aria-label="Sắp xếp tồn kho"
+              [ngModel]="query().sort + ':' + query().dir"
+              (ngModelChange)="sort($event)"
+            >
+              @for (item of sorts; track item.value) {
+                <option [value]="item.value">{{ item.label }}</option>
+              }
+            </select>
+          </label>
+        }
       </form>
       @if (chips().length) {
         <div class="chips filter-chips">
@@ -249,7 +260,7 @@ const SORTS: { value: string; label: string }[] = [
           <table class="table table--cards">
             <thead>
               <tr>
-                @if (canAdjust) {
+                @if (canThresholds) {
                   <th class="w-check">
                     <label class="check">
                       <input
@@ -273,12 +284,12 @@ const SORTS: { value: string; label: string }[] = [
               </tr>
             </thead>
             @if (view.state().loading) {
-              <tbody [admSkeleton]="10" [columns]="canAdjust ? 9 : 8"></tbody>
+              <tbody [admSkeleton]="10" [columns]="canThresholds ? 9 : 8"></tbody>
             } @else {
               <tbody>
                 @for (item of page()?.items ?? []; track item.variantId) {
                   <tr [class.is-selected]="selection.has(item.variantId)">
-                    @if (canAdjust) {
+                    @if (canThresholds) {
                       <td class="w-check">
                         <label class="check">
                           <input
@@ -292,7 +303,7 @@ const SORTS: { value: string; label: string }[] = [
                     }
                     <td>
                       <div class="cell-media">
-                        <img class="thumb" [src]="item.image" alt="" />
+                        <img class="thumb" [src]="item.image || placeholder" alt="" />
                         <div>
                           <a
                             class="cell-title"
@@ -316,7 +327,7 @@ const SORTS: { value: string; label: string }[] = [
                       {{ item.available | admNum }}
                     </td>
                     <td class="num" data-label="Ngưỡng">
-                      @if (canAdjust) {
+                      @if (canThresholds) {
                         <button
                           type="button"
                           class="threshold"
@@ -397,6 +408,11 @@ export class InventoryPage {
   private readonly dialogs = inject(AdminDialogs);
   private readonly toast = inject(AdminToastService);
   protected readonly canAdjust = inject(AdminSession).can('inventory.adjust');
+  /** Only an admin changes thresholds (S6-Q2); staff see them. */
+  protected readonly canThresholds = inject(AdminSession).can('inventory.thresholds');
+  /** Slice 6: the list runs on the API (fixed order). */
+  protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
+  protected readonly placeholder = '/assets/illustrations/shopping_bags.svg';
   protected readonly views = VIEWS;
   protected readonly sorts = SORTS;
   protected readonly status = STATUS;
@@ -435,7 +451,11 @@ export class InventoryPage {
   });
 
   constructor() {
-    this.loadFacets();
+    // Tab counts follow the search / category / colour / size filters (not the status tab).
+    effect(() => {
+      const { search, category, color, size } = this.query();
+      untracked(() => this.loadFacets({ search, category, color, size }));
+    });
   }
 
   removeChip(key: 'search' | 'category' | 'color' | 'size'): void {
@@ -571,11 +591,14 @@ export class InventoryPage {
 
   private refresh(): void {
     this.view.reload();
-    this.loadFacets();
+    const { search, category, color, size } = this.query();
+    this.loadFacets({ search, category, color, size });
   }
 
-  private loadFacets(): void {
-    this.api.facets().subscribe({
+  private loadFacets(
+    filters: Pick<InventoryQuery, 'search' | 'category' | 'color' | 'size'>,
+  ): void {
+    this.api.facets(filters).subscribe({
       next: (facets) => this.facets.set(facets),
       error: () => this.facets.set(null),
     });

@@ -31,6 +31,14 @@ export const API_ERROR_CODES = [
   'condition-not-met',
   // Slice 5 (account).
   'invalid-password',
+  // Slice 6 (admin catalog).
+  'version-conflict',
+  'publish-incomplete',
+  'invalid-image',
+  'duplicate',
+  'product-in-use',
+  'variant-in-use',
+  'voucher-in-use',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
@@ -53,6 +61,13 @@ export interface ApiErrorDetail {
   stockIssues?: StockIssue[];
   removedVoucherCodes?: string[];
   existingOrderCode?: string;
+  /** Slice 6 extras (admin catalog), read with type checks. */
+  missing?: string[];
+  reason?: string;
+  sku?: string;
+  productId?: string;
+  available?: number;
+  reserved?: number;
 }
 
 function readStockIssues(value: unknown): StockIssue[] | undefined {
@@ -98,5 +113,13 @@ export function readApiError(error: unknown): ApiErrorDetail {
       : undefined,
     existingOrderCode:
       typeof detail['existingOrderCode'] === 'string' ? detail['existingOrderCode'] : undefined,
+    missing: Array.isArray(detail['missing'])
+      ? detail['missing'].filter((item): item is string => typeof item === 'string')
+      : undefined,
+    reason: typeof detail['reason'] === 'string' ? detail['reason'] : undefined,
+    sku: typeof detail['sku'] === 'string' ? detail['sku'] : undefined,
+    productId: typeof detail['productId'] === 'string' ? detail['productId'] : undefined,
+    available: Number.isInteger(detail['available']) ? (detail['available'] as number) : undefined,
+    reserved: Number.isInteger(detail['reserved']) ? (detail['reserved'] as number) : undefined,
   };
 }

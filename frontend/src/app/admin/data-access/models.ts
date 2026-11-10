@@ -25,6 +25,8 @@ export interface Page<T> {
   total: number;
   page: number;
   pageSize: number;
+  /** Tab counts, when the API sends them (Slice 6 lists). */
+  counts?: Record<string, number>;
 }
 
 export type SortDir = 'asc' | 'desc';
@@ -54,7 +56,28 @@ export type AdminErrorCode =
   | 'account-disabled'
   | 'rate-limited'
   | 'password-locked'
-  | 'origin-not-allowed';
+  | 'origin-not-allowed'
+  // Slice 6 (admin catalog):
+  | 'version-conflict'
+  | 'publish-incomplete'
+  | 'invalid-image'
+  | 'duplicate'
+  | 'stock-changed'
+  | 'product-in-use'
+  | 'variant-in-use'
+  | 'voucher-in-use'
+  | 'idempotency-conflict';
+
+/** Extras of a Slice 6 error body (`missing`, `reason`, `sku`, current stock...). */
+export interface AdminErrorDetail {
+  field?: string;
+  missing?: string[];
+  reason?: string;
+  sku?: string;
+  productId?: string;
+  available?: number;
+  reserved?: number;
+}
 
 export class AdminApiError extends Error {
   constructor(
@@ -64,6 +87,7 @@ export class AdminApiError extends Error {
     readonly fields: Record<string, string> = {},
     /** Seconds to wait; present for `rate-limited` and `password-locked`. */
     readonly retryAfterSeconds?: number,
+    readonly detail: AdminErrorDetail = {},
   ) {
     super(message);
   }
@@ -300,9 +324,12 @@ export interface AdminVariant {
   sku: string;
   color: { name: string; hex: string };
   size: string;
-  /** Null = product price. */
+  /** Null = product price. Hidden and not sent when the catalog runs on the API (S6-Q7). */
   price: number | null;
+  /** Mock: units in stock. API: units on sale (`available`). */
   inventory: number;
+  /** API only: an order line uses this SKU, so the SKU is locked and the variant stays. */
+  hasOrders?: boolean;
 }
 
 export interface AdminProduct {
@@ -332,10 +359,15 @@ export interface AdminProduct {
   seoDescription: string;
   createdAt: string;
   updatedAt: string;
+  /** API only: has been on sale at least once. */
+  published?: boolean;
+  /** API only: the slug can no longer change (BR-INV-13). */
+  slugLocked?: boolean;
 }
 
 export interface AdminProductSummary {
   id: string;
+  slug?: string;
   name: string;
   image: string;
   status: ProductStatus;
@@ -347,7 +379,11 @@ export interface AdminProductSummary {
   updatedAt: string;
 }
 
-export type ProductInput = Omit<AdminProduct, 'id' | 'createdAt' | 'updatedAt'>;
+/** `updatedAt` is the version read last; the API refuses the save when it moved (BR-INV-05). */
+export type ProductInput = Omit<
+  AdminProduct,
+  'id' | 'createdAt' | 'updatedAt' | 'published' | 'slugLocked'
+> & { updatedAt?: string };
 
 export type ProductView = 'all' | 'active' | 'draft' | 'hidden' | 'out-of-stock';
 
@@ -375,6 +411,8 @@ export interface InventoryItem {
   thresholdCustom: boolean;
   category: string;
   status: StockStatus;
+  /** API only. */
+  productStatus?: ProductStatus;
 }
 
 /** Còn hàng / Sắp hết (available at or under the threshold) / Hết hàng (nothing to sell). */
@@ -406,16 +444,22 @@ export interface InventoryAdjustment {
   quantity: number;
   reason: AdjustmentReason;
   note: string;
+  /** API: `set` needs the "Có thể bán" the person sees (BR-INV-33). */
+  expectedAvailable?: number;
+  /** API: one key per intent, reused when the person retries (BR-INV-33). */
+  idempotencyKey?: string;
 }
 
 export interface InventoryMovement {
   id: string;
   at: string;
   change: number;
-  after: number;
+  /** Null for movements caused by orders (the API does not store the balance). */
+  after: number | null;
   reason: AdjustmentReason | 'order' | 'cancel';
   note: string;
   author: string;
+  authorRole?: StaffRole | null;
 }
 
 // ---------- Customers ----------
@@ -474,7 +518,7 @@ export type PromotionState = 'running' | 'scheduled' | 'expired' | 'disabled';
  * customers: only the listed accounts. private: shown to no one; staff hand the code out
  * themselves (influencers, apologies) and whoever has it can use it.
  */
-export type PromotionAudience = 'everyone' | 'tiers' | 'customers' | 'private';
+export type PromotionAudience = 'everyone' | 'tiers' | 'customers' | 'private' | 'members';
 
 export interface Promotion {
   id: string;
@@ -501,9 +545,21 @@ export interface Promotion {
   endsAt: string | null;
   enabled: boolean;
   createdAt: string;
+  /** API only. */
+  firstOrderOnly?: boolean;
+  excludeSaleItems?: boolean;
+  /** API only: at least one redemption exists, so type, value, cap and code are locked. */
+  hasRedemptions?: boolean;
+  /** API only: computed by the server, the list does not recompute it. */
+  state?: PromotionState;
+  /** API only: version read last. */
+  updatedAt?: string;
 }
 
-export type PromotionInput = Omit<Promotion, 'id' | 'used' | 'createdAt'>;
+export type PromotionInput = Omit<
+  Promotion,
+  'id' | 'used' | 'createdAt' | 'state' | 'hasRedemptions'
+>;
 
 export interface PromotionQuery extends PageQuery {
   state: PromotionState | '';

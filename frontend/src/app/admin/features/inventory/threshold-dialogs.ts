@@ -33,6 +33,7 @@ export interface DefaultThresholdData {
               name="value"
               type="number"
               min="0"
+              max="1000"
               step="1"
               inputmode="numeric"
               [(ngModel)]="value"
@@ -71,7 +72,7 @@ export class DefaultThresholdDialog {
   resetCustom = false;
 
   valid(): boolean {
-    return Number.isInteger(this.value) && (this.value ?? -1) >= 0;
+    return Number.isInteger(this.value) && (this.value ?? -1) >= 0 && (this.value ?? 0) <= 1000;
   }
 
   submit(): void {
@@ -128,6 +129,7 @@ export interface SkuThresholdData {
                 name="value"
                 type="number"
                 min="0"
+                max="1000"
                 step="1"
                 inputmode="numeric"
                 [(ngModel)]="value"
@@ -159,7 +161,10 @@ export class SkuThresholdDialog {
   value: number | null = this.data.current ?? this.data.defaultValue;
 
   valid(): boolean {
-    return this.mode === 'default' || (Number.isInteger(this.value) && (this.value ?? -1) >= 0);
+    return (
+      this.mode === 'default' ||
+      (Number.isInteger(this.value) && (this.value ?? -1) >= 0 && (this.value ?? 0) <= 1000)
+    );
   }
 
   submit(): void {

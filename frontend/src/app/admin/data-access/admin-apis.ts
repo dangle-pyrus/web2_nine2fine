@@ -1,6 +1,8 @@
 /**
- * Admin API ports. Pages depend only on these tokens; `provideAdminApis()` binds them to the
+ * Admin API ports. Pages depend only on these tokens; `provideAdmin()` binds them to the
  * in-memory mocks (`src/mocks/admin`) or to the HTTP adapters below depending on `apiConfig.mode`.
+ * Products, inventory and promotions (Slice 6) have their HTTP adapters in `products-api.ts`,
+ * `inventory-api.ts` and `promotions-api.ts`, bound by `admin-catalog-adapters.ts`.
  * Endpoints are documented in document/admin/ADMIN_API_CONTRACT.md.
  */
 import { HttpClient } from '@angular/common/http';
@@ -122,7 +124,10 @@ export interface AdminInventoryApi {
   list(query: InventoryQuery): Observable<Page<InventoryItem>>;
   adjust(variantId: string, input: InventoryAdjustment): Observable<InventoryItem>;
   history(variantId: string): Observable<InventoryMovement[]>;
-  facets(): Observable<InventoryFacets>;
+  /** Counts follow the search / category / colour / size filters, not the status tab. */
+  facets(
+    query?: Partial<Pick<InventoryQuery, 'search' | 'category' | 'color' | 'size'>>,
+  ): Observable<InventoryFacets>;
   /** Own threshold for these SKUs; null puts them back on the shop default. */
   setThreshold(variantIds: string[], value: number | null): Observable<void>;
   /** Shop-wide default; `resetCustom` also drops every SKU's own threshold. */
@@ -345,63 +350,6 @@ export class HttpAdminReturnsApi implements AdminReturnsApi {
 }
 
 @Injectable()
-export class HttpAdminProductsApi implements AdminProductsApi {
-  private readonly http = inject(HttpClient);
-  private readonly base = `${adminBase()}/products`;
-  list(query: ProductQuery) {
-    return this.http
-      .get<Page<AdminProductSummary>>(this.base, { params: toParams(query) })
-      .pipe(adminErrors());
-  }
-  get(id: string) {
-    return this.http.get<AdminProduct>(`${this.base}/${id}`).pipe(adminErrors());
-  }
-  create(input: ProductInput) {
-    return this.http.post<AdminProduct>(this.base, input).pipe(adminErrors());
-  }
-  update(id: string, input: ProductInput) {
-    return this.http.put<AdminProduct>(`${this.base}/${id}`, input).pipe(adminErrors());
-  }
-  setStatus(ids: string[], status: ProductStatus) {
-    return this.http.post<void>(`${this.base}/bulk-status`, { ids, status }).pipe(adminErrors());
-  }
-  remove(id: string) {
-    return this.http.delete<void>(`${this.base}/${id}`).pipe(adminErrors());
-  }
-  uploadImage(file: File) {
-    const body = new FormData();
-    body.append('file', file);
-    return this.http
-      .post<ProductImage>(`${adminBase()}/uploads/product-images`, body)
-      .pipe(adminErrors());
-  }
-}
-
-@Injectable()
-export class HttpAdminInventoryApi implements AdminInventoryApi {
-  private readonly http = inject(HttpClient);
-  private readonly base = `${adminBase()}/inventory`;
-  list(query: InventoryQuery) {
-    return this.http
-      .get<Page<InventoryItem>>(this.base, { params: toParams(query) })
-      .pipe(adminErrors());
-  }
-  adjust(variantId: string, input: InventoryAdjustment) {
-    return this.http
-      .post<InventoryItem>(`${this.base}/${variantId}/adjustments`, input)
-      .pipe(adminErrors());
-  }
-  history(variantId: string) {
-    return this.http
-      .get<InventoryMovement[]>(`${this.base}/${variantId}/movements`)
-      .pipe(adminErrors());
-  }
-  facets = () => frontendOnly<InventoryFacets>();
-  setThreshold = () => frontendOnly<void>();
-  setDefaultThreshold = () => frontendOnly<void>();
-}
-
-@Injectable()
 export class HttpAdminCustomersApi implements AdminCustomersApi {
   private readonly http = inject(HttpClient);
   private readonly base = `${adminBase()}/customers`;
@@ -415,32 +363,6 @@ export class HttpAdminCustomersApi implements AdminCustomersApi {
   }
   update(id: string, input: CustomerUpdate) {
     return this.http.patch<AdminCustomer>(`${this.base}/${id}`, input).pipe(adminErrors());
-  }
-}
-
-@Injectable()
-export class HttpAdminPromotionsApi implements AdminPromotionsApi {
-  private readonly http = inject(HttpClient);
-  private readonly base = `${adminBase()}/promotions`;
-  list(query: PromotionQuery) {
-    return this.http
-      .get<Page<Promotion>>(this.base, { params: toParams(query) })
-      .pipe(adminErrors());
-  }
-  get(id: string) {
-    return this.http.get<Promotion>(`${this.base}/${id}`).pipe(adminErrors());
-  }
-  create(input: PromotionInput) {
-    return this.http.post<Promotion>(this.base, input).pipe(adminErrors());
-  }
-  update(id: string, input: PromotionInput) {
-    return this.http.put<Promotion>(`${this.base}/${id}`, input).pipe(adminErrors());
-  }
-  setEnabled(id: string, enabled: boolean) {
-    return this.http.patch<Promotion>(`${this.base}/${id}`, { enabled }).pipe(adminErrors());
-  }
-  remove(id: string) {
-    return this.http.delete<void>(`${this.base}/${id}`).pipe(adminErrors());
   }
 }
 

@@ -33,6 +33,8 @@ export function promotionAudience(
       return `${promo.customerIds.length} khách được chọn`;
     case 'private':
       return 'Phát riêng';
+    case 'members':
+      return 'Chỉ thành viên';
     default:
       return 'Tất cả khách';
   }

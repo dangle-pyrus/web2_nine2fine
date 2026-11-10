@@ -140,8 +140,27 @@ export const MEDIA: Record<string, MediaAsset> = {
   },
 };
 
+/** Id of an image an admin uploaded (docs/api/openapi.yaml `UploadedImage`): `up-<32 hex>.<ext>`. */
+const UPLOADED_ID = /^up-[0-9a-f]{32}\.(jpg|png|webp)$/;
+
+/**
+ * One lookup for every media id (BR-INV-27): the manifest first; an uploaded image is served by
+ * `/api/media/{id}` (same site, the `/api` proxy); anything else is the placeholder.
+ */
 export function getMedia(id: string): MediaAsset {
-  return MEDIA[id] ?? MEDIA['catalog-placeholder'];
+  const known = MEDIA[id];
+  if (known) return known;
+  if (UPLOADED_ID.test(id)) {
+    return {
+      src: `/api/media/${id}`,
+      alt: '',
+      width: 1200,
+      height: 1600,
+      temporary: false,
+      source: 'local-brand',
+    };
+  }
+  return MEDIA['catalog-placeholder'];
 }
 
 /** Pexels credits for the attribution list (photographer + source page). */

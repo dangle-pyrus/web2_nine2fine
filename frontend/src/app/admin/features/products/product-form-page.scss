@@ -353,3 +353,15 @@
     width: 96px;
   }
 }
+
+.slug-row {
+  align-items: center;
+  gap: 8px;
+  .input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+.slug-prefix {
+  white-space: nowrap;
+}

@@ -2,8 +2,11 @@ import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DateTimePipe } from '../../core/format.pipes';
+import { API_CONFIG } from '../../../core/api-config';
 import { ADMIN_INVENTORY_API } from '../../data-access/admin-apis';
 import { errorMessage } from '../../data-access/http-support';
+import { newIdempotencyKey } from '../../data-access/inventory-api';
+import { AdminApiError } from '../../data-access/models';
 import type { AdjustmentReason, InventoryItem, InventoryMovement } from '../../data-access/models';
 import { AdmIcon } from '../../ui/icon';
 
@@ -35,10 +38,10 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
     <div class="drawer">
       <header>
         <div>
-          <h2>{{ data.item.productName }}</h2>
+          <h2>{{ item().productName }}</h2>
           <p class="small secondary meta-list">
-            <span>{{ data.item.color.name }} / {{ data.item.size }}</span>
-            <span class="mono">SKU {{ data.item.sku }}</span>
+            <span>{{ item().color.name }} / {{ item().size }}</span>
+            <span class="mono">SKU {{ item().sku }}</span>
           </p>
         </div>
         <button
@@ -54,15 +57,15 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
         <dl class="stats">
           <div>
             <dt>Trong kho</dt>
-            <dd>{{ data.item.onHand }}</dd>
+            <dd>{{ item().onHand }}</dd>
           </div>
           <div>
             <dt>Đang giữ</dt>
-            <dd>{{ data.item.reserved }}</dd>
+            <dd>{{ item().reserved }}</dd>
           </div>
           <div>
             <dt>Có thể bán</dt>
-            <dd>{{ data.item.available }}</dd>
+            <dd>{{ item().available }}</dd>
           </div>
         </dl>
 
@@ -92,7 +95,7 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
                 [min]="mode() === 'set' ? 0 : null"
                 step="1"
                 [ngModel]="quantity()"
-                (ngModelChange)="quantity.set($event)"
+                (ngModelChange)="quantity.set($event); changed()"
                 [attr.aria-invalid]="tried() && !!error()"
               />
               @if (tried() && error(); as message) {
@@ -111,7 +114,7 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
                 class="select"
                 name="reason"
                 [ngModel]="reason()"
-                (ngModelChange)="reason.set($event)"
+                (ngModelChange)="reason.set($event); changed()"
               >
                 @for (item of reasons; track item.value) {
                   <option [value]="item.value">{{ item.label }}</option>
@@ -119,18 +122,23 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
               </select>
             </div>
             <div class="field">
-              <label for="adj-note">Ghi chú</label>
+              <label for="adj-note" [class.req]="reason() === 'correction'">Ghi chú</label>
               <input
                 id="adj-note"
                 class="input"
                 name="note"
+                maxlength="200"
                 placeholder="Ví dụ: Lô nhập 12/10"
                 [ngModel]="note()"
-                (ngModelChange)="note.set($event)"
+                (ngModelChange)="note.set($event); changed()"
+                [attr.aria-invalid]="tried() && !!noteError()"
               />
+              @if (tried() && noteError(); as message) {
+                <p class="error">{{ message }}</p>
+              }
             </div>
             @if (serverError()) {
-              <p class="error">{{ serverError() }}</p>
+              <p class="error" role="alert">{{ serverError() }}</p>
             }
             <button type="submit" class="adm-btn adm-btn--primary" [class.is-busy]="saving()">
               Lưu điều chỉnh
@@ -161,7 +169,13 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
                   <p class="num change" [class.minus]="move.change < 0">
                     {{ move.change > 0 ? '+' : '' }}{{ move.change }}
                   </p>
-                  <p class="num small secondary">còn {{ move.after }}</p>
+                  <p class="num small secondary">
+                    @if (move.after === null) {
+                      —
+                    } @else {
+                      còn {{ move.after }}
+                    }
+                  </p>
                 </li>
               }
             </ul>
@@ -250,8 +264,13 @@ const MOVEMENT_LABELS: Record<InventoryMovement['reason'], string> = {
 })
 export class AdjustStockDrawer {
   private readonly api = inject(ADMIN_INVENTORY_API);
+  private readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
   readonly ref = inject<DialogRef<InventoryItem>>(DialogRef);
   readonly data = inject<{ item: InventoryItem; canAdjust: boolean }>(DIALOG_DATA);
+  /** The row as the person sees it; `stock-changed` replaces it with the current numbers. */
+  readonly item = signal<InventoryItem>(this.data.item);
+  /** One key per intent (BR-INV-33): kept on a retry, renewed when the person edits the form. */
+  private idempotencyKey = newIdempotencyKey();
   protected readonly reasons = REASONS;
   protected readonly labels = MOVEMENT_LABELS;
   readonly mode = signal<'delta' | 'set'>('delta');
@@ -265,17 +284,30 @@ export class AdjustStockDrawer {
 
   readonly after = computed(() => {
     const quantity = Number(this.quantity() ?? 0) || 0;
-    return this.mode() === 'delta' ? this.data.item.onHand + quantity : quantity;
+    return this.mode() === 'delta' ? this.item().onHand + quantity : quantity;
   });
   readonly error = computed(() => {
     const quantity = this.quantity();
     if (quantity === null || String(quantity) === '' || !Number.isInteger(Number(quantity)))
       return 'Nhập một số nguyên.';
     if (this.mode() === 'delta' && Number(quantity) === 0) return 'Số lượng thay đổi phải khác 0.';
-    if (this.after() < this.data.item.reserved)
-      return `Không thể thấp hơn ${this.data.item.reserved} đang giữ cho đơn chưa giao.`;
+    if (this.contract) {
+      if (this.mode() === 'delta' && Math.abs(Number(quantity)) > 10_000)
+        return 'Mỗi lần thêm hoặc bớt tối đa 10.000.';
+      if (this.mode() === 'set' && Number(quantity) > 100_000) return 'Số đếm tối đa 100.000.';
+      if (this.mode() === 'delta' && this.item().available + Number(quantity) < 0)
+        return `Chỉ còn ${this.item().available} có thể bán.`;
+    }
+    if (this.after() < this.item().reserved)
+      return `Không thể thấp hơn ${this.item().reserved} đang giữ cho đơn chưa giao.`;
     return '';
   });
+  /** "Sửa sai" needs a note (S6-Q6). */
+  readonly noteError = computed(() =>
+    this.contract && this.reason() === 'correction' && !this.note().trim()
+      ? 'Ghi chú là bắt buộc với lý do "Sửa sai số liệu".'
+      : '',
+  );
 
   constructor() {
     this.api
@@ -283,22 +315,54 @@ export class AdjustStockDrawer {
       .subscribe({ next: (moves) => this.history.set(moves), error: () => this.history.set([]) });
   }
 
+  /** The person changed the form, so this is a new intent and needs a new key. */
+  protected changed(): void {
+    this.idempotencyKey = newIdempotencyKey();
+  }
+
   submit(): void {
     this.tried.set(true);
-    if (this.error()) return;
+    if (this.error() || this.noteError()) return;
     this.saving.set(true);
     this.serverError.set('');
+    const mode = this.mode();
     this.api
-      .adjust(this.data.item.variantId, {
-        mode: this.mode(),
+      .adjust(this.item().variantId, {
+        mode,
         quantity: Number(this.quantity()),
         reason: this.reason(),
         note: this.note().trim(),
+        ...(this.contract
+          ? {
+              idempotencyKey: this.idempotencyKey,
+              ...(mode === 'set' ? { expectedAvailable: this.item().available } : {}),
+            }
+          : {}),
       })
       .subscribe({
         next: (item) => this.ref.close(item),
         error: (error: unknown) => {
           this.saving.set(false);
+          // BR-INV-33: someone else moved the stock. Show the current numbers, keep the input.
+          if (
+            error instanceof AdminApiError &&
+            error.code === 'stock-changed' &&
+            error.detail.available !== undefined &&
+            error.detail.reserved !== undefined
+          ) {
+            const { available, reserved } = error.detail;
+            this.item.update((row) => ({
+              ...row,
+              available,
+              reserved,
+              onHand: available + reserved,
+            }));
+            this.idempotencyKey = newIdempotencyKey();
+            this.serverError.set(
+              `Tồn kho vừa thay đổi: còn ${available} có thể bán, ${reserved} đang giữ. Kiểm tra số đếm rồi lưu lại.`,
+            );
+            return;
+          }
           this.serverError.set(errorMessage(error));
         },
       });

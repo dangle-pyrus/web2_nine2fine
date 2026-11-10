@@ -27,6 +27,14 @@ export interface ApiConfig {
    * addresses / profile prefill at checkout. `http` in the normal build, `mock` in e2e.
    */
   accountMode: 'mock' | 'http';
+  /**
+   * Admin products, inventory and promotions (Slice 6), independent of `mode`. `http`: the three
+   * modules call `/api/admin/{products,inventory,promotions}` (the order desk menu gains Sản phẩm,
+   * Tồn kho, Khuyến mãi; Won't fields are hidden; needs `authMode: 'http'`). `mock`: the earlier
+   * mock back office. The e2e build picks `http` with `localStorage['n2f.e2e.adminCatalogMode']`
+   * and the specs answer `/api/admin/**` themselves.
+   */
+  adminCatalogMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -44,5 +52,6 @@ export const apiConfig: ApiConfig = {
   checkoutMode: 'http',
   adminOrdersMode: 'http',
   accountMode: 'http',
+  adminCatalogMode: 'http',
   baseUrl: '/api',
 };

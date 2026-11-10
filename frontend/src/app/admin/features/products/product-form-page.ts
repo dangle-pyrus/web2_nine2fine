@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { API_CONFIG } from '../../../core/api-config';
 import { CATEGORIES, GENDERS, MOMENTS } from '../../../features/catalog/models/product';
 import { AdminSession } from '../../core/admin-session';
 import { money, percent, slugify } from '../../core/format';
@@ -11,7 +12,7 @@ import {
   ADMIN_PRODUCTS_API,
   ADMIN_STOREFRONT_API,
 } from '../../data-access/admin-apis';
-import { errorMessage } from '../../data-access/http-support';
+import { errorMessage, missingLabels } from '../../data-access/http-support';
 import {
   AdminApiError,
   AdminCollection,
@@ -34,6 +35,11 @@ import { AdjustStockDrawer } from '../inventory/adjust-stock-drawer';
 
 /** Sizes in garment order (6.3: never alphabetical). */
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+/** The API knows four sizes (BR-INV-19) and at most 8 colours, 12 images, 32 variants. */
+const API_SIZES = ['S', 'M', 'L', 'XL'];
+const MAX_COLORS = 8;
+const MAX_IMAGES = 12;
+const MAX_VARIANTS = 32;
 const PRESET_COLORS = [
   { name: 'Đen', hex: '#242323' },
   { name: 'Trắng', hex: '#f5f4f0' },
@@ -71,10 +77,12 @@ function emptyProduct(): ProductInput {
 
 /** Editable part of a product (drops server-owned fields). */
 function toInput(product: AdminProduct): ProductInput {
+  // `updatedAt` stays: it is the version the API checks on save (BR-INV-05).
   const input: Partial<AdminProduct> = { ...product };
   delete input.id;
   delete input.createdAt;
-  delete input.updatedAt;
+  delete input.published;
+  delete input.slugLocked;
   return input as ProductInput;
 }
 
@@ -114,17 +122,19 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly categoryLabel = computed(
     () => CATEGORIES.find((item) => item.value === this.draft().category)?.label ?? '',
   );
+  /** Slice 6: the screen runs on the API, so the Won't fields are hidden (S6-Q7). */
+  protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
   protected readonly id = routeParam('id');
   protected readonly isNew = computed(() => !this.id());
   protected readonly canEdit = this.session.can('products.edit');
   protected readonly canDelete = this.session.can('products.delete');
-  protected readonly canSeeCost = this.session.can('products.cost');
+  protected readonly canSeeCost = !this.contract && this.session.can('products.cost');
 
   protected readonly categories = CATEGORIES;
   protected readonly genders = GENDERS;
   protected readonly moments = MOMENTS;
   protected readonly statusOptions = PRODUCT_STATUS_OPTIONS;
-  protected readonly allSizes = SIZES;
+  protected readonly allSizes = this.contract ? API_SIZES : SIZES;
   protected readonly presetColors = PRESET_COLORS;
   protected readonly badge = productBadge;
 
@@ -143,6 +153,11 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly bulkStock = signal<number | null>(null);
   protected readonly newColor = signal({ name: '', hex: '#888888' });
   protected readonly dragIndex = signal<number | null>(null);
+  /** A message that stays until the next save or reload (version conflict, publish gaps). */
+  protected readonly notice = signal<
+    { kind: 'conflict' } | { kind: 'publish'; missing: string[] } | null
+  >(null);
+  protected readonly slugPrefix = 'nine2fine.vn/product/';
 
   protected readonly dirty = computed(() => JSON.stringify(this.draft()) !== this.original());
 
@@ -166,6 +181,15 @@ export class ProductFormPage implements HasUnsavedChanges {
     const errors: Record<string, string> = { ...this.serverErrors() };
     if (!draft.name.trim()) errors['name'] = 'Nhập tên sản phẩm.';
     if (!(draft.price > 0)) errors['price'] = 'Giá bán phải lớn hơn 0.';
+    if (this.contract) {
+      if (draft.name.length > 120) errors['name'] = 'Tên tối đa 120 ký tự.';
+      if (draft.price > 0 && (draft.price < 1000 || draft.price > 100_000_000))
+        errors['price'] = 'Giá bán từ 1.000 đến 100.000.000 ₫.';
+      if (draft.compareAtPrice !== null && draft.compareAtPrice > 100_000_000)
+        errors['compareAtPrice'] = 'Giá gốc tối đa 100.000.000 ₫.';
+      if (draft.variants.length > MAX_VARIANTS)
+        errors['variants'] = `Tối đa ${MAX_VARIANTS} biến thể.`;
+    }
     if (
       draft.compareAtPrice !== null &&
       draft.compareAtPrice > 0 &&
@@ -174,7 +198,8 @@ export class ProductFormPage implements HasUnsavedChanges {
       errors['compareAtPrice'] = 'Giá gốc phải cao hơn giá bán.';
     if (!draft.colors.length || !draft.sizes.length)
       errors['variants'] = 'Chọn ít nhất một màu và một size.';
-    if (draft.status === 'active' && !draft.images.length)
+    // On the API the server answers `publish-incomplete` with the whole list (BR-INV-14).
+    if (!this.contract && draft.status === 'active' && !draft.images.length)
       errors['images'] = 'Sản phẩm đang bán cần ít nhất một ảnh.';
     return errors;
   });
@@ -244,10 +269,12 @@ export class ProductFormPage implements HasUnsavedChanges {
     const id = this.id();
     if (id) {
       this.load(id);
-      this.storefrontApi.collections().subscribe({
-        next: (items) => this.collections.set(items),
-        error: () => this.collections.set([]),
-      });
+      // Collections are not in the API (S6-Q7): the section is hidden there.
+      if (!this.contract)
+        this.storefrontApi.collections().subscribe({
+          next: (items) => this.collections.set(items),
+          error: () => this.collections.set([]),
+        });
     } else {
       const draft = emptyProduct();
       draft.variants = this.buildVariants(draft);
@@ -283,6 +310,7 @@ export class ProductFormPage implements HasUnsavedChanges {
   load(id: string): void {
     this.loading.set(true);
     this.loadError.set('');
+    this.notice.set(null);
     this.api.get(id).subscribe({
       next: (product) => {
         this.loading.set(false);
@@ -334,6 +362,13 @@ export class ProductFormPage implements HasUnsavedChanges {
 
   upload(files: FileList | null): void {
     if (!files?.length) return;
+    if (
+      this.contract &&
+      this.draft().images.length + this.uploading() + files.length > MAX_IMAGES
+    ) {
+      this.toast.error(`Mỗi sản phẩm tối đa ${MAX_IMAGES} ảnh.`);
+      return;
+    }
     for (const file of Array.from(files)) {
       this.uploading.update((count) => count + 1);
       this.api.uploadImage(file).subscribe({
@@ -387,6 +422,10 @@ export class ProductFormPage implements HasUnsavedChanges {
     const name = color.name.trim();
     if (!name || this.draft().colors.some((item) => item.name.toLowerCase() === name.toLowerCase()))
       return;
+    if (this.contract && this.draft().colors.length >= MAX_COLORS) {
+      this.toast.error(`Tối đa ${MAX_COLORS} màu cho một sản phẩm.`);
+      return;
+    }
     this.applyOptions({ colors: [...this.draft().colors, { name, hex: color.hex }] });
     this.newColor.set({ name: '', hex: '#888888' });
   }
@@ -511,12 +550,16 @@ export class ProductFormPage implements HasUnsavedChanges {
               const apply = (input: ProductInput): ProductInput => ({
                 ...input,
                 variants: input.variants.map((row) =>
-                  row.id === variant.id ? { ...row, inventory: updated.onHand } : row,
+                  row.id === variant.id
+                    ? { ...row, inventory: this.contract ? updated.available : updated.onHand }
+                    : row,
                 ),
               });
               this.original.set(JSON.stringify(apply(JSON.parse(this.original()) as ProductInput)));
               this.draft.update(apply);
-              this.toast.show(`Đã cập nhật tồn kho ${updated.sku}: còn ${updated.onHand}`);
+              this.toast.show(
+                `Đã cập nhật tồn kho ${updated.sku}: còn ${this.contract ? updated.available : updated.onHand}`,
+              );
             });
         },
         error: (error: unknown) => this.toast.error(errorMessage(error)),
@@ -526,6 +569,7 @@ export class ProductFormPage implements HasUnsavedChanges {
   // ---------- Save ----------
 
   discard(): void {
+    this.notice.set(null);
     this.reset(JSON.parse(this.original()) as ProductInput);
   }
 
@@ -547,11 +591,13 @@ export class ProductFormPage implements HasUnsavedChanges {
     const input: ProductInput = {
       ...draft,
       name: draft.name.trim(),
-      slug: draft.slug || slugify(draft.name),
+      // The API makes the slug from the name when it is left empty (and numbers a clash).
+      slug: this.contract ? draft.slug.trim() : draft.slug || slugify(draft.name),
       compareAtPrice:
         draft.compareAtPrice && draft.compareAtPrice > 0 ? draft.compareAtPrice : null,
     };
     this.saving.set(true);
+    this.notice.set(null);
     const id = this.id();
     const request = id ? this.api.update(id, input) : this.api.create(input);
     request.subscribe({
@@ -569,12 +615,28 @@ export class ProductFormPage implements HasUnsavedChanges {
       },
       error: (error: unknown) => {
         this.saving.set(false);
-        if (error instanceof AdminApiError && Object.keys(error.fields).length)
-          this.serverErrors.set(error.fields);
-        this.toast.error(errorMessage(error));
+        this.showSaveError(error);
       },
     });
   }
+
+  /** Field errors under their field, version conflict and publish gaps as a banner (BR-INV-05, 14). */
+  private showSaveError(error: unknown): void {
+    if (error instanceof AdminApiError) {
+      if (error.code === 'version-conflict') this.notice.set({ kind: 'conflict' });
+      if (error.code === 'publish-incomplete')
+        this.notice.set({ kind: 'publish', missing: error.detail.missing ?? [] });
+      const fields: Record<string, string> = {};
+      for (const [key, message] of Object.entries(error.fields)) {
+        // A problem in one row of the variant table (variants[2].sku) shows above the table.
+        fields[key.startsWith('variants[') ? 'variants' : key] = message;
+      }
+      if (Object.keys(fields).length) this.serverErrors.set(fields);
+    }
+    this.toast.error(errorMessage(error));
+  }
+
+  protected readonly missingText = (missing: string[]): string => missingLabels(missing).join(', ');
 
   remove(): void {
     const product = this.product();

@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { API_CONFIG } from '../../../core/api-config';
 import { CATEGORIES } from '../../../features/catalog/models/product';
 import { AdminSession } from '../../core/admin-session';
 import { dateTime } from '../../core/format';
 import { NumPipe } from '../../core/format.pipes';
 import { promotionBadge, promotionState, tierBadge } from '../../core/status';
 import { ADMIN_CUSTOMERS_API, ADMIN_PROMOTIONS_API } from '../../data-access/admin-apis';
-import { errorMessage } from '../../data-access/http-support';
+import { errorMessage, VERSION_CONFLICT_MESSAGE } from '../../data-access/http-support';
 import {
   AdminApiError,
   type AdminCustomerSummary,
@@ -31,6 +32,22 @@ const TYPES: { value: PromotionType; label: string; help: string }[] = [
   { value: 'percent', label: 'Giảm theo %', help: 'Ví dụ giảm 10% toàn đơn' },
   { value: 'fixed', label: 'Giảm số tiền', help: 'Ví dụ giảm 100.000 ₫' },
   { value: 'free-shipping', label: 'Miễn phí vận chuyển', help: 'Khách không trả phí giao' },
+];
+
+/** Slice 6 (BR-INV-44): the API knows everyone and members only. */
+const API_AUDIENCES: { value: PromotionAudience; label: string; help: string; icon: string }[] = [
+  {
+    value: 'everyone',
+    label: 'Mọi khách',
+    help: 'Mọi khách đều dùng được, kể cả khách chưa có tài khoản.',
+    icon: 'reiconUsers',
+  },
+  {
+    value: 'members',
+    label: 'Chỉ thành viên',
+    help: 'Chỉ khách đã đăng nhập tài khoản dùng được mã.',
+    icon: 'reiconCrown',
+  },
 ];
 
 const AUDIENCES: { value: PromotionAudience; label: string; help: string; icon: string }[] = [
@@ -92,6 +109,8 @@ function emptyPromotion(): PromotionInput {
     audience: 'everyone',
     tiers: [],
     customerIds: [],
+    firstOrderOnly: false,
+    excludeSaleItems: false,
     startsAt: start.toISOString(),
     endsAt: null,
     enabled: true,
@@ -143,6 +162,18 @@ function emptyPromotion(): PromotionInput {
           }
         </ng-container>
       </adm-page-header>
+      @if (conflict()) {
+        <div class="banner banner--critical" role="alert">
+          <adm-icon name="reiconAlertCircle" />
+          <div class="banner-body">
+            <p class="banner-title">Dữ liệu đã thay đổi</p>
+            <p>{{ conflictMessage }}</p>
+          </div>
+          <button type="button" class="adm-btn banner-action" (click)="load(id()!)">
+            Tải lại dữ liệu
+          </button>
+        </div>
+      }
       @if (!isNew()) {
         <adm-save-bar
           [visible]="canEdit && dirty()"
@@ -164,6 +195,7 @@ function emptyPromotion(): PromotionInput {
                     type="radio"
                     name="type"
                     [value]="type.value"
+                    [disabled]="locked()"
                     [checked]="draft().type === type.value"
                     (change)="patch({ type: type.value })"
                   />
@@ -183,18 +215,27 @@ function emptyPromotion(): PromotionInput {
                   id="pr-code"
                   class="input mono upper"
                   maxlength="20"
+                  [disabled]="locked()"
                   placeholder="VD: CHAOTHU10"
                   [value]="draft().code"
                   (input)="patch({ code: $any($event.target).value.toUpperCase() })"
                   (blur)="touch('code')"
                   [attr.aria-invalid]="!!showError('code')"
                 />
-                <button type="button" class="adm-btn" (click)="generate()">Tạo ngẫu nhiên</button>
+                @if (!locked()) {
+                  <button type="button" class="adm-btn" (click)="generate()">Tạo ngẫu nhiên</button>
+                }
               </div>
               @if (showError('code'); as error) {
                 <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
               } @else {
-                <p class="hint">Khách nhập mã này khi thanh toán.</p>
+                <p class="hint">
+                  {{
+                    locked()
+                      ? 'Mã đã được dùng nên không đổi được loại, giá trị và giảm tối đa. Hãy tạo mã mới.'
+                      : 'Khách nhập mã này khi thanh toán.'
+                  }}
+                </p>
               }
             </div>
             <div class="field">
@@ -220,7 +261,8 @@ function emptyPromotion(): PromotionInput {
                       class="input"
                       type="number"
                       min="0"
-                      [max]="draft().type === 'percent' ? 100 : null"
+                      [max]="draft().type === 'percent' ? (contract ? 90 : 100) : null"
+                      [disabled]="locked()"
                       [value]="draft().value || ''"
                       (input)="patch({ value: num($any($event.target).value) ?? 0 })"
                       (blur)="touch('value')"
@@ -242,6 +284,7 @@ function emptyPromotion(): PromotionInput {
                         type="number"
                         min="0"
                         step="1000"
+                        [disabled]="locked()"
                         [value]="draft().maxDiscount ?? ''"
                         (input)="patch({ maxDiscount: num($any($event.target).value) || null })"
                       />
@@ -272,21 +315,64 @@ function emptyPromotion(): PromotionInput {
                 <span class="suffix">₫</span>
               </div>
             </div>
-            <div class="field">
-              <span class="field-label">Áp dụng cho</span>
-              <div class="checks">
-                @for (item of categories; track item.value) {
+            @if (contract) {
+              <div class="field">
+                <label for="pr-category">Áp dụng cho</label>
+                <select
+                  id="pr-category"
+                  class="select"
+                  [value]="draft().categories[0] ?? ''"
+                  (change)="
+                    patch({
+                      categories: $any($event.target).value ? [$any($event.target).value] : [],
+                    })
+                  "
+                >
+                  <option value="" [selected]="!draft().categories.length">Toàn bộ sản phẩm</option>
+                  @for (item of categories; track item.value) {
+                    <option [value]="item.value" [selected]="draft().categories[0] === item.value">
+                      {{ item.label }}
+                    </option>
+                  }
+                </select>
+                <p class="hint">Mỗi mã áp dụng cho một danh mục hoặc toàn bộ sản phẩm.</p>
+              </div>
+              <div class="field">
+                <span class="field-label">Điều kiện thêm</span>
+                <div class="checks">
                   <label class="check"
                     ><input
                       type="checkbox"
-                      [checked]="draft().categories.includes(item.value)"
-                      (change)="toggleCategory(item.value, $any($event.target).checked)"
-                    />{{ item.label }}</label
+                      [checked]="!!draft().firstOrderOnly"
+                      (change)="patch({ firstOrderOnly: $any($event.target).checked })"
+                    />Chỉ đơn hàng đầu tiên của khách</label
                   >
-                }
+                  <label class="check"
+                    ><input
+                      type="checkbox"
+                      [checked]="!!draft().excludeSaleItems"
+                      (change)="patch({ excludeSaleItems: $any($event.target).checked })"
+                    />Không áp dụng cho hàng đang giảm giá</label
+                  >
+                </div>
               </div>
-              <p class="hint">Không chọn danh mục nào = áp dụng cho toàn bộ sản phẩm.</p>
-            </div>
+            } @else {
+              <div class="field">
+                <span class="field-label">Áp dụng cho</span>
+                <div class="checks">
+                  @for (item of categories; track item.value) {
+                    <label class="check"
+                      ><input
+                        type="checkbox"
+                        [checked]="draft().categories.includes(item.value)"
+                        (change)="toggleCategory(item.value, $any($event.target).checked)"
+                      />{{ item.label }}</label
+                    >
+                  }
+                </div>
+                <p class="hint">Không chọn danh mục nào = áp dụng cho toàn bộ sản phẩm.</p>
+              </div>
+            }
             <div class="form-grid">
               <div class="field">
                 <label for="pr-limit">Tổng lượt dùng tối đa</label>
@@ -298,7 +384,11 @@ function emptyPromotion(): PromotionInput {
                   placeholder="Không giới hạn"
                   [value]="draft().usageLimit ?? ''"
                   (input)="patch({ usageLimit: num($any($event.target).value) || null })"
+                  [attr.aria-invalid]="!!showError('usageLimit')"
                 />
+                @if (showError('usageLimit'); as error) {
+                  <p class="error">{{ error }}</p>
+                }
               </div>
               <div class="field">
                 <label for="pr-per">Mỗi khách dùng tối đa</label>
@@ -470,7 +560,7 @@ function emptyPromotion(): PromotionInput {
             <p class="hint">Giờ Việt Nam (GMT+7).</p>
           </section>
 
-          @if (!isNew() && canEdit && saved()?.used === 0) {
+          @if (!isNew() && canEdit && (contract ? !saved()?.hasRedemptions : saved()?.used === 0)) {
             <button type="button" class="adm-btn adm-btn--danger" (click)="remove()">
               <adm-icon name="reiconTrash" [size]="16" /> Xóa mã giảm giá
             </button>
@@ -689,11 +779,15 @@ export class PromotionFormPage implements HasUnsavedChanges {
   private readonly toast = inject(AdminToastService);
   private readonly dialogs = inject(AdminDialogs);
   protected readonly canEdit = inject(AdminSession).can('promotions.edit');
+  /** Slice 6: the form runs on the API (BR-INV-44): two audiences, one category. */
+  protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
+  protected readonly conflict = signal(false);
+  protected readonly conflictMessage = VERSION_CONFLICT_MESSAGE;
   protected readonly id = routeParam('id');
   protected readonly isNew = computed(() => !this.id());
   protected readonly types = TYPES;
   protected readonly categories = CATEGORIES;
-  protected readonly audiences = AUDIENCES;
+  protected readonly audiences = this.contract ? API_AUDIENCES : AUDIENCES;
   protected readonly tierOptions = TIERS;
   protected readonly tierBadge = tierBadge;
   private readonly customersApi = inject(ADMIN_CUSTOMERS_API);
@@ -715,6 +809,8 @@ export class PromotionFormPage implements HasUnsavedChanges {
         return `Dành cho ${draft.customerIds.length} khách được chọn`;
       case 'private':
         return 'Phát riêng, không hiện cho khách';
+      case 'members':
+        return 'Chỉ dành cho thành viên đã đăng nhập';
       default:
         return 'Dành cho tất cả khách';
     }
@@ -730,15 +826,36 @@ export class PromotionFormPage implements HasUnsavedChanges {
   protected readonly serverErrors = signal<Record<string, string>>({});
   protected readonly dirty = computed(() => JSON.stringify(this.draft()) !== this.original());
   protected readonly summary = computed(() => promotionSummary(this.draft()));
+  /** BR-INV-40: a code that was redeemed keeps its code, type, value and cap. */
+  protected readonly locked = computed(() => !!this.saved()?.hasRedemptions);
 
   protected readonly errors = computed(() => {
     const draft = this.draft();
     const errors: Record<string, string> = { ...this.serverErrors() };
-    if (!/^[A-Z0-9_-]{3,20}$/.test(draft.code.trim()))
-      errors['code'] ??= 'Mã gồm 3–20 ký tự: chữ không dấu, số, gạch ngang.';
-    if (draft.type === 'percent' && !(draft.value >= 1 && draft.value <= 100))
-      errors['value'] = 'Phần trăm giảm từ 1 đến 100.';
-    if (draft.type === 'fixed' && !(draft.value > 0)) errors['value'] = 'Nhập số tiền giảm.';
+    if (this.contract) {
+      if (!/^[A-Z0-9]{4,20}$/.test(draft.code.trim().toUpperCase()))
+        errors['code'] ??= 'Mã gồm 4–20 ký tự: chữ không dấu và số, không có gạch ngang.';
+      if (draft.type === 'percent' && !(draft.value >= 1 && draft.value <= 90))
+        errors['value'] = 'Phần trăm giảm từ 1 đến 90.';
+      if (draft.type === 'fixed' && !(draft.value >= 1000 && draft.value <= 10_000_000))
+        errors['value'] = 'Số tiền giảm từ 1.000 đến 10.000.000 ₫.';
+      if (
+        draft.type === 'percent' &&
+        draft.maxDiscount !== null &&
+        !(draft.maxDiscount >= 1000 && draft.maxDiscount <= 10_000_000)
+      )
+        errors['maxDiscount'] = 'Giảm tối đa từ 1.000 đến 10.000.000 ₫.';
+      if (draft.usageLimit !== null && draft.usageLimit > 1_000_000)
+        errors['usageLimit'] = 'Tổng lượt tối đa 1.000.000.';
+      if (draft.perCustomerLimit > 10) errors['perCustomerLimit'] = 'Mỗi khách tối đa 10 lần.';
+      if (draft.title.length > 100) errors['title'] = 'Tên chương trình tối đa 100 ký tự.';
+    } else {
+      if (!/^[A-Z0-9_-]{3,20}$/.test(draft.code.trim()))
+        errors['code'] ??= 'Mã gồm 3–20 ký tự: chữ không dấu, số, gạch ngang.';
+      if (draft.type === 'percent' && !(draft.value >= 1 && draft.value <= 100))
+        errors['value'] = 'Phần trăm giảm từ 1 đến 100.';
+      if (draft.type === 'fixed' && !(draft.value > 0)) errors['value'] = 'Nhập số tiền giảm.';
+    }
     if (draft.endsAt && draft.endsAt <= draft.startsAt)
       errors['endsAt'] = 'Ngày kết thúc phải sau ngày bắt đầu.';
     if (draft.audience === 'tiers' && !draft.tiers.length)
@@ -751,22 +868,24 @@ export class PromotionFormPage implements HasUnsavedChanges {
   constructor() {
     const id = this.id();
     if (id) this.load(id);
-    for (const tier of TIERS)
-      this.customersApi
-        .list({
-          tier: tier.value,
-          status: '',
-          search: '',
-          page: 1,
-          pageSize: 1,
-          sort: '',
-          dir: 'desc',
-        })
-        .subscribe({
-          next: (page) =>
-            this.tierCounts.update((counts) => ({ ...counts, [tier.value]: page.total })),
-          error: () => undefined,
-        });
+    // Tiers and named customers are Won't on the API (S6-Q7): no customer lookups there.
+    if (!this.contract)
+      for (const tier of TIERS)
+        this.customersApi
+          .list({
+            tier: tier.value,
+            status: '',
+            search: '',
+            page: 1,
+            pageSize: 1,
+            sort: '',
+            dir: 'desc',
+          })
+          .subscribe({
+            next: (page) =>
+              this.tierCounts.update((counts) => ({ ...counts, [tier.value]: page.total })),
+            error: () => undefined,
+          });
   }
 
   toggleTier(tier: CustomerTier, on: boolean): void {
@@ -831,6 +950,7 @@ export class PromotionFormPage implements HasUnsavedChanges {
   load(id: string): void {
     this.loading.set(true);
     this.loadError.set('');
+    this.conflict.set(false);
     this.api.get(id).subscribe({
       next: (promo) => {
         this.loading.set(false);
@@ -849,10 +969,12 @@ export class PromotionFormPage implements HasUnsavedChanges {
     delete copy.id;
     delete copy.used;
     delete copy.createdAt;
+    delete copy.state;
+    delete copy.hasRedemptions;
     const input = copy as PromotionInput;
     this.draft.set(input);
     this.original.set(JSON.stringify(input));
-    this.loadCustomerNames(input.customerIds);
+    if (!this.contract) this.loadCustomerNames(input.customerIds);
     this.touched.set({});
     this.serverErrors.set({});
   }
@@ -887,17 +1009,18 @@ export class PromotionFormPage implements HasUnsavedChanges {
   }
 
   badge(promo: Promotion) {
-    return promotionBadge(promotionState(promo));
+    return promotionBadge(promo.state ?? promotionState(promo));
   }
 
   discard(): void {
+    this.conflict.set(false);
     this.draft.set(JSON.parse(this.original()) as PromotionInput);
     this.touched.set({});
     this.serverErrors.set({});
   }
 
   save(): void {
-    this.touched.set({ code: true, value: true, endsAt: true, audience: true });
+    this.touched.set({ code: true, value: true, endsAt: true, audience: true, usageLimit: true });
     const local = { ...this.errors() };
     for (const key of Object.keys(this.serverErrors())) delete local[key];
     if (Object.keys(local).length) {
@@ -915,6 +1038,7 @@ export class PromotionFormPage implements HasUnsavedChanges {
     };
     const id = this.id();
     this.saving.set(true);
+    this.conflict.set(false);
     (id ? this.api.update(id, input) : this.api.create(input)).subscribe({
       next: (promo) => {
         this.saving.set(false);
@@ -924,8 +1048,17 @@ export class PromotionFormPage implements HasUnsavedChanges {
       },
       error: (error: unknown) => {
         this.saving.set(false);
-        if (error instanceof AdminApiError && Object.keys(error.fields).length)
-          this.serverErrors.set(error.fields);
+        if (error instanceof AdminApiError) {
+          if (error.code === 'version-conflict') this.conflict.set(true);
+          // The API names the total as `totalLimit`; the form field is `usageLimit`.
+          const fields = Object.fromEntries(
+            Object.entries(error.fields).map(([key, message]) => [
+              key === 'totalLimit' ? 'usageLimit' : key,
+              message,
+            ]),
+          );
+          if (Object.keys(fields).length) this.serverErrors.set(fields);
+        }
         this.toast.error(errorMessage(error));
       },
     });

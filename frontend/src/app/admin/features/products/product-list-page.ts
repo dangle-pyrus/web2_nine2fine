@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { API_CONFIG } from '../../../core/api-config';
 import { CATEGORIES } from '../../../features/catalog/models/product';
 import { AdminSession } from '../../core/admin-session';
 import { DatePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
@@ -66,6 +67,9 @@ const VIEWS: { value: ProductView; label: string }[] = [
             (click)="selection.clear(); list.update({ view: item.value })"
           >
             {{ item.label }}
+            @if (page()?.counts; as counts) {
+              <span class="count">{{ counts[item.value] ?? 0 | admNum }}</span>
+            }
           </button>
         }
       </nav>
@@ -99,7 +103,7 @@ const VIEWS: { value: ProductView; label: string }[] = [
               class="input input--sm"
               type="search"
               name="search"
-              placeholder="Tên sản phẩm, SKU, tag"
+              [placeholder]="contract ? 'Tên sản phẩm, SKU' : 'Tên sản phẩm, SKU, tag'"
               aria-label="Tìm sản phẩm"
               [ngModel]="search()"
               (ngModelChange)="search.set($event)"
@@ -117,19 +121,21 @@ const VIEWS: { value: ProductView; label: string }[] = [
               <option [value]="item.value">{{ item.label }}</option>
             }
           </select>
-          <select
-            class="select select--sm"
-            name="sort"
-            aria-label="Sắp xếp"
-            [ngModel]="query().sort + ':' + query().dir"
-            (ngModelChange)="sort($event)"
-          >
-            <option value="updatedAt:desc">Mới cập nhật</option>
-            <option value="name:asc">Tên A–Z</option>
-            <option value="price:asc">Giá tăng dần</option>
-            <option value="price:desc">Giá giảm dần</option>
-            <option value="inventory:asc">Tồn kho ít nhất</option>
-          </select>
+          @if (!contract) {
+            <select
+              class="select select--sm"
+              name="sort"
+              aria-label="Sắp xếp"
+              [ngModel]="query().sort + ':' + query().dir"
+              (ngModelChange)="sort($event)"
+            >
+              <option value="updatedAt:desc">Mới cập nhật</option>
+              <option value="name:asc">Tên A–Z</option>
+              <option value="price:asc">Giá tăng dần</option>
+              <option value="price:desc">Giá giảm dần</option>
+              <option value="inventory:asc">Tồn kho ít nhất</option>
+            </select>
+          }
         </form>
         @if (query().search || query().category) {
           <div class="chips filter-chips">
@@ -284,6 +290,8 @@ export class ProductListPage {
   private readonly router = inject(Router);
   private readonly toast = inject(AdminToastService);
   protected readonly canEdit = inject(AdminSession).can('products.edit');
+  /** Slice 6: the list runs on the API (fixed order, no tags). */
+  protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
   protected readonly views = VIEWS;
   protected readonly categories = CATEGORIES;
   protected readonly badge = productBadge;
@@ -331,7 +339,10 @@ export class ProductListPage {
           undo: () => {
             for (const value of new Set(previous.values())) {
               const group = ids.filter((id) => previous.get(id) === value);
-              this.api.setStatus(group, value).subscribe(() => this.view.reload());
+              this.api.setStatus(group, value).subscribe({
+                next: () => this.view.reload(),
+                error: (error: unknown) => this.toast.error(errorMessage(error)),
+              });
             }
           },
         });
