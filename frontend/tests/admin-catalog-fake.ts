@@ -238,6 +238,17 @@ export class CatalogApi {
       await new Promise((r) => setTimeout(r, this.listDelayMs));
 
     let match: RegExpMatchArray | null;
+    if (path === '/categories' && method === 'GET')
+      return this.reply(
+        route,
+        200,
+        [
+          ['tops', 'Áo (API)'],
+          ['bottoms', 'Quần (API)'],
+          ['dresses', 'Đầm (API)'],
+          ['outerwear', 'Áo khoác (API)'],
+        ].map(([slug, name]) => ({ id: `c-${slug}`, slug, name })),
+      );
     if (path === '/products' && method === 'GET') return this.listProducts(route, url);
     if (path === '/products' && method === 'POST') return this.createProduct(route, body as Json);
     if (path === '/products/bulk-status' && method === 'POST')
@@ -703,7 +714,7 @@ export async function useCatalogApi(page: Page, api = new CatalogApi()): Promise
     },
     [CATALOG_MODE_KEY, ORDERS_MODE_KEY],
   );
-  await page.route(/\/api\/admin\/(products|inventory|promotions|uploads)/, (route) =>
+  await page.route(/\/api\/admin\/(products|categories|inventory|promotions|uploads)/, (route) =>
     api.handle(route),
   );
   return api;

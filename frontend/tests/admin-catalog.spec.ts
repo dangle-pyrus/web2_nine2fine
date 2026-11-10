@@ -85,11 +85,76 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await signIn(page);
     await page.goto('/admin/products');
     await expect(page.getByText('Không tải được danh sách sản phẩm')).toBeVisible();
-    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await page.locator('adm-empty').getByRole('button', { name: 'Thử lại' }).click();
     await expect(rows(page)).toHaveCount(2);
     api.products = [];
     await page.goto('/admin/products');
     await expect(page.getByText('Thêm sản phẩm đầu tiên')).toBeVisible();
+  });
+
+  test('AC-INV-39: the product form says who saved last and when; no name, no line', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    api.products[1]['updatedBy'] = null;
+    await signIn(page);
+    await page.goto('/admin/products/p-live');
+    await expect(page.getByTestId('updated-by')).toContainText(/^\s*Cập nhật bởi Admin lúc .+\d/);
+    await page.goto('/admin/products/p-draft');
+    await expect(page.getByLabel('Tên sản phẩm')).toBeVisible();
+    await expect(page.getByTestId('updated-by')).toHaveCount(0);
+  });
+
+  test('BR-INV-10: categories come from GET /admin/categories on the form, the filter and the voucher form', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    await signIn(page);
+    await page.goto('/admin/products');
+    await expect(rows(page).first()).toContainText('(API)');
+    await expect(page.getByLabel('Lọc theo danh mục').locator('option')).toHaveText([
+      'Danh mục: tất cả',
+      'Áo (API)',
+      'Quần (API)',
+      'Đầm (API)',
+      'Áo khoác (API)',
+    ]);
+    await page.goto('/admin/products/p-live');
+    await expect(page.getByLabel('Danh mục', { exact: true })).toHaveValue('outerwear');
+    await expect(page.getByLabel('Danh mục', { exact: true }).locator('option')).toHaveText([
+      'Áo (API)',
+      'Quần (API)',
+      'Đầm (API)',
+      'Áo khoác (API)',
+    ]);
+    await page.goto('/admin/promotions/new');
+    await expect(page.getByLabel('Áp dụng cho', { exact: true }).locator('option')).toContainText([
+      'Toàn bộ sản phẩm',
+      'Áo (API)',
+      'Quần (API)',
+      'Đầm (API)',
+      'Áo khoác (API)',
+    ]);
+    expect(api.find('GET', /\/admin\/categories$/).length).toBeGreaterThan(0);
+  });
+
+  test('BR-INV-10: a failed category load shows the error with a retry and the page still works', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    api.failures.set('GET /categories', {
+      status: 500,
+      code: 'unavailable',
+      message: 'Lỗi máy chủ',
+    });
+    await signIn(page);
+    await page.goto('/admin/products/p-draft');
+    await expect(page.getByLabel('Tên sản phẩm')).toBeVisible();
+    const error = page.getByTestId('categories-error');
+    await expect(error).toContainText('Không tải được danh mục');
+    await error.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(error).toHaveCount(0);
+    await expect(page.getByLabel('Danh mục', { exact: true }).locator('option')).toHaveCount(4);
   });
 
   test('AC-INV-08: the Won’t fields are not on the product form', async ({ page }) => {

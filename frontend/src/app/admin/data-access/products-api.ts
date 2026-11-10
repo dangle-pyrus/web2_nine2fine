@@ -5,6 +5,7 @@ import { AdminProductsApi } from './admin-apis';
 import { adminImageUrl, WireImageRef } from './catalog-media';
 import { adminBase, adminErrors } from './http-support';
 import type {
+  AdminCategory,
   AdminProduct,
   AdminProductSummary,
   AdminVariant,
@@ -74,6 +75,7 @@ interface WireProduct {
   slugLocked: boolean;
   createdAt: string;
   updatedAt: string;
+  updatedBy: { name: string } | null;
 }
 
 interface WireUploadedImage {
@@ -128,6 +130,7 @@ export function toProduct(wire: WireProduct): AdminProduct {
     })),
     createdAt: wire.createdAt,
     updatedAt: wire.updatedAt,
+    updatedBy: wire.updatedBy?.name ?? null,
     published: wire.published,
     slugLocked: wire.slugLocked,
   };
@@ -223,6 +226,16 @@ export class HttpAdminProductsApi implements AdminProductsApi {
   }
   remove(id: string) {
     return this.http.delete<void>(`${this.base}/${id}`).pipe(adminErrors());
+  }
+  categories() {
+    return this.http
+      .get<{ id: string; slug: string; name: string }[]>(`${this.root}/categories`)
+      .pipe(
+        adminErrors(),
+        map((items): AdminCategory[] =>
+          items.map((item) => ({ value: item.slug, label: item.name })),
+        ),
+      );
   }
   /** The file itself is the request body (BR-INV-24): no multipart. */
   uploadImage(file: File) {

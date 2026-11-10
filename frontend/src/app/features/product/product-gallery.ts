@@ -29,7 +29,7 @@ import { MediaAsset } from '../../../media/media-manifest';
             class="thumb"
             [class.active]="$index === active()"
             [attr.aria-selected]="$index === active()"
-            [attr.aria-label]="'Ảnh ' + ($index + 1) + ': ' + image.alt"
+            [attr.aria-label]="'Ảnh ' + ($index + 1) + (image.alt ? ': ' + image.alt : '')"
             (click)="show($index)"
             (mouseenter)="show($index)"
           >
@@ -42,7 +42,7 @@ import { MediaAsset } from '../../../media/media-manifest';
         <img
           class="main"
           [src]="current().src"
-          [alt]="productName() + ' — ' + current().alt"
+          [alt]="altOf(current())"
           width="640"
           height="800"
           fetchpriority="high"
@@ -71,7 +71,7 @@ import { MediaAsset } from '../../../media/media-manifest';
           <figure [class.temporary]="image.temporary">
             <img
               [src]="image.src"
-              [alt]="productName() + ' — ' + image.alt"
+              [alt]="altOf(image)"
               width="640"
               height="800"
               [attr.loading]="$index ? 'lazy' : null"
@@ -236,6 +236,10 @@ export class ProductGallery {
   readonly images = input.required<MediaAsset[]>();
   readonly productName = input.required<string>();
   readonly active = signal(0);
+  /** An uploaded image can have no alt (BR-INV-26): then the product name stands alone. */
+  protected altOf(image: MediaAsset): string {
+    return image.alt ? `${this.productName()} — ${image.alt}` : this.productName();
+  }
   readonly current = computed(() => this.images()[this.active()] ?? this.images()[0]);
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
 

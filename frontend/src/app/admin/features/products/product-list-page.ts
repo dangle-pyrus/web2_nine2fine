@@ -2,11 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { API_CONFIG } from '../../../core/api-config';
-import { CATEGORIES } from '../../../features/catalog/models/product';
 import { AdminSession } from '../../core/admin-session';
 import { DatePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import { productBadge } from '../../core/status';
 import { ADMIN_PRODUCTS_API } from '../../data-access/admin-apis';
+import { AdminCategories } from '../../data-access/admin-categories';
 import { errorMessage } from '../../data-access/http-support';
 import type {
   AdminProductSummary,
@@ -117,10 +117,18 @@ const VIEWS: { value: ProductView; label: string }[] = [
             (ngModelChange)="list.update({ category: $event })"
           >
             <option value="">Danh mục: tất cả</option>
-            @for (item of categories; track item.value) {
+            @for (item of categoryList.items(); track item.value) {
               <option [value]="item.value">{{ item.label }}</option>
             }
           </select>
+          @if (categoryList.error(); as message) {
+            <span class="error small" role="alert" data-testid="categories-error"
+              >Không tải được danh mục: {{ message }}
+              <button type="button" class="link small" (click)="categoryList.retry()">
+                Thử lại
+              </button></span
+            >
+          }
           @if (!contract) {
             <select
               class="select select--sm"
@@ -293,7 +301,7 @@ export class ProductListPage {
   /** Slice 6: the list runs on the API (fixed order, no tags). */
   protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
   protected readonly views = VIEWS;
-  protected readonly categories = CATEGORIES;
+  protected readonly categoryList = inject(AdminCategories);
   protected readonly badge = productBadge;
   protected readonly placeholder = '/assets/illustrations/shopping_bags.svg';
   protected readonly list = urlQuery<ProductQuery>({
@@ -308,8 +316,12 @@ export class ProductListPage {
   protected readonly search = signal(this.query().search);
   protected readonly ids = computed(() => this.page()?.items.map((item) => item.id) ?? []);
 
+  constructor() {
+    this.categoryList.load();
+  }
+
   categoryLabel(value: string): string {
-    return CATEGORIES.find((item) => item.value === value)?.label ?? value;
+    return this.categoryList.label(value);
   }
 
   sort(value: string): void {

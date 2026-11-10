@@ -4,6 +4,7 @@ import * as ports from './data-access/admin-apis';
 import * as mocks from '../../mocks/admin/mock-admin-apis';
 import { MockAdminReportsApi } from '../../mocks/admin/mock-admin-reports';
 import * as storefrontMocks from '../../mocks/admin/mock-admin-storefront';
+import { AdminCategories } from './data-access/admin-categories';
 import { adminCatalogAdapterProviders } from './admin-catalog-adapters';
 import { adminOrderAdapterProviders } from './admin-order-adapters';
 import { AdminDialogs } from './ui/dialogs';
@@ -49,6 +50,7 @@ export function provideAdmin(): Provider[] {
     ...adminOrderAdapterProviders,
     // Slice 6 products, inventory, promotions: HTTP adapters, or the mock/HTTP choice in e2e.
     ...adminCatalogAdapterProviders,
+    AdminCategories,
     // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
     ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),
     ...bind(ports.ADMIN_DASHBOARD_API, mocks.MockAdminDashboardApi, ports.HttpAdminDashboardApi),

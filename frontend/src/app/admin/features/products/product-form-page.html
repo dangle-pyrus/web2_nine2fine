@@ -701,12 +701,18 @@
           [value]="draft().category"
           (change)="patch({ category: $any($event.target).value })"
         >
-          @for (item of categories; track item.value) {
+          @for (item of categoryList.items(); track item.value) {
           <option [value]="item.value" [selected]="draft().category === item.value">
             {{ item.label }}
           </option>
           }
         </select>
+        @if (categoryList.error(); as message) {
+        <p class="error" role="alert" data-testid="categories-error">
+          <adm-icon name="reiconAlertCircle" [size]="14" /> Không tải được danh mục: {{ message }}
+          <button type="button" class="link small" (click)="categoryList.retry()">Thử lại</button>
+        </p>
+        }
       </div>
       <div class="field">
         <span class="field-label" [class.req]="contract">Dành cho</span>
@@ -803,6 +809,14 @@
           <dt>Cập nhật lần cuối</dt>
           <dd>{{ saved.updatedAt | admDateTime }}</dd>
         </div>
+        @if (saved.updatedBy) {
+        <div>
+          <dt>Người cập nhật</dt>
+          <dd data-testid="updated-by">
+            Cập nhật bởi {{ saved.updatedBy }} lúc {{ saved.updatedAt | admDateTime }}
+          </dd>
+        </div>
+        }
       </dl>
     </section>
     }

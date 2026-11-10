@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { API_CONFIG } from '../../../core/api-config';
-import { CATEGORIES } from '../../../features/catalog/models/product';
 import { AdminSession } from '../../core/admin-session';
 import { dateTime } from '../../core/format';
 import { NumPipe } from '../../core/format.pipes';
 import { promotionBadge, promotionState, tierBadge } from '../../core/status';
 import { ADMIN_CUSTOMERS_API, ADMIN_PROMOTIONS_API } from '../../data-access/admin-apis';
+import { AdminCategories } from '../../data-access/admin-categories';
 import { errorMessage, VERSION_CONFLICT_MESSAGE } from '../../data-access/http-support';
 import {
   AdminApiError,
@@ -329,12 +329,21 @@ function emptyPromotion(): PromotionInput {
                   "
                 >
                   <option value="" [selected]="!draft().categories.length">Toàn bộ sản phẩm</option>
-                  @for (item of categories; track item.value) {
+                  @for (item of categories(); track item.value) {
                     <option [value]="item.value" [selected]="draft().categories[0] === item.value">
                       {{ item.label }}
                     </option>
                   }
                 </select>
+                @if (categoryList.error(); as message) {
+                  <p class="error" role="alert" data-testid="categories-error">
+                    <adm-icon name="reiconAlertCircle" [size]="14" /> Không tải được danh mục:
+                    {{ message }}
+                    <button type="button" class="link small" (click)="categoryList.retry()">
+                      Thử lại
+                    </button>
+                  </p>
+                }
                 <p class="hint">Mỗi mã áp dụng cho một danh mục hoặc toàn bộ sản phẩm.</p>
               </div>
               <div class="field">
@@ -360,7 +369,7 @@ function emptyPromotion(): PromotionInput {
               <div class="field">
                 <span class="field-label">Áp dụng cho</span>
                 <div class="checks">
-                  @for (item of categories; track item.value) {
+                  @for (item of categories(); track item.value) {
                     <label class="check"
                       ><input
                         type="checkbox"
@@ -786,7 +795,8 @@ export class PromotionFormPage implements HasUnsavedChanges {
   protected readonly id = routeParam('id');
   protected readonly isNew = computed(() => !this.id());
   protected readonly types = TYPES;
-  protected readonly categories = CATEGORIES;
+  protected readonly categoryList = inject(AdminCategories);
+  protected readonly categories = this.categoryList.items;
   protected readonly audiences = this.contract ? API_AUDIENCES : AUDIENCES;
   protected readonly tierOptions = TIERS;
   protected readonly tierBadge = tierBadge;
@@ -866,6 +876,7 @@ export class PromotionFormPage implements HasUnsavedChanges {
   });
 
   constructor() {
+    this.categoryList.load();
     const id = this.id();
     if (id) this.load(id);
     // Tiers and named customers are Won't on the API (S6-Q7): no customer lookups there.

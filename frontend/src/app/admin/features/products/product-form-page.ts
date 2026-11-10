@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { API_CONFIG } from '../../../core/api-config';
-import { CATEGORIES, GENDERS, MOMENTS } from '../../../features/catalog/models/product';
+import { GENDERS, MOMENTS } from '../../../features/catalog/models/product';
 import { AdminSession } from '../../core/admin-session';
 import { money, percent, slugify } from '../../core/format';
 import { NumPipe, DateTimePipe } from '../../core/format.pipes';
@@ -12,6 +12,7 @@ import {
   ADMIN_PRODUCTS_API,
   ADMIN_STOREFRONT_API,
 } from '../../data-access/admin-apis';
+import { AdminCategories } from '../../data-access/admin-categories';
 import { errorMessage, missingLabels } from '../../data-access/http-support';
 import {
   AdminApiError,
@@ -83,6 +84,7 @@ function toInput(product: AdminProduct): ProductInput {
   delete input.createdAt;
   delete input.published;
   delete input.slugLocked;
+  delete input.updatedBy;
   return input as ProductInput;
 }
 
@@ -119,9 +121,11 @@ export class ProductFormPage implements HasUnsavedChanges {
   private readonly storefrontApi = inject(ADMIN_STOREFRONT_API);
   /** Collections are saved on their own, straight away (not part of the product form). */
   protected readonly collections = signal<AdminCollection[] | null>(null);
-  protected readonly categoryLabel = computed(
-    () => CATEGORIES.find((item) => item.value === this.draft().category)?.label ?? '',
-  );
+  protected readonly categoryList = inject(AdminCategories);
+  protected readonly categoryLabel = computed(() => {
+    const value = this.draft().category;
+    return this.categoryList.items().find((item) => item.value === value)?.label ?? '';
+  });
   /** Slice 6: the screen runs on the API, so the Won't fields are hidden (S6-Q7). */
   protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
   protected readonly id = routeParam('id');
@@ -130,7 +134,6 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly canDelete = this.session.can('products.delete');
   protected readonly canSeeCost = !this.contract && this.session.can('products.cost');
 
-  protected readonly categories = CATEGORIES;
   protected readonly genders = GENDERS;
   protected readonly moments = MOMENTS;
   protected readonly statusOptions = PRODUCT_STATUS_OPTIONS;
@@ -270,6 +273,7 @@ export class ProductFormPage implements HasUnsavedChanges {
   });
 
   constructor() {
+    this.categoryList.load();
     const id = this.id();
     if (id) {
       this.load(id);

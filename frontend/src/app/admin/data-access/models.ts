@@ -363,6 +363,13 @@ export interface AdminProduct {
   published?: boolean;
   /** API only: the slug can no longer change (BR-INV-13). */
   slugLocked?: boolean;
+  /** API only: name of whoever saved last (BR-INV-23); null when unknown or account deleted. */
+  updatedBy?: string | null;
+}
+
+export interface AdminCategory {
+  value: string;
+  label: string;
 }
 
 export interface AdminProductSummary {
@@ -382,7 +389,7 @@ export interface AdminProductSummary {
 /** `updatedAt` is the version read last; the API refuses the save when it moved (BR-INV-05). */
 export type ProductInput = Omit<
   AdminProduct,
-  'id' | 'createdAt' | 'updatedAt' | 'published' | 'slugLocked'
+  'id' | 'createdAt' | 'updatedAt' | 'published' | 'slugLocked' | 'updatedBy'
 > & { updatedAt?: string };
 
 export type ProductView = 'all' | 'active' | 'draft' | 'hidden' | 'out-of-stock';

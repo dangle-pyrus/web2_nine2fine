@@ -918,6 +918,10 @@ export class MockAdminProductsApi implements AdminProductsApi {
     return respond(undefined);
   }
 
+  categories() {
+    return respond(CATEGORIES.map((item) => ({ value: item.value, label: item.label })));
+  }
+
   uploadImage(file: File) {
     if (!file.type.startsWith('image/'))
       return fail(invalid('Chỉ tải lên được file ảnh (JPG, PNG, WebP).'));

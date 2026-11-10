@@ -37,7 +37,7 @@ const BADGE_LABELS: Record<string, string> = { NEW: 'Mới về', BESTSELLER: 'B
           >
             <img
               [src]="broken().has(slide.media.src) ? fallback.src : slide.media.src"
-              [alt]="slide.media.alt"
+              [alt]="slide.media.alt || product().name"
               (error)="markBroken(slide.media.src)"
               width="400"
               height="500"

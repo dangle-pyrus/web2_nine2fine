@@ -12,6 +12,7 @@ import type { StoreSettingsValue } from '../../core/store-settings';
 import { adminBase, adminErrors, defaultMessage, toParams } from './http-support';
 import {
   AdminApiError,
+  AdminCategory,
   AdminCollection,
   AdminReview,
   AdminSizeChart,
@@ -118,6 +119,8 @@ export interface AdminProductsApi {
   setStatus(ids: string[], status: ProductStatus): Observable<void>;
   remove(id: string): Observable<void>;
   uploadImage(file: File): Observable<ProductImage>;
+  /** Categories to pick from (BR-INV-10); read only. */
+  categories(): Observable<AdminCategory[]>;
 }
 
 export interface AdminInventoryApi {
