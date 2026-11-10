@@ -32,9 +32,12 @@ export const mails: MailMessage[] = [];
 
 export async function resetState(): Promise<void> {
   assertLocalTestDb(); // chốt chặn trước mọi thao tác xoá
+  // Slice 6: products / vouchers / media / nhật ký kho có FK tới users nên TRUNCATE users CASCADE sẽ xoá cả catalog.
+  // Truncate phía đơn / giỏ / phiên rồi DELETE users (FK SET NULL) để catalog sống sót như trước.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys" RESTART IDENTITY CASCADE',
   );
+  await prisma.$executeRawUnsafe('DELETE FROM "users"');
   mails.length = 0;
   setMailTransport({
     async send(msg) {
@@ -353,3 +356,131 @@ export async function withToShipCancelMode<T>(mode: 'direct' | 'request', fn: ()
 }
 
 export { prisma, flushMail };
+
+/* ======================= Slice 6: admin kho & sản phẩm ======================= */
+
+/** PNG tối thiểu (chữ ký + IHDR), đủ để đọc kích thước; không cần giải mã. */
+export function makePng(w: number, h: number): Buffer {
+  const b = Buffer.alloc(33);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+  b.writeUInt32BE(13, 8);
+  b.write('IHDR', 12, 'latin1');
+  b.writeUInt32BE(w, 16);
+  b.writeUInt32BE(h, 20);
+  b[24] = 8;
+  b[25] = 2;
+  return b;
+}
+
+/** JPEG tối thiểu: SOI + SOF0 (độ cao rồi độ rộng). */
+export function makeJpeg(w: number, h: number): Buffer {
+  const b = Buffer.alloc(2 + 2 + 2 + 15);
+  b[0] = 0xff; b[1] = 0xd8;
+  b[2] = 0xff; b[3] = 0xc0;
+  b.writeUInt16BE(17, 4);
+  b[6] = 8;
+  b.writeUInt16BE(h, 7);
+  b.writeUInt16BE(w, 9);
+  b[11] = 3;
+  return b;
+}
+
+/** WebP tối thiểu: `VP8X` (mặc định), `VP8 ` (lossy) hoặc `VP8L` (lossless). */
+export function makeWebp(w: number, h: number, kind: 'VP8X' | 'VP8 ' | 'VP8L' = 'VP8X'): Buffer {
+  const b = Buffer.alloc(30);
+  b.write('RIFF', 0, 'latin1');
+  b.writeUInt32LE(22, 4);
+  b.write('WEBP', 8, 'latin1');
+  b.write(kind, 12, 'latin1');
+  b.writeUInt32LE(10, 16);
+  if (kind === 'VP8X') {
+    b.writeUIntLE(w - 1, 24, 3);
+    b.writeUIntLE(h - 1, 27, 3);
+  } else if (kind === 'VP8 ') {
+    Buffer.from([0x9d, 0x01, 0x2a]).copy(b, 23);
+    b.writeUInt16LE(w, 26);
+    b.writeUInt16LE(h, 28);
+  } else {
+    b[20] = 0x2f;
+    b.writeUInt32LE(((w - 1) | ((h - 1) << 14)) >>> 0, 21);
+  }
+  return b;
+}
+
+/** POST byte thô tới /api/admin/uploads/product-images. */
+export function uploadRaw(cookie: string | undefined, body: Buffer | string, contentType = 'application/octet-stream', ip: string = freshIp()) {
+  const r = request(app).post('/api/admin/uploads/product-images');
+  r.set('X-Forwarded-For', ip).set('Origin', ORIGIN).set('X-Requested-With', 'n2f').set('Content-Type', contentType);
+  if (cookie) r.set('Cookie', cookie);
+  return r.send(body);
+}
+
+export interface MakeProductVariant {
+  sku: string;
+  color?: string;
+  hex?: string;
+  size?: string;
+  qty?: number;
+}
+export interface MakeProductOpts {
+  slug?: string;
+  name?: string;
+  type?: string;
+  status?: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  price?: number;
+  category?: string;
+  publishedAt?: Date | null;
+  gallery?: string[];
+  variants?: MakeProductVariant[];
+  updatedAt?: Date;
+}
+
+let productSeq = 0;
+/** Sản phẩm thử trực tiếp bằng Prisma (không qua API): `search_text` tính đúng công thức. */
+export async function makeProduct(o: MakeProductOpts = {}): Promise<{ id: string; slug: string; variants: Array<{ id: string; sku: string }> }> {
+  const n = ++productSeq;
+  const { foldVi } = await import('../src/lib/text');
+  const category = await prisma.category.findUniqueOrThrow({ where: { slug: o.category ?? 'tops' } });
+  const status = o.status ?? 'DRAFT';
+  const name = o.name ?? `Sản phẩm thử ${n}`;
+  const type = o.type ?? 'Áo thun';
+  const gallery = o.gallery ?? ['pexels-test-image'];
+  const at = o.updatedAt ?? new Date();
+  const p = await prisma.product.create({
+    data: {
+      categoryId: category.category_id,
+      slug: o.slug ?? `san-pham-thu-${n}`,
+      name,
+      typeLabel: type,
+      price: o.price ?? 250000,
+      coverMediaId: gallery[0] ?? '',
+      galleryMediaIds: gallery,
+      moments: ['work'],
+      genders: ['nam'],
+      salesRank: 1000 + n,
+      displayOrder: 1000 + n,
+      searchText: foldVi(`${name} ${type}`),
+      status,
+      publishedAt: o.publishedAt === undefined ? (status === 'ACTIVE' ? at : null) : o.publishedAt,
+      updatedAt: at,
+      variants: {
+        create: (o.variants ?? [{ sku: `TP-${n}-DEN-S` }]).map((v, i) => ({
+          sku: v.sku,
+          colorName: v.color ?? 'Đen',
+          colorHex: v.hex ?? '#000000',
+          size: v.size ?? 'S',
+          inventoryQty: v.qty ?? 10,
+          sortOrder: i,
+        })),
+      },
+    },
+    include: { variants: { orderBy: { sortOrder: 'asc' } } },
+  });
+  return { id: p.product_id, slug: p.slug, variants: p.variants.map((v) => ({ id: v.variant_id, sku: v.sku })) };
+}
+
+/** Gọi API admin sản phẩm. */
+export const aGet = (path: string, cookie?: string) => get(`/api/admin${path}`, { cookie, ip: freshIp() });
+export const aPost = (path: string, body: unknown, cookie?: string, headers?: Record<string, string>) => post(`/api/admin${path}`, body, { cookie, ip: freshIp(), headers });
+export const aPut = (path: string, body: unknown, cookie?: string) => put(`/api/admin${path}`, body, { cookie, ip: freshIp() });
+export const aDel = (path: string, cookie?: string) => del(`/api/admin${path}`, { cookie, ip: freshIp() });

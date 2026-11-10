@@ -37,6 +37,11 @@ const schema = z
     BANK_NAME: opt(z.string()),
     BANK_ACCOUNT_NUMBER: opt(z.string()),
     BANK_ACCOUNT_NAME: opt(z.string()),
+    MEDIA_STORAGE: z.preprocess(emptyToUndefined, z.enum(['local', 'supabase']).default('local')),
+    MEDIA_LOCAL_DIR: opt(z.string()),
+    SUPABASE_URL: opt(z.string()),
+    SUPABASE_SERVICE_ROLE_KEY: opt(z.string()),
+    SUPABASE_STORAGE_BUCKET: z.preprocess(emptyToUndefined, z.string().default('product-images')),
   })
   .superRefine((env, ctx) => {
     if (env.MAIL_MODE === 'smtp') {
@@ -77,6 +82,12 @@ export interface AppConfig {
   appBaseUrl: string;
   /** Tài khoản nhận chuyển khoản (G2). `null` khi chưa cấu hình đủ -> QR không bật được. */
   bank: { name: string; accountNumber: string; accountName: string } | null;
+  /** Slice 6: nơi lưu ảnh tải lên. `supabase` chỉ dùng được khi đủ url + service role key. */
+  media: {
+    storage: 'local' | 'supabase';
+    localDir?: string;
+    supabase: { url: string; serviceRoleKey: string; bucket: string } | null;
+  };
 }
 
 function parseTrustProxy(v: string): boolean | number {
@@ -123,6 +134,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       e.BANK_NAME && e.BANK_ACCOUNT_NUMBER && e.BANK_ACCOUNT_NAME
         ? { name: e.BANK_NAME, accountNumber: e.BANK_ACCOUNT_NUMBER, accountName: e.BANK_ACCOUNT_NAME }
         : null,
+    media: {
+      storage: e.MEDIA_STORAGE,
+      localDir: e.MEDIA_LOCAL_DIR,
+      supabase:
+        e.SUPABASE_URL && e.SUPABASE_SERVICE_ROLE_KEY
+          ? { url: e.SUPABASE_URL.replace(/\/$/, ''), serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY, bucket: e.SUPABASE_STORAGE_BUCKET }
+          : null,
+    },
   };
 }
 

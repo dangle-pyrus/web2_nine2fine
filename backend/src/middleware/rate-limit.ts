@@ -59,6 +59,9 @@ export function adminRateLimit(req: Request, res: Response, next: NextFunction):
   (req.method === 'GET' || req.method === 'HEAD' ? adminReadLimit : adminWriteLimit)(req, res, next);
 }
 
+/** Tải ảnh sản phẩm (BR-INV-04): 30 tệp / 10 phút / tài khoản, thêm vào bộ ghi chung. */
+export const adminUploadLimit = createRateLimit({ name: 'admin-upload', windowMs: 10 * 60_000, max: 30, key: byAdminUser });
+
 /** Chỉ cho test. */
 export function resetCheckoutRateLimits(): void {
   for (const r of registry) r();

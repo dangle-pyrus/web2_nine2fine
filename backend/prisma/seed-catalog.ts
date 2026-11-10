@@ -111,7 +111,7 @@ export async function seedCatalog(
         };
         const product = await tx.product.upsert({
           where: { slug: p.slug },
-          create: { slug: p.slug, status: 'ACTIVE', ...content },
+          create: { slug: p.slug, status: 'ACTIVE', publishedAt: new Date(), ...content },
           update: content, // không đụng status
         });
         for (const v of p.variants) {
@@ -145,7 +145,14 @@ export async function seedCatalog(
 if (require.main === module) {
   dotenv.config();
   const prisma = new PrismaClient();
-  seedCatalog(prisma)
+  // Plan mục 15 #8: sau khi admin sửa sản phẩm, chạy lại seed sẽ ghi đè tên / giá / ảnh / biến thể. Chỉ chạy trên DB rỗng, hoặc --force.
+  const guard = async (): Promise<void> => {
+    if (process.argv.includes('--force')) return;
+    const n = await prisma.product.count();
+    if (n > 0) throw new Error(`DB đã có ${n} sản phẩm: seed catalog sẽ ghi đè dữ liệu admin. Thêm --force nếu chủ ý.`);
+  };
+  guard()
+    .then(() => seedCatalog(prisma))
     .then((r) => {
       console.log(
         `Seed catalog xong: ${r.products} sản phẩm, ${r.variants} biến thể, ${r.sizeCharts} bảng size` +

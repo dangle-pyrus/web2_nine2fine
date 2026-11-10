@@ -73,3 +73,42 @@ export const ACCOUNT_ASSUMPTIONS = {
   passwordChangeGapMs: 15 * MINUTE,
   passwordChangeLockMs: 15 * MINUTE,
 } as const;
+
+/**
+ * GIẢ ĐỊNH Slice 6 (S6-Q1..Q9, mặc định PO; Orchestrator duyệt plan 2026-11-10).
+ * Đổi một câu trả lời = sửa đúng một chỗ ở đây + BR/contract theo quy trình.
+ */
+export const CATALOG_ASSUMPTIONS = {
+  /** S6-Q3: khoá slug sau lần công khai đầu. `false` = bỏ kiểm khoá, `slugLocked` luôn false. */
+  lockSlugAfterPublish: true,
+  /** S6-Q4: voucher đã có lượt dùng thì khoá loại / giá trị / giảm tối đa. */
+  voucherLockWhenRedeemed: true,
+  /** S6-Q5: ảnh sản phẩm. */
+  image: {
+    maxBytes: 5 * 1024 * 1024,
+    minShort: 600,
+    maxLong: 6000,
+    maxPerProduct: 12,
+    mimes: ['image/jpeg', 'image/png', 'image/webp'] as readonly string[],
+  },
+  /** S6-Q6: tồn kho. */
+  stock: {
+    maxDelta: 10_000,
+    maxQty: 100_000,
+    reasons: ['received', 'return', 'damaged', 'count', 'correction'] as readonly string[],
+  },
+  /** S6-Q8: giá trị khởi tạo ngưỡng sắp hết (giá trị chạy lưu ở `store_settings.low_stock_default`). */
+  defaultLowStockThreshold: 5,
+  /** S6-Q9: khoảng giá (đồng). Đổi cần migration mới cho CHECK `chk_products_*`. */
+  price: { min: 1000, max: 100_000_000 },
+  /** BR-INV-19 / 21. */
+  variant: { maxVariants: 32, maxColors: 8, sizes: ['S', 'M', 'L', 'XL'] as readonly string[] },
+} as const;
+
+export type CatalogPermission = 'catalog.read' | 'stock.adjust' | 'products.write' | 'media.upload' | 'stock.thresholds' | 'promotions.write';
+
+/** S6-Q2 / BR-INV-02: staff đọc + điều chỉnh tồn; admin mọi việc. Một nguồn cho `requirePermission`. */
+export const CATALOG_PERMISSIONS: Record<'staff' | 'admin', readonly CatalogPermission[]> = {
+  staff: ['catalog.read', 'stock.adjust'],
+  admin: ['catalog.read', 'stock.adjust', 'products.write', 'media.upload', 'stock.thresholds', 'promotions.write'],
+};

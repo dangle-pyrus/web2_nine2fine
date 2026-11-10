@@ -15,6 +15,15 @@ import { requireAuth, requireRole } from './middleware/auth';
 import { orderAdminRouter } from './modules/order-admin/order-admin.routes';
 import { checkoutRouter, voucherRouter } from './modules/checkout/checkout.routes';
 import { accountRouter } from './modules/account/account.routes';
+import { adminRateLimit } from './middleware/rate-limit';
+import { mediaRouter } from './modules/media/media.routes';
+import {
+  adminCategoriesRouter,
+  adminInventoryRouter,
+  adminProductsRouter,
+  adminPromotionsRouter,
+  adminUploadsRouter,
+} from './modules/catalog-admin/catalog-admin.routes';
 
 export interface CreateAppOptions {
   /** Cho module khác (và test) gắn thêm route dưới /api, trước middleware 404 / lỗi. */
@@ -49,14 +58,37 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use(catalogRouter);
   // Địa giới công khai, chỉ đọc (như catalog).
   api.use(locationRouter);
+  // Slice 6: ảnh tải lên công khai (GET), như catalog: phương thức ghi -> 404.
+  api.use(mediaRouter);
   api.use(originGuard);
+  // Slice 6: tải ảnh là byte thô nên đứng TRƯỚC requireJsonBody / express.json (cần cookieParser riêng).
+  api.use(
+    '/admin/uploads',
+    cookieParser(),
+    noStore,
+    requireAuth('admin'),
+    requireRole('staff', 'admin'),
+    adminRateLimit,
+    adminUploadsRouter,
+  );
   api.use(requireJsonBody);
-  api.use(express.json({ limit: '16kb' }));
+  // 16 KB toàn cục; POST / PUT /admin/products dùng parser 64 KB riêng trong router của nó (mô tả dài + 32 biến thể).
+  const json16 = express.json({ limit: '16kb' });
+  api.use((req, res, next) => {
+    if (req.path.startsWith('/admin/products') && (req.method === 'POST' || req.method === 'PUT')) return next();
+    json16(req, res, next);
+  });
   api.use(cookieParser());
   api.use('/auth', authRouter);
   api.use('/admin/auth', adminAuthRouter);
   // noStore TRƯỚC requireAuth để cả 401 / 403 có Cache-Control: no-store (BR-ADM-01).
   api.use('/admin/orders', noStore, requireAuth('admin'), requireRole('staff', 'admin'), orderAdminRouter);
+  // Slice 6: noStore TRƯỚC requireAuth để 401 / 403 có Cache-Control: no-store (BR-INV-01). Quyền theo hành động: requirePermission ở router.
+  const adminCatalog = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
+  api.use('/admin/categories', ...adminCatalog, adminCategoriesRouter);
+  api.use('/admin/products', ...adminCatalog, adminProductsRouter);
+  api.use('/admin/inventory', ...adminCatalog, adminInventoryRouter);
+  api.use('/admin/promotions', ...adminCatalog, adminPromotionsRouter);
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);

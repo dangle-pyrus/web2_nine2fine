@@ -2,6 +2,9 @@
  * CHỐT CHẶN AN TOÀN: test chỉ được chạy trên Postgres cục bộ.
  * Mọi thao tác xoá / dọn dữ liệu trong test phải gọi assertLocalTestDb() trước.
  */
+import os from 'node:os';
+import path from 'node:path';
+
 export const TEST_DB_URL = 'postgresql://postgres@127.0.0.1:54329/n2f_test';
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
@@ -49,9 +52,11 @@ export function forceTestEnv(): void {
     COOKIE_SAMESITE: 'lax',
     TRUST_PROXY: '1',
     SUPPORT_EMAIL: 'support@example.test',
+    MEDIA_STORAGE: 'local',
+    MEDIA_LOCAL_DIR: path.join(os.tmpdir(), `n2f-media-test-${process.pid}`),
     MAIL_FROM_NAME: 'nine2fine',
   });
-  for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'MAIL_FROM_ADDRESS', 'MAIL_OUTBOX_DIR', 'APP_BASE_URL', 'BANK_NAME', 'BANK_ACCOUNT_NUMBER', 'BANK_ACCOUNT_NAME']) {
+  for (const k of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'MAIL_FROM_ADDRESS', 'MAIL_OUTBOX_DIR', 'APP_BASE_URL', 'BANK_NAME', 'BANK_ACCOUNT_NUMBER', 'BANK_ACCOUNT_NAME', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_STORAGE_BUCKET']) {
     delete process.env[k];
   }
   assertLocalTestDb();

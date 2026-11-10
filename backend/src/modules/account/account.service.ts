@@ -116,7 +116,7 @@ export async function getMembership(userId: string): Promise<MembershipDto> {
   const rows = await prisma.$queryRaw<Array<{ spent: bigint | number | null }>>`
     SELECT COALESCE(SUM("total"), 0)::bigint AS spent FROM "orders"
     WHERE "user_id" = ${userId}::uuid AND "status" = 'completed'
-      AND COALESCE("delivered_at", "created_at") >= ${from} AND COALESCE("delivered_at", "created_at") < ${to}`;
+      AND (COALESCE("delivered_at", "created_at") AT TIME ZONE 'UTC') >= ${from} AND (COALESCE("delivered_at", "created_at") AT TIME ZONE 'UTC') < ${to}`;
   const spent = Number(rows[0]?.spent ?? 0);
   const tiers = ACCOUNT_ASSUMPTIONS.tiers;
   let idx = 0;

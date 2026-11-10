@@ -23,7 +23,14 @@ export type ErrorCode =
   | 'order-state-changed'
   | 'condition-not-met'
   | 'invalid-password'
-  | 'unavailable';
+  | 'unavailable'
+  | 'publish-incomplete'
+  | 'invalid-image'
+  | 'duplicate'
+  | 'version-conflict'
+  | 'product-in-use'
+  | 'variant-in-use'
+  | 'voucher-in-use';
 
 const STATUS: Record<ErrorCode, number> = {
   validation: 422,
@@ -51,6 +58,13 @@ const STATUS: Record<ErrorCode, number> = {
   'condition-not-met': 409,
   'invalid-password': 422,
   unavailable: 500,
+  'publish-incomplete': 422,
+  'invalid-image': 422,
+  duplicate: 409,
+  'version-conflict': 409,
+  'product-in-use': 409,
+  'variant-in-use': 409,
+  'voucher-in-use': 409,
 };
 
 export interface AppErrorExtras {
@@ -65,6 +79,13 @@ export interface AppErrorExtras {
   currentStatus?: string;
   /** Slice 4: `AdminOrder` hiện tại kèm `order-state-changed`. */
   order?: unknown;
+  /** Slice 6. */
+  missing?: string[];
+  productId?: string;
+  reason?: string;
+  sku?: string;
+  available?: number;
+  reserved?: number;
 }
 
 export class AppError extends Error {
@@ -143,4 +164,34 @@ export const Errors = {
   invalidPassword: () =>
     new AppError('invalid-password', 'Mật khẩu hiện tại chưa đúng.', { field: 'currentPassword' }),
   unavailable: () => new AppError('unavailable', 'Không thể kết nối. Vui lòng thử lại.'),
+  /** Slice 6 (admin kho & sản phẩm). */
+  publishIncomplete: (missing: string[], productId?: string) =>
+    new AppError('publish-incomplete', 'Sản phẩm chưa đủ điều kiện hiển thị: thiếu ảnh, biến thể hoặc thông tin bắt buộc.', {
+      missing,
+      productId,
+    }),
+  invalidImage: (reason: 'format' | 'size' | 'dimensions') =>
+    new AppError(
+      'invalid-image',
+      reason === 'size'
+        ? 'Ảnh quá lớn (tối đa 5 MB).'
+        : reason === 'dimensions'
+          ? 'Kích thước ảnh chưa phù hợp (cạnh ngắn tối thiểu 600 px, cạnh dài tối đa 6.000 px).'
+          : 'Chỉ nhận ảnh JPEG, PNG hoặc WebP hợp lệ.',
+      { reason },
+    ),
+  duplicate: (field: string, message = 'Giá trị này đã được dùng.') => new AppError('duplicate', message, { field }),
+  versionConflict: () =>
+    new AppError(
+      'version-conflict',
+      'Dữ liệu vừa được người khác cập nhật. Tải lại để xem bản mới; thay đổi của bạn chưa được lưu.',
+    ),
+  productInUse: () =>
+    new AppError('product-in-use', 'Sản phẩm đã từng hiển thị hoặc đã có đơn; hãy Ẩn thay vì xoá.'),
+  variantInUse: (sku: string) =>
+    new AppError('variant-in-use', 'Biến thể đã có đơn nên không bỏ được. Đặt tồn về 0 để ngừng bán.', { sku }),
+  voucherInUse: (message = 'Mã đã có lượt dùng nên không xoá hoặc đổi loại / giá trị được.') =>
+    new AppError('voucher-in-use', message),
+  stockChangedAdmin: (available: number, reserved: number) =>
+    new AppError('stock-changed', 'Số lượng vừa thay đổi. Kiểm tra lại số hiện tại rồi thử lại.', { available, reserved }),
 };

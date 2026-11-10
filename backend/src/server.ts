@@ -22,6 +22,9 @@ async function main(): Promise<void> {
   const { purgeStaleBuckets } = await import('./modules/auth/rate-limit.service');
   const { logger } = await import('./lib/logger');
   const app = createApp();
+  const { mediaStorageWarning } = await import('./lib/storage');
+  const mediaWarning = mediaStorageWarning();
+  if (mediaWarning) logger.warn(mediaWarning);
 
   const server = app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
