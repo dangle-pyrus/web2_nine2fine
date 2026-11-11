@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10) + Admin khách hàng & nhân viên (Slice 7, locked 2026-11-11)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -116,6 +116,18 @@ info:
     - **Kích thước thân JSON:** `POST` / `PUT /admin/products` tối đa 64 KB (các route còn lại 16 KB); vượt -> `422 validation`.
     - **Mã lỗi mới (7):** `publish-incomplete`, `invalid-image`, `duplicate`, `version-conflict`, `product-in-use`, `variant-in-use`, `voucher-in-use`. Dùng lại `unauthenticated`, `forbidden`, `not-found`, `validation`, `stock-changed` (kèm `available`, `reserved`), `idempotency-conflict`, `rate-limited`, `unavailable`. `ErrorResponse.error` thêm `missing`, `productId`, `reason`, `sku`, `available`, `reserved`.
     - **Ảnh:** API sản phẩm trả `{id, url}`; `url` null nghĩa là ảnh thư viện (FE tra media manifest). Ảnh tải lên có `id` dạng `up-<32 hex>.<jpg|png|webp>` và `url = /api/media/{id}`; storefront dùng `/api/media/{mediaId}` cho mọi `mediaId` không có trong manifest (API catalog / cart / order không đổi).
+    ## Slice 7 - Admin khách hàng & nhân viên (status: locked 2026-11-11, Orchestrator duyệt 14 điểm ở plan mục 12)
+    Tag `admin-customers`, `admin-staff`; 11 operation; BR/AC `docs/product/PRD.md` Slice 7 (BR-USR-01..25, AC-USR-01..44; S7-Q1..Q9 theo mặc định PO); kế hoạch `docs/api/admin-users-implementation-plan.md`.
+    - **Phiên và quyền:** cookie `n2f_asid`; vai trò và `is_active` đọc từ DB mỗi yêu cầu; mọi phản hồi (kể cả 401/403) `Cache-Control: no-store`. **staff:** chỉ danh sách + chi tiết + đơn của khách, dữ liệu liên hệ đã che. **admin:** mọi việc của staff (không che, kèm ngày sinh và sổ địa chỉ) + khoá / mở khách + toàn bộ API nhân viên + lịch sử thao tác. Thiếu quyền -> `403 forbidden` (kiểm trước khi đọc thân yêu cầu, không đổi dữ liệu, không nhật ký, không thư).
+    - **Khách = `users.role = member`.** Id của staff / admin ở API khách -> `404 not-found`. Số liệu (`orderCount`, `totalSpent`, `lastOrderAt`, hạng) tính tại lúc đọc, chỉ từ đơn có `user_id` của khách (đơn vãng lai cùng email không tính).
+    - **Che dữ liệu ở máy chủ (BR-USR-11):** staff nhận `email` dạng `mi***@gmail.com`, `phone` dạng `0912 *** 678`, và phản hồi **không có** khoá `birthDate`, `addresses`. `contactMasked: true` báo cho FE. Tìm kiếm `q` khớp theo giá trị đầy đủ ở cả hai vai trò.
+    - **Khoá / mở / đổi vai trò (BR-USR-14..16, 21..24):** mỗi thao tác thành công là MỘT giao dịch gồm đổi trạng thái / vai trò + thu hồi mọi phiên (`account-disabled` / `role-changed`, cả `admin` lẫn `storefront`) + đúng 1 dòng nhật ký bất biến. Mở khoá không khôi phục phiên. Thao tác không đổi gì (khoá tài khoản đã khoá, mở tài khoản đang hoạt động, đặt đúng vai trò hiện tại) -> `200`, không nhật ký. Admin không tự khoá / tự đổi vai trò (`409 self-change`); không bao giờ còn 0 admin hoạt động, kể cả khi hai admin thao tác đồng thời (`409 last-admin`, khoá chống đua phía máy chủ).
+    - **Tạo nhân viên (BR-USR-19, 20):** không mật khẩu. Máy chủ tạo tài khoản đang hoạt động, `password_hash` NULL, gửi 1 thư hướng dẫn dùng "Quên mật khẩu" với chính email đó (thư không chứa mã hay mật khẩu); lỗi gửi thư không làm hỏng việc tạo. Mật khẩu không bao giờ xuất hiện trong phản hồi, log, thư, nhật ký.
+    - **Idempotency:** `POST /admin/staff` BẮT BUỘC `Idempotency-Key` (tạo lại cùng khoá + cùng nội dung trong 24 giờ -> `200` kết quả lần đầu, `Idempotency-Replayed: true`, không tạo bản ghi / thư thứ hai); các `POST` / `PUT` khoá, mở, đổi vai trò nhận `Idempotency-Key` tuỳ chọn (bản thân chúng đã idempotent theo trạng thái). Khác nội dung cùng khoá -> `409 idempotency-conflict`.
+    - **Giới hạn tần suất theo tài khoản:** đọc 120 / 60 giây, ghi 60 / 60 giây (chung bộ đếm admin); riêng `POST /admin/staff` thêm 10 lần / 60 phút. `429 rate-limited` + `retryAfterSeconds` + `Retry-After`.
+    - **Thứ tự kiểm ở yêu cầu ghi:** `401` -> `403 origin-not-allowed` -> `429` -> `403 forbidden` -> `422 Idempotency-Key` -> `422 validation` (thân) -> (giao dịch) `401` nếu chính người gọi vừa bị thu hồi phiên / khoá -> `404` -> `409 self-change` -> `409 duplicate` / `409 last-admin` -> `200` / `201`.
+    - **Mã lỗi mới (2):** `self-change`, `last-admin` (đều 409). Dùng lại: `unauthenticated`, `forbidden`, `origin-not-allowed`, `not-found`, `validation`, `duplicate` (`field: email`), `idempotency-conflict`, `rate-limited`, `unavailable`.
+    - **Không có** API xoá tài khoản, sửa / xoá nhật ký, nâng khách thành nhân viên, gửi lại thư mời (Won't, `PUT` / `DELETE` ngoài danh sách -> `404`).
   license:
     name: Proprietary
 servers:
@@ -150,6 +162,10 @@ tags:
     description: 'Slice 6, status: locked. Tải ảnh sản phẩm lên (chỉ admin) qua lớp lưu trữ `local` / `supabase`.'
   - name: media
     description: 'Slice 6, status: locked. Công khai. Địa chỉ ổn định của ảnh tải lên, storefront dùng cho mọi `mediaId` không có trong media manifest.'
+  - name: admin-customers
+    description: 'Slice 7, status: locked. Khách hàng (`users.role = member`): danh sách + tab + lọc hạng + tìm, chi tiết, đơn của khách (staff + admin, staff chỉ thấy liên hệ đã che); khoá / mở khoá (chỉ admin, thu hồi mọi phiên).'
+  - name: admin-staff
+    description: 'Slice 7, status: locked. Nhân viên (`staff` / `admin`), chỉ admin: danh sách, tạo không mật khẩu + thư hướng dẫn, khoá / mở, đổi vai trò, lịch sử thao tác một tài khoản. Khoá / đổi vai trò thu hồi mọi phiên; luôn còn >= 1 admin hoạt động.'
 security: []
 paths:
   /auth/lookup:
@@ -2297,6 +2313,316 @@ paths:
         '409': { $ref: '#/components/responses/CatalogConflict' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/customers:
+    get:
+      tags: [admin-customers]
+      operationId: adminListCustomers
+      x-status: draft
+      summary: Danh sách khách hàng, tab, lọc hạng, tìm, sắp, phân trang (BR-USR-08, 09, 11)
+      description: |
+        Quyền: staff, admin (`customers.view`). Chỉ `role = member`, cả đang hoạt động và bị khoá. `q` (cắt khoảng trắng, <= 100 ký tự, dài hơn -> `422`, `field: q`): tên (chứa, không phân biệt hoa thường và dấu), email (chứa, không phân biệt hoa thường), SĐT (chuẩn hoá `+84` / `84` -> `0`, chỉ khi có >= 4 chữ số liên tiếp); `%` và `_` là ký tự thường. Tìm theo giá trị đầy đủ ở cả hai vai trò dù hiển thị che.
+        `view`: `all` | `blocked`. `tier`: `bronze` | `silver` | `gold` (hạng theo chi tiêu năm dương lịch hiện tại giờ VN, ngưỡng 18.000.000 / 40.000.000, BR-ACC-15); giá trị lạ -> `422`. `sort`: `lastOrderAt` (mặc định, giảm dần, khách chưa có đơn ở cuối), `totalSpent` (giảm), `orderCount` (giảm), `name` (A-Z); mọi kiểu sắp hoà theo `id`. `counts` đếm theo cùng `q` + `tier` (không theo `view`) nên khớp số dòng của từng tab. Số liệu đọc tại thời điểm gọi, không cache. Trang quá cuối -> `items` rỗng, `total` đúng.
+      security:
+        - adminSession: []
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: view, in: query, schema: { type: string, enum: [all, blocked], default: all } }
+        - { name: tier, in: query, schema: { $ref: '#/components/schemas/AdminCustomerTier' } }
+        - { name: sort, in: query, schema: { type: string, enum: [lastOrderAt, totalSpent, orderCount, name], default: lastOrderAt } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 }, description: 'Ngoài 1..50 -> `422 validation`, `field: limit`.' }
+      responses:
+        '200':
+          description: Một trang khách hàng.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCustomerPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/customers/{customerId}:
+    get:
+      tags: [admin-customers]
+      operationId: adminGetCustomer
+      x-status: draft
+      summary: Chi tiết khách hàng (BR-USR-10, 11, 12)
+      description: |
+        Quyền: staff, admin. Hồ sơ, hạng + chi tiêu năm nay, số liệu, 10 đơn mới nhất (cùng dòng `AdminOrderSummary` của màn Đơn hàng, mỗi `id` dẫn sang `GET /admin/orders/{orderCode}`). Admin nhận thêm `birthDate` và `addresses` (mặc định đứng đầu, rồi tạo trước); **với staff hai khoá này vắng mặt hoàn toàn** và `email` / `phone` đã che. Id sai dạng, không tồn tại, hoặc là staff / admin -> `404 not-found`.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Khách hàng.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCustomer' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/customers/{customerId}/orders:
+    get:
+      tags: [admin-customers]
+      operationId: adminListCustomerOrders
+      x-status: draft
+      summary: Đơn của một khách (có phân trang), phục vụ "Xem tất cả đơn" cho cả staff
+      description: |
+        Quyền: staff, admin. Mọi đơn có `user_id` của khách (kể cả `cancelled`), mới nhất trước, hoà theo mã đơn giảm dần; cùng dòng `AdminOrderSummary` (chỉ có tên người nhận, không có SĐT / email). Lý do tồn tại: staff không có email đầy đủ để dán vào ô tìm của màn Đơn hàng (BR-USR-10); admin vẫn có thể dùng đường `q` = email để thấy cả đơn vãng lai cùng email. Id khách như `GET /admin/customers/{customerId}`.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        '200':
+          description: Một trang đơn.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOrderPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/customers/{customerId}/lock:
+    post:
+      tags: [admin-customers]
+      operationId: adminLockCustomer
+      x-status: draft
+      summary: Khoá tài khoản khách (BR-USR-14, 16, 24)
+      description: |
+        Chỉ admin (`customers.edit`; staff -> `403`). `reason` bắt buộc 5..250 ký tự (NFC, cắt hai đầu). Một giao dịch: `is_active = false`, thu hồi mọi phiên của khách (`revoke_reason = account-disabled`), 1 dòng nhật ký `locked` kèm lý do và số phiên đã thu hồi; lỗi giữa chừng thì không đổi gì. Khách đã khoá: không đăng nhập / không đặt lại mật khẩu (BR-AUTH-19, 37), yêu cầu kế tiếp từ mọi máy -> `401`. Đơn đang xử lý không đổi; đặt hàng vãng lai bằng cùng email vẫn được. Không gửi thư. Khoá khách đã khoá -> `200`, không đổi, không nhật ký mới. Idempotency-Key tuỳ chọn.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/AdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLockInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminCustomerUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/UsersConflict' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/customers/{customerId}/unlock:
+    post:
+      tags: [admin-customers]
+      operationId: adminUnlockCustomer
+      x-status: draft
+      summary: Mở khoá tài khoản khách (BR-USR-15, 24)
+      description: |
+        Chỉ admin. `reason` tuỳ chọn <= 250 ký tự (thân có thể là `{}`). `is_active = true` + 1 dòng nhật ký `unlocked`; **không** khôi phục phiên đã thu hồi (khách đăng nhập lại như bình thường). Khách đang hoạt động -> `200`, không đổi, không nhật ký. Idempotency-Key tuỳ chọn.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/AdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminUnlockInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminCustomerUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/UsersConflict' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/staff:
+    get:
+      tags: [admin-staff]
+      operationId: adminListStaff
+      x-status: draft
+      summary: Danh sách nhân viên (BR-USR-18)
+      description: 'Chỉ admin (`settings.staff`; staff -> `403`). Mọi tài khoản `staff` / `admin`, cả đã khoá, tối đa 200 dòng, không phân trang, sắp `createdAt` tăng, hoà theo `id`. Không có `member`, không có `password_hash`. `lastActiveAt` = `last_used_at` lớn nhất trong các phiên của tài khoản (null nếu chưa từng đăng nhập); `passwordSet = false` nghĩa là "Chờ đặt mật khẩu" (BR-USR-25).'
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Nhân viên.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items: { $ref: '#/components/schemas/AdminStaffMember' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [admin-staff]
+      operationId: adminCreateStaff
+      x-status: draft
+      summary: Tạo nhân viên không mật khẩu + thư hướng dẫn (BR-USR-19, 20, 24; S7-Q1)
+      description: |
+        Chỉ admin. Bắt buộc `Idempotency-Key`. `name` 2..100 ký tự (NFC, gộp khoảng trắng; hiển thị lại đúng chuỗi đã nhập), `email` hợp lệ <= 254 ký tự (cắt hai đầu, chữ thường), `role` in (`staff`, `admin`). Email đã tồn tại ở **bất kỳ** tài khoản nào (kể cả khách, không phân biệt hoa thường) -> `409 duplicate`, `field: email`, không tạo gì. Thành công: tài khoản `is_active = true`, `password_hash` NULL, `marketing_opt_in = false`, 1 dòng nhật ký `staff-created`, `201` (phản hồi không có mật khẩu), và SAU khi commit 1 thư tới email đó nêu vai trò + hướng dẫn mở "Quên mật khẩu" của storefront, nhập đúng email này và mã 8 chữ số nhận bằng thư (BR-AUTH-20); thư **không** chứa mã hay mật khẩu. Lỗi gửi thư: vẫn `201`, không `500`. Thêm giới hạn 10 lần / 60 phút / admin (`429`). Gửi lại cùng khoá + cùng nội dung -> `200` với đúng kết quả đầu, không tạo / gửi thư lần hai.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/StaffCreateIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStaffInput' }
+      responses:
+        '201':
+          description: Nhân viên vừa tạo.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStaffMember' }
+        '200':
+          description: Bản phát lại của một yêu cầu tạo đã thành công (cùng `Idempotency-Key` + cùng nội dung).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Idempotency-Replayed: { schema: { type: string, const: 'true' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStaffMember' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/UsersConflict' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/staff/{staffId}/lock:
+    post:
+      tags: [admin-staff]
+      operationId: adminLockStaff
+      x-status: draft
+      summary: Khoá nhân viên + thu hồi mọi phiên (BR-USR-16, 21, 23, 24)
+      description: |
+        Chỉ admin. `reason` bắt buộc 5..250 ký tự. Một giao dịch dưới khoá chống đua toàn cục của thao tác nhân viên: kiểm người gọi còn là admin hoạt động có phiên còn hiệu lực (không -> `401`), `404` nếu id không phải staff / admin, `409 self-change` nếu `staffId` là chính người gọi, `409 last-admin` nếu khoá xong còn 0 admin hoạt động; rồi `is_active = false`, thu hồi mọi phiên của nhân viên (`account-disabled`), 1 dòng nhật ký `locked` (kèm số phiên). Nhân viên bị khoá giữ nguyên lịch sử (đơn, tồn kho, nhật ký). Khoá tài khoản đã khoá -> `200`, không đổi, không nhật ký (kiểm `self-change` vẫn chạy trước). Idempotency-Key tuỳ chọn.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/AdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLockInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminStaffUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/UsersConflict' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/staff/{staffId}/unlock:
+    post:
+      tags: [admin-staff]
+      operationId: adminUnlockStaff
+      x-status: draft
+      summary: Mở khoá nhân viên (BR-USR-21)
+      description: 'Chỉ admin. `reason` tuỳ chọn <= 250 ký tự. `is_active = true` + 1 dòng nhật ký `unlocked`; không khôi phục phiên (nhân viên đăng nhập lại; AC-USR-29). Đang hoạt động -> `200`, không đổi, không nhật ký. Idempotency-Key tuỳ chọn.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/AdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminUnlockInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminStaffUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/UsersConflict' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/staff/{staffId}/role:
+    put:
+      tags: [admin-staff]
+      operationId: adminSetStaffRole
+      x-status: draft
+      summary: Đổi vai trò staff <-> admin + thu hồi mọi phiên (BR-USR-16, 22, 23, 24)
+      description: |
+        Chỉ admin. `role` in (`staff`, `admin`); `member` hoặc giá trị lạ -> `422 validation`, `field: role`. `reason` tuỳ chọn <= 250 ký tự. Một giao dịch dưới khoá chống đua: kiểm người gọi như `lock`, `404` nếu id không phải staff / admin (kể cả khách), `409 self-change` nếu là chính người gọi (kể cả đặt đúng vai trò hiện tại), `409 last-admin` nếu hạ xuống `staff` làm còn 0 admin hoạt động (hạ một admin đã khoá không tính); rồi đổi `role`, thu hồi mọi phiên (`role-changed`), 1 dòng nhật ký `role-changed` (vai trò trước / sau). Đặt đúng vai trò hiện tại -> `200`, không đổi, không nhật ký, không thu hồi. Nhân viên phải đăng nhập lại để có quyền mới; các yêu cầu kế tiếp của phiên cũ -> `401` (không phải `403`). Idempotency-Key tuỳ chọn.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/AdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStaffRoleInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminStaffUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/UsersConflict' }
+        '422': { $ref: '#/components/responses/UsersValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/accounts/{accountId}/history:
+    get:
+      tags: [admin-staff]
+      operationId: adminAccountHistory
+      x-status: draft
+      summary: Lịch sử thao tác của một tài khoản, 20 dòng mới nhất (BR-USR-17, 24; Should)
+      description: 'Chỉ admin (`settings.staff`; staff -> `403`). `accountId` là khách hoặc nhân viên (id lạ -> `404`). Mới trước, tối đa 20 dòng. Nhật ký chỉ thêm: không có `PUT` / `PATCH` / `DELETE` trên dòng (`404`), không có API xoá tài khoản. Thao tác bị từ chối (`403`, `409`, `422`) không để lại dòng.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Tối đa 20 dòng.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 20
+                items: { $ref: '#/components/schemas/AdminAccountEvent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -2369,6 +2695,30 @@ components:
       required: true
       schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
       description: 'Slice 6, BẮT BUỘC cho điều chỉnh tồn (BR-INV-33). FE sinh một khoá cho mỗi ý định, dùng lại khi "Thử lại". Cùng khoá + cùng người + cùng đường dẫn + cùng body trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`), không áp lần hai; khác nội dung -> `409 idempotency-conflict`. Thiếu / sai dạng -> `422 validation`, `field: Idempotency-Key`.'
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      description: 'Slice 7. UUID khách (`role = member`); sai dạng, không có, hoặc là staff / admin -> `404 not-found`.'
+      schema: { type: string }
+    StaffId:
+      name: staffId
+      in: path
+      required: true
+      description: 'Slice 7. UUID nhân viên (`role` in `staff`, `admin`); sai dạng, không có, hoặc là khách -> `404 not-found`.'
+      schema: { type: string }
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      description: 'Slice 7. UUID tài khoản bất kỳ (khách hoặc nhân viên); sai dạng hoặc không có -> `404 not-found`.'
+      schema: { type: string }
+    StaffCreateIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
+      description: 'Slice 7, BẮT BUỘC cho tạo nhân viên: FE sinh một khoá cho mỗi ý định, dùng lại khi "Thử lại" để mất mạng giữa chừng không làm lần bấm sau nhận `409 duplicate`. Cùng khoá + cùng người + cùng đường dẫn + cùng nội dung trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`); khác nội dung -> `409 idempotency-conflict`. Thiếu / sai dạng -> `422 validation`, `field: Idempotency-Key`.'
   headers:
     RetryAfter:
       description: Số giây chờ, bằng `error.retryAfterSeconds`.
@@ -2517,6 +2867,38 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminInventoryItem' }
+    UsersValidation:
+      description: |
+        Slice 7. `validation` (+ `field`: `q`, `tier`, `view`, `sort`, `page`, `limit`, `reason`, `name`, `email`, `role`, `Idempotency-Key`). Không đổi gì, không nhật ký, không thư.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    UsersConflict:
+      description: |
+        Slice 7. Mọi trường hợp: không đổi dữ liệu, không nhật ký, không thư.
+        - `duplicate` (+ `field: email`): email đã có ở bất kỳ tài khoản nào (BR-USR-19).
+        - `self-change`: admin tự khoá / tự đổi vai trò chính mình (BR-USR-23a).
+        - `last-admin`: thao tác sẽ để lại 0 admin hoạt động, gồm cả hai admin thao tác đồng thời (BR-USR-23b, c).
+        - `idempotency-conflict`: cùng `Idempotency-Key` nhưng nội dung khác.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AdminCustomerUpdated:
+      description: 'Slice 7. Khách sau thao tác (dạng admin, đủ trường). Gửi lại cùng `Idempotency-Key` + cùng nội dung: cùng kết quả đầu, header `Idempotency-Replayed: true`, không tác dụng phụ.'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+        Idempotency-Replayed: { schema: { type: string, const: 'true' }, description: 'Chỉ có khi là bản phát lại.' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminCustomer' }
+    AdminStaffUpdated:
+      description: 'Slice 7. Nhân viên sau thao tác. Gửi lại cùng `Idempotency-Key` + cùng nội dung: cùng kết quả đầu, header `Idempotency-Replayed: true`, không tác dụng phụ.'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+        Idempotency-Replayed: { schema: { type: string, const: 'true' }, description: 'Chỉ có khi là bản phát lại.' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminStaffMember' }
   schemas:
     Email:
       type: string
@@ -2596,6 +2978,9 @@ components:
         | variant-in-use | 409 | AC-INV-23 (Slice 6, draft; kèm `sku`) |
         | voucher-in-use | 409 | AC-INV-42, 44 (Slice 6, draft) |
         | stock-changed (dùng lại) | 409 | AC-INV-34 (Slice 6: điều chỉnh `set`; kèm `available`, `reserved`, không có `stockIssues`) |
+        | self-change | 409 | AC-USR-37, 38, 41 (Slice 7, draft; admin tự khoá / tự đổi vai trò) |
+        | last-admin | 409 | AC-USR-40, 41 (Slice 7, draft; thao tác để lại 0 admin hoạt động) |
+        | duplicate (dùng lại) | 409 | AC-USR-33 (Slice 7: `field: email`) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -2629,6 +3014,8 @@ components:
         - product-in-use
         - variant-in-use
         - voucher-in-use
+        - self-change
+        - last-admin
         - unavailable
     ErrorResponse:
       type: object
@@ -2650,7 +3037,7 @@ components:
               description: Có khi `code` in (`rate-limited`, `code-locked`, `password-locked`).
             field:
               type: string
-              description: 'Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`). Catalog: tên tham số query (`sort`, `gender`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids`). Slice 6: đường dẫn có chỉ số, ví dụ `variants[2].sku`, `images`, `items[0].threshold`, `quantity`, `reason`, `note`, `code`, `totalLimit`, `slug`.'
+              description: 'Tên trường trong body (`email`, `code`, `firstName`, `lastName`, `birthDate`, `acceptedTerms`, `newPassword`) khi `code` in (`validation`, `underage`). Catalog: tên tham số query (`sort`, `gender`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids`). Slice 6: đường dẫn có chỉ số, ví dụ `variants[2].sku`, `images`, `items[0].threshold`, `quantity`, `reason`, `note`, `code`, `totalLimit`, `slug`. Slice 7: `q`, `tier`, `view`, `sort`, `reason`, `name`, `email`, `role`, `Idempotency-Key`.'
             quote:
               description: 'Slice 3: báo giá mới nhất, có ở `price-changed`, `voucher-changed`, `stock-changed` (đặt hàng).'
               $ref: '#/components/schemas/Quote'
@@ -3972,3 +4359,135 @@ components:
             scheduled: { type: integer, minimum: 0 }
             expired: { type: integer, minimum: 0 }
             disabled: { type: integer, minimum: 0 }
+    AdminCustomerTier:
+      type: string
+      enum: [bronze, silver, gold]
+      description: 'Slice 7. Hạng theo BR-ACC-15 (`bronze` = "Đồng", `silver` = "Bạc", `gold` = "Vàng"); FE hiện dùng `member` cho Đồng nên phải ánh xạ.'
+    AdminCustomerSummary:
+      type: object
+      required: [id, name, email, phone, contactMasked, tier, orderCount, totalSpent, lastOrderAt, status]
+      additionalProperties: false
+      description: 'Slice 7, dòng của danh sách khách (BR-USR-08).'
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: '`lastName firstName` đã ghép.' }
+        email: { type: string, description: 'Admin: đầy đủ. Staff: dạng `mi***@gmail.com` (giữ 2 ký tự đầu của phần tên, 1 ký tự nếu phần tên <= 2).' }
+        phone: { type: [string, 'null'], description: 'Admin: đầy đủ. Staff: dạng `0912 *** 678` (4 số đầu, 3 số cuối). null nếu khách chưa có SĐT.' }
+        contactMasked: { type: boolean, description: 'true khi người gọi là staff (FE hiện "Liên hệ được ẩn bớt theo quyền của bạn.").' }
+        tier: { $ref: '#/components/schemas/AdminCustomerTier' }
+        orderCount: { type: integer, minimum: 0, description: 'Số đơn có `user_id` của khách, trừ `cancelled`.' }
+        totalSpent: { type: integer, minimum: 0, description: 'Tổng `total` (đồng) các đơn `completed` của khách, mọi thời gian.' }
+        lastOrderAt: { type: [string, 'null'], format: date-time, description: 'Thời điểm đặt gần nhất trong các đơn tính ở `orderCount`; null nếu 0 đơn.' }
+        status: { type: string, enum: [active, blocked] }
+    AdminCustomerPage:
+      type: object
+      required: [items, total, page, limit, counts]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminCustomerSummary' }, maxItems: 50 }
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 50 }
+        counts:
+          type: object
+          required: [all, blocked]
+          additionalProperties: false
+          properties:
+            all: { type: integer, minimum: 0 }
+            blocked: { type: integer, minimum: 0 }
+    AdminCustomerAddress:
+      type: object
+      required: [recipient, phone, line, isDefault]
+      additionalProperties: false
+      description: 'Slice 7, chỉ admin (BR-USR-12, Should), chỉ đọc.'
+      properties:
+        recipient: { type: string }
+        phone: { type: string }
+        line: { type: string, description: 'Số nhà + phường / xã + tỉnh / thành đã ghép.' }
+        isDefault: { type: boolean }
+    AdminCustomer:
+      description: 'Slice 7, chi tiết khách (BR-USR-10). Mở rộng `AdminCustomerSummary`. `birthDate` và `addresses` CHỈ có khi người gọi là admin (với staff vắng khoá, BR-USR-11). Không có `note`, `tags`, `returnCount`, `usualSizes`, `averageOrderValue` (Won''t, K2).'
+      allOf:
+        - $ref: '#/components/schemas/AdminCustomerSummary'
+        - type: object
+          required: [createdAt, marketingOptIn, spentThisYear, recentOrders]
+          properties:
+            createdAt: { type: string, format: date-time }
+            marketingOptIn: { type: boolean }
+            spentThisYear: { type: integer, minimum: 0, description: 'Chi tiêu năm dương lịch hiện tại (giờ VN) làm căn cứ hạng; khớp `GET /account/membership` của chính khách.' }
+            birthDate: { type: [string, 'null'], format: date, description: 'Chỉ admin.' }
+            addresses: { type: array, items: { $ref: '#/components/schemas/AdminCustomerAddress' }, description: 'Chỉ admin. Mặc định đứng đầu, rồi tạo trước.' }
+            recentOrders: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/AdminOrderSummary' }, description: '10 đơn mới nhất của khách (kể cả `cancelled`), mới trước.' }
+    AdminLockInput:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason: { type: string, minLength: 5, maxLength: 250, description: 'NFC, cắt hai đầu; sai độ dài -> `422`, `field: reason`.' }
+    AdminUnlockInput:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: string, maxLength: 250, description: 'Tuỳ chọn.' }
+    AdminStaffRole:
+      type: string
+      enum: [staff, admin]
+    AdminStaffMember:
+      type: object
+      required: [id, name, email, role, status, passwordSet, createdAt, lastActiveAt]
+      additionalProperties: false
+      description: 'Slice 7 (BR-USR-18). Chỉ admin nhận; email đầy đủ. Không chứa `password_hash`.'
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, description: '`lastName firstName` đã ghép; tạo "Trần Thu Hà" -> hiển thị lại đúng "Trần Thu Hà".' }
+        email: { type: string }
+        role: { $ref: '#/components/schemas/AdminStaffRole' }
+        status: { type: string, enum: [active, disabled] }
+        passwordSet: { type: boolean, description: 'false = "Chờ đặt mật khẩu" (BR-USR-25).' }
+        createdAt: { type: string, format: date-time }
+        lastActiveAt: { type: [string, 'null'], format: date-time, description: '`last_used_at` lớn nhất trong các phiên (cả đã thu hồi); null nếu chưa từng đăng nhập.' }
+    AdminStaffInput:
+      type: object
+      required: [name, email, role]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        email: { type: string, maxLength: 254, description: 'Cắt hai đầu + chữ thường rồi mới kiểm.' }
+        role: { $ref: '#/components/schemas/AdminStaffRole' }
+    AdminStaffRoleInput:
+      type: object
+      required: [role]
+      additionalProperties: false
+      properties:
+        role: { $ref: '#/components/schemas/AdminStaffRole' }
+        reason: { type: string, maxLength: 250 }
+    AdminAccountEvent:
+      type: object
+      required: [id, at, action, actor, target, roleBefore, roleAfter, reason, sessionsRevoked]
+      additionalProperties: false
+      description: 'Slice 7, một dòng nhật ký thao tác tài khoản (BR-USR-24). Giá trị người / đích là ảnh chụp lúc làm.'
+      properties:
+        id: { type: string, format: uuid }
+        at: { type: string, format: date-time }
+        action: { type: string, enum: [staff-created, locked, unlocked, role-changed] }
+        actor:
+          type: object
+          required: [id, name, role]
+          additionalProperties: false
+          properties:
+            id: { type: [string, 'null'], format: uuid }
+            name: { type: string }
+            role: { $ref: '#/components/schemas/AdminStaffRole' }
+        target:
+          type: object
+          required: [id, email, name, role]
+          additionalProperties: false
+          properties:
+            id: { type: [string, 'null'], format: uuid }
+            email: { type: string }
+            name: { type: string }
+            role: { type: string, enum: [member, staff, admin] }
+        roleBefore: { type: [string, 'null'], enum: [staff, admin, null], description: 'Có khi `role-changed`; null ở các hành động khác.' }
+        roleAfter: { type: [string, 'null'], enum: [staff, admin, null], description: 'Có khi `role-changed` hoặc `staff-created`.' }
+        reason: { type: string, description: 'Rỗng nếu không có lý do.' }
+        sessionsRevoked: { type: integer, minimum: 0 }
