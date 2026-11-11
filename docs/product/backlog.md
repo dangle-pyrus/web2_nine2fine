@@ -28,6 +28,7 @@ Slice 1 đóng có điều kiện theo yêu cầu Thắng (decisions 2026-11-07)
 | G6 | **Rate limit catalog sau reverse proxy** (QA Slice 2 m6): bật `TRUST_PROXY` đúng số proxy của nơi deploy; xác nhận chạy 1 tiến trình (bộ đếm nằm trong RAM) hoặc chuyển bộ đếm vào DB. Đạt khi trên môi trường triển khai: 2 máy khác IP mỗi máy gửi 100 yêu cầu catalog trong 60 giây đều nhận 200; máy thứ ba gửi 121 yêu cầu thì yêu cầu 121 nhận 429 (BR-CAT-19) | backend-dev, Thắng | Không làm thì mọi khách chung một IP, cả site bị chặn sau 120 yêu cầu/phút. |
 | G7 | AC-CAT-52 (Should): đo p95 danh sách ≤ 500 ms, chi tiết ≤ 300 ms với 100 sản phẩm thử, đo ở máy chủ triển khai | backend-dev | Hoãn từ Slice 2; đo trên máy dev không có giá trị. |
 | G8 | Slice 2: `npm test` backend pass 3 lần liền hoặc pass trên Linux/CI (cùng việc với G1 và 1.21) | backend-dev | Tiền lệ Slice 1: M2 là crash môi trường vitest/Windows, không chặn nghiệm thu. |
+| G9 | **Thông tin pháp lý thật của cửa hàng** (Slice 8): Thắng nhập tên pháp lý, MST / số ĐKKD, nơi và ngày cấp, địa chỉ, hotline, email CSKH / dữ liệu, giờ làm việc, liên kết thông báo Bộ Công Thương (nếu đã có) qua Cài đặt › Thông tin cửa hàng; kiểm chân trang storefront hiện đúng | Thắng | Giá trị ban đầu là mẫu `STORE_INFO` ("thay trước khi ra mắt"); luật TMĐT bắt buộc hiện thông tin người bán. |
 
 ---
 
@@ -321,6 +322,37 @@ Câu hỏi mở (chi tiết PRD Slice 7 mục 7). Tất cả theo mặc định 
 Điều kiện bắt đầu code (PO): Slice 6 lát 6.1..6.7 xong (đã đạt); 6.8 không chặn. Thứ tự: 7.1 → (7.2 → 7.3) song song 7.4 → 7.5 → 7.6 → 7.7.
 
 DoD: theo DoD chung; thêm: ở `adminUsersMode: http` hai màn Khách hàng và Nhân viên không dùng mock; khoá hoặc đổi vai trò luôn thu hồi mọi phiên và có đúng 1 dòng nhật ký (AC-USR-22, 26, 27, 42); không bao giờ 0 admin hoạt động (AC-USR-40, 41); admin không biết mật khẩu nhân viên (AC-USR-32, 35); staff không nhận email / SĐT / ngày sinh / địa chỉ đầy đủ trong phản hồi (AC-USR-18); AC-AUTH-75, 85 ghi Đạt vào G4.
+
+---
+
+## Slice 8 — Admin tổng quan & cài đặt cửa hàng (P0)
+
+PRD: `docs/product/PRD.md` › Slice 8 (BR-INS-01..09, BR-DSH-01..08, BR-RPT-01..09, BR-SET-01..13, BR-AUD-01..05; AC-INS-01..13, AC-DSH-01..10, AC-RPT-01..11, AC-SET-01..16, AC-AUD-01..05). Thắng giao 2026-11-12, đang vắng: mọi câu hỏi mở theo mặc định PO. Mục tiêu: Tổng quan (việc cần làm + doanh thu thật), Báo cáo bán hàng, Cài đặt cửa hàng (thông tin hiển thị + tham số vận hành có kiểm giá trị, nhật ký đổi, storefront đọc phần công khai), Nhật ký hoạt động hợp nhất; bốn màn mock chạy BE thật sau cờ `adminInsightsMode`. Định nghĩa doanh thu: đơn `completed` + `paid` theo `delivered_at` (VN), tiền hàng sau giảm, không gồm ship (BR-INS-09).
+
+| # | Hạng mục | Mức | BR | AC | Người làm | Phụ thuộc | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8.1 | Nền / contract: kiểm quyền API (phiên `n2f_asid`, staff / admin), giới hạn tần suất (báo cáo 20/60 giây), mã lỗi, định nghĩa số liệu dùng chung + quy ước giờ VN, migration cộng thêm (cột thông tin cửa hàng seed từ `STORE_INFO`, bảng nhật ký cài đặt + RLS, chỉ mục `at` / `delivered_at`), contract `openapi.yaml`, cờ FE `adminInsightsMode`, menu, `permissions.ts`, `/admin` = Tổng quan | Must | INS-01..09 | INS-01..11 | BE → FE | Slice 7 (7.1..7.6 xong) | Chưa |
+| 8.2 | Tổng quan: KPI (doanh thu, đơn đặt, đơn hoàn tất, giá trị TB, khách mới) + so kỳ trước, việc cần làm bằng số tab Đơn hàng, sắp hết / hết hàng bằng số tab Tồn kho, biểu đồ 30 ngày, top 5 sản phẩm; staff chỉ thấy phần việc (lọc ở máy chủ); FE ẩn ô Won't | Must | DSH-01..04, 06..08; DSH-05 (Should) | DSH-01..06, 08..10; DSH-07 (Should) | BE, FE | 8.1 | Chưa |
+| 8.3 | Báo cáo bán hàng: KPI + kỳ trước, theo ngày, top 10 sản phẩm / biến thể, theo danh mục, theo phương thức thanh toán; khoảng ≤ 366 ngày; tổng các khối khớp KPI; ẩn khối Won't | Must | RPT-01..08 | RPT-01..10, INS-11..13 | BE, FE | 8.1 (song song 8.2) | Chưa |
+| 8.4 | Cài đặt cửa hàng: thông tin + liên hệ + tham số vận hành Must (phí ship, ngưỡng free-ship, giữ chuyển khoản, trần COD, số ngày giao, giờ chốt); chỉ admin, kiểm giá trị, lưu nguyên tử, chống ghi chồng, nhật ký đổi; `GET /api/store/settings` công khai (whitelist, `max-age=60`) + chân trang / trợ giúp / chính sách storefront đọc giá trị thật; sửa chữ ngưỡng free-ship | Must | SET-01..03, 05, 07..13 | SET-01..03, 05, 06, 08..16 | BE, FE (admin + storefront) | 8.1 (song song 8.2, 8.3) | Chưa |
+| 8.5 | Nhật ký hoạt động: danh sách hợp nhất 4 nguồn (thao tác đơn của nhân viên, điều chỉnh tồn, thao tác tài khoản, đổi cài đặt), lọc loại + khoảng ≤ 92 ngày, phân trang, chỉ đọc, chỉ admin | Should | AUD-01..05 | AUD-01..05 | BE, FE | 8.1, 8.4 (nguồn đổi cài đặt) | Chưa |
+| 8.6 | Gói Should nhỏ: xuất CSV báo cáo; liên kết MXH + thông báo Bộ Công Thương; tham số giỏ và COD sửa được | Should | RPT-09; SET-04, 06 | RPT-11; SET-04, 07 | BE, FE | 8.3, 8.4 | Chưa |
+| 8.7 | Nghiệm thu thật trên Supabase: áp migration Slice 8 (**cần Thắng duyệt**); Thắng nhập thông tin pháp lý thật (G9) và kiểm chân trang storefront; so số Tổng quan / Báo cáo với đơn thật trong DB; đổi phí ship ở admin rồi đặt đơn thử; migrate 2 lần | Must | INS-06; SET-08..11 | INS-09; SET-11, 13, 14; INS-12, 13 | Thắng, Orchestrator, qa-reviewer | 8.1..8.4 | Chưa |
+| 8.8 | Lãi gộp / giá vốn, trả hàng và đơn giao thất bại, ABC, tồn lâu, theo vùng, heatmap, size / màu, báo cáo khách / voucher; nhóm Đổi trả và Hạng thành viên ở Cài đặt; `bank_transfer_enabled` và tài khoản ngân hàng; nhật ký sản phẩm / voucher; xuất nhật ký; thư / thông báo hết hàng; nội dung (collections, bảng size, đánh giá, trang chủ) | Won't | — | — | slice sau | — | Không có dữ liệu / chưa có trả hàng / ngoài phạm vi Thắng giao |
+
+Câu hỏi mở (chi tiết PRD Slice 8 mục 7). Tất cả theo mặc định PO (Thắng vắng, đổi được khi quay lại); không câu nào chặn 8.1–8.6:
+
+| # | Câu hỏi | Chặn lát | Làm trước theo mặc định? |
+| --- | --- | --- | --- |
+| S8-Q1 | Doanh thu tính khi nào (mặc định: `completed` + `paid`, ngày `delivered_at`, tiền hàng sau giảm, không gồm ship) | 8.2, 8.3 | Có |
+| S8-Q2 | Staff thấy gì ở Tổng quan (mặc định: việc cần làm, tồn kho, số đơn đặt; không tiền) | 8.2 | Có |
+| S8-Q3 | Nhật ký hệ thống (mặc định: làm ở mức Should, hợp nhất 4 nguồn có sẵn) | 8.5 | Có |
+| S8-Q4 | Tham số vận hành sửa được (mặc định: Must 6 tham số, Should giỏ / COD; không sửa `low_stock_default`, chuyển khoản, Đổi trả, Hạng) | 8.4, 8.6 | Có |
+| S8-Q5..Q10 | Khoảng báo cáo ≤ 366 ngày / nhật ký ≤ 92 ngày; CSV Should; thông tin cửa hàng nào sửa được; trường Won't; cache công khai 60 giây; giới hạn giá trị tham số | — | Có |
+
+Điều kiện bắt đầu code (PO): Slice 7 lát 7.1..7.6 xong (đã đạt); 7.7 không chặn. Thứ tự: 8.1 → (8.2 ∥ 8.3 ∥ 8.4) → 8.5 → 8.6 → 8.7. Cắt giảm nếu thiếu thời gian: bỏ 8.5 và 8.6 trước, vẫn đủ go-live.
+
+DoD: theo DoD chung; thêm: ở `adminInsightsMode: http` Tổng quan, Báo cáo, Cài đặt cửa hàng, Nhật ký không dùng mock và không có ô Won't; một định nghĩa doanh thu, tổng theo ngày = sản phẩm = danh mục = phương thức = KPI (AC-INS-13); staff không nhận số tiền (AC-DSH-09, AC-INS-02); mỗi lần lưu cài đặt có thay đổi đúng 1 dòng nhật ký (AC-SET-12), đổi cài đặt không đổi đơn đã tạo (AC-SET-11); API công khai chỉ gồm whitelist (AC-SET-13); G9 ghi Đạt vào bảng go-live.
 
 ---
 
