@@ -23,7 +23,7 @@ Slice 1 đóng có điều kiện theo yêu cầu Thắng (decisions 2026-11-07)
 | G1 | **QA vòng 2 Slice 1** (`docs/qa/report-slice-1-auth.md`): kiểm lại AC-07, 20, 29, 70 sau khi M1, M3, N1, N2 sửa; chạy `npm test` backend 3 lần liên tiếp pass hoặc pass trên Linux/CI | qa-reviewer | Điều kiện nghiệm thu chính thức của Slice 1. |
 | G2 | **AC-AUTH-95a**: Thắng yêu cầu mã 10 lần cho một hộp thư Gmail thật; đạt khi ≥ 9/10 vào hộp thư chính trong 60 giây, người gửi "nine2fine" | Thắng | Trước đây là điều kiện đóng Slice 1; nay là điều kiện go-live. |
 | G3 | AC-AUTH-95b (Outlook, 10 lần, Should) và AC-AUTH-89 (kiểm log/console/URL/analytics một lần trên môi trường triển khai) | Thắng, qa-reviewer | Theo PRD Slice 1 mục 6. |
-| G4 | AC hoãn theo slice: AC-AUTH-69 → Slice 2 (AC-CAT-44); AC-AUTH-68, 88 → Account; AC-AUTH-84, 85 → Slice 4 (AC-ADM-01, 02; 85 diễn đạt lại theo PRD Slice 4 mục 6); AC-AUTH-75 → slice Admin người dùng (Slice 4 chỉ kiểm phần cốt lõi bằng SQL, AC-ADM-03) | qa-reviewer | Slice được giao không được đóng nếu chưa kiểm. |
+| G4 | AC hoãn theo slice: AC-AUTH-69 → Slice 2 (AC-CAT-44); AC-AUTH-68, 88 → Account; AC-AUTH-84, 85 → Slice 4 (AC-ADM-01, 02; 85 diễn đạt lại theo PRD Slice 4 mục 6); AC-AUTH-75 → **Slice 7** (AC-USR-26, 27, 29; Slice 4 chỉ kiểm phần cốt lõi bằng SQL, AC-ADM-03); phần chữ nguyên văn "API cài đặt nhân viên" của AC-AUTH-85 → **Slice 7** (AC-USR-02) | qa-reviewer | Slice được giao không được đóng nếu chưa kiểm. |
 | G5 | Dọn mock (xem mục "Dọn mock") và nội dung catalog thật (xem Slice 2) | dev, Thắng | Bản production sạch. |
 | G6 | **Rate limit catalog sau reverse proxy** (QA Slice 2 m6): bật `TRUST_PROXY` đúng số proxy của nơi deploy; xác nhận chạy 1 tiến trình (bộ đếm nằm trong RAM) hoặc chuyển bộ đếm vào DB. Đạt khi trên môi trường triển khai: 2 máy khác IP mỗi máy gửi 100 yêu cầu catalog trong 60 giây đều nhận 200; máy thứ ba gửi 121 yêu cầu thì yêu cầu 121 nhận 429 (BR-CAT-19) | backend-dev, Thắng | Không làm thì mọi khách chung một IP, cả site bị chặn sau 120 yêu cầu/phút. |
 | G7 | AC-CAT-52 (Should): đo p95 danh sách ≤ 500 ms, chi tiết ≤ 300 ms với 100 sản phẩm thử, đo ở máy chủ triển khai | backend-dev | Hoãn từ Slice 2; đo trên máy dev không có giá trị. |
@@ -291,6 +291,36 @@ Câu hỏi mở (chi tiết PRD Slice 6 mục 7). S6-Q2..Q9 làm theo mặc đ�
 Điều kiện bắt đầu code (PO): Slice 5 đóng (5.6 hoặc ghi rõ hoãn). Thứ tự: 6.1 → (6.2 → 6.3 → 6.4) song song 6.5, 6.6 → 6.7 → 6.8. Không lát nào trước 6.8 bị chặn bởi câu hỏi mở.
 
 DoD: theo DoD chung; thêm: ở `adminCatalogMode: http` ba màn Sản phẩm, Tồn kho, Khuyến mãi không dùng mock; tồn không bao giờ âm, mỗi điều chỉnh tay có đúng 1 dòng nhật ký có người/giờ/lý do (AC-INV-33..36); mã tạo ở admin dùng được ngay ở checkout (AC-INV-40); 2.19 đóng (AC-INV-24).
+
+---
+
+## Slice 7 — Admin khách hàng & nhân viên (P0)
+
+PRD: `docs/product/PRD.md` › Slice 7 (BR-USR-01..25, AC-USR-01..44). Thắng giao 2026-11-11. Mục tiêu: staff/admin tra khách (tìm, lọc, hạng, đơn, dữ liệu cá nhân che theo vai trò); admin khoá / mở khách; admin tạo nhân viên không biết mật khẩu, khoá / mở, đổi vai trò staff ↔ admin, mọi phiên bị thu hồi khi khoá hoặc đổi vai trò; luôn ≥ 1 admin hoạt động; có nhật ký. Hai màn mock (`customers/*`, `settings/staff-page.ts`) chạy BE thật sau cờ `adminUsersMode`. Nhận AC hoãn AC-AUTH-75 và AC-AUTH-85 (phần "API cài đặt nhân viên") từ G4.
+
+| # | Hạng mục | Mức | BR | AC | Người làm | Phụ thuộc | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 7.1 | Nền: kiểm quyền API (phiên `n2f_asid`, ma trận staff/admin), giới hạn tần suất, mã lỗi mới (`self-change`, `last-admin`), migration cộng thêm (nhật ký thao tác tài khoản, RLS), contract `openapi.yaml`, cờ FE `adminUsersMode`, menu, `permissions.ts` khớp ma trận | Must | 01..07 | 01, 03..10 | BE → FE | Slice 6 (6.1..6.7 xong) | Chưa |
+| 7.2 | Khách (đọc): danh sách (tìm, tab, lọc hạng, sắp, phân trang), chi tiết, số liệu + hạng, che email / SĐT / ẩn ngày sinh ở máy chủ, 10 đơn mới nhất + liên kết sang màn đơn; ẩn ô Won't; FE danh sách + chi tiết HTTP | Must | 08..11, 13 | 11..19, 21, 44 | BE, FE | 7.1 | Chưa |
+| 7.3 | Khoá / mở khách + dịch vụ dùng chung đổi trạng thái tài khoản (một giao dịch: `is_active`, thu hồi mọi phiên, nhật ký; khoá chống đua); chữ FE khoá khách sửa theo K4 | Must | 14..16, 24 | 22..25, 28, 29 | BE, FE | 7.2 | Chưa |
+| 7.4 | Nhân viên (đọc + tạo): danh sách, tạo không mật khẩu, thư hướng dẫn "Quên mật khẩu", đặt mật khẩu bằng cơ chế sẵn có; FE màn Nhân viên HTTP (ẩn bảng quyền Won't) | Must | 18..20 | 31..36 | BE, FE | 7.1 | Chưa |
+| 7.5 | Nhân viên (khoá / mở / đổi vai trò): thu hồi phiên, không tự khoá / tự hạ, luôn ≥ 1 admin (kể cả đua). **Đóng AC-AUTH-75 (AC-USR-26, 27) và AC-AUTH-85 (AC-USR-02)** | Must | 21..23, 16 | 02, 26, 27, 37..42 | BE, FE | 7.3, 7.4 | Chưa |
+| 7.6 | Sổ địa chỉ khách (admin); lịch sử thao tác tài khoản; "Chờ đặt mật khẩu" + "Hoạt động gần nhất"; liên kết "Quên mật khẩu" ở `/admin/login` | Should | 12, 17, 25 | 20, 30, 43 | BE, FE | 7.2..7.5 | Chưa |
+| 7.7 | Nghiệm thu thật trên Supabase: áp migration Slice 7 (**cần Thắng duyệt**); tạo 1 nhân viên thật bằng email do Thắng chọn, thư Gmail thật, đặt mật khẩu bằng "Quên mật khẩu", đăng nhập `/admin`; khoá / mở 1 khách test; AC-AUTH-75 trên 2 trình duyệt; migrate 2 lần | Must | 06, 16, 19, 20 | 09, 26, 27, 32, 35 | Thắng, Orchestrator, qa-reviewer | 7.1..7.5 | Chưa |
+| 7.8 | Ghi chú / tag khách, "Đã trả hàng", "Size hay mua", "Giá trị TB/đơn", Xuất CSV; gộp khách; xoá tài khoản cứng; nâng khách thành nhân viên; gửi lại thư mời / liên kết mời một lần; thư báo khoá cho khách; báo cáo, nội dung, cài đặt cửa hàng, nhật ký toàn hệ thống | Won't | — | — | slice sau | — | Không có cột / dữ liệu, hoặc ngoài phạm vi Thắng giao |
+
+Câu hỏi mở (chi tiết PRD Slice 7 mục 7). Tất cả theo mặc định PO, Thắng đổi được; không câu nào chặn 7.1–7.6:
+
+| # | Câu hỏi | Chặn lát | Làm trước theo mặc định? |
+| --- | --- | --- | --- |
+| S7-Q1 | Cách tạo nhân viên (mặc định: tạo không mật khẩu + thư hướng dẫn "Quên mật khẩu", admin không biết mật khẩu) | 7.4 | Có |
+| S7-Q2 | Staff khoá / mở khách? (mặc định: không, chỉ admin) | 7.3 | Có |
+| S7-Q3 | Staff thấy email / SĐT đầy đủ? (mặc định: không, che; không thấy ngày sinh, sổ địa chỉ) | 7.2 | Có |
+| S7-Q4..Q9 | Quy tắc khoá khách; không nâng khách thành nhân viên; hạng theo BR-ACC-15; trường Won't; không xoá cứng; giới hạn số | — | Có |
+
+Điều kiện bắt đầu code (PO): Slice 6 lát 6.1..6.7 xong (đã đạt); 6.8 không chặn. Thứ tự: 7.1 → (7.2 → 7.3) song song 7.4 → 7.5 → 7.6 → 7.7.
+
+DoD: theo DoD chung; thêm: ở `adminUsersMode: http` hai màn Khách hàng và Nhân viên không dùng mock; khoá hoặc đổi vai trò luôn thu hồi mọi phiên và có đúng 1 dòng nhật ký (AC-USR-22, 26, 27, 42); không bao giờ 0 admin hoạt động (AC-USR-40, 41); admin không biết mật khẩu nhân viên (AC-USR-32, 35); staff không nhận email / SĐT / ngày sinh / địa chỉ đầy đủ trong phản hồi (AC-USR-18); AC-AUTH-75, 85 ghi Đạt vào G4.
 
 ---
 

@@ -1,5 +1,10 @@
 # Handoff
 
+## Slice 7 — Admin khách hàng & nhân viên (2026-11-11: PRD + backlog xong, chưa code)
+- PO: PRD Slice 7 (BR-USR-01..25, AC-USR-01..44), backlog lát 7.1–7.8, decisions 2026-11-11. Nhận AC-AUTH-75 (AC-USR-26, 27, 29) và AC-AUTH-85 (AC-USR-02). Backend chốt tên endpoint / bảng nhật ký / mã `self-change`, `last-admin` trong `openapi.yaml`.
+- Câu hỏi mở (mặc định PO, không chặn 7.1–7.6): S7-Q1 cách tạo nhân viên (tạo không mật khẩu + thư hướng dẫn "Quên mật khẩu"); S7-Q2 staff khoá/mở khách (mặc định không); S7-Q3 staff thấy email/SĐT đầy đủ (mặc định che, không thấy ngày sinh/địa chỉ); S7-Q4..Q9 xem PRD mục 7. Lát 7.7 cần Thắng duyệt áp migration Slice 7 lên Supabase và email nhân viên thật.
+- Lưu ý cho BE/FE: `users.terms_accepted_at` NOT NULL khi tạo nhân viên (BE chọn giá trị); `/admin/login` chưa có liên kết "Quên mật khẩu" (Should, BR-USR-25); đổi chữ FE khoá khách (K4); `CustomerUpdate` ở HTTP chỉ còn `status`.
+
 ## Slice 6 — Admin kho & sản phẩm (2026-11-11: lát 6.1–6.7 xong, QA sửa xong; còn 6.8 chờ Thắng)
 - **Tóm tắt trạng thái (orchestrator, 2026-11-11):** BE 6 file test Slice 6 pass; `npm test` toàn bộ 29/29 file (crash M2 ở concurrency, lookup-codes, chạy lại riêng 8/8, 26/26). Chạy thật FE `start:local` + BE DB `n2f_dev` (tài khoản admin/staff `@nine2fine.test`, mật khẩu sinh riêng chỉ cho n2f_dev, lưu ngoài repo): tạo SP → tải JPEG → Đang bán → PDP hiện ảnh `/api/media/up-…`, giá, size S còn 7; "Đặt số đếm" 7 → nhật ký `count` người "Nine2fine Admin"; voucher mới "Đang chạy"; staff không có nút lưu, DELETE 403. Lần chạy đầu lộ 4 lỗi FE (ô Dòng mô tả bắt buộc, ≥1 giới tính/dịp mặc, SKU tự sinh trùng, lý do điều chỉnh theo cách/dấu) đã sửa (cbf31a8). QA: `docs/qa/report-slice-6-admin-catalog.md` (46/48 Pass, 0 Blocker, 1 Major) — M-1, m-1..m-7 đã sửa.
 - Playwright toàn bộ (cbf31a8): 411 pass, 9 fail ngoài Slice 6: AC-CART-18 (flaky, nay cả mobile), commerce:37, :183 (flaky, chạy lại pass), home:56 (fail ổn định, đã biết từ Slice 2), operations:58, :103 (fail ổn định: test Slice 3 còn chờ nút "Hủy đơn" của khách ở `to_ship`, nay là "Gửi yêu cầu huỷ" từ Slice 4.5; cần sửa test).

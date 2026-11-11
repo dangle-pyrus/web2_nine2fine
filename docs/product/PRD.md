@@ -1375,3 +1375,171 @@ Mặc định PO, làm trước theo mặc định; Thắng đổi được bằ
 | S6-Q7 | Giá biến thể, giá vốn, tags, SEO, bộ sưu tập, đối tượng voucher theo hạng/khách/riêng tư, nhiều danh mục | K2, K6, BR-INV-44 | Won't; ẩn ở HTTP. | Mặc định PO |
 | S6-Q8 | Ngưỡng sắp hết | BR-INV-35, 36 | Mặc định 5 (Must); sửa ngưỡng: Should; storefront không đổi. | Mặc định PO |
 | S6-Q9 | Khoảng giá | BR-INV-11 | Số nguyên 1.000–100.000.000 đồng; giá gốc > giá. | Mặc định PO |
+
+---
+
+## Slice 7: Admin khách hàng & nhân viên
+
+Nguồn: backlog 4.9 (khách hàng, nhân viên; vô hiệu hoá / đổi vai trò bằng giao diện), backlog G4 (AC-AUTH-75, AC-AUTH-85), decisions 2026-11-08 (AC hoãn), Slice 1 (BR-AUTH-19, 20, 22, 29, 33, 34, 35, 37; AC-AUTH-75, 85), Slice 4 (BR-ADM-01..04, 06, 41; S4-Q9), Slice 5 (BR-ACC-15 hạng), Slice 6 (BR-INV-01..08 làm mẫu nền quyền). Thắng giao 2026-11-11: khách hàng (admin + staff đọc; khoá/mở khoá), nhân viên (chỉ admin; tạo, khoá/mở, đổi vai trò, thu hồi mọi phiên), đóng AC-AUTH-75 và phần còn lại của AC-AUTH-85, thay hai màn admin đang mock. Hiện trạng đã đọc: `schema.prisma` (`User`: `role` member/admin/staff, `is_active`, `password_hash` null được, `date_of_birth`, `phone_number`, `marketing_opt_in`, `terms_accepted_at` NOT NULL, không có cột ghi chú/tag/khoá-bởi; `Session`: `audience`, `revoked_at`, `revoke_reason`, `last_used_at`; `AuthActionToken` mục đích `reset_password`; `Address`; `Order.user_id`); `auth.service.ts` (đăng nhập từ chối tài khoản `is_active = false` kèm thư "tài khoản bị khoá"; đặt lại mật khẩu chỉ cho tài khoản đang hoạt động, mã OTP 10 phút, thu hồi mọi phiên); `session.service.ts` (`revokeAllUserSessions`; vai trò và `is_active` đọc lại mỗi yêu cầu); FE `admin/features/customers/*`, `settings/staff-page.ts`, `core/permissions.ts`, `data-access/models.ts`. Mã BR: `BR-USR`, AC: `AC-USR`. Tên endpoint, bảng, cột, mã lỗi do Backend chốt trong `openapi.yaml`; PRD chỉ nêu dữ liệu phải lưu và hành vi. Tiền là số nguyên đồng; múi giờ Asia/Ho_Chi_Minh. Mặc định PO ghi ở mục 7 (S7-Q#).
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** Ở bản thật không có cách nào để biết ai là khách, khoá một tài khoản gian lận, hay thêm/bớt nhân viên: tài khoản staff/admin chỉ vào DB qua seed, khoá và đổi vai trò phải sửa SQL, và SQL không thu hồi phiên đang mở (AC-AUTH-75 và phần "API cài đặt nhân viên" của AC-AUTH-85 còn hoãn từ Slice 1). Hai màn admin Khách hàng và Nhân viên đã thiết kế nhưng chạy mock, hiện "Chưa khả dụng" ở HTTP.
+
+**Mục tiêu.**
+1. Staff/admin tra khách (tìm, lọc, phân trang), xem hồ sơ, hạng và đơn của khách, rồi nhảy sang màn đơn Slice 4; dữ liệu cá nhân che theo vai trò.
+2. Admin khoá / mở khoá tài khoản khách; khoá thì khách mất mọi phiên ngay.
+3. Admin tạo tài khoản nhân viên **mà không biết mật khẩu của họ**, khoá / mở, đổi vai trò staff ↔ admin; khoá hoặc đổi vai trò thì mọi phiên của tài khoản đó bị thu hồi ngay.
+4. Không bao giờ để hệ thống còn 0 admin hoạt động; admin không tự khoá / tự hạ mình.
+5. Mỗi lần tạo / khoá / mở / đổi vai trò có dòng nhật ký ai làm, lúc nào, vì sao.
+6. Đóng AC-AUTH-75 và AC-AUTH-85; ở HTTP hai màn không còn dữ liệu mock.
+
+**Không phải mục tiêu.** Báo cáo, nội dung, cài đặt cửa hàng, nhật ký toàn hệ thống, xuất file, ghi chú / tag khách, gộp khách, xoá tài khoản cứng, đổi giao diện admin.
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Lý do |
+| --- | --- | --- |
+| Quyền API (phiên `n2f_asid`, ma trận staff/admin), giới hạn tần suất, mã lỗi, cờ FE `adminUsersMode`, migration cộng thêm | Must | Nền an toàn, giống Slice 4 và 6. |
+| Khách hàng: danh sách (tìm, tab, lọc hạng, sắp, phân trang), chi tiết (hồ sơ, hạng, số đơn, tổng chi, đơn gần nhất, 10 đơn mới nhất + liên kết sang màn đơn) | Must | Mục tiêu 1. |
+| Che email / SĐT, ẩn ngày sinh và sổ địa chỉ với staff, ở phía máy chủ | Must | Dữ liệu cá nhân; ẩn bằng FE không phải bảo vệ. |
+| Khoá / mở khoá khách (chỉ admin), lý do, thu hồi mọi phiên | Must | Mục tiêu 2. |
+| Nhân viên: danh sách, tạo (họ tên, email, vai trò; không mật khẩu), khoá / mở, đổi vai trò, thu hồi phiên | Must | Mục tiêu 3. |
+| Ràng buộc: không tự khoá / tự hạ, luôn ≥ 1 admin hoạt động (kể cả khi hai admin thao tác đồng thời) | Must | Mục tiêu 4. |
+| Nhật ký thao tác tài khoản (bảng riêng, không sửa / xoá) | Must | Mục tiêu 5. |
+| Sổ địa chỉ của khách (chỉ admin); xem lịch sử thao tác của một tài khoản; nhãn "Chờ đặt mật khẩu" + "Hoạt động gần nhất"; liên kết "Quên mật khẩu" ở `/admin/login` | Should | Hữu ích, không chặn vận hành. |
+| Ghi chú nội bộ, tag, "Đã trả hàng", "Size hay mua", "Giá trị TB/đơn"; Xuất CSV khách | Won't | DB không có cột / chưa có trả hàng / định nghĩa chưa chốt / ngoài phạm vi. Ẩn ở HTTP. |
+| Gộp khách, xoá tài khoản cứng, nâng khách thành nhân viên, tạo nhân viên bằng mật khẩu admin đặt, gửi lại thư mời, link mời một lần riêng, tự đổi họ tên nhân viên, thư báo khoá cho khách | Won't | Rủi ro dữ liệu / lộ mật khẩu / chưa cần. |
+| Báo cáo, nội dung, cài đặt cửa hàng, nhật ký toàn hệ thống | Won't | Ngoài phạm vi Thắng giao; các mục này vẫn "Chưa khả dụng". |
+
+### 3. Hiện trạng và hành vi được chọn
+
+| # | Điểm | Hiện trạng | Chọn | Lý do |
+| --- | --- | --- | --- | --- |
+| K1 | "Khách" | `users.role = member`. Đơn khách vãng lai (không `user_id`) không thuộc tài khoản nào. | Danh sách / chi tiết chỉ gồm `member`; id của staff/admin ở API khách → 404. Số đơn, tổng chi, đơn gần nhất chỉ tính đơn có `user_id` của khách (khớp BR-ACC-15, CHK-05). | Không lẫn nhân viên vào khách; cùng cách tính với màn Hạng của khách. |
+| K2 | Trường FE có, DB không | `note`, `tags`, `returnCount`, `usualSizes`, `averageOrderValue`; nút Xuất CSV. | Won't, ẩn ở HTTP; BE bỏ qua nếu gửi. `CustomerUpdate` ở HTTP chỉ còn đổi `status`. | Không thêm cột cho tính năng chưa dùng; trả hàng chưa có. |
+| K3 | Hạng | FE `member/silver/gold` (Đồng / Bạc / Vàng); BE Slice 5 `bronze/silver/gold` tính theo chi tiêu năm dương lịch, không lưu vào `users`. | Dùng đúng BR-ACC-15; `bronze` hiển thị "Đồng". Lọc theo hạng tính tại lúc đọc. | Một nguồn sự thật với trang Hạng của khách. |
+| K4 | Khoá khách | FE chữ "Khách không đăng nhập và đặt hàng được". Khoá = `is_active = false`; checkout vãng lai không cần tài khoản. | Khoá chặn đăng nhập / phiên / đặt lại mật khẩu; **không** chặn đặt hàng vãng lai bằng cùng email; sửa chữ FE: "Khách không đăng nhập được cho đến khi bạn mở khoá. Đơn đang xử lý không bị ảnh hưởng." | Chữ cũ hứa điều hệ thống không làm được. |
+| K5 | Khoá nhân viên | FE chữ "bị đăng xuất"; hiện chỉ đọc lại `is_active` mỗi yêu cầu, không ghi `revoked_at`. | Thu hồi thật mọi dòng `sessions` (cả `admin` và `storefront`) trong cùng giao dịch (BR-AUTH-29). | Nếu không, mở khoá lại sẽ "sống lại" phiên cũ; đổi vai trò không làm phiên hết hiệu lực. |
+| K6 | Tạo nhân viên | FE "Mời nhân viên" (họ tên, email, vai trò) và thư mời. BE có đặt lại mật khẩu bằng mã 8 chữ số, 10 phút, dùng cho mọi tài khoản đang hoạt động; `password_hash` cho phép null; `/auth/forgot-password` có ở storefront, `/admin/login` chưa có liên kết. | Mặc định S7-Q1: tạo tài khoản đang hoạt động, **chưa có mật khẩu**, gửi thư hướng dẫn nhân viên tự dùng "Quên mật khẩu" với chính email đó; thư không chứa mật khẩu hay mã. Admin không bao giờ biết hay đặt mật khẩu. | Dùng lại cơ chế đã kiểm thử, không bảng token mới, không trang mới. |
+| K7 | Vai trò | `Role` enum cũ (không dùng) và `user_role` member/admin/staff; BR-AUTH-33: một tài khoản một vai trò. | Chỉ đổi giữa staff ↔ admin; không đổi từ / sang member. | Giữ ranh giới khách / nhân viên. |
+| K8 | Cờ FE | `adminOrdersMode`, `adminCatalogMode` độc lập. | Cờ mới `adminUsersMode` (`http`/`mock`); `http` mở thêm "Khách hàng" và "Cài đặt › Nhân viên" (admin). | Phát hành tách khỏi các slice trước. |
+| K9 | Dữ liệu cá nhân ở staff | S4-Q9: staff thấy SĐT/email người nhận ở màn đơn (cần để gọi). `permissions.ts`: `customers.contact` chỉ admin. | Màn Khách hàng: staff chỉ thấy email / SĐT đã che, không thấy ngày sinh và sổ địa chỉ (S7-Q3). | Màn đơn đã đủ cho việc gọi khách; danh bạ toàn bộ khách là dữ liệu rộng hơn. |
+
+### 4. Business Rules
+
+**Chung**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-USR-01 | Must | BR-INV-01 | Mọi API admin khách hàng và nhân viên chỉ nhận phiên `n2f_asid` còn hạn của tài khoản staff/admin đang hoạt động; vai trò và `is_active` đọc từ DB mỗi yêu cầu. Không phiên / hết hạn / thu hồi / chỉ có `n2f_sid` / `is_active = false` → 401 `unauthenticated`, `Cache-Control: no-store`, không dữ liệu. |
+| BR-USR-02 | Must | BR-AUTH-33; AC-AUTH-85 | Ma trận quyền, kiểm ở mọi yêu cầu, trước khi đọc thân yêu cầu. **staff**: xem danh sách và chi tiết khách (dữ liệu đã che, BR-USR-11). **admin**: mọi việc của staff + xem đầy đủ liên hệ, khoá / mở khách, toàn bộ API nhân viên (danh sách, tạo, khoá / mở, đổi vai trò, xem lịch sử). Thiếu quyền → 403 `forbidden` ("Không đủ quyền"); dữ liệu không đổi, không có dòng nhật ký, không thư. |
+| BR-USR-03 | Must | BR-ADM-04; BR-INV-03 | FE ẩn nút / route / menu không đủ quyền theo `permissions.ts` (khớp BR-USR-02): staff không thấy mục Cài đặt, nút Khoá / Mở khoá; `/admin/settings/staff` bị chặn. Nút gửi khoá khi đang gửi; lỗi (kể cả mất mạng) hiện thông báo, giữ nguyên dữ liệu đã nhập; sau khi có mạng bấm lại không tạo bản ghi thứ hai (BR-USR-19, 21 idempotent). Phiên bị thu hồi khi đang xem → yêu cầu kế tiếp 401 → về `/admin/login`. |
+| BR-USR-04 | Must | BR-INV-04 | Giới hạn theo tài khoản, dùng chung bộ đếm admin: đọc 120 / 60 giây, ghi 60 / 60 giây; tạo nhân viên thêm giới hạn 10 lần / 60 phút / admin. Vượt → 429 `rate-limited` + `retryAfterSeconds` + `Retry-After`. |
+| BR-USR-05 | Must | BR-INV-06 | Cờ `adminUsersMode` (`http` bản thường / `mock` e2e). `http`: Khách hàng và Cài đặt › Nhân viên gọi API thật, không đọc / ghi mock; menu của admin gồm Đơn hàng, Sản phẩm, Tồn kho, Khuyến mãi, Khách hàng, Cài đặt (chỉ gồm "Nhân viên"); các route admin khác vẫn "Chưa khả dụng"; ô Won't (K2) và các dòng quyền thuộc tính năng Won't (xuất file, trả hàng, doanh thu, giá vốn, nhật ký, cài đặt cửa hàng) ẩn. `mock`: như hiện tại, Playwright mock pass nguyên. |
+| BR-USR-06 | Must | BR-INV-07 | Migration chỉ cộng thêm (không `DROP`/`TRUNCATE`/đổi kiểu, không xoá dữ liệu); bảng mới bật RLS; chạy `migrate deploy` 2 lần thì lần 2 không có gì. Cần lưu thêm: nhật ký thao tác tài khoản (BR-USR-24). Không đổi bảng `users`, `sessions` (nếu BE cần cột mới phải là cộng thêm và nêu trong plan). |
+| BR-USR-07 | Must | BR-INV-08 | Mã lỗi ổn định (FE map theo `code`): `unauthenticated` 401, `forbidden` 403, `not-found` 404, `validation` 422 (+`field`), `duplicate` 409 (+`field: email`), `self-change` 409, `last-admin` 409, `rate-limited` 429, lỗi máy chủ; không stack trace, SQL. Tên `self-change`, `last-admin` do BE chốt. FE hiện câu tiếng Việt riêng cho từng mã, không trang trắng. |
+
+**Khách hàng**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-USR-08 | Must | K1, K3 | Danh sách chỉ gồm `member`, cả đang hoạt động và bị khoá. Tìm `q` (cắt khoảng trắng, ≤ 100 ký tự, dài hơn → 422 `field: q`): tên (chứa, không phân biệt hoa thường và dấu), email (chứa, không phân biệt hoa thường), SĐT (chuẩn hoá `+84` / `84` → `0`, chứa ≥ 4 chữ số liên tiếp); `%` và `_` là ký tự thường. Tab `all` / `blocked` kèm số đếm; lọc `tier` ∈ {`bronze`, `silver`, `gold`}; sắp `lastOrderAt` giảm (khách chưa có đơn ở cuối), `totalSpent` giảm, `orderCount` giảm, tên A–Z; hoà theo id; `page` ≥ 1, `limit` 1–50 (mặc định 20), ngoài khoảng → 422; trang quá cuối → `items` rỗng, `total` đúng. Mỗi dòng: tên, email, SĐT, hạng, số đơn, tổng chi, đơn gần nhất, trạng thái. |
+| BR-USR-09 | Must | BR-ACC-15; CHK-05 | Số liệu mỗi khách: `orderCount` = số đơn có `user_id` của khách, trừ `cancelled`; `totalSpent` = tổng `total` các đơn `completed` của khách (đồng, số nguyên); `lastOrderAt` = thời điểm đặt gần nhất trong các đơn tính ở `orderCount` (null nếu 0); hạng theo BR-ACC-15 (chi tiêu năm dương lịch hiện tại, giờ VN: Đồng < 18.000.000 ≤ Bạc < 40.000.000 ≤ Vàng). Đơn khách vãng lai trùng email không tính. Số liệu đọc tại thời điểm gọi, không cache. |
+| BR-USR-10 | Must | — | Chi tiết khách gồm: tên, email, SĐT, hạng và chi tiêu năm nay, `createdAt`, `marketingOptIn`, trạng thái (`active` / `blocked`), `orderCount`, `totalSpent`, `lastOrderAt`, 10 đơn mới nhất (cùng trường dòng của BR-ADM-05, mỗi đơn dẫn sang chi tiết ở màn Đơn hàng Slice 4), và (admin) ngày sinh. Nút "Xem tất cả đơn" mở màn Đơn hàng với `q` = email khách (hiển thị cả đơn vãng lai cùng email; chữ ghi rõ "theo email"). Id không tồn tại hoặc là staff/admin → 404. |
+| BR-USR-11 | Must | K9; BR-AUTH-35 | Che ở **phía máy chủ**, theo vai trò của người gọi: staff nhận email dạng `mi***@gmail.com` (giữ 2 ký tự đầu, che phần còn lại của tên) và SĐT dạng `0912 *** 678` (giữ 4 chữ số đầu, 3 cuối); phản hồi cho staff **không chứa** ngày sinh, sổ địa chỉ và giá trị đầy đủ của email / SĐT (kể cả trong mảng đơn). Admin nhận đầy đủ. Tìm kiếm khớp theo giá trị đầy đủ ở cả hai vai trò. Chữ FE khi che: "Liên hệ được ẩn bớt theo quyền của bạn." |
+| BR-USR-12 | Should | K9 | Sổ địa chỉ của khách (chỉ admin; mỗi địa chỉ: người nhận, SĐT, số nhà + phường/xã + tỉnh/thành, đánh dấu mặc định; mặc định đứng đầu, rồi mới tạo trước). Staff không thấy mục này. Chỉ đọc. |
+| BR-USR-13 | Must | BR-AUTH-35 | Không phản hồi nào (kể cả lỗi, log) chứa `password_hash`, mã OTP / băm token, nội dung phiên, `ip_address`, `user_agent`, `refresh_token_hash`. |
+| BR-USR-14 | Must | BR-AUTH-19, 29; BR-AUTH-37 | Khoá khách (chỉ admin): lý do bắt buộc 5–250 ký tự (NFC, cắt hai đầu). Trong **một giao dịch**: `is_active = false`, thu hồi mọi phiên (BR-USR-16), ghi 1 dòng nhật ký (BR-USR-24). Khách đã khoá: không đăng nhập bằng mã / mật khẩu (nhận lỗi tài khoản bị khoá và thư "tài khoản bị khoá" theo BR-AUTH-19, 37), không đặt lại mật khẩu được. Đơn đang xử lý của khách không đổi; đặt hàng vãng lai bằng cùng email vẫn được (K4). Không gửi thư cho khách lúc bị khoá. Khoá khách đã khoá → 200, không đổi gì, không dòng nhật ký mới. |
+| BR-USR-15 | Must | — | Mở khoá khách (chỉ admin): lý do tuỳ chọn ≤ 250 ký tự; `is_active = true`, 1 dòng nhật ký; **không** khôi phục phiên đã thu hồi (khách đăng nhập lại như bình thường); mở khoá khách đang hoạt động → 200, không đổi, không nhật ký. |
+| BR-USR-16 | Must | BR-AUTH-29; AC-AUTH-75 | Thu hồi phiên: khi khoá tài khoản (khách hoặc nhân viên) hoặc đổi vai trò, mọi dòng `sessions` còn hiệu lực của tài khoản đó (cả `admin` và `storefront`) được đặt `revoked_at` và `revoke_reason` (`account-disabled` hoặc `role-changed`) trong cùng giao dịch với thay đổi; lỗi giữa chừng thì không đổi gì. Yêu cầu kế tiếp từ **mọi** máy đang đăng nhập → 401 `unauthenticated` như BR-AUTH-26, không chờ hết hạn phiên. Mở khoá không thu hồi gì. |
+| BR-USR-17 | Should | — | Lịch sử thao tác của một tài khoản (khách hoặc nhân viên): 20 dòng mới nhất, mới trước, chỉ admin xem; trường theo BR-USR-24. |
+
+**Nhân viên**
+
+| Mã | Mức | Nguồn | Quy tắc |
+| --- | --- | --- | --- |
+| BR-USR-18 | Must | BR-AUTH-33 | Danh sách nhân viên (chỉ admin): mọi tài khoản `staff` / `admin`, cả đã khoá, tối đa 200 dòng, không phân trang, sắp `createdAt` tăng, hoà theo id. Mỗi dòng: id, họ tên, email, vai trò, trạng thái (`active` / `disabled`), `createdAt`, `lastActiveAt` (`last_used_at` lớn nhất trong các phiên; null nếu chưa đăng nhập). Không chứa `member`. |
+| BR-USR-19 | Must | K6, K7 | Tạo nhân viên (chỉ admin): họ tên 2–100 ký tự (NFC, gộp khoảng trắng; BE chốt cách tách họ / tên, hiển thị lại đúng chuỗi đã nhập), email hợp lệ ≤ 254 ký tự (cắt hai đầu, chuyển chữ thường), vai trò ∈ {`staff`, `admin`}. Email đã tồn tại ở **bất kỳ** tài khoản nào (không phân biệt hoa thường, kể cả khách) → 409 `duplicate` `field: email`, không tạo gì. Thành công: tài khoản `is_active = true`, chưa có mật khẩu, `marketing_opt_in = false`, 1 dòng nhật ký, 201 (không chứa mật khẩu), 1 thư hướng dẫn (BR-USR-20). Lỗi gửi thư không làm hỏng việc tạo (vẫn 201; tài khoản dùng được qua "Quên mật khẩu"). |
+| BR-USR-20 | Must | BR-AUTH-20, 22 | Đặt mật khẩu nhân viên: thư gửi tới email nhân viên nêu vai trò và hướng dẫn mở trang "Quên mật khẩu", nhập đúng email này, nhập mã 8 chữ số nhận bằng thư (hiệu lực 10 phút, một lần; mã mới yêu cầu lại được bất cứ lúc nào theo giới hạn BR-AUTH-04..09), đặt mật khẩu theo BR-AUTH-20. Thư mời **không chứa mã hay mật khẩu**. Không ai khác (kể cả admin tạo) biết hay đặt được mật khẩu; không mật khẩu nào xuất hiện trong phản hồi, log, thư, nhật ký. Chưa đặt mật khẩu thì không đăng nhập mật khẩu được (lỗi như sai thông tin, BR-AUTH-17). Tài khoản bị khoá không nhận mã đặt mật khẩu (BR-AUTH-19). |
+| BR-USR-21 | Must | BR-AUTH-29 | Khoá / mở nhân viên (chỉ admin): khoá cần lý do 5–250 ký tự, theo cách BR-USR-14 (một giao dịch: `is_active`, thu hồi phiên, nhật ký); mở: lý do tuỳ chọn, theo BR-USR-15. Khoá tài khoản đã khoá / mở tài khoản đang hoạt động → 200 không đổi, không nhật ký. Nhân viên bị khoá giữ nguyên lịch sử thao tác (đơn, tồn kho, nhật ký). |
+| BR-USR-22 | Must | BR-AUTH-29, 33 | Đổi vai trò (chỉ admin) giữa `staff` ↔ `admin`: một giao dịch gồm đổi `role`, thu hồi mọi phiên (BR-USR-16, `role-changed`), 1 dòng nhật ký (vai trò trước / sau); lý do tuỳ chọn ≤ 250 ký tự. Đặt đúng vai trò hiện tại → 200 không đổi, không nhật ký. Không đổi từ / sang `member`. Nhân viên phải đăng nhập lại để có quyền mới. |
+| BR-USR-23 | Must | — | Ràng buộc an toàn, kiểm trong giao dịch và có khoá chống đua: (a) admin không tự khoá và không tự đổi vai trò của chính mình → 409 `self-change`, không đổi gì; (b) sau mọi thao tác khoá hoặc hạ vai trò, số admin `is_active = true` phải ≥ 1, ngược lại → 409 `last-admin`, không đổi gì; (c) hai admin thao tác đồng thời (vd. mỗi người hạ người kia) không bao giờ để lại 0 admin hoạt động: nhiều nhất một thao tác thành công, thao tác còn lại nhận 409 `last-admin` hoặc 401 (phiên đã bị thu hồi). FE không hiện menu thao tác ở dòng "(bạn)". |
+| BR-USR-24 | Must | BR-INV-34 | Nhật ký thao tác tài khoản: mỗi lần tạo nhân viên, khoá, mở khoá, đổi vai trò ghi đúng 1 dòng trong cùng giao dịch: thời điểm, hành động (`staff-created`, `locked`, `unlocked`, `role-changed`), người thực hiện (id, họ tên, vai trò lúc đó), tài khoản bị tác động (id, email và họ tên lúc đó), vai trò trước / sau (khi đổi vai trò hoặc tạo), lý do, số phiên đã thu hồi. Không có API sửa / xoá; không có API xoá tài khoản; dòng giữ khi tài khoản bị tác động bị khoá. Chỉ admin đọc (BR-USR-17). Thao tác bị từ chối (403, 409, 422) không để lại dòng. |
+| BR-USR-25 | Should | K6 | Màn Nhân viên: tài khoản chưa có mật khẩu hiện "Chờ đặt mật khẩu" (thay "Chưa đăng nhập"); đã khoá hiện "Đã khóa"; còn lại "Hoạt động {tương đối}". `/admin/login` có liên kết "Quên mật khẩu" tới trang Quên mật khẩu của storefront. |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu: admin A, A2; staff S; nhân viên N (staff, mới tạo); khách M (`minh.nguyen@gmail.com`, SĐT `0912345678`, ngày sinh 14/03/1998, 2 địa chỉ: 1 mặc định; đơn O1 `completed` 2.000.000 đồng, O2 `to_ship` 500.000, O3 `cancelled` 300.000, đều đặt năm nay); khách M2 đã bị khoá; khách vãng lai G. Mỗi AC ghi BR; AC đóng AC hoãn của Slice 1 được **in đậm**.
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-USR-01 | 01 | Không cookie; chỉ `n2f_sid` của M; `n2f_asid` của S sau khi `is_active = false` (SQL) | `GET` danh sách khách, `GET` danh sách nhân viên, `POST` khoá khách, `POST` tạo nhân viên | Cả bốn: 401 `unauthenticated`, `Cache-Control: no-store`, không dữ liệu; DB không đổi. |
+| **AC-USR-02** (**đóng AC-AUTH-85**) | 02 | S đăng nhập admin; A đăng nhập admin | S gọi: danh sách nhân viên, tạo nhân viên, đổi vai trò N, khoá N, khoá khách M, xem lịch sử tài khoản. Sau đó A gọi cùng các API | S: 403 `forbidden` (FE "Không đủ quyền") cho cả sáu; DB không đổi, không dòng nhật ký, không thư. A: 200 / 201 cho cùng các API. S vẫn xem được danh sách khách và chi tiết M (200). |
+| AC-USR-03 | 02 | A bị hạ thành staff bằng SQL; S được nâng thành admin bằng SQL, cả hai đang có phiên | A gọi danh sách nhân viên; S gọi danh sách nhân viên (yêu cầu kế tiếp) | A: 403 `forbidden`. S: 200. Không cần đăng nhập lại (vai trò đọc từ DB). |
+| AC-USR-04 | 03 | `adminUsersMode: http` | S mở admin; mở `/admin/customers`, chi tiết M, `/admin/settings/staff`. A mở cùng các trang | S: menu có Khách hàng, không có Cài đặt; chi tiết M không có nút Khoá / Mở khoá; `/admin/settings/staff` bị chặn (không hiện nội dung). A: có Khách hàng, Cài đặt › Nhân viên, nút Khoá / Mở khoá. |
+| AC-USR-05 | 03 | A ở màn Nhân viên, mất mạng | Bấm "Khoá tài khoản" cho N, xác nhận | Nút khoá khi đang gửi; lỗi mất mạng hiện thông báo; trạng thái hàng N không đổi; có mạng lại bấm khoá lần nữa: đúng 1 dòng nhật ký `locked` cho N. |
+| AC-USR-06 | 04 | A | 61 yêu cầu ghi trong 60 giây; 11 lần tạo nhân viên trong 60 phút | Yêu cầu ghi 61 và lần tạo 11: 429 `rate-limited` + `retryAfterSeconds`, `Retry-After`; 10 lần tạo trước đó vẫn thành công. |
+| AC-USR-07 | 05 | Build thường (`http` cả ba cờ) | A mở admin | Menu: Đơn hàng, Sản phẩm, Tồn kho, Khuyến mãi, Khách hàng, Cài đặt; Cài đặt chỉ có "Nhân viên"; `/admin/settings/store`, `/admin/settings/audit`, trang tổng quan → "Chưa khả dụng"; không request nào tới mock ở hai màn; Playwright `adminUsersMode: mock` pass nguyên. |
+| AC-USR-08 | 05 | `http`; A mở danh sách + chi tiết khách và màn Nhân viên | Xem các ô | Không có Xuất CSV, Ghi chú, Tag, "Đã trả hàng", "Size hay mua", "Giá trị TB/đơn"; bảng quyền không có dòng xuất file, trả hàng, doanh thu, giá vốn, nhật ký, cài đặt cửa hàng; chữ khoá khách là "Khách không đăng nhập được cho đến khi bạn mở khoá. Đơn đang xử lý không bị ảnh hưởng." |
+| AC-USR-09 | 06 | DB có dữ liệu Slice 1–6 | `migrate deploy` 2 lần | Lần 2 không có migration mới; không DROP/TRUNCATE/đổi kiểu; bảng mới bật RLS; số dòng `users`, `sessions`, `orders` không đổi. |
+| AC-USR-10 | 07, 13 | Gây từng lỗi của AC-USR-01, 02, 23, 33, 37, 41 | Đọc thân phản hồi và FE | Có `code` ổn định theo BR-USR-07 và HTTP đúng; không stack trace, SQL; không có khoá `password_hash`, `refresh_token_hash`, `ip_address`, `user_agent`, mã OTP; FE hiện đúng câu cho `self-change`, `last-admin`, `duplicate`, không trang trắng. |
+| AC-USR-11 | 08 | 25 khách, M có đơn gần nhất, 5 khách chưa có đơn | Mở danh sách mặc định; trang 2; `limit=51`; `limit=0`; `page=99` | Trang 1: 20 dòng, M trước khách có đơn cũ hơn, 5 khách chưa có đơn ở cuối; trang 2: 5 dòng; `total` 25; 422; 422; `items` rỗng, `total` 25. |
+| AC-USR-12 | 08 | Có khách "Nguyễn Văn Minh" | `q` = `nguyen van minh`; `minh.ng`; `0912`; `+84912345`; `q` 101 ký tự; `q` = `%` | Mỗi cách tìm của 4 giá trị đầu ra M (khớp tên bỏ dấu, email, SĐT chuẩn hoá); 422 `validation` `field: q`; `%` chỉ khớp khách có ký tự `%`. |
+| AC-USR-13 | 08 | M2 bị khoá; 2 khách Vàng, 5 Bạc | Mở tab "Đã khóa"; lọc hạng Vàng; lọc Vàng + tab Đã khóa | Tab `blocked` đếm đúng và liệt kê M2; lọc Vàng ra đúng 2; kết hợp ra giao đúng; số đếm tab khớp số dòng. |
+| AC-USR-14 | 08, 10 | Có A, S, N trong `users` | Xem toàn bộ danh sách khách; `GET` chi tiết với id của S; id không tồn tại | Không dòng nào là A / S / N; id của S → 404 `not-found`; id lạ → 404. |
+| AC-USR-15 | 09 | M như dữ liệu tham chiếu | Xem dòng và chi tiết M | `orderCount` 2 (O1, O2; O3 huỷ không tính); `totalSpent` 2.000.000; `lastOrderAt` = giờ đặt O2; số nguyên đồng; giờ hiển thị Asia/Ho_Chi_Minh; đơn G (vãng lai, cùng email M) không được tính. |
+| AC-USR-16 | 09 | Khách K1 chi tiêu năm nay (đơn `completed`) 17.999.999; K2 18.000.000; K3 40.000.000; K4 có đơn `completed` năm ngoái 50.000.000, năm nay 0 | Xem hạng ở danh sách và chi tiết | Đồng; Bạc; Vàng; Đồng; chi tiết hiện chi tiêu năm nay và khớp `GET /account/membership` của chính khách. |
+| AC-USR-17 | 10 | M có 12 đơn | Mở chi tiết M; bấm một đơn; bấm "Xem tất cả đơn" | Đúng 10 đơn mới nhất, mới trước; đơn mở ra màn chi tiết Slice 4 đúng đơn; "Xem tất cả đơn" mở màn Đơn hàng với `q` = email M (có chữ "theo email"). |
+| AC-USR-18 | 11 | S và A cùng xem M (danh sách và chi tiết) | Đọc phản hồi JSON và giao diện | S: email `mi***@gmail.com`, SĐT `0912 *** 678`; JSON không chứa chuỗi `minh.nguyen`, `0912345678`, ngày sinh, địa chỉ; chữ "Liên hệ được ẩn bớt theo quyền của bạn." A: email, SĐT, ngày sinh đầy đủ. |
+| AC-USR-19 | 11 | S | Tìm `q` = `minh.nguyen@gmail.com` và `0912345678` | Ra M (tìm theo giá trị đầy đủ); hiển thị vẫn che. |
+| AC-USR-20 (Should) | 12 | M có 2 địa chỉ, 1 mặc định | A xem chi tiết M; S xem chi tiết M | A: 2 địa chỉ, mặc định đứng đầu, đủ người nhận / SĐT / số nhà + phường + tỉnh. S: không có mục Sổ địa chỉ, JSON không có địa chỉ. |
+| AC-USR-21 | 13 | Mọi API Slice 7, cả thành công và lỗi | Quét thân phản hồi và log máy chủ trong lúc chạy AC-USR-01..43 | Không có `password_hash`, băm token, mã OTP, mật khẩu, `ip_address`, `user_agent`. |
+| AC-USR-22 | 14 | M đang đăng nhập ở 2 trình duyệt (2 phiên `n2f_sid`), có O2 `to_ship` | A khoá M với lý do "Hoàn hàng gian lận lặp lại"; M gọi `GET /account/profile` ở cả hai trình duyệt | 200; `is_active = false`; 2 dòng `sessions` có `revoked_at` và `revoke_reason = account-disabled`; 1 dòng nhật ký `locked` kèm lý do và số phiên 2; cả hai yêu cầu của M: 401 `unauthenticated`. |
+| AC-USR-23 | 14 | A | Khoá M với lý do 4 ký tự; 251 ký tự; thiếu; khoá lần hai M đã khoá; id lạ | 422 `validation` `field: reason` ×3; khoá lần hai: 200, không dòng nhật ký mới; 404. |
+| AC-USR-24 | 14 | M bị khoá | M đăng nhập bằng mã và bằng mật khẩu; M yêu cầu đặt lại mật khẩu; khách vãng lai đặt COD bằng email của M; kiểm O2 | Đăng nhập: lỗi tài khoản bị khoá (BR-AUTH-19) và nhận thư "tài khoản bị khoá"; không nhận mã đặt lại, không đổi mật khẩu; đơn vãng lai tạo được; O2 vẫn `to_ship`, không đổi. |
+| AC-USR-25 | 15 | M bị khoá; cookie `n2f_sid` cũ của M lưu trước khi khoá | A mở khoá M (có / không lý do); M đăng nhập; M dùng cookie cũ; A mở khoá M đang hoạt động | `is_active = true`, 1 dòng nhật ký `unlocked`; M đăng nhập được; cookie cũ vẫn 401 (không "sống lại"); mở khoá lần hai: 200 không đổi, không dòng nhật ký mới. |
+| **AC-USR-26** (**đóng AC-AUTH-75**) | 16, 21 | N (staff) đăng nhập admin ở 2 máy (2 phiên `n2f_asid`) | A khoá N; N gọi `GET /admin/customers` ở máy 1 rồi máy 2 | Cả hai: 401 `unauthenticated`, FE về `/admin/login`; 2 dòng `sessions` `revoked_at` có, `revoke_reason = account-disabled`; trong cùng giao dịch nhật ký `locked` ghi số phiên 2. Máy 1 đang mở màn khi bị khoá: yêu cầu kế tiếp cũng 401. |
+| **AC-USR-27** (**đóng AC-AUTH-75**) | 16, 22 | A2 (admin) đăng nhập 2 máy | A hạ A2 thành staff; A2 gọi API nhân viên ở cả 2 máy; A2 đăng nhập lại | Hai yêu cầu: 401 `unauthenticated` (không phải 403: phiên đã bị thu hồi); `revoke_reason = role-changed`; đăng nhập lại được, API nhân viên 403 (vai trò mới), khách / đơn 200. |
+| AC-USR-28 | 16 | Giao dịch khoá N gặp lỗi giữa chừng (giả lập lỗi ở bước thu hồi / nhật ký) | A khoá N | 5xx hoặc lỗi; `is_active` của N vẫn `true`, không dòng nhật ký, phiên của N không bị thu hồi. |
+| AC-USR-29 | 16, 21 | N khoá rồi mở khoá | N dùng cookie cũ; N đăng nhập lại | Cookie cũ 401; đăng nhập lại thành công, phiên mới dùng được. |
+| AC-USR-30 (Should) | 17 | M có 3 thao tác (khoá, mở, khoá) | A xem lịch sử M; S xem | A: 3 dòng mới trước, đủ người / vai trò / hành động / lý do; S: 403. |
+| AC-USR-31 | 18 | Có A, A2, S, N bị khoá, nhiều khách | A mở danh sách nhân viên | Chỉ A, A2, S, N (kể cả N bị khoá, đánh dấu `disabled`); không khách; mỗi dòng đủ trường BR-USR-18; `lastActiveAt` = `last_used_at` lớn nhất của phiên, null nếu chưa đăng nhập; không `password_hash`. |
+| AC-USR-32 | 19, 20 | A | Tạo "Trần Thu Hà", `ha.tran@nine2fine.test` (có khoảng trắng và chữ hoa), vai trò `staff` | 201 kèm id, vai trò `staff`, `active`, email lưu chữ thường đã cắt; `password_hash` NULL (SQL); 1 dòng nhật ký `staff-created` người A; 1 thư tới email đó nêu vai trò và hướng dẫn "Quên mật khẩu", không chứa mật khẩu hay mã; phản hồi không có mật khẩu. |
+| AC-USR-33 | 19 | A | Tạo với email sai định dạng; 255 ký tự; họ tên 1 ký tự và 101 ký tự; vai trò `member`, `owner`; email của S (đổi hoa thường); email của khách M | Các trường sai: 422 `validation` đúng `field`; email của S và của M: 409 `duplicate` `field: email`; không tạo gì, không nhật ký, không thư. |
+| AC-USR-34 | 19 | SMTP lỗi | A tạo nhân viên | 201, tài khoản tạo, 1 dòng nhật ký; không 500; nhân viên vẫn đặt được mật khẩu qua "Quên mật khẩu" khi hết lỗi. |
+| AC-USR-35 | 20 | N mới tạo, chưa đặt mật khẩu | N đăng nhập `/admin/login` với mật khẩu bịa; N vào "Quên mật khẩu", nhập email, nhập mã trong thư, đặt mật khẩu yếu rồi mật khẩu hợp lệ; N đăng nhập `/admin/login`; nhập mã sau 11 phút | Đăng nhập bịa: lỗi sai thông tin, không lộ "chưa đặt mật khẩu"; mật khẩu yếu: lỗi theo BR-AUTH-20; hợp lệ: vào `/admin` đúng vai trò; mã quá 10 phút: lỗi hết hạn, yêu cầu mã mới được. |
+| AC-USR-36 | 20 | N bị khoá trước khi đặt mật khẩu | N yêu cầu mã ở "Quên mật khẩu" | Không đặt lại được; nhận thư "tài khoản bị khoá" (BR-AUTH-19, 37). |
+| AC-USR-37 | 21, 23 | A, S | A khoá S với lý do 5 ký tự; lý do rỗng; A mở khoá S; A khoá chính A; A mở menu ở dòng của A | Khoá thành công; 422 `field: reason`; mở khoá thành công; 409 `self-change`, A vẫn hoạt động; dòng "(bạn)" không có menu thao tác. Mỗi thao tác thành công 1 dòng nhật ký. |
+| AC-USR-38 | 22, 23 | A, S | A đổi S thành admin; S đăng nhập lại và mở Cài đặt; A đổi S về staff; A đổi chính A thành staff; A đặt S thành staff khi S đã staff | Đổi thành công, S thấy "Cài đặt"; đổi về staff được; 409 `self-change`, vai trò A không đổi; 200 không đổi, không dòng nhật ký mới. |
+| AC-USR-39 | 22 | Khách M | A gọi API đổi vai trò với id của M, hoặc đổi sang `member` | 404 `not-found` (M không thuộc nhân viên); 422 `field: role`; M vẫn `member`. |
+| AC-USR-40 | 23 | Chỉ A và A2 là admin hoạt động; chạy 20 lần: A hạ A2 và A2 hạ A (hoặc khoá nhau) cùng lúc | Hai yêu cầu song song | Sau mỗi lần: số admin `is_active` ≥ 1; nhiều nhất một thao tác thành công (200), bên còn lại 409 `last-admin` hoặc 401; không 500; mỗi thao tác thành công đúng 1 dòng nhật ký. |
+| AC-USR-41 | 23 | A là admin hoạt động duy nhất, A3 là admin đã bị khoá | A khoá A; A hạ A; A hạ A3 xuống staff; A mở khoá A3 | 409 `self-change`; 409 `self-change`; 200; 200; luôn còn ≥ 1 admin hoạt động. |
+| AC-USR-42 | 24 | Sau AC-USR-32, 37, 38 | A đọc lịch sử qua API lịch sử (BR-USR-17); thử `PUT` / `DELETE` một dòng; `DELETE` tài khoản khách và nhân viên | Dòng đủ thời điểm, hành động, người thực hiện + vai trò, tài khoản đích (id, email, họ tên lúc đó), vai trò trước / sau, lý do, số phiên thu hồi; thao tác bị từ chối (AC-USR-23, 33, 37) không có dòng; `PUT` / `DELETE` → 404 hoặc 405; không có API xoá tài khoản. |
+| AC-USR-43 (Should) | 25 | N chưa đặt mật khẩu; N2 đã đăng nhập hôm qua; N3 bị khoá | A mở màn Nhân viên; mở `/admin/login` | N "Chờ đặt mật khẩu"; N2 "Hoạt động … trước"; N3 "Đã khóa"; `/admin/login` có liên kết "Quên mật khẩu" mở trang quên mật khẩu storefront. |
+| AC-USR-44 | 08 | `http`; A mở danh sách khách; chặn mạng; DB không có khách; lọc không khớp | Tải lại; bỏ chặn bấm "Thử lại"; xem trạng thái rỗng | Lỗi + nút "Thử lại", bộ lọc trên URL giữ nguyên; sau thử lại ra đúng danh sách; "Chưa có khách hàng" (DB rỗng) khác "Không tìm thấy khách hàng phù hợp" (có lọc). |
+
+### 6. Định nghĩa xong của Slice 7
+
+- AC Must đạt (test BE/E2E ghi mã AC), AC Should ghi làm hay hoãn.
+- `openapi.yaml` có tag cho khách hàng admin và nhân viên (locked trước khi FE nối); migration chỉ cộng thêm; `decisions.md`, `handoff.md` cập nhật.
+- Ở `adminUsersMode: http` hai màn không có dữ liệu mock; Playwright mock pass nguyên.
+- **Đóng AC hoãn:** AC-AUTH-75 bằng AC-USR-26, 27 (và 29); AC-AUTH-85 bằng AC-USR-02 (staff 403 / admin được trên API nhân viên). Ghi kết quả vào backlog G4.
+- Khoá hoặc đổi vai trò luôn thu hồi mọi phiên và có đúng 1 dòng nhật ký (AC-USR-22, 26, 27, 42); không bao giờ 0 admin hoạt động (AC-USR-40, 41); admin không biết mật khẩu nhân viên (AC-USR-32, 35).
+- Lát nghiệm thu thật trên Supabase (7.7) cần Thắng duyệt áp migration.
+
+### 7. Câu hỏi mở
+
+Mặc định PO, làm trước theo mặc định; Thắng đổi được bằng cách trả lời. Không câu nào chặn lát 7.1–7.6; chỉ lát 7.7 cần Thắng duyệt áp migration và gửi thư thật.
+
+| # | Câu hỏi | Ảnh hưởng | Mặc định PO | Trạng thái |
+| --- | --- | --- | --- | --- |
+| S7-Q1 | Cách tạo tài khoản nhân viên mà admin không biết mật khẩu | BR-USR-19, 20; K6 | Admin nhập họ tên, email, vai trò; hệ thống tạo tài khoản chưa có mật khẩu và gửi thư hướng dẫn dùng "Quên mật khẩu" với email đó (mã 10 phút, yêu cầu lại được). Không bảng token mới, không trang đặt mật khẩu admin. Phương án thay thế (liên kết mời một lần 24 giờ + trang đặt mật khẩu riêng) = Won't lần này; phương án admin đặt mật khẩu tạm bị loại. | Mặc định PO |
+| S7-Q2 | Staff có được khoá / mở khoá khách? | BR-USR-02, 14, 15 | Không; chỉ admin (khoá làm khách mất phiên ngay). Staff chỉ xem. Cho staff = đổi `customers.edit` và BR-USR-02. | Mặc định PO |
+| S7-Q3 | Staff thấy email / SĐT khách đầy đủ? | BR-USR-11, 12; K9 | Không: email và SĐT che, không thấy ngày sinh và sổ địa chỉ; đã đủ thông tin người nhận ở màn đơn (S4-Q9). Cho thấy đầy đủ = cấp `customers.contact` cho staff. | Mặc định PO (Thắng đổi được) |
+| S7-Q4 | Quy tắc khoá khách | BR-USR-14 | Lý do bắt buộc 5–250 ký tự; không gửi thư lúc khoá; chỉ chặn đăng nhập, không chặn đặt hàng vãng lai bằng cùng email. | Mặc định PO |
+| S7-Q5 | Email đã là khách có thể được nâng thành nhân viên? | BR-USR-19, 22 | Không: 409 `duplicate`; nhân viên dùng email riêng. Không đổi từ / sang `member`. | Mặc định PO |
+| S7-Q6 | Hạng hiển thị | BR-USR-09 | Theo BR-ACC-15 (Đồng / Bạc / Vàng, chi tiêu năm dương lịch hiện tại, ngưỡng 18.000.000 và 40.000.000). | Mặc định PO |
+| S7-Q7 | Trường FE không có dữ liệu | K2 | Ghi chú, tag, đã trả hàng, size hay mua, giá trị TB, Xuất CSV: Won't, ẩn ở HTTP. | Mặc định PO |
+| S7-Q8 | Xoá tài khoản | BR-USR-24 | Không xoá cứng; "ngừng dùng" = khoá; nhật ký giữ vĩnh viễn. | Mặc định PO |
+| S7-Q9 | Giới hạn | BR-USR-04, 08, 18, 19 | Tạo nhân viên 10 lần / 60 phút / admin; danh sách khách `limit` ≤ 50; nhân viên ≤ 200 dòng; lý do 5–250 ký tự; họ tên 2–100 ký tự. | Mặc định PO |
