@@ -5,7 +5,7 @@ import { AdmEmptyState } from '../ui/empty-state';
 
 /**
  * Every back-office page except the orders desk (and, with `adminCatalogMode` `http`, products,
- * inventory and promotions) while `adminOrdersMode` is `http` (BR-ADM-36): no
+ * inventory and promotions; with `adminUsersMode` `http`, customers and staff) while `adminOrdersMode` is `http` (BR-ADM-36): no
  * mock API is injected here, so no mock data shows up and no request leaves the page.
  */
 @Component({
@@ -24,9 +24,13 @@ import { AdmEmptyState } from '../ui/empty-state';
   `,
 })
 export class AdminUnavailablePage {
-  protected readonly description = `Trang này chưa được kết nối với dữ liệu thật. Hiện có ${
-    inject(API_CONFIG).adminCatalogMode === 'http'
-      ? 'Đơn hàng, Sản phẩm, Tồn kho và Khuyến mãi'
-      : 'Đơn hàng'
-  }.`;
+  protected readonly description = `Trang này chưa được kết nối với dữ liệu thật. Hiện có ${this.available()}.`;
+
+  private available(): string {
+    const config = inject(API_CONFIG);
+    const modules = ['Đơn hàng'];
+    if (config.adminCatalogMode === 'http') modules.push('Sản phẩm', 'Tồn kho', 'Khuyến mãi');
+    if (config.adminUsersMode === 'http') modules.push('Khách hàng', 'Cài đặt › Nhân viên');
+    return `${modules.slice(0, -1).join(', ')}${modules.length > 1 ? ' và ' : ''}${modules.at(-1)}`;
+  }
 }

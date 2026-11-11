@@ -47,6 +47,7 @@ const COLLAPSE_KEY = 'n2f.admin.sidebar';
 /** Sidebar counts refresh this often while the tab is visible. */
 const COUNTS_REFRESH_MS = 60_000;
 const DESK_CATALOG_LINKS = ['/admin/products', '/admin/inventory', '/admin/promotions'];
+const DESK_CUSTOMER_LINK = '/admin/customers';
 /** Second key of a "G then O" jump must follow within this time. */
 const CHORD_MS = 1200;
 
@@ -77,6 +78,8 @@ export class AdminShell {
   protected readonly deskMode = inject(API_CONFIG).adminOrdersMode !== 'mock';
   /** Slice 6: Sản phẩm, Tồn kho, Khuyến mãi call the API and join the desk menu. */
   private readonly catalogHttp = inject(API_CONFIG).adminCatalogMode === 'http';
+  /** Slice 7: Khách hàng, and Cài đặt › Nhân viên for admins, join the desk menu. */
+  private readonly usersHttp = inject(API_CONFIG).adminUsersMode === 'http';
   private readonly ordersApi = this.deskMode ? null : inject(ADMIN_ORDERS_API);
   private readonly returnsApi = this.deskMode ? null : inject(ADMIN_RETURNS_API);
   private readonly deskApi = this.deskMode ? inject(ADMIN_ORDER_DESK_API) : null;
@@ -164,13 +167,26 @@ export class AdminShell {
   /** Modules the role may not see are hidden, not disabled (8.2). */
   protected readonly items = computed(() => {
     this.session.user();
-    const deskLinks = ['/admin/orders', ...(this.catalogHttp ? DESK_CATALOG_LINKS : [])];
+    const deskLinks = [
+      '/admin/orders',
+      ...(this.catalogHttp ? DESK_CATALOG_LINKS : []),
+      ...(this.usersHttp ? [DESK_CUSTOMER_LINK] : []),
+    ];
     const visible = this.deskMode
       ? this.nav
           .filter((item) => deskLinks.includes(item.link))
           .map((item) => ({ ...item, children: undefined }))
       : this.nav;
     return visible.filter((item) => this.session.can(item.permission));
+  });
+  /** Cài đặt: the whole menu entry in the earlier back office, only "Nhân viên" on the desk. */
+  protected readonly showSettings = computed(() => {
+    this.session.user();
+    return this.deskMode
+      ? this.usersHttp && this.session.can('settings.staff')
+      : this.session.can('settings.store') ||
+          this.session.can('settings.staff') ||
+          this.session.can('settings.audit');
   });
   protected readonly initials = computed(() =>
     (this.session.user()?.name ?? '')

@@ -7,6 +7,7 @@ import * as storefrontMocks from '../../mocks/admin/mock-admin-storefront';
 import { AdminCategories } from './data-access/admin-categories';
 import { adminCatalogAdapterProviders } from './admin-catalog-adapters';
 import { adminOrderAdapterProviders } from './admin-order-adapters';
+import { adminUsersAdapterProviders } from './admin-users-adapters';
 import { AdminDialogs } from './ui/dialogs';
 import { provideAdminIcons } from './ui/icons';
 
@@ -43,6 +44,11 @@ export function provideAdmin(): Provider[] {
       "adminCatalogMode 'http' needs authMode 'http': without the admin session cookie every catalog request answers 401.",
     );
   }
+  if (config.adminUsersMode === 'http' && config.authMode !== 'http') {
+    console.warn(
+      "adminUsersMode 'http' needs authMode 'http': without the admin session cookie every customer and staff request answers 401.",
+    );
+  }
   return [
     provideAdminIcons(),
     AdminDialogs,
@@ -50,6 +56,8 @@ export function provideAdmin(): Provider[] {
     ...adminOrderAdapterProviders,
     // Slice 6 products, inventory, promotions: HTTP adapters, or the mock/HTTP choice in e2e.
     ...adminCatalogAdapterProviders,
+    // Slice 7 customers and staff: HTTP adapters, or the mock/HTTP choice in e2e.
+    ...adminUsersAdapterProviders,
     AdminCategories,
     // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
     ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),

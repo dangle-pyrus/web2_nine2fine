@@ -35,6 +35,13 @@ export interface ApiConfig {
    * and the specs answer `/api/admin/**` themselves.
    */
   adminCatalogMode: 'mock' | 'http';
+  /**
+   * Admin customers and staff (Slice 7), independent of `mode`. `http`: Khách hàng and Cài đặt >
+   * Nhân viên call `/api/admin/{customers,staff,accounts}` (the desk menu gains Khách hàng, and
+   * Nhân viên for admins; needs `authMode: 'http'`). `mock`: the earlier mock back office. The e2e
+   * build picks `http` with `localStorage['n2f.e2e.adminUsersMode']`.
+   */
+  adminUsersMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -53,5 +60,6 @@ export const apiConfig: ApiConfig = {
   adminOrdersMode: 'http',
   accountMode: 'http',
   adminCatalogMode: 'http',
+  adminUsersMode: 'http',
   baseUrl: '/api',
 };

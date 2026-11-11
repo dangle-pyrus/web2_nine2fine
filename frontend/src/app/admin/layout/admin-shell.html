@@ -130,8 +130,7 @@
         <span class="role">{{ roleLabels[user.role] }}</span>
       </span>
     </div>
-    } @if (!deskMode && (session.can('settings.store') || session.can('settings.staff') ||
-    session.can('settings.audit'))) {
+    } @if (showSettings()) {
     <a
       class="item"
       routerLink="/admin/settings"

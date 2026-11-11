@@ -1,32 +1,43 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { of } from 'rxjs';
-import { AdminSession } from '../../core/admin-session';
-import { maskEmail } from '../../core/format';
-import { DatePipe, MoneyPipe, NumPipe, PhonePipe } from '../../core/format.pipes';
+import { DatePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import { tierBadge } from '../../core/status';
-import { ADMIN_CUSTOMERS_API } from '../../data-access/admin-apis';
-import { errorMessage } from '../../data-access/http-support';
-import type { AdminCustomerSummary, CustomerQuery, CustomerTier } from '../../data-access/models';
+import { ADMIN_CUSTOMER_ACCOUNTS_API } from '../../data-access/customers-api';
+import type { PageQuery } from '../../data-access/models';
+import type {
+  CustomerRow,
+  CustomerSort,
+  CustomerView,
+  UserTier,
+} from '../../data-access/users-models';
 import { AdmBadge } from '../../ui/badge';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
-import { AdminDialogs } from '../../ui/dialogs';
-import { ExportDialog, ExportDialogData, ExportScope } from '../../ui/export-dialog';
-import { downloadCsv, fetchAllPages, loader, urlQuery } from '../../ui/list-state';
+import { loader, urlQuery } from '../../ui/list-state';
 import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
-import { AdminToastService } from '../../ui/toast';
 
-const TIERS: { value: CustomerTier; label: string }[] = [
-  { value: 'member', label: 'Đồng' },
+const TIERS: { value: UserTier; label: string }[] = [
+  { value: 'bronze', label: 'Đồng' },
   { value: 'silver', label: 'Bạc' },
   { value: 'gold', label: 'Vàng' },
 ];
+const SORTS: CustomerSort[] = ['lastOrderAt', 'totalSpent', 'orderCount', 'name'];
+/** The contract caps `limit` at 50. */
+const PAGE_SIZES = [20, 50] as const;
+const SEARCH_MAX = 100;
 
-/** Customers index (6.5). Contact details are masked for roles without `customers.contact`. */
+interface CustomerUrlQuery extends PageQuery {
+  view: CustomerView;
+  tier: UserTier | '';
+}
+
+/**
+ * Customers index (BR-USR-08, 09, 11; AC-USR-11..14). The server filters, sorts, pages and masks
+ * contact details for staff; this page only shows what it receives.
+ */
 @Component({
   selector: 'adm-customer-list-page',
   imports: [
@@ -41,39 +52,31 @@ const TIERS: { value: CustomerTier; label: string }[] = [
     MoneyPipe,
     NumPipe,
     DatePipe,
-    PhonePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <adm-page-header heading="Khách hàng">
-      <ng-container actions>
-        @if (canContact) {
-          <button
-            type="button"
-            class="adm-btn adm-btn--lg"
-            [disabled]="!page()?.items?.length"
-            (click)="exportCsv()"
-          >
-            <adm-icon name="reiconDownload" [size]="16" /> Xuất CSV
-          </button>
-        }
-      </ng-container>
-    </adm-page-header>
+    <adm-page-header heading="Khách hàng" />
     <div class="page-body page-body--wide">
       <nav class="tabs" aria-label="Lọc khách hàng">
         <button
           type="button"
-          [class.is-active]="!query().status"
-          (click)="list.update({ status: '' })"
+          [class.is-active]="query().view === 'all'"
+          (click)="list.update({ view: 'all' })"
         >
           Tất cả
+          @if (counts(); as c) {
+            <span class="tab-count">{{ c.all | admNum }}</span>
+          }
         </button>
         <button
           type="button"
-          [class.is-active]="query().status === 'blocked'"
-          (click)="list.update({ status: 'blocked' })"
+          [class.is-active]="query().view === 'blocked'"
+          (click)="list.update({ view: 'blocked' })"
         >
           Đã khóa
+          @if (counts(); as c) {
+            <span class="tab-count">{{ c.blocked | admNum }}</span>
+          }
         </button>
       </nav>
       <form class="toolbar" role="search" (ngSubmit)="list.update({ search: search().trim() })">
@@ -85,6 +88,7 @@ const TIERS: { value: CustomerTier; label: string }[] = [
             name="search"
             placeholder="Tên, email hoặc số điện thoại"
             aria-label="Tìm khách hàng"
+            [maxLength]="searchMax"
             [ngModel]="search()"
             (ngModelChange)="search.set($event)"
           />
@@ -105,13 +109,13 @@ const TIERS: { value: CustomerTier; label: string }[] = [
           class="select select--sm"
           name="sort"
           aria-label="Sắp xếp"
-          [ngModel]="query().sort + ':' + query().dir"
-          (ngModelChange)="sort($event)"
+          [ngModel]="query().sort"
+          (ngModelChange)="list.update({ sort: $event })"
         >
-          <option value="lastOrderAt:desc">Mua gần đây</option>
-          <option value="totalSpent:desc">Chi tiêu cao nhất</option>
-          <option value="orderCount:desc">Nhiều đơn nhất</option>
-          <option value="name:asc">Tên A–Z</option>
+          <option value="lastOrderAt">Mua gần đây</option>
+          <option value="totalSpent">Chi tiêu cao nhất</option>
+          <option value="orderCount">Nhiều đơn nhất</option>
+          <option value="name">Tên A–Z</option>
         </select>
       </form>
       @if (query().search || query().tier) {
@@ -133,10 +137,13 @@ const TIERS: { value: CustomerTier; label: string }[] = [
                 <adm-icon name="reiconX" [size]="12" /></button
             ></span>
           }
-          <button type="button" class="link small" (click)="search.set(''); list.reset(['status'])">
+          <button type="button" class="link small" (click)="search.set(''); list.reset(['view'])">
             Xóa tất cả
           </button>
         </div>
+      }
+      @if (masked()) {
+        <p class="hint" data-testid="contact-masked">Liên hệ được ẩn bớt theo quyền của bạn.</p>
       }
 
       @if (view.state().error && !page()) {
@@ -148,7 +155,7 @@ const TIERS: { value: CustomerTier; label: string }[] = [
           <button type="button" class="adm-btn" (click)="view.reload()">Thử lại</button>
         </adm-empty>
       } @else if (page() && !page()!.total) {
-        @if (query().search || query().tier || query().status) {
+        @if (query().search || query().tier || query().view !== 'all') {
           <adm-empty
             heading="Không tìm thấy khách hàng phù hợp"
             description="Thử từ khóa khác hoặc bỏ bớt bộ lọc."
@@ -162,10 +169,13 @@ const TIERS: { value: CustomerTier; label: string }[] = [
             kind="first"
             image="/assets/illustrations/walk_in_the_city.svg"
             heading="Chưa có khách hàng"
-            description="Khách hàng xuất hiện ở đây sau khi đăng ký tài khoản hoặc đặt đơn đầu tiên."
+            description="Khách hàng xuất hiện ở đây sau khi đăng ký tài khoản."
           />
         }
       } @else {
+        @if (view.state().error) {
+          <p class="error" role="alert">{{ view.state().error }}</p>
+        }
         <div class="table-wrap" [class.is-refreshing]="view.state().refreshing">
           <table class="table table--cards">
             <thead>
@@ -198,22 +208,14 @@ const TIERS: { value: CustomerTier; label: string }[] = [
                       </div>
                     </td>
                     <td data-label="Liên hệ">
-                      <div>
-                        {{ canContact ? customer.email : maskEmail(customer.email) }}
-                      </div>
-                      <div class="cell-sub">
-                        {{ customer.phone | admPhone: !canContact }}
-                      </div>
+                      <div>{{ customer.email }}</div>
+                      <div class="cell-sub">{{ customer.phone ?? '—' }}</div>
                     </td>
                     <td data-label="Hạng">
                       <adm-badge [spec]="tierBadge(customer.tier)" />
                     </td>
-                    <td class="num" data-label="Số đơn">
-                      {{ customer.orderCount | admNum }}
-                    </td>
-                    <td class="num" data-label="Đã chi">
-                      {{ customer.totalSpent | admMoney }}
-                    </td>
+                    <td class="num" data-label="Số đơn">{{ customer.orderCount | admNum }}</td>
+                    <td class="num" data-label="Đã chi">{{ customer.totalSpent | admMoney }}</td>
                     <td class="secondary" data-label="Đơn gần nhất">
                       {{ customer.lastOrderAt ? (customer.lastOrderAt | admDate) : '—' }}
                     </td>
@@ -227,7 +229,8 @@ const TIERS: { value: CustomerTier; label: string }[] = [
           <adm-pager
             [total]="data.total"
             [page]="data.page"
-            [pageSize]="data.pageSize"
+            [pageSize]="data.limit"
+            [sizes]="pageSizes"
             (pageChange)="list.update({ page: $event })"
             (sizeChange)="list.update({ pageSize: $event })"
           />
@@ -238,6 +241,10 @@ const TIERS: { value: CustomerTier; label: string }[] = [
   styles: `
     .danger-text {
       color: var(--adm-danger);
+    }
+    .tab-count {
+      margin-left: 4px;
+      color: var(--adm-text-tertiary);
     }
     .avatar {
       flex-shrink: 0;
@@ -255,23 +262,43 @@ const TIERS: { value: CustomerTier; label: string }[] = [
   `,
 })
 export class CustomerListPage {
-  private readonly api = inject(ADMIN_CUSTOMERS_API);
+  private readonly api = inject(ADMIN_CUSTOMER_ACCOUNTS_API);
   private readonly router = inject(Router);
-  private readonly dialogs = inject(AdminDialogs);
-  private readonly toast = inject(AdminToastService);
-  protected readonly canContact = inject(AdminSession).can('customers.contact');
   protected readonly tiers = TIERS;
   protected readonly tierBadge = tierBadge;
-  protected readonly maskEmail = maskEmail;
-  protected readonly list = urlQuery<CustomerQuery>({
+  protected readonly pageSizes = PAGE_SIZES;
+  protected readonly searchMax = SEARCH_MAX;
+  protected readonly list = urlQuery<CustomerUrlQuery>({
+    view: 'all',
     tier: '',
-    status: '',
     sort: 'lastOrderAt',
-    dir: 'desc',
+    pageSize: PAGE_SIZES[0],
   });
-  protected readonly query = this.list.query;
-  protected readonly view = loader(this.query, (query) => this.api.list(query));
+  /** URL values are untrusted: a lost or odd one falls back to the default so no request is invalid. */
+  protected readonly query = computed(() => {
+    const value = this.list.query();
+    return {
+      ...value,
+      view: value.view === 'blocked' ? ('blocked' as const) : ('all' as const),
+      tier: TIERS.some((item) => item.value === value.tier) ? value.tier : ('' as const),
+      sort: SORTS.includes(value.sort as CustomerSort) ? value.sort : 'lastOrderAt',
+      search: value.search.slice(0, SEARCH_MAX),
+      pageSize: value.pageSize > 50 ? 50 : value.pageSize,
+    };
+  });
+  protected readonly view = loader(this.query, (query) =>
+    this.api.list({
+      q: query.search,
+      view: query.view,
+      tier: query.tier,
+      sort: query.sort as CustomerSort,
+      page: query.page,
+      limit: query.pageSize,
+    }),
+  );
   protected readonly page = this.view.data;
+  protected readonly counts = computed(() => this.page()?.counts ?? null);
+  protected readonly masked = computed(() => !!this.page()?.items.some((c) => c.contactMasked));
   protected readonly search = signal(this.query().search);
 
   initials(name: string): string {
@@ -279,52 +306,8 @@ export class CustomerListPage {
     return ((parts.at(-2)?.[0] ?? '') + (parts.at(-1)?.[0] ?? '')).toUpperCase();
   }
 
-  sort(value: string): void {
-    const [sort, dir] = value.split(':') as [string, 'asc' | 'desc'];
-    this.list.update({ sort, dir });
-  }
-
-  open(customer: AdminCustomerSummary, event: MouseEvent): void {
+  open(customer: CustomerRow, event: MouseEvent): void {
     if ((event.target as HTMLElement).closest('a, button, input')) return;
     void this.router.navigate(['/admin/customers', customer.id]);
-  }
-
-  exportCsv(): void {
-    const page = this.page();
-    if (!page) return;
-    this.dialogs
-      .modal<ExportDialogData, ExportScope>(ExportDialog, {
-        noun: 'khách hàng',
-        pageCount: page.items.length,
-        total: page.total,
-      })
-      .closed.subscribe((scope) => {
-        if (!scope) return;
-        const rows =
-          scope === 'page'
-            ? of(page.items)
-            : fetchAllPages((index, pageSize) =>
-                this.api.list({ ...this.query(), page: index, pageSize }),
-              );
-        rows.subscribe({
-          next: (items) => {
-            downloadCsv(
-              `khach-hang-${new Date().toISOString().slice(0, 10)}.csv`,
-              ['Tên', 'Email', 'Điện thoại', 'Hạng', 'Số đơn', 'Đã chi', 'Đơn gần nhất'],
-              items.map((c) => [
-                c.name,
-                c.email,
-                c.phone,
-                tierBadge(c.tier).label,
-                c.orderCount,
-                c.totalSpent,
-                c.lastOrderAt ?? '',
-              ]),
-            );
-            this.toast.show(`Đã xuất ${items.length} khách hàng`);
-          },
-          error: (error: unknown) => this.toast.error(errorMessage(error)),
-        });
-      });
   }
 }

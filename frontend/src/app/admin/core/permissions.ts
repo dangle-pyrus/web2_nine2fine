@@ -116,7 +116,7 @@ export const PERMISSION_MATRIX: {
     module: 'Khách hàng',
     items: [
       { permission: 'customers.view', label: 'Xem' },
-      { permission: 'customers.edit', label: 'Sửa ghi chú, khóa tài khoản' },
+      { permission: 'customers.edit', label: 'Khóa, mở khóa tài khoản khách' },
       { permission: 'customers.contact', label: 'Xem đầy đủ SĐT, email' },
     ],
   },

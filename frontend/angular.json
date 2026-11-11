@@ -61,6 +61,10 @@
                 {
                   "replace": "src/app/admin/admin-catalog-adapters.ts",
                   "with": "src/app/admin/admin-catalog-adapters.e2e.ts"
+                },
+                {
+                  "replace": "src/app/admin/admin-users-adapters.ts",
+                  "with": "src/app/admin/admin-users-adapters.e2e.ts"
                 }
               ]
             }

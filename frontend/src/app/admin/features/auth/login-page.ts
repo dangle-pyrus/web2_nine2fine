@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { sanitizeAdminReturnUrl } from '../../../core/return-url';
 import { formatWait, SUPPORT_EMAIL, validEmail } from '../../../features/auth/auth-messages';
 import { AdminSession } from '../../core/admin-session';
@@ -16,7 +16,7 @@ interface LoginNavigationState {
 /** Staff sign-in. Separate from the shopper login (`/auth/login`). */
 @Component({
   selector: 'adm-login-page',
-  imports: [FormsModule, AdmIcon],
+  imports: [FormsModule, RouterLink, AdmIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'adm', '[class.is-ready]': 'stylesheet.ready()' },
   template: `
@@ -90,6 +90,11 @@ interface LoginNavigationState {
         >
           {{ busy() ? 'Đang đăng nhập…' : 'Đăng nhập' }}
         </button>
+        <a class="link small forgot" routerLink="/auth/login">Quên mật khẩu</a>
+        <p class="hint small forgot-hint">
+          Tài khoản mới hoặc quên mật khẩu: mở trang đăng nhập của cửa hàng, nhập email, chọn "Sử
+          dụng mật khẩu" rồi "Quên mật khẩu" để nhận mã đặt mật khẩu.
+        </p>
       </form>
     </main>
   `,
@@ -125,6 +130,13 @@ interface LoginNavigationState {
     }
     .banner {
       margin: 0;
+    }
+    .forgot {
+      justify-self: center;
+    }
+    .forgot-hint {
+      margin: 0;
+      text-align: center;
     }
     .adm-btn {
       width: 100%;

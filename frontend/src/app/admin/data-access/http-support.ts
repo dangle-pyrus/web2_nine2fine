@@ -49,6 +49,9 @@ const AUTH_CODES: readonly string[] = [
   'voucher-in-use',
   'idempotency-conflict',
   'not-found',
+  // Slice 7 (admin customers and staff).
+  'self-change',
+  'last-admin',
 ];
 
 /**
@@ -138,6 +141,10 @@ export function defaultMessage(code: AdminErrorCode): string {
       return 'Mã đã được dùng; hãy tắt thay vì xoá.';
     case 'idempotency-conflict':
       return 'Yêu cầu này trùng khoá với một điều chỉnh khác. Tải lại rồi thử lại.';
+    case 'self-change':
+      return 'Bạn không thể tự khoá hoặc tự đổi vai trò của chính mình.';
+    case 'last-admin':
+      return 'Cửa hàng cần ít nhất một quản trị viên đang hoạt động. Hãy nâng người khác lên quản trị viên trước.';
     case 'validation':
       return 'Một số trường chưa hợp lệ. Kiểm tra các trường được đánh dấu rồi lưu lại.';
     default:
@@ -189,6 +196,9 @@ export function errorMessage(error: unknown): string {
       return `${detail.sku ? `SKU ${detail.sku}` : 'Biến thể'} đã có đơn hàng nên không bỏ được. Đặt tồn về 0 để ngừng bán size này.`;
     case 'version-conflict':
       return VERSION_CONFLICT_MESSAGE;
+    case 'self-change':
+    case 'last-admin':
+      return defaultMessage(error.code);
     default:
       return error.message;
   }

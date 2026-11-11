@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { API_CONFIG } from '../../../core/api-config';
 import { AdminSession } from '../../core/admin-session';
 import type { Permission } from '../../core/permissions';
 import { AdmIcon } from '../../ui/icon';
@@ -23,7 +24,7 @@ const GROUPS: {
     link: 'staff',
     icon: 'reiconShieldUser',
     title: 'Nhân viên và phân quyền',
-    description: 'Mời nhân viên, đổi vai trò, khóa tài khoản.',
+    description: 'Thêm nhân viên, đổi vai trò, khóa tài khoản.',
     permission: 'settings.staff',
   },
   {
@@ -119,7 +120,12 @@ const GROUPS: {
 })
 export class SettingsIndexPage {
   private readonly session = inject(AdminSession);
+  /** Orders desk (real API): store settings and the audit log are not connected yet. */
+  private readonly desk = inject(API_CONFIG).adminOrdersMode !== 'mock';
   protected readonly groups = computed(() =>
-    GROUPS.filter((group) => this.session.permissions().has(group.permission)),
+    GROUPS.filter(
+      (group) =>
+        this.session.permissions().has(group.permission) && (!this.desk || group.link === 'staff'),
+    ),
   );
 }

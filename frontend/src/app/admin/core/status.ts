@@ -126,13 +126,15 @@ export const RETURN_REASONS: Record<ReturnReason, string> = {
   'changed-mind': 'Đổi ý',
 };
 
-const TIER: Record<CustomerTier, BadgeSpec> = {
+const TIER: Record<CustomerTier | 'bronze', BadgeSpec> = {
+  bronze: { label: 'Đồng', tone: 'neutral' },
   member: { label: 'Đồng', tone: 'neutral' },
   silver: { label: 'Bạc', tone: 'neutral' },
   gold: { label: 'Vàng', tone: 'warning' },
 };
 
-export function tierBadge(tier: CustomerTier): BadgeSpec {
+/** `bronze` is the Slice 7 API name of the lowest tier, `member` the earlier mock's. */
+export function tierBadge(tier: CustomerTier | 'bronze'): BadgeSpec {
   return TIER[tier];
 }
 

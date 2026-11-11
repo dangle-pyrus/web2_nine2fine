@@ -40,7 +40,6 @@ import {
   ReturnToSenderInput,
   ShippingAddress,
   CustomerQuery,
-  CustomerUpdate,
   DashboardRange,
   DashboardSummary,
   InventoryAdjustment,
@@ -64,8 +63,6 @@ import {
   ReturnSummary,
   SearchResults,
   ShipInput,
-  StaffInput,
-  StaffMember,
 } from './models';
 
 // ---------- Ports ----------
@@ -140,7 +137,6 @@ export interface AdminInventoryApi {
 export interface AdminCustomersApi {
   list(query: CustomerQuery): Observable<Page<AdminCustomerSummary>>;
   get(id: string): Observable<AdminCustomer>;
-  update(id: string, input: CustomerUpdate): Observable<AdminCustomer>;
 }
 
 export interface AdminPromotionsApi {
@@ -155,12 +151,6 @@ export interface AdminPromotionsApi {
 export interface AdminSettingsApi {
   getStore(): Observable<StoreSettingsValue>;
   updateStore(value: StoreSettingsValue): Observable<StoreSettingsValue>;
-  listStaff(): Observable<StaffMember[]>;
-  inviteStaff(input: StaffInput): Observable<StaffMember>;
-  updateStaff(
-    id: string,
-    input: Partial<StaffInput> & { status?: StaffMember['status'] },
-  ): Observable<StaffMember>;
   audit(query: AuditQuery): Observable<Page<AuditEntry>>;
 }
 
@@ -364,9 +354,6 @@ export class HttpAdminCustomersApi implements AdminCustomersApi {
   get(id: string) {
     return this.http.get<AdminCustomer>(`${this.base}/${id}`).pipe(adminErrors());
   }
-  update(id: string, input: CustomerUpdate) {
-    return this.http.patch<AdminCustomer>(`${this.base}/${id}`, input).pipe(adminErrors());
-  }
 }
 
 @Injectable()
@@ -380,15 +367,6 @@ export class HttpAdminSettingsApi implements AdminSettingsApi {
     return this.http
       .put<StoreSettingsValue>(`${this.base}/settings/store`, value)
       .pipe(adminErrors());
-  }
-  listStaff() {
-    return this.http.get<StaffMember[]>(`${this.base}/staff`).pipe(adminErrors());
-  }
-  inviteStaff(input: StaffInput) {
-    return this.http.post<StaffMember>(`${this.base}/staff`, input).pipe(adminErrors());
-  }
-  updateStaff(id: string, input: Partial<StaffInput> & { status?: StaffMember['status'] }) {
-    return this.http.patch<StaffMember>(`${this.base}/staff/${id}`, input).pipe(adminErrors());
   }
   audit(query: AuditQuery) {
     return this.http

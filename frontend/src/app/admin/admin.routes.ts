@@ -19,6 +19,13 @@ const legacyMode: CanMatchFn = () => inject(API_CONFIG).adminOrdersMode === 'moc
  */
 const catalogHttp: CanMatchFn = () => inject(API_CONFIG).adminCatalogMode === 'http';
 
+/**
+ * Slice 7: Khách hàng and Cài đặt › Nhân viên join the order desk when `adminUsersMode` is `http`
+ * (BR-USR-05); with `mock` they stay "Chưa khả dụng" there. Store settings and the audit log stay
+ * unavailable either way.
+ */
+const usersHttp: CanMatchFn = () => inject(API_CONFIG).adminUsersMode === 'http';
+
 const T = (title: string) => `${title} | nine2fine Admin`;
 
 /**
@@ -163,6 +170,50 @@ export const ADMIN_ROUTES: Routes = [
                       import('./features/promotions/promotion-form-page').then(
                         (m) => m.PromotionFormPage,
                       ),
+                  },
+                ],
+              },
+              {
+                path: 'customers',
+                canMatch: [usersHttp],
+                canActivate: [requirePermission('customers.view')],
+                children: [
+                  {
+                    path: '',
+                    title: T('Khách hàng'),
+                    loadComponent: () =>
+                      import('./features/customers/customer-list-page').then(
+                        (m) => m.CustomerListPage,
+                      ),
+                  },
+                  {
+                    path: ':id',
+                    title: T('Khách hàng'),
+                    loadComponent: () =>
+                      import('./features/customers/customer-detail-page').then(
+                        (m) => m.CustomerDetailPage,
+                      ),
+                  },
+                ],
+              },
+              {
+                path: 'settings',
+                canMatch: [usersHttp],
+                children: [
+                  {
+                    path: '',
+                    title: T('Cài đặt'),
+                    loadComponent: () =>
+                      import('./features/settings/settings-index-page').then(
+                        (m) => m.SettingsIndexPage,
+                      ),
+                  },
+                  {
+                    path: 'staff',
+                    title: T('Nhân viên & phân quyền'),
+                    canActivate: [requirePermission('settings.staff')],
+                    loadComponent: () =>
+                      import('./features/settings/staff-page').then((m) => m.StaffPage),
                   },
                 ],
               },

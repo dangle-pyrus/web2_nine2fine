@@ -66,7 +66,10 @@ export type AdminErrorCode =
   | 'product-in-use'
   | 'variant-in-use'
   | 'voucher-in-use'
-  | 'idempotency-conflict';
+  | 'idempotency-conflict'
+  // Slice 7 (admin customers and staff):
+  | 'self-change'
+  | 'last-admin';
 
 /** Extras of a Slice 6 error body (`missing`, `reason`, `sku`, current stock...). */
 export interface AdminErrorDetail {

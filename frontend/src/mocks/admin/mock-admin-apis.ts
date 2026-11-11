@@ -34,7 +34,6 @@ import {
   ReturnToSenderInput,
   ShippingAddress,
   CustomerQuery,
-  CustomerUpdate,
   DashboardRange,
   DashboardSummary,
   InventoryAdjustment,
@@ -56,7 +55,6 @@ import {
   ReturnSummary,
   SearchResults,
   ShipInput,
-  StaffInput,
   StaffMember,
 } from '../../app/admin/data-access/models';
 import { fail, respond } from '../mock-latency';
@@ -1215,20 +1213,6 @@ export class MockAdminCustomersApi implements AdminCustomersApi {
       .map(toOrderSummary);
     return respond({ ...clone(customer), recentOrders });
   }
-
-  update(id: string, input: CustomerUpdate) {
-    const customer = this.db.data.customers.find((item) => item.id === id);
-    if (!customer) return fail(notFound('khách hàng'));
-    const before = customer.status;
-    Object.assign(customer, clone(input));
-    if (input.status && input.status !== before) {
-      this.db.log({
-        action: input.status === 'blocked' ? 'Khóa tài khoản khách' : 'Mở khóa tài khoản khách',
-        target: { type: 'customer', id, label: customer.name },
-      });
-    }
-    return this.get(id);
-  }
 }
 
 // ---------- Promotions ----------
@@ -1368,63 +1352,6 @@ export class MockAdminSettingsApi implements AdminSettingsApi {
     return respond(clone(storeSettings()));
   }
 
-  listStaff() {
-    return respond(this.db.data.staff.map((member) => withoutPassword(member)));
-  }
-
-  inviteStaff(input: StaffInput) {
-    const email = input.email.trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
-      return fail(invalid('Email chưa đúng định dạng.', { email: 'Nhập email hợp lệ.' }));
-    if (this.db.data.staff.some((item) => item.email === email))
-      return fail(
-        invalid(`Email ${email} đã thuộc về một nhân viên khác.`, { email: 'Email đã tồn tại.' }),
-      );
-    const member = {
-      id: `s${Date.now().toString(36)}`,
-      name: input.name.trim(),
-      email,
-      role: input.role,
-      status: 'active' as const,
-      createdAt: new Date().toISOString(),
-      password: 'Staff2026Mock',
-    };
-    this.db.data.staff.push(member);
-    this.db.log({
-      action: 'Thêm nhân viên',
-      target: { type: 'staff', id: member.id, label: member.name },
-    });
-    const result = withoutPassword(member);
-    return respond(result);
-  }
-
-  updateStaff(id: string, input: Partial<StaffInput> & { status?: StaffMember['status'] }) {
-    const member = this.db.data.staff.find((item) => item.id === id);
-    if (!member) return fail(notFound('nhân viên'));
-    const admins = this.db.data.staff.filter(
-      (item) => item.role === 'admin' && item.status === 'active',
-    );
-    if (
-      member.role === 'admin' &&
-      admins.length === 1 &&
-      (input.role === 'staff' || input.status === 'disabled')
-    ) {
-      return fail(
-        new AdminApiError('conflict', 'Cửa hàng cần ít nhất một quản trị viên đang hoạt động.'),
-      );
-    }
-    const before = `${member.role}/${member.status}`;
-    Object.assign(member, input);
-    this.db.log({
-      action: 'Sửa quyền nhân viên',
-      target: { type: 'staff', id, label: member.name },
-      before,
-      after: `${member.role}/${member.status}`,
-    });
-    const result = withoutPassword(member);
-    return respond(clone(result));
-  }
-
   audit(query: AuditQuery) {
     const items = this.db.data.audit
       .filter((entry) => !query.targetType || entry.target.type === query.targetType)
@@ -1478,10 +1405,4 @@ export class MockAdminSearchApi implements AdminSearchApi {
         .map(({ id, name, email, phone }) => ({ id, name, email, phone })),
     });
   }
-}
-
-function withoutPassword<T extends { password?: string }>(member: T): Omit<T, 'password'> {
-  const copy = clone(member);
-  delete copy.password;
-  return copy;
 }

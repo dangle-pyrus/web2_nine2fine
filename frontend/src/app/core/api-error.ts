@@ -39,6 +39,9 @@ export const API_ERROR_CODES = [
   'product-in-use',
   'variant-in-use',
   'voucher-in-use',
+  // Slice 7 (admin customers and staff).
+  'self-change',
+  'last-admin',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
