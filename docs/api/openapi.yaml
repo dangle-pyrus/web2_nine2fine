@@ -2647,7 +2647,7 @@ paths:
     get:
       tags: [admin-dashboard]
       operationId: adminGetDashboard
-      x-status: draft
+      x-status: locked
       summary: Tổng quan - việc cần làm, KPI, biểu đồ 30 ngày, top sản phẩm (BR-DSH-01..08)
       description: |
         Quyền: staff, admin (`dashboard.view`); phần tiền chỉ admin (`dashboard.revenue`), lọc Ở MÁY CHỦ (BR-DSH-07).
@@ -2674,7 +2674,7 @@ paths:
     get:
       tags: [admin-reports]
       operationId: adminGetSalesReport
-      x-status: draft
+      x-status: locked
       summary: Báo cáo bán hàng theo khoảng ngày (BR-RPT-01..08)
       description: |
         Chỉ admin (`dashboard.revenue`; staff -> `403`). `from`, `to`: `YYYY-MM-DD` (ngày VN, gồm cả hai đầu). `to` thiếu = hôm nay (VN); `from` thiếu = `to` - 29 ngày. Kỳ so sánh = khoảng liền trước cùng số ngày. `422 validation`: định dạng sai hoặc ngày không có thật (`field: from` / `to`, ví dụ `2026-02-30`, `2026-13-01`); `from` > `to` (`field: from`); `to` sau hôm nay (`field: to`); khoảng > 366 ngày (`field: to`); `sort` ngoài `units` | `revenue` (`field: sort`).
@@ -2702,7 +2702,7 @@ paths:
     get:
       tags: [admin-reports]
       operationId: adminExportSalesReport
-      x-status: draft
+      x-status: locked
       summary: Xuất CSV báo cáo bán hàng (BR-RPT-09, Should)
       description: |
         Chỉ admin. Cùng `from`, `to` và quy tắc `422` như `GET /admin/reports/sales` (không có `sort`: bảng sản phẩm xếp theo `units`). Tệp UTF-8 có BOM, dấu phân cách `,`, kết thúc dòng CRLF, tiền là số nguyên không dấu chấm, ngày `YYYY-MM-DD`, tên tệp `nine2fine-bao-cao-<from>_<to>.csv` (`from`, `to` đã áp mặc định). Năm khối, mỗi khối một dòng tiêu đề khối + một dòng tiêu đề cột, cách nhau một dòng trống: `KPI`, `Theo ngày`, `Top sản phẩm`, `Theo danh mục`, `Theo phương thức thanh toán`. Ô văn bản bắt đầu bằng `=`, `+`, `-`, `@` (hoặc tab / CR) được chèn `'` đầu để không chạy như công thức; ô chứa `,` `"` hoặc xuống dòng được bọc `"` và nhân đôi `"`. Số trong tệp bằng đúng số trên màn cùng khoảng. Thân là tệp, không phải JSON; lỗi (`401`, `403`, `422`, `429`, `500`) vẫn là `ErrorResponse` JSON.
@@ -2729,7 +2729,7 @@ paths:
     get:
       tags: [admin-store-settings]
       operationId: adminGetStoreSettings
-      x-status: draft
+      x-status: locked
       summary: Đọc cài đặt cửa hàng (BR-SET-01..06)
       description: 'Chỉ admin (`settings.store`; staff -> `403`, cả đọc lẫn ghi). Trả đủ thông tin hiển thị + tham số vận hành + tham số giỏ / COD + `updatedAt` (dùng cho `PUT`). Không có `bankTransferEnabled`, tài khoản ngân hàng, ngưỡng hạng, nhóm đổi trả (Won''t); `lowStockDefault` chỉ đọc (sửa ở `PUT /admin/inventory/thresholds`).'
       security:
@@ -2749,7 +2749,7 @@ paths:
     put:
       tags: [admin-store-settings]
       operationId: adminUpdateStoreSettings
-      x-status: draft
+      x-status: locked
       summary: Lưu cài đặt cửa hàng, nguyên tử, chống ghi chồng, có nhật ký (BR-SET-02..09)
       description: |
         Chỉ admin. Thân là bản thay thế của hai nhóm bắt buộc `info`, `operations` + `updatedAt` đã đọc; `info.social`, `info.notificationUrl` và nhóm `cart` (Should) vắng = giữ nguyên. Trường lạ bị bỏ qua. Mọi chuỗi: NFC, cắt khoảng trắng hai đầu, không ký tự điều khiển. Quy tắc từng trường ở schema `AdminStoreSettingsInput` (khoảng giá trị, bội số 1.000, `deliveryDaysMin` <= `deliveryDaysMax`). Sai ở bất kỳ trường -> `422 validation` kèm `error.field` (trường đầu) và `error.fieldErrors` (mọi lỗi); KHÔNG lưu trường nào.
@@ -2782,7 +2782,7 @@ paths:
     get:
       tags: [admin-audit]
       operationId: adminListAuditLog
-      x-status: draft
+      x-status: locked
       summary: Nhật ký hoạt động hợp nhất (BR-AUD-01..05, Should)
       description: |
         Chỉ admin (`settings.audit`; staff -> `403`). Chỉ đọc, hợp nhất bốn nguồn có sẵn: (a) sự kiện đơn do nhân viên thao tác (`order_events.actor = shop`; không gồm sự kiện khách / hệ thống), (b) điều chỉnh tồn kho, (c) thao tác tài khoản (khách khoá / mở; nhân viên tạo / khoá / mở / đổi vai trò), (d) đổi cài đặt cửa hàng. Không nhật ký sản phẩm / voucher. Mở màn này không tạo dòng nào.
@@ -2813,7 +2813,7 @@ paths:
     get:
       tags: [store-settings]
       operationId: getPublicStoreSettings
-      x-status: draft
+      x-status: locked
       summary: Thông tin người bán + chính sách hiển thị, công khai (BR-SET-10, 11)
       description: |
         Công khai, chỉ đọc, không cần cookie / `X-Requested-With` (như catalog; cookie phiên gửi kèm bị bỏ qua, không bao giờ `401`). Chỉ gồm whitelist: `info` và `policy`. KHÔNG có `codMaxTotal`, tham số giỏ / COD, `bankTransferEnabled`, thông tin tài khoản, `updatedAt`, người sửa. `policy.deliveryWindow` suy từ `deliveryDaysMin`-`deliveryDaysMax` ("{min}–{max} ngày", gạch EN). Chuỗi rỗng của trường tuỳ chọn trả `null` (`notificationUrl`, `social.*`, `registrationDate`) hoặc `''` (`registrationIssuer`, `privacyEmail`, `hours`); `social.*` / `notificationUrl` `null` = storefront ẩn. Thiếu dòng cài đặt trong DB -> trả giá trị mặc định dựng sẵn (bằng `STORE_INFO` / `STORE_POLICY` của FE), không `500`. `Cache-Control: public, max-age=60`. Giới hạn catalog 120 / 60 giây / IP (`429`). Phương thức ghi -> `404 not-found`.

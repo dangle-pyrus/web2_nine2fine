@@ -6,6 +6,10 @@
 - Cho BE: `GET /api/store/settings` chưa tồn tại (chỉ là đề xuất ở FE `HttpStoreSettingsApi`); thông tin cửa hàng chưa có cột (seed từ `STORE_INFO`); cần chỉ mục `at` cho `order_events`, `inventory_adjustments`, `account_events`; `line_discount` đã chia đều voucher nên Σ dòng = tiền hàng sau giảm của đơn.
 - Cho FE: bỏ ở HTTP các trường `returnRate`, `deliveryFailed`, `returnRequests`, lãi gộp / ABC / vùng / heatmap...; ẩn nhóm Đổi trả, Hạng thành viên; sửa chữ ngưỡng free-ship thành "Giá trị hàng trước mã giảm giá."; `/admin` = Tổng quan khi `adminInsightsMode = http`.
 
+### Slice 8 — trạng thái (Orchestrator, 2026-11-12 01:40 giờ VN)
+- Xong: PRD/backlog (9b583fb), contract + plan (9bd91d9), contract **locked**, 17 điểm lệch plan mục 14 đã duyệt (decisions.md).
+- Bước tiếp theo: backend-dev làm lát 8.1 (nền, migration `20261112000100_admin_insights_schema` chỉ áp cục bộ) rồi 8.2–8.5; frontend-dev nối FE sau cờ `adminInsightsMode`; cuối slice qa-reviewer.
+
 ## Slice 7 — Admin khách hàng & nhân viên (2026-11-12: lát 7.1–7.6 xong BE + FE, QA xong, M-1 đã sửa; còn 7.7 chờ Thắng)
 - Supabase (2026-11-11 18:11Z, Thắng tự chạy `npx prisma migrate deploy`): `20261111000100_admin_users_schema` đã áp, không rollback. Kiểm chỉ đọc (orchestrator): `account_events` 14 cột, 5 CHECK + 2 FK, RLS bật, 0 dòng; users 6, sessions 11, orders 1; 1 admin hoạt động. Còn phần chạy thật của 7.7 (tạo nhân viên bằng email thật, AC-AUTH-75 trên 2 trình duyệt).
 - **Tóm tắt (orchestrator, 2026-11-12):** QA `docs/qa/report-slice-7-admin-users.md`: 42/44 AC Pass, 0 Blocker, M-1 (thư mời nhân viên trỏ `/auth/forgot-password`, mở thẳng bị chuyển về login) đã sửa: thư hướng dẫn `/auth/login` → nhập email → "Sử dụng mật khẩu" → "Quên mật khẩu"; AC-USR-43 sửa chữ theo. Còn mở cho PO: m-2 (`last-admin` không đạt qua API), m-4 (staff thấy `recipientName` đầy đủ ở đơn của khách). Còn lại: lát 7.7 (Thắng chạy `npx prisma migrate deploy` trong `backend` với `.env` Supabase để áp `20261111000100_admin_users_schema`, rồi nghiệm thu thật: tạo nhân viên bằng email thật, AC-AUTH-75 trên 2 trình duyệt).
