@@ -90,7 +90,9 @@ describe('T-USR-31 AC-USR-32: tạo nhân viên không mật khẩu', () => {
     const sent = mails.filter((m) => m.to === 'ha.tran@nine2fine.test');
     expect(sent).toHaveLength(1);
     expect(sent[0].text).toContain('Nhân viên');
-    expect(sent[0].text).toContain('/auth/forgot-password');
+    expect(sent[0].text).toContain('/auth/login và nhập đúng địa chỉ email này');
+    expect(sent[0].text).toContain('"Quên mật khẩu"');
+    expect(sent[0].text).not.toContain('/auth/forgot-password');
     expect(sent[0].text).toContain('/admin/login');
     expect(sent[0].text).not.toMatch(/\d{8}/);
     expect(sent[0].text).not.toMatch(/mật khẩu (là|:)/i);
