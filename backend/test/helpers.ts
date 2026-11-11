@@ -511,7 +511,7 @@ export async function makeMember(
   const n = ++customerSeq;
   return prisma.user.create({
     data: {
-      email: o.email ?? `khach${n}@example.com`,
+      email: (o.email ?? `khach${n}@example.com`).toLowerCase(),
       passwordHash: o.password ? await hashPassword(o.password) : null,
       firstName: o.firstName ?? `Khách${n}`,
       lastName: o.lastName ?? 'Nguyễn Văn',
@@ -531,7 +531,7 @@ export async function makeStaff(o: { email?: string; role?: 'staff' | 'admin'; p
   const n = ++staffSeq;
   return prisma.user.create({
     data: {
-      email: o.email ?? `nv${n}@nine2fine.test`,
+      email: (o.email ?? `nv${n}@nine2fine.test`).toLowerCase(),
       passwordHash: o.passwordHash === null ? null : await hashPassword(A.password),
       firstName: o.firstName ?? `Nv${n}`,
       lastName: o.lastName ?? 'Trần',
