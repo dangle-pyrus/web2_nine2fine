@@ -47,3 +47,13 @@ export function vnDayRange(from?: string, to?: string): { gte?: Date; lt?: Date 
     ...(to ? { lt: vnStartOfDay(addDays(to, 1)) } : {}),
   };
 }
+
+/** Mốc [đầu năm, đầu năm sau) theo giờ VN (00:00 01/01 VN = 17:00 31/12 UTC năm trước) và số năm VN của `d`. */
+export function vnYearBounds(d: Date): { year: number; from: Date; to: Date } {
+  const year = vnShift(d).getUTCFullYear();
+  return {
+    year,
+    from: new Date(Date.UTC(year, 0, 1) - VN_OFFSET_MS),
+    to: new Date(Date.UTC(year + 1, 0, 1) - VN_OFFSET_MS),
+  };
+}

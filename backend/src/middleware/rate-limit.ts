@@ -62,6 +62,14 @@ export function adminRateLimit(req: Request, res: Response, next: NextFunction):
 /** Tải ảnh sản phẩm (BR-INV-04): 30 tệp / 10 phút / tài khoản, thêm vào bộ ghi chung. */
 export const adminUploadLimit = createRateLimit({ name: 'admin-upload', windowMs: 10 * 60_000, max: 30, key: byAdminUser });
 
+/** Tạo nhân viên (BR-USR-19, S7-Q9): 10 lần / 60 phút / admin; đếm mọi lần gọi tới được (đặt SAU requirePermission). */
+export const adminStaffCreateLimit = createRateLimit({
+  name: 'admin-staff-create',
+  windowMs: 60 * 60_000,
+  max: 10,
+  key: byAdminUser,
+});
+
 /** Chỉ cho test. */
 export function resetCheckoutRateLimits(): void {
   for (const r of registry) r();

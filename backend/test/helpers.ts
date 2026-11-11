@@ -35,7 +35,7 @@ export async function resetState(): Promise<void> {
   // Slice 6: products / vouchers / media / nhật ký kho có FK tới users nên TRUNCATE users CASCADE sẽ xoá cả catalog.
   // Truncate phía đơn / giỏ / phiên rồi DELETE users (FK SET NULL) để catalog sống sót như trước.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys", "account_events" RESTART IDENTITY CASCADE',
   );
   await prisma.$executeRawUnsafe('DELETE FROM "users"');
   mails.length = 0;
@@ -484,3 +484,90 @@ export const aGet = (path: string, cookie?: string) => get(`/api/admin${path}`, 
 export const aPost = (path: string, body: unknown, cookie?: string, headers?: Record<string, string>) => post(`/api/admin${path}`, body, { cookie, ip: freshIp(), headers });
 export const aPut = (path: string, body: unknown, cookie?: string) => put(`/api/admin${path}`, body, { cookie, ip: freshIp() });
 export const aDel = (path: string, cookie?: string) => del(`/api/admin${path}`, { cookie, ip: freshIp() });
+
+/* ======================= Slice 7: admin khách hàng & nhân viên ======================= */
+
+export const uGet = (path: string, cookie?: string) => get(`/api/admin${path}`, { cookie, ip: freshIp() });
+export const uPost = (path: string, body: unknown, cookie?: string, headers?: Record<string, string>) =>
+  post(`/api/admin${path}`, body, { cookie, ip: freshIp(), headers });
+export const uPut = (path: string, body: unknown, cookie?: string, headers?: Record<string, string>) =>
+  put(`/api/admin${path}`, body, { cookie, ip: freshIp(), headers });
+
+/** Tạo khách (member) với đủ trường cho màn khách hàng. */
+let customerSeq = 0;
+export async function makeMember(
+  o: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string | null;
+    isActive?: boolean;
+    birthDate?: string;
+    marketingOptIn?: boolean;
+    password?: string;
+    createdAt?: Date;
+  } = {},
+) {
+  const n = ++customerSeq;
+  return prisma.user.create({
+    data: {
+      email: o.email ?? `khach${n}@example.com`,
+      passwordHash: o.password ? await hashPassword(o.password) : null,
+      firstName: o.firstName ?? `Khách${n}`,
+      lastName: o.lastName ?? 'Nguyễn Văn',
+      phone_number: o.phone === undefined ? null : o.phone,
+      isActive: o.isActive ?? true,
+      dateOfBirth: o.birthDate ? new Date(`${o.birthDate}T00:00:00.000Z`) : null,
+      marketingOptIn: o.marketingOptIn ?? false,
+      role: 'member',
+      terms_accepted_at: new Date(),
+      ...(o.createdAt ? { createdAt: o.createdAt } : {}),
+    },
+  });
+}
+
+/** Tạo staff / admin chưa có mật khẩu (`password_hash` NULL) hoặc có mật khẩu. */
+export async function makeStaff(o: { email?: string; role?: 'staff' | 'admin'; passwordHash?: null; isActive?: boolean; firstName?: string; lastName?: string } = {}) {
+  const n = ++staffSeq;
+  return prisma.user.create({
+    data: {
+      email: o.email ?? `nv${n}@nine2fine.test`,
+      passwordHash: o.passwordHash === null ? null : await hashPassword(A.password),
+      firstName: o.firstName ?? `Nv${n}`,
+      lastName: o.lastName ?? 'Trần',
+      role: o.role ?? 'staff',
+      isActive: o.isActive ?? true,
+      terms_accepted_at: new Date(),
+    },
+  });
+}
+
+/** Đăng nhập thêm một phiên admin cho tài khoản đã có (cùng mật khẩu `A.password`). */
+export async function loginAdminAgain(email: string): Promise<string> {
+  const res = await post('/api/admin/auth/login', { email, password: A.password }, { ip: freshIp() });
+  const cookie = cookieFrom(res, 'n2f_asid');
+  if (!cookie) throw new Error(`admin login ${res.status}`);
+  return cookie;
+}
+
+/** Đăng nhập storefront (mật khẩu `A.password`) cho khách đã có. */
+export async function loginMemberAgain(email: string): Promise<string | undefined> {
+  const res = await loginPassword(email, A.password, freshIp());
+  return cookieFrom(res, 'n2f_sid');
+}
+
+const FORBIDDEN_IN_RESPONSE = ['password_hash', 'passwordHash', 'refresh_token_hash', 'tokenHash', 'ip_address', 'ipAddress', 'user_agent', 'userAgent', 'stack'];
+/** AC-USR-21 / T-USR-06: thân phản hồi không chứa trường bí mật, stack, SQL, mã OTP 8 số nhận qua thư. */
+export function assertNoSecrets(res: { text: string }): void {
+  for (const k of FORBIDDEN_IN_RESPONSE) {
+    if (res.text.includes(k)) throw new Error(`response contains forbidden token "${k}"`);
+  }
+  if (/(SELECT|INSERT|UPDATE)[^"]*FROM/i.test(res.text) || /prisma/i.test(res.text)) throw new Error('response leaks SQL / prisma detail');
+  for (const m of mails) {
+    const code = /: (\d{8})/.exec(m.text)?.[1];
+    if (code && res.text.includes(code)) throw new Error('response contains an OTP code');
+  }
+}
+
+export const countEvents = (where: Record<string, unknown> = {}) => prisma.accountEvent.count({ where });
+export const activeAdmins = () => prisma.user.count({ where: { role: 'admin', isActive: true } });

@@ -5,7 +5,7 @@ import { getConfig } from '../../config/env';
 import { now } from '../../lib/clock';
 import { hashPassword, verifyPassword } from '../../lib/crypto';
 import { AppError, Errors } from '../../lib/errors';
-import { isoDate, vnShift } from '../../lib/vn-time';
+import { isoDate, vnYearBounds } from '../../lib/vn-time';
 import { sendMailInBackground } from '../../mail/mailer';
 import { passwordChangedMail } from '../../mail/templates';
 import { clearKeys, getLockSeconds, keys, recordFailure } from '../auth/rate-limit.service';
@@ -109,10 +109,7 @@ export interface MembershipDto {
 /** BR-ACC-15: tổng `total` đơn `completed` của thành viên, giao (hoặc đặt) trong năm dương lịch VN hiện tại. */
 export async function getMembership(userId: string): Promise<MembershipDto> {
   await loadUser(userId);
-  const year = vnShift(now()).getUTCFullYear();
-  // Mốc năm theo giờ VN: 00:00 01/01 VN = 17:00 31/12 UTC năm trước.
-  const from = new Date(Date.UTC(year, 0, 1) - 7 * 3600_000);
-  const to = new Date(Date.UTC(year + 1, 0, 1) - 7 * 3600_000);
+  const { year, from, to } = vnYearBounds(now());
   const rows = await prisma.$queryRaw<Array<{ spent: bigint | number | null }>>`
     SELECT COALESCE(SUM("total"), 0)::bigint AS spent FROM "orders"
     WHERE "user_id" = ${userId}::uuid AND "status" = 'completed'

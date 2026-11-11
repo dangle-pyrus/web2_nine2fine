@@ -2317,7 +2317,7 @@ paths:
     get:
       tags: [admin-customers]
       operationId: adminListCustomers
-      x-status: draft
+      x-status: locked
       summary: Danh sách khách hàng, tab, lọc hạng, tìm, sắp, phân trang (BR-USR-08, 09, 11)
       description: |
         Quyền: staff, admin (`customers.view`). Chỉ `role = member`, cả đang hoạt động và bị khoá. `q` (cắt khoảng trắng, <= 100 ký tự, dài hơn -> `422`, `field: q`): tên (chứa, không phân biệt hoa thường và dấu), email (chứa, không phân biệt hoa thường), SĐT (chuẩn hoá `+84` / `84` -> `0`, chỉ khi có >= 4 chữ số liên tiếp); `%` và `_` là ký tự thường. Tìm theo giá trị đầy đủ ở cả hai vai trò dù hiển thị che.
@@ -2347,7 +2347,7 @@ paths:
     get:
       tags: [admin-customers]
       operationId: adminGetCustomer
-      x-status: draft
+      x-status: locked
       summary: Chi tiết khách hàng (BR-USR-10, 11, 12)
       description: |
         Quyền: staff, admin. Hồ sơ, hạng + chi tiêu năm nay, số liệu, 10 đơn mới nhất (cùng dòng `AdminOrderSummary` của màn Đơn hàng, mỗi `id` dẫn sang `GET /admin/orders/{orderCode}`). Admin nhận thêm `birthDate` và `addresses` (mặc định đứng đầu, rồi tạo trước); **với staff hai khoá này vắng mặt hoàn toàn** và `email` / `phone` đã che. Id sai dạng, không tồn tại, hoặc là staff / admin -> `404 not-found`.
@@ -2371,7 +2371,7 @@ paths:
     get:
       tags: [admin-customers]
       operationId: adminListCustomerOrders
-      x-status: draft
+      x-status: locked
       summary: Đơn của một khách (có phân trang), phục vụ "Xem tất cả đơn" cho cả staff
       description: |
         Quyền: staff, admin. Mọi đơn có `user_id` của khách (kể cả `cancelled`), mới nhất trước, hoà theo mã đơn giảm dần; cùng dòng `AdminOrderSummary` (chỉ có tên người nhận, không có SĐT / email). Lý do tồn tại: staff không có email đầy đủ để dán vào ô tìm của màn Đơn hàng (BR-USR-10); admin vẫn có thể dùng đường `q` = email để thấy cả đơn vãng lai cùng email. Id khách như `GET /admin/customers/{customerId}`.
@@ -2398,7 +2398,7 @@ paths:
     post:
       tags: [admin-customers]
       operationId: adminLockCustomer
-      x-status: draft
+      x-status: locked
       summary: Khoá tài khoản khách (BR-USR-14, 16, 24)
       description: |
         Chỉ admin (`customers.edit`; staff -> `403`). `reason` bắt buộc 5..250 ký tự (NFC, cắt hai đầu). Một giao dịch: `is_active = false`, thu hồi mọi phiên của khách (`revoke_reason = account-disabled`), 1 dòng nhật ký `locked` kèm lý do và số phiên đã thu hồi; lỗi giữa chừng thì không đổi gì. Khách đã khoá: không đăng nhập / không đặt lại mật khẩu (BR-AUTH-19, 37), yêu cầu kế tiếp từ mọi máy -> `401`. Đơn đang xử lý không đổi; đặt hàng vãng lai bằng cùng email vẫn được. Không gửi thư. Khoá khách đã khoá -> `200`, không đổi, không nhật ký mới. Idempotency-Key tuỳ chọn.
@@ -2426,7 +2426,7 @@ paths:
     post:
       tags: [admin-customers]
       operationId: adminUnlockCustomer
-      x-status: draft
+      x-status: locked
       summary: Mở khoá tài khoản khách (BR-USR-15, 24)
       description: |
         Chỉ admin. `reason` tuỳ chọn <= 250 ký tự (thân có thể là `{}`). `is_active = true` + 1 dòng nhật ký `unlocked`; **không** khôi phục phiên đã thu hồi (khách đăng nhập lại như bình thường). Khách đang hoạt động -> `200`, không đổi, không nhật ký. Idempotency-Key tuỳ chọn.
@@ -2454,7 +2454,7 @@ paths:
     get:
       tags: [admin-staff]
       operationId: adminListStaff
-      x-status: draft
+      x-status: locked
       summary: Danh sách nhân viên (BR-USR-18)
       description: 'Chỉ admin (`settings.staff`; staff -> `403`). Mọi tài khoản `staff` / `admin`, cả đã khoá, tối đa 200 dòng, không phân trang, sắp `createdAt` tăng, hoà theo `id`. Không có `member`, không có `password_hash`. `lastActiveAt` = `last_used_at` lớn nhất trong các phiên của tài khoản (null nếu chưa từng đăng nhập); `passwordSet = false` nghĩa là "Chờ đặt mật khẩu" (BR-USR-25).'
       security:
@@ -2477,7 +2477,7 @@ paths:
     post:
       tags: [admin-staff]
       operationId: adminCreateStaff
-      x-status: draft
+      x-status: locked
       summary: Tạo nhân viên không mật khẩu + thư hướng dẫn (BR-USR-19, 20, 24; S7-Q1)
       description: |
         Chỉ admin. Bắt buộc `Idempotency-Key`. `name` 2..100 ký tự (NFC, gộp khoảng trắng; hiển thị lại đúng chuỗi đã nhập), `email` hợp lệ <= 254 ký tự (cắt hai đầu, chữ thường), `role` in (`staff`, `admin`). Email đã tồn tại ở **bất kỳ** tài khoản nào (kể cả khách, không phân biệt hoa thường) -> `409 duplicate`, `field: email`, không tạo gì. Thành công: tài khoản `is_active = true`, `password_hash` NULL, `marketing_opt_in = false`, 1 dòng nhật ký `staff-created`, `201` (phản hồi không có mật khẩu), và SAU khi commit 1 thư tới email đó nêu vai trò + hướng dẫn mở "Quên mật khẩu" của storefront, nhập đúng email này và mã 8 chữ số nhận bằng thư (BR-AUTH-20); thư **không** chứa mã hay mật khẩu. Lỗi gửi thư: vẫn `201`, không `500`. Thêm giới hạn 10 lần / 60 phút / admin (`429`). Gửi lại cùng khoá + cùng nội dung -> `200` với đúng kết quả đầu, không tạo / gửi thư lần hai.
@@ -2517,7 +2517,7 @@ paths:
     post:
       tags: [admin-staff]
       operationId: adminLockStaff
-      x-status: draft
+      x-status: locked
       summary: Khoá nhân viên + thu hồi mọi phiên (BR-USR-16, 21, 23, 24)
       description: |
         Chỉ admin. `reason` bắt buộc 5..250 ký tự. Một giao dịch dưới khoá chống đua toàn cục của thao tác nhân viên: kiểm người gọi còn là admin hoạt động có phiên còn hiệu lực (không -> `401`), `404` nếu id không phải staff / admin, `409 self-change` nếu `staffId` là chính người gọi, `409 last-admin` nếu khoá xong còn 0 admin hoạt động; rồi `is_active = false`, thu hồi mọi phiên của nhân viên (`account-disabled`), 1 dòng nhật ký `locked` (kèm số phiên). Nhân viên bị khoá giữ nguyên lịch sử (đơn, tồn kho, nhật ký). Khoá tài khoản đã khoá -> `200`, không đổi, không nhật ký (kiểm `self-change` vẫn chạy trước). Idempotency-Key tuỳ chọn.
@@ -2545,7 +2545,7 @@ paths:
     post:
       tags: [admin-staff]
       operationId: adminUnlockStaff
-      x-status: draft
+      x-status: locked
       summary: Mở khoá nhân viên (BR-USR-21)
       description: 'Chỉ admin. `reason` tuỳ chọn <= 250 ký tự. `is_active = true` + 1 dòng nhật ký `unlocked`; không khôi phục phiên (nhân viên đăng nhập lại; AC-USR-29). Đang hoạt động -> `200`, không đổi, không nhật ký. Idempotency-Key tuỳ chọn.'
       security:
@@ -2572,7 +2572,7 @@ paths:
     put:
       tags: [admin-staff]
       operationId: adminSetStaffRole
-      x-status: draft
+      x-status: locked
       summary: Đổi vai trò staff <-> admin + thu hồi mọi phiên (BR-USR-16, 22, 23, 24)
       description: |
         Chỉ admin. `role` in (`staff`, `admin`); `member` hoặc giá trị lạ -> `422 validation`, `field: role`. `reason` tuỳ chọn <= 250 ký tự. Một giao dịch dưới khoá chống đua: kiểm người gọi như `lock`, `404` nếu id không phải staff / admin (kể cả khách), `409 self-change` nếu là chính người gọi (kể cả đặt đúng vai trò hiện tại), `409 last-admin` nếu hạ xuống `staff` làm còn 0 admin hoạt động (hạ một admin đã khoá không tính); rồi đổi `role`, thu hồi mọi phiên (`role-changed`), 1 dòng nhật ký `role-changed` (vai trò trước / sau). Đặt đúng vai trò hiện tại -> `200`, không đổi, không nhật ký, không thu hồi. Nhân viên phải đăng nhập lại để có quyền mới; các yêu cầu kế tiếp của phiên cũ -> `401` (không phải `403`). Idempotency-Key tuỳ chọn.
@@ -2600,7 +2600,7 @@ paths:
     get:
       tags: [admin-staff]
       operationId: adminAccountHistory
-      x-status: draft
+      x-status: locked
       summary: Lịch sử thao tác của một tài khoản, 20 dòng mới nhất (BR-USR-17, 24; Should)
       description: 'Chỉ admin (`settings.staff`; staff -> `403`). `accountId` là khách hoặc nhân viên (id lạ -> `404`). Mới trước, tối đa 20 dòng. Nhật ký chỉ thêm: không có `PUT` / `PATCH` / `DELETE` trên dòng (`404`), không có API xoá tài khoản. Thao tác bị từ chối (`403`, `409`, `422`) không để lại dòng.'
       security:

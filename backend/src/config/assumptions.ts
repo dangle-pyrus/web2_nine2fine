@@ -114,3 +114,34 @@ export const CATALOG_PERMISSIONS: Record<'staff' | 'admin', readonly CatalogPerm
   staff: ['catalog.read', 'stock.adjust'],
   admin: ['catalog.read', 'stock.adjust', 'products.write', 'media.upload', 'stock.thresholds', 'promotions.write'],
 };
+
+/**
+ * GIẢ ĐỊNH Slice 7 (S7-Q1..Q9, mặc định PO; Orchestrator duyệt plan 2026-11-11).
+ * Đổi một câu trả lời = sửa đúng một chỗ ở đây + BR/contract theo quy trình.
+ */
+export const USERS_ASSUMPTIONS = {
+  /** S7-Q4: lý do khoá 5..250 ký tự (CHECK DB `chk_account_events_reason` cùng giới hạn). */
+  reason: { min: 5, max: 250 },
+  /** S7-Q9. */
+  name: { min: 2, max: 100 },
+  listLimit: { default: 20, max: 50 },
+  maxStaff: 200,
+  recentOrders: 10,
+  historyLimit: 20,
+  /** S7-Q9: 10 lần tạo nhân viên / 60 phút / admin. */
+  staffCreateRateLimit: { max: 10, windowMs: 60 * 60_000 },
+  /** Khoá cố vấn toàn cục (pg_advisory_xact_lock) cho mọi thao tác nhân viên: chống để lại 0 admin hoạt động. */
+  adminGuardKey: 7_000_001,
+  q: { max: 100, minDigits: 4 },
+} as const;
+
+export type UserPermission = 'customers.view' | 'customers.contact' | 'customers.edit' | 'settings.staff';
+
+/** S7-Q2, Q3: staff chỉ xem khách (liên hệ đã che); admin mọi việc. Cùng tên với `frontend/.../permissions.ts`. */
+export const USER_PERMISSIONS: Record<'staff' | 'admin', readonly UserPermission[]> = {
+  staff: ['customers.view'],
+  admin: ['customers.view', 'customers.contact', 'customers.edit', 'settings.staff'],
+};
+
+export const canSeeContact = (role: string): boolean =>
+  (role === 'staff' || role === 'admin') && USER_PERMISSIONS[role].includes('customers.contact');

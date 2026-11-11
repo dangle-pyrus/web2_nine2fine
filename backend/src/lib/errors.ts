@@ -30,7 +30,9 @@ export type ErrorCode =
   | 'version-conflict'
   | 'product-in-use'
   | 'variant-in-use'
-  | 'voucher-in-use';
+  | 'voucher-in-use'
+  | 'self-change'
+  | 'last-admin';
 
 const STATUS: Record<ErrorCode, number> = {
   validation: 422,
@@ -65,6 +67,8 @@ const STATUS: Record<ErrorCode, number> = {
   'product-in-use': 409,
   'variant-in-use': 409,
   'voucher-in-use': 409,
+  'self-change': 409,
+  'last-admin': 409,
 };
 
 export interface AppErrorExtras {
@@ -192,6 +196,9 @@ export const Errors = {
     new AppError('variant-in-use', 'Biến thể đã có đơn nên không bỏ được. Đặt tồn về 0 để ngừng bán.', { sku }),
   voucherInUse: (message = 'Mã đã có lượt dùng nên không xoá hoặc đổi loại / giá trị được.') =>
     new AppError('voucher-in-use', message),
+  /** Slice 7 (admin khách hàng & nhân viên). */
+  selfChange: () => new AppError('self-change', 'Bạn không thể tự khoá hoặc tự đổi vai trò của chính mình.'),
+  lastAdmin: () => new AppError('last-admin', 'Hệ thống phải còn ít nhất một quản trị viên đang hoạt động.'),
   stockChangedAdmin: (available: number, reserved: number) =>
     new AppError('stock-changed', 'Số lượng vừa thay đổi. Kiểm tra lại số hiện tại rồi thử lại.', { available, reserved }),
 };

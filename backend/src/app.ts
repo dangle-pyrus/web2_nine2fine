@@ -16,6 +16,7 @@ import { orderAdminRouter } from './modules/order-admin/order-admin.routes';
 import { checkoutRouter, voucherRouter } from './modules/checkout/checkout.routes';
 import { accountRouter } from './modules/account/account.routes';
 import { adminRateLimit } from './middleware/rate-limit';
+import { adminAccountsRouter, adminCustomersRouter, adminStaffRouter } from './modules/users-admin/users-admin.routes';
 import { mediaRouter } from './modules/media/media.routes';
 import {
   adminCategoriesRouter,
@@ -89,6 +90,11 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/admin/products', ...adminCatalog, adminProductsRouter);
   api.use('/admin/inventory', ...adminCatalog, adminInventoryRouter);
   api.use('/admin/promotions', ...adminCatalog, adminPromotionsRouter);
+  // Slice 7: cùng khuôn; quyền theo hành động (`requirePermission`) ở router, trước Zod và giao dịch.
+  const adminUsers = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
+  api.use('/admin/customers', ...adminUsers, adminCustomersRouter);
+  api.use('/admin/staff', ...adminUsers, adminStaffRouter);
+  api.use('/admin/accounts', ...adminUsers, adminAccountsRouter);
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);

@@ -72,3 +72,25 @@ export function passwordChangedMail(to: string, supportEmail: string): MailMessa
     ].join('\n'),
   };
 }
+
+export function staffInviteMail(to: string, name: string, role: 'staff' | 'admin', appBaseUrl: string): MailMessage {
+  const roleText = role === 'admin' ? 'Quản trị viên' : 'Nhân viên';
+  return {
+    to,
+    subject: 'Tài khoản quản trị nine2fine của bạn đã được tạo',
+    text: [
+      `Xin chào ${name},`,
+      '',
+      `Bạn vừa được thêm vào hệ thống quản trị nine2fine với vai trò ${roleText}.`,
+      'Tài khoản chưa có mật khẩu. Để đặt mật khẩu:',
+      `1. Mở ${appBaseUrl}/auth/forgot-password`,
+      '2. Nhập đúng địa chỉ email này.',
+      '3. Nhập mã xác thực 8 chữ số nhận bằng thư (hiệu lực 10 phút, có thể xin lại) rồi đặt mật khẩu mới.',
+      `Sau đó đăng nhập tại ${appBaseUrl}/admin/login`,
+      '',
+      'Nếu bạn không biết về việc này, hãy bỏ qua thư.',
+      '',
+      'nine2fine',
+    ].join('\n'),
+  };
+}

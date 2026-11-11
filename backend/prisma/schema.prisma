@@ -20,36 +20,38 @@ model MembershipTier {
 }
 
 model User {
-  user_id             String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  membership_tier_id  String?               @db.Uuid
-  email               String                @unique @db.VarChar(255)
-  passwordHash        String?               @map("password_hash") @db.VarChar(255)
-  firstName           String                @map("first_name") @db.VarChar(100)
-  lastName            String                @map("last_name") @db.VarChar(100)
-  dateOfBirth         DateTime?             @map("date_of_birth") @db.Date
-  phone_number        String?               @db.VarChar(20)
-  gender              String?               @db.VarChar(20)
-  loyal_points        Int                   @default(0)
-  role                user_role             @default(member)
-  isActive            Boolean               @default(true) @map("is_active")
-  marketingOptIn      Boolean               @default(false) @map("marketing_opt_in")
-  marketingOptInAt    DateTime?             @map("marketing_opt_in_at") @db.Timestamp(6)
-  terms_accepted_at   DateTime              @db.Timestamp(6)
-  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamp(6)
-  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  cart                Cart?
-  orders              Order[]
-  confirmedOrders     Order[]               @relation("OrderConfirmer")
-  handedOverOrders    Order[]               @relation("OrderHandover")
-  deliveredOrders     Order[]               @relation("OrderDeliverer")
-  cancelDecidedOrders Order[]               @relation("OrderCancelDecider")
-  returnHandledOrders Order[]               @relation("OrderReturnHandler")
-  orderEvents         OrderEvent[]          @relation("OrderEventActor")
-  addresses           Address[]
-  productsUpdated     Product[]             @relation("ProductUpdatedBy")
-  vouchersUpdated     Voucher[]             @relation("VoucherUpdatedBy")
-  inventoryAdjusts    InventoryAdjustment[] @relation("InventoryAdjustActor")
-  mediaAssets         MediaAsset[]          @relation("MediaAssetCreator")
+  user_id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  membership_tier_id    String?               @db.Uuid
+  email                 String                @unique @db.VarChar(255)
+  passwordHash          String?               @map("password_hash") @db.VarChar(255)
+  firstName             String                @map("first_name") @db.VarChar(100)
+  lastName              String                @map("last_name") @db.VarChar(100)
+  dateOfBirth           DateTime?             @map("date_of_birth") @db.Date
+  phone_number          String?               @db.VarChar(20)
+  gender                String?               @db.VarChar(20)
+  loyal_points          Int                   @default(0)
+  role                  user_role             @default(member)
+  isActive              Boolean               @default(true) @map("is_active")
+  marketingOptIn        Boolean               @default(false) @map("marketing_opt_in")
+  marketingOptInAt      DateTime?             @map("marketing_opt_in_at") @db.Timestamp(6)
+  terms_accepted_at     DateTime              @db.Timestamp(6)
+  createdAt             DateTime              @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  cart                  Cart?
+  orders                Order[]
+  confirmedOrders       Order[]               @relation("OrderConfirmer")
+  handedOverOrders      Order[]               @relation("OrderHandover")
+  deliveredOrders       Order[]               @relation("OrderDeliverer")
+  cancelDecidedOrders   Order[]               @relation("OrderCancelDecider")
+  returnHandledOrders   Order[]               @relation("OrderReturnHandler")
+  orderEvents           OrderEvent[]          @relation("OrderEventActor")
+  addresses             Address[]
+  productsUpdated       Product[]             @relation("ProductUpdatedBy")
+  vouchersUpdated       Voucher[]             @relation("VoucherUpdatedBy")
+  inventoryAdjusts      InventoryAdjustment[] @relation("InventoryAdjustActor")
+  mediaAssets           MediaAsset[]          @relation("MediaAssetCreator")
+  accountEventsActed    AccountEvent[]        @relation("AccountEventActor")
+  accountEventsTargeted AccountEvent[]        @relation("AccountEventTarget")
 
   @@map("users")
 }
@@ -646,4 +648,27 @@ model MediaAsset {
   createdBy   User?    @relation("MediaAssetCreator", fields: [createdById], references: [user_id], onDelete: SetNull)
 
   @@map("media_assets")
+}
+
+/// Slice 7: nhật ký thao tác tài khoản, chỉ thêm (không update / delete trong mã).
+model AccountEvent {
+  eventId         String     @id @default(dbgenerated("gen_random_uuid()")) @map("event_id") @db.Uuid
+  at              DateTime   @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @db.Timestamp(6)
+  action          String     @db.VarChar(16)
+  actorUserId     String?    @map("actor_user_id") @db.Uuid
+  actorName       String     @map("actor_name") @db.VarChar(100)
+  actorRole       user_role  @map("actor_role")
+  targetUserId    String?    @map("target_user_id") @db.Uuid
+  targetEmail     String     @map("target_email") @db.VarChar(254)
+  targetName      String     @map("target_name") @db.VarChar(100)
+  targetRole      user_role  @map("target_role")
+  roleBefore      user_role? @map("role_before")
+  roleAfter       user_role? @map("role_after")
+  reason          String     @default("") @db.VarChar(250)
+  sessionsRevoked Int        @default(0) @map("sessions_revoked")
+  actor           User?      @relation("AccountEventActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
+  target          User?      @relation("AccountEventTarget", fields: [targetUserId], references: [user_id], onDelete: SetNull)
+
+  @@index([targetUserId, at(sort: Desc), eventId(sort: Desc)], map: "idx_account_events_target_at")
+  @@map("account_events")
 }

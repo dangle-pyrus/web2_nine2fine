@@ -1,9 +1,13 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
+import { foldCol } from '../../lib/sql-fold';
 import { foldVi } from '../../lib/text';
-import { ts } from '../../lib/sql';
+import { Db, ts } from '../../lib/sql';
 import { vnDayRange } from '../../lib/vn-time';
-import type { AdminBucket, AdminTab, OrderFilter } from './order-admin.schemas';
+import type { AdminBucket, AdminTab, OrderFilter as PublicOrderFilter } from './order-admin.schemas';
+
+/** Nội bộ: thêm `userId` (Slice 7, đơn của một khách); contract admin-orders không đổi. */
+type OrderFilter = PublicOrderFilter & { userId?: string };
 
 /**
  * Danh sách / đếm / tìm kiếm (plan mục 7). MỘT hàm dựng WHERE dùng chung cho list và counts nên số đếm luôn khớp.
@@ -33,12 +37,6 @@ const tabCase = Prisma.join(
 /** Thoát `\`, `%`, `_` để dùng trong LIKE ... ESCAPE '\'. */
 export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-const VN_ACCENTED = 'àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ';
-const VN_FROM = VN_ACCENTED + VN_ACCENTED.toUpperCase();
-const VN_TO = [...VN_FROM].map((c) => foldVi(c)).join('');
-/** Bỏ dấu + hạ chữ thường phía cột (cùng ánh xạ với `foldVi` phía từ khoá). */
-const foldCol = (col: string) => Prisma.sql`translate(lower(${Prisma.raw(col)}), ${VN_FROM}, ${VN_TO})`;
-
 function searchSql(q: string): Prisma.Sql {
   const parts: Prisma.Sql[] = [];
   const upperCode = q.replace(/^#/, '').toUpperCase();
@@ -56,6 +54,7 @@ function searchSql(q: string): Prisma.Sql {
 
 function filterConds(f: OrderFilter): Prisma.Sql[] {
   const conds: Prisma.Sql[] = [];
+  if (f.userId) conds.push(Prisma.sql`o."user_id" = ${f.userId}::uuid`);
   if (f.q) conds.push(searchSql(f.q));
   if (f.payment) conds.push(Prisma.sql`o."payment_method" = ${f.payment === 'bank-transfer' ? 'bank_transfer' : 'cod'}::"payment_method"`);
   const r = vnDayRange(f.from, f.to);
@@ -83,12 +82,13 @@ export interface SummaryRow {
 
 export async function listOrders(
   f: OrderFilter & { view: AdminTab; page: number; limit: number },
+  db: Db = prisma,
 ): Promise<{ rows: SummaryRow[]; total: number }> {
   const conds = filterConds(f);
   if (f.view !== 'all') conds.push(TAB_SQL[f.view]);
   const where = whereOf(conds);
   const [rows, [cnt]] = await Promise.all([
-    prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
+    db.$queryRaw<SummaryRow[]>(Prisma.sql`
       SELECT o."code", o."created_at", o."status"::text AS "status", o."payment_status"::text AS "payment_status",
         o."payment_method"::text AS "payment_method", o."recipient_name", o."total", o."cancel_requested_at", o."estimated_to",
         (SELECT COALESCE(SUM(i."quantity"), 0)::int FROM "order_items" i WHERE i."order_id" = o."order_id") AS "item_count",
@@ -96,7 +96,7 @@ export async function listOrders(
       FROM "orders" o ${where}
       ORDER BY o."created_at" DESC, o."code" DESC
       LIMIT ${f.limit} OFFSET ${(f.page - 1) * f.limit}`),
-    prisma.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*) AS "n" FROM "orders" o ${where}`),
+    db.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*) AS "n" FROM "orders" o ${where}`),
   ]);
   return { rows, total: Number(cnt.n) };
 }
