@@ -8,6 +8,7 @@ import type { Db } from '../../lib/sql';
 import { ts } from '../../lib/sql';
 import { runInBackground, sendMail } from '../../mail/mailer';
 import { orderCancelledMail } from '../../mail/order-templates';
+import { mailContact } from '../store/settings.service';
 import { EventActorUser, insertOrderEvent } from './order-event';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
 
@@ -157,7 +158,7 @@ export function scheduleCancelEmail(orderId: string): void {
   runInBackground('order-cancel-email', async () => {
     const o = await prisma.order.findUnique({ where: { order_id: orderId }, include: ORDER_INCLUDE });
     if (!o) return;
-    await sendMail(orderCancelledMail(toOrderDto(o), o.userId !== null));
+    await sendMail(orderCancelledMail(toOrderDto(o), o.userId !== null, await mailContact()));
   });
 }
 

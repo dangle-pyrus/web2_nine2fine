@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Request, Router } from 'express';
 import { now } from '../../lib/clock';
 import { adminReportLimit } from '../../middleware/rate-limit';
 import { requirePermission } from '../../middleware/require-permission';
@@ -7,6 +7,8 @@ import { toSalesCsv } from './csv';
 import { getDashboard } from './dashboard.service';
 import { parseExportQuery, parseRange, parseReportQuery } from './insights.schemas';
 import { getSalesReport } from './report.service';
+import { staffDisplayName } from '../order/order-event';
+import { getAdminSettings, SettingsActor, updateSettings } from './settings.service';
 
 /**
  * Routers Slice 8. Gắn ở app.ts SAU `noStore`, `requireAuth('admin')`, `requireRole('staff','admin')`, `adminRateLimit`
@@ -41,4 +43,16 @@ adminReportsRouter.get('/sales/export', requirePermission('dashboard.revenue'), 
       'Cache-Control': 'no-store',
     })
     .send(toSalesCsv(report));
+});
+
+/* ---------------- GET / PUT /admin/settings/store ----------------
+ * PUT: noStore -> requireAuth 401 -> originGuard 403 -> adminRateLimit 429 -> requirePermission 403 -> Zod 422 -> giao dịch. */
+const actorOf = (req: Request): SettingsActor => ({ id: req.auth!.user.user_id, name: staffDisplayName(req.auth!.user) });
+
+adminSettingsRouter.get('/store', requirePermission('settings.store'), async (_req, res) => {
+  res.json(await getAdminSettings(prisma, now()));
+});
+
+adminSettingsRouter.put('/store', requirePermission('settings.store'), async (req, res) => {
+  res.json(await updateSettings(actorOf(req), req.body, now()));
 });

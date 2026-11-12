@@ -10,6 +10,8 @@ import {
   cancelApprovedMail, cancelRejectedMail, emailFailureSupportMail, eventEmailFailureSupportMail, orderAwaitingPaymentMail, orderCancelledMail, orderConfirmedMail,
   orderDeliveredMail, orderShippedMail,
 } from '../../mail/order-templates';
+import type { MailContact } from '../../mail/order-templates';
+import { mailContact } from '../store/settings.service';
 import type { OrderDto } from './order.mapper';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
 
@@ -48,7 +50,8 @@ async function attemptOnce(orderId: string, at: Date): Promise<Attempt> {
   const dto = toOrderDto(order);
   const isMember = order.userId !== null;
   try {
-    await sendMail(order.status === 'to_pay' ? orderAwaitingPaymentMail(dto, isMember) : orderConfirmedMail(dto, isMember));
+    const contact = await mailContact();
+    await sendMail(order.status === 'to_pay' ? orderAwaitingPaymentMail(dto, isMember, contact) : orderConfirmedMail(dto, isMember, contact));
   } catch (err) {
     logger.error('order-email-failed', { order: order.code, reason: err instanceof Error ? err.name : 'unknown' });
     return 'failed';
@@ -101,7 +104,7 @@ export async function retryPendingEmails(at: Date = clockNow()): Promise<number>
 /* ---------------- Thư theo sự kiện (Slice 4, BR-ADM-35; plan mục 8) ---------------- */
 
 /** Tên thư lưu ở `order_events.email_template` -> nội dung. */
-const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean) => MailMessage> = {
+const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean, contact?: MailContact) => MailMessage> = {
   'order-shipped': orderShippedMail,
   'order-delivered': orderDeliveredMail,
   'order-cancelled-shop': orderCancelledMail,
@@ -125,7 +128,7 @@ async function attemptEventOnce(eventId: string, at: Date): Promise<Attempt> {
     return 'skipped';
   }
   try {
-    await sendMail(build(toOrderDto(order), order.userId !== null));
+    await sendMail(build(toOrderDto(order), order.userId !== null, await mailContact()));
   } catch (err) {
     logger.error('order-event-email-failed', { order: order.code, eventId, reason: err instanceof Error ? err.name : 'unknown' });
     return 'failed';
