@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10) + Admin khách hàng & nhân viên (Slice 7, locked 2026-11-11) + Admin tổng quan & cài đặt cửa hàng (Slice 8, draft 2026-11-12)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10) + Admin khách hàng & nhân viên (Slice 7, locked 2026-11-11) + Admin tổng quan & cài đặt cửa hàng (Slice 8, locked 2026-11-12) + Trả hàng / hoàn tiền (Slice 9, locked 2026-11-12; khách vãng lai draft, hoãn)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -128,7 +128,7 @@ info:
     - **Thứ tự kiểm ở yêu cầu ghi:** `401` -> `403 origin-not-allowed` -> `429` -> `403 forbidden` -> `422 Idempotency-Key` -> `422 validation` (thân) -> (giao dịch) `401` nếu chính người gọi vừa bị thu hồi phiên / khoá -> `404` -> `409 self-change` -> `409 duplicate` / `409 last-admin` -> `200` / `201`.
     - **Mã lỗi mới (2):** `self-change`, `last-admin` (đều 409). Dùng lại: `unauthenticated`, `forbidden`, `origin-not-allowed`, `not-found`, `validation`, `duplicate` (`field: email`), `idempotency-conflict`, `rate-limited`, `unavailable`.
     - **Không có** API xoá tài khoản, sửa / xoá nhật ký, nâng khách thành nhân viên, gửi lại thư mời (Won't, `PUT` / `DELETE` ngoài danh sách -> `404`).
-    ## Slice 8 - Admin tổng quan & cài đặt cửa hàng (status: draft 2026-11-12, chờ Orchestrator duyệt `docs/api/admin-insights-implementation-plan.md` mục 14 rồi chuyển `locked` trước khi FE nối)
+    ## Slice 8 - Admin tổng quan & cài đặt cửa hàng (status: locked 2026-11-12)
     Tag `admin-dashboard`, `admin-reports`, `admin-store-settings`, `admin-audit`, `store-settings`; 7 operation; BR/AC `docs/product/PRD.md` Slice 8 (BR-INS-01..09, BR-DSH-01..08, BR-RPT-01..09, BR-SET-01..13, BR-AUD-01..05; AC-INS, AC-DSH, AC-RPT, AC-SET, AC-AUD; S8-Q1..Q10 theo mặc định PO); kế hoạch `docs/api/admin-insights-implementation-plan.md`.
     - **Phiên và quyền:** cookie `n2f_asid`; vai trò và `is_active` đọc từ DB mỗi yêu cầu; mọi phản hồi admin (kể cả 401 / 403) `Cache-Control: no-store`. **staff:** chỉ `GET /admin/dashboard` (phần việc cần làm, tồn kho, số đơn đặt; máy chủ KHÔNG gửi tiền / khách mới / biểu đồ / top sản phẩm). **admin:** mọi việc của staff + toàn bộ Tổng quan + Báo cáo + CSV + đọc / sửa cài đặt cửa hàng + nhật ký. Thiếu quyền -> `403 forbidden`, kiểm trước khi đọc thân, không đổi dữ liệu, không dòng nhật ký. Ngoại lệ duy nhất không cần phiên: `GET /store/settings` (công khai, chỉ whitelist).
     - **Định nghĩa số liệu (BR-INS-09, một nguồn cho Tổng quan / Báo cáo / CSV):** *đơn tính doanh thu* = `status = completed` VÀ `payment_status = paid`, tính vào ngày `delivered_at` theo giờ VN. *Doanh thu* = Σ (`unit_price x quantity - line_discount`) các dòng của đơn đó; KHÔNG gồm phí vận chuyển. *Đơn đặt* = đơn có `created_at` trong kỳ, trừ `cancelled`. *Đơn huỷ* = đơn `cancelled` có `created_at` trong kỳ. Đơn `refunded` / `partially_refunded`, đơn đang xử lý, `completed` thiếu `delivered_at` không tính doanh thu.
@@ -138,6 +138,17 @@ info:
     - **Lỗi `validation` nhiều trường:** thân `PUT /admin/settings/store` sai ở nhiều trường thì `error.field` là trường đầu tiên và `error.fieldErrors` (mới, tuỳ chọn) liệt kê MỌI lỗi `{field, message}` (AC-SET-02). Các endpoint khác vẫn báo lỗi đầu tiên.
     - **Mã lỗi mới:** không có. Dùng lại `unauthenticated`, `forbidden`, `origin-not-allowed`, `validation` (+`field`: `range`, `from`, `to`, `sort`, `targetType`, `page`, `limit`, đường dẫn trường cài đặt như `info.hotline`, `operations.shippingFee`, `updatedAt`), `version-conflict`, `rate-limited`, `not-found`, `unavailable`.
     - **Không có** API sửa / xoá nhật ký (`PUT` / `PATCH` / `DELETE` -> `404 not-found`), không xuất nhật ký, không lãi gộp / giá vốn / trả hàng / ABC / vùng / heatmap / size-màu / khách / voucher (Won't; máy chủ không gửi các trường `returnRate`, `deliveryFailed`, `returnRequests`).
+    ## Slice 9 - Trả hàng / hoàn tiền (status: locked 2026-11-12 cho thành viên + admin; 5 operation khách vãng lai `/orders/{orderCode}/return*` giữ draft, lát 9.6 hoãn)
+    Tag `returns`, `return-photos`, `admin-returns`; 17 operation (5 khách thành viên `/account/**`, 5 khách vãng lai `/orders/{orderCode}/return*` [Should, lát 9.6, CÓ THỂ CẮT: bỏ cả 5 thì phần còn lại không đổi], 7 admin `/admin/returns*` + `/admin/return-photos/{photoId}`); BR/AC `docs/product/PRD.md` Slice 9 (BR-RET-01..55, AC-RET-01..55; S9-Q1..Q14 theo mặc định PO); kế hoạch `docs/api/returns-implementation-plan.md`. Đổi thêm (chỉ CỘNG THÊM trường, không bỏ / đổi nghĩa) các schema của Slice 3, 4, 8: `Order` (+`canReturn`, `returnDeadline`, `return`), `AdminOrder` (+`return`), `AdminOrderSummary` (+`returnPending`, Should), `AdminEventKind` (+6 loại), `AdminDashboardTodo` (+3 số), `AdminSalesReport.kpis` (+3 chỉ số, +`returnRate` Should); đổi hành vi (không đổi hình dạng): định nghĩa doanh thu (BR-RET-51) và hạng thành viên (BR-RET-53).
+    - **Đơn giữ `completed`:** KHÔNG thêm giá trị `OrderStatus`. Yêu cầu trả hàng là thực thể riêng với 6 trạng thái `requested` -> `approved` -> `received` -> `refunded`; `requested` | `approved` -> `rejected`; `requested` -> `cancelled` (khách). Mỗi chuyển là so-sánh-rồi-đổi nguyên tử; ngoài bảng / lặp lại / thua cuộc đua -> `409 invalid-transition` (+`currentReturnState`). Tối đa 1 yêu cầu không-`cancelled` mỗi đơn (ràng buộc ở DB).
+    - **Phiên và quyền:** khách thành viên cookie `n2f_sid` (chỉ đơn của chính mình; đơn người khác hoặc không có -> `404`, không lộ); khách vãng lai cookie `n2f_oa` gắn đúng đơn [Should]; admin cookie `n2f_asid`. Quyền mới: `returns.process` (staff + admin: xem, duyệt, từ chối / đóng, nhận hàng) và `returns.refund` (CHỈ admin: xác nhận hoàn tiền + xem số tài khoản đầy đủ khi `received`). Thiếu quyền -> `403` trước khi đọc thân. Mọi phản hồi (kể cả 401 / 403 / 404 của nhóm này) `Cache-Control: no-store`; ảnh `private, no-store`.
+    - **Tiền (BR-RET-30, một công thức một nơi):** theo `order_items.line_discount`; dự kiến lúc gửi, CHỐT lúc nhận hàng (số lượng đạt), admin chỉ xác nhận đã chuyển (`amount` phải bằng số chốt; không có ô sửa tay). Hoàn tiền thật là thủ công, ngoài hệ thống. `payment_status` đơn đổi CHỈ ở bước `refunded` (`refunded` nếu mọi dòng đơn hoàn đủ, ngược lại `partially_refunded`).
+    - **Số tài khoản nhận hoàn (BR-RET-16, 17):** đơn COD bắt buộc `bank`, `accountNumber`, `accountName`; đơn `bank-transfer` bỏ qua. Mọi phản hồi cho khách và staff chỉ có ngân hàng, 4 số cuối, tên; admin thấy đủ số CHỈ ở `received`; không bao giờ trong email, sự kiện đơn, nhật ký, log, CSV, tên tệp; XOÁ số đầy đủ trong cùng giao dịch khi yêu cầu sang `refunded` | `rejected` | `cancelled`.
+    - **Ảnh riêng tư (BR-RET-14, 15):** tải bằng thân byte thô (như ảnh sản phẩm) vào kho RIÊNG TƯ, KHÔNG phải bucket công khai `product-images`; xem qua endpoint có kiểm quyền ở MỖI lần (máy chủ trả byte, không `302`, không URL ký); không bao giờ qua `/media/{id}`.
+    - **Mã lỗi mới:** `not-returnable` 409, `return-window-closed` 409, `return-exists` 409. Dùng lại `unauthenticated`, `forbidden`, `origin-not-allowed`, `not-found`, `validation` (+`field` phẳng, +`fieldErrors` ở tạo yêu cầu / nhận hàng), `invalid-image`, `invalid-transition` (+trường mới `currentReturnState`), `idempotency-conflict`, `rate-limited`, `unavailable`.
+    - **Giới hạn tần suất:** tạo yêu cầu 10 / giờ / tài khoản (khách vãng lai: / IP); tải ảnh 30 / giờ / tài khoản (vãng lai: / đơn); khách đọc / huỷ / dự kiến dùng bộ đếm đơn hiện có (120 / 60 giây); admin chung bộ đếm admin (đọc 120, ghi 60 / 60 giây).
+    - **Giờ:** hạn trả = 23:59:59 giờ VN của ngày thứ 30 kể từ ngày giao (ngày giao VN = ngày 0), máy chủ tính (`Order.canReturn`, `Order.returnDeadline`); thời điểm ISO UTC; tiền số nguyên đồng.
+    - **Không có (Won't):** đổi hàng, cổng hoàn tiền, nhân viên tạo hộ yêu cầu, sửa tay số tiền, hoàn nhiều đợt, tạo lại sau khi bị từ chối / đã hoàn, hoàn lượt voucher, lý do "khác" / "không như mô tả", tự xoá ảnh theo lịch, sửa số ngày / phí gửi trả ở Cài đặt.
   license:
     name: Proprietary
 servers:
@@ -177,15 +188,21 @@ tags:
   - name: admin-staff
     description: 'Slice 7, status: locked. Nhân viên (`staff` / `admin`), chỉ admin: danh sách, tạo không mật khẩu + thư hướng dẫn, khoá / mở, đổi vai trò, lịch sử thao tác một tài khoản. Khoá / đổi vai trò thu hồi mọi phiên; luôn còn >= 1 admin hoạt động.'
   - name: admin-dashboard
-    description: 'Slice 8, status: draft. Tổng quan: việc cần làm + tồn kho (staff + admin), KPI / biểu đồ 30 ngày / top sản phẩm (chỉ admin, lọc ở máy chủ).'
+    description: 'Slice 8, status: locked. Tổng quan: việc cần làm + tồn kho (staff + admin), KPI / biểu đồ 30 ngày / top sản phẩm (chỉ admin, lọc ở máy chủ).'
   - name: admin-reports
-    description: 'Slice 8, status: draft. Báo cáo bán hàng (chỉ admin): KPI + kỳ trước, theo ngày, top sản phẩm / biến thể, theo danh mục, theo phương thức thanh toán; xuất CSV (Should).'
+    description: 'Slice 8, status: locked. Báo cáo bán hàng (chỉ admin): KPI + kỳ trước, theo ngày, top sản phẩm / biến thể, theo danh mục, theo phương thức thanh toán; xuất CSV (Should).'
   - name: admin-store-settings
-    description: 'Slice 8, status: draft. Cài đặt cửa hàng (chỉ admin): thông tin hiển thị với khách + tham số vận hành; lưu nguyên tử, chống ghi chồng, có nhật ký.'
+    description: 'Slice 8, status: locked. Cài đặt cửa hàng (chỉ admin): thông tin hiển thị với khách + tham số vận hành; lưu nguyên tử, chống ghi chồng, có nhật ký.'
   - name: admin-audit
-    description: 'Slice 8, status: draft. Nhật ký hoạt động hợp nhất (chỉ admin, chỉ đọc, Should): thao tác đơn của nhân viên, điều chỉnh tồn kho, thao tác tài khoản, đổi cài đặt.'
+    description: 'Slice 8, status: locked. Nhật ký hoạt động hợp nhất (chỉ admin, chỉ đọc, Should): thao tác đơn của nhân viên, điều chỉnh tồn kho, thao tác tài khoản, đổi cài đặt.'
   - name: store-settings
-    description: 'Slice 8, status: draft. Công khai: thông tin người bán + chính sách hiển thị (whitelist), cache 60 giây.'
+    description: 'Slice 8, status: locked. Công khai: thông tin người bán + chính sách hiển thị (whitelist), cache 60 giây.'
+  - name: returns
+    description: 'Slice 9, status: locked (khách vãng lai: draft, hoãn). Khách gửi / huỷ yêu cầu trả hàng, tính dự kiến hoàn. Thành viên (`n2f_sid`, `/account/orders/{orderCode}/return*`); khách vãng lai (`n2f_oa`, `/orders/{orderCode}/return*`) là Should, có thể cắt. Chi tiết yêu cầu nằm trong `Order.return`.'
+  - name: return-photos
+    description: 'Slice 9, status: locked (khách vãng lai: draft, hoãn). Ảnh minh chứng trả hàng: tải bằng thân byte thô vào kho riêng tư, xem qua endpoint có kiểm quyền (khách / khách vãng lai / admin). Không công khai.'
+  - name: admin-returns
+    description: 'Slice 9, status: locked (khách vãng lai: draft, hoãn). Staff / admin: danh sách + tab đếm, chi tiết, duyệt, từ chối / đóng, nhận hàng + kiểm từng dòng + nhập kho (`returns.process`); xác nhận hoàn tiền + xem số tài khoản đầy đủ khi `received` (`returns.refund`, chỉ admin).'
 security: []
 paths:
   /auth/lookup:
@@ -2828,6 +2845,526 @@ paths:
               schema: { $ref: '#/components/schemas/StorePublicSettings' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /account/orders/{orderCode}/return:
+    post:
+      tags: [returns]
+      operationId: createReturnRequest
+      x-status: locked
+      summary: Thành viên gửi yêu cầu trả hàng cho đơn của mình (BR-RET-09..18, 21, 30)
+      description: |
+        Slice 9, status: locked (khách vãng lai: draft, hoãn). Chỉ phiên `n2f_sid` của CHỦ đơn; đơn không có hoặc của người khác -> `404 not-found` (không phân biệt). Bắt buộc `Idempotency-Key`: cùng khoá + cùng nội dung -> `200` kèm `Idempotency-Replayed: true`, không tạo thêm; cùng khoá khác nội dung -> `409 idempotency-conflict`; thiếu / sai dạng -> `422`, `field: Idempotency-Key`. Giới hạn 10 yêu cầu / giờ / tài khoản (đếm mọi lần gọi tới được thân), vượt -> `429 rate-limited`.
+
+        **Thứ tự kiểm:** phiên 401 -> `X-Requested-With` 403 -> giới hạn 429 -> `Idempotency-Key` 422 -> thân (MỌI lỗi theo trường một lần, `error.fieldErrors`, `field` phẳng như dưới) 422 -> đơn 404 -> giao dịch (khoá dòng đơn): điều kiện đơn `409 not-returnable` (chưa `completed`, thiếu `deliveredAt`, `paymentStatus` khác `paid`, kể cả `refunded` / `partially_refunded`), quá hạn `409 return-window-closed` (hạn = 23:59:59 giờ VN của ngày thứ 30 kể từ ngày giao, ngày giao = ngày 0, máy chủ tính), đã có yêu cầu không-`cancelled` `409 return-exists` (ràng buộc duy nhất ở DB; 20 yêu cầu đồng thời: đúng 1 thành công) -> kiểm theo dữ liệu (`lines`, `photos`, tiền) 422.
+
+        **Trường thân (phẳng):** `lines` (>= 1, mỗi dòng `variantId` của đơn + `quantity` nguyên 1..số đã mua, không trùng; sai -> `field: lines`); `reason` (6 mã, sai / thiếu -> `field: reason`); `detail` (NFC, cắt hai đầu, không ký tự điều khiển ngoài xuống dòng; lỗi của shop bắt buộc 10..500, lỗi của khách tuỳ chọn <= 500; -> `field: detail`); `conditionAck` (lý do lỗi của khách bắt buộc `true`, -> `field: conditionAck`); `photos` (mảng id ảnh đã tải bằng `POST /account/return-photos`: lỗi của shop bắt buộc >= 1, tối đa 5, ảnh phải do CHÍNH tài khoản này tải trong 24 giờ qua và chưa gắn yêu cầu nào; sai -> `field: photos`); `bank` (2..60), `accountNumber` (bỏ khoảng trắng còn 6..19 chữ số), `accountName` (2..50, chữ cái và khoảng trắng, lưu IN HOA): BẮT BUỘC khi đơn COD, đơn `bank-transfer` thì BỎ QUA (không lưu). Trường lạ bị loại.
+
+        Tiền theo BR-RET-30 trên số lượng đã chọn (`amount` dự kiến, `final = false`); tiền hàng trừ phí gửi trả <= 0 (lý do lỗi của khách) -> `422`, `field: lines`. Số tài khoản không bao giờ có trong phản hồi (chỉ ngân hàng, 4 số cuối, tên). Thêm đúng 1 sự kiện đơn `return_requested` và gửi email "Đã nhận yêu cầu trả hàng".
+      security:
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReturnCreateInput' }
+      responses:
+        '200':
+          description: Phát lại kết quả lần đầu (cùng `Idempotency-Key` + cùng nội dung).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Idempotency-Replayed: { schema: { type: string, const: 'true' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequest' }
+        '201':
+          description: Đã tạo yêu cầu (`state = requested`).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/orders/{orderCode}/return/estimate:
+    post:
+      tags: [returns]
+      operationId: estimateReturnAmount
+      x-status: locked
+      x-priority: should
+      summary: Tính "Dự kiến hoàn" bằng đúng công thức máy chủ (BR-RET-21, 30) [Should, có thể cắt]
+      description: |
+        Không ghi gì, không cần `Idempotency-Key`. Thân gồm `lines` + `reason` (cùng quy tắc `lines`, `reason` của `createReturnRequest`); không kiểm ảnh / mô tả / tài khoản / hạn trả. Trả đúng số mà `createReturnRequest` sẽ lưu. FE có thể thay bằng công thức cục bộ dùng `lineDiscount` của đơn nếu cắt endpoint này (một nguồn công thức: `modules/returns/return-amount.ts`). Giới hạn đọc của khách (120 / 60 giây).
+      security:
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReturnEstimateInput' }
+      responses:
+        '200':
+          description: Số tiền dự kiến.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnAmount' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/orders/{orderCode}/return/cancel:
+    post:
+      tags: [returns]
+      operationId: cancelReturnRequest
+      x-status: locked
+      summary: Khách huỷ yêu cầu trả hàng khi chưa được duyệt (BR-RET-19)
+      description: |
+        Chỉ chủ đơn. Chuyển `requested` -> `cancelled` nguyên tử (không thân, không lý do); trong cùng giao dịch XOÁ số tài khoản đầy đủ và mở lại quyền tạo yêu cầu mới (nếu còn hạn). Không email; thêm đúng 1 sự kiện `return_cancelled`. Từ `approved` trở đi, đã `cancelled`, hoặc đơn không có yêu cầu đang xử lý -> `409 invalid-transition` (kèm `currentReturnState`; không có yêu cầu nào -> `404 not-found`).
+      security:
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '200':
+          description: Yêu cầu sau khi huỷ.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/return-photos:
+    post:
+      tags: [return-photos]
+      operationId: uploadReturnPhoto
+      x-status: locked
+      summary: Thành viên tải 1 ảnh minh chứng trả hàng (BR-RET-14, 15)
+      description: |
+        Slice 9, status: locked (khách vãng lai: draft, hoãn). **Thân yêu cầu là byte thô của đúng 1 tệp** (như `POST /admin/uploads/product-images`; không multipart), `Content-Type` bất kỳ trong `image/jpeg`, `image/png`, `image/webp`, `application/octet-stream`. Định dạng xác định theo NỘI DUNG (magic bytes). Giới hạn: <= 5 MB, cạnh ngắn >= 200 px, cạnh dài <= 8.000 px; sai -> `422 invalid-image` `reason` = `format` | `size` | `dimensions` (thứ tự kiểm: size, format, dimensions). Gỡ metadata (EXIF / GPS / XMP / COM) trước khi lưu; khoá lưu do máy chủ sinh (`rp-<32 hex>.<ext>`). Ảnh lưu ở **kho RIÊNG TƯ** (không phải bucket công khai `product-images`; không bao giờ qua `GET /media/{id}`). Giới hạn 30 tệp / giờ / tài khoản (`429 rate-limited`; đếm mọi lần gọi tới được thân). Ảnh chưa gắn vào yêu cầu chỉ gắn được trong 24 giờ, bởi chính người tải; không tự xoá theo lịch.
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Ảnh đã lưu (chưa gắn yêu cầu).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnPhoto' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/return-photos/{photoId}:
+    get:
+      tags: [return-photos]
+      operationId: getMyReturnPhoto
+      x-status: locked
+      summary: Xem ảnh trả hàng của chính mình (BR-RET-15)
+      description: |
+        Cần phiên `n2f_sid`; kiểm quyền Ở MỖI LẦN gọi: chỉ người tải ảnh (ảnh chưa gắn) hoặc chủ của đơn có yêu cầu mà ảnh gắn vào. Không có phiên -> `401`; ảnh của người khác / không có / id sai dạng -> `404 not-found` (không phân biệt). Máy chủ ĐỌC byte từ kho riêng tư và TRẢ TRỰC TIẾP (không `302`, không URL ký): `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, `Content-Type` theo tệp. Mọi `ReturnPhoto.url` trong phản hồi cho khách trỏ về endpoint này (cần cookie, không mở được khi không đăng nhập).
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnPhotoId'
+      responses:
+        '200':
+          description: Byte ảnh.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/return:
+    post:
+      tags: [returns]
+      operationId: createGuestReturnRequest
+      x-status: draft
+      x-priority: should
+      summary: Khách vãng lai gửi yêu cầu trả hàng (BR-RET-22) [Should, lát 9.6, có thể cắt]
+      description: |
+        Cùng hành vi, thân, thứ tự kiểm, mã lỗi và phản hồi như `createReturnRequest`, nhưng quyền là cookie `n2f_oa` GẮN ĐÚNG đơn này (đã qua `POST /orders/lookup/verify`, còn hạn 30 phút); chủ đơn có phiên `n2f_sid` cũng gọi được (cùng hành vi). Không có cả hai -> `401`; grant của đơn khác / đơn không có -> `404`. Ảnh gắn theo đơn của grant (do `POST /orders/{orderCode}/return/photos` tải); giới hạn 10 yêu cầu / giờ / IP. Nếu lát 9.6 bị cắt, 4 operation `/orders/{orderCode}/return*` không có và chính sách giữ "gọi hotline / gửi email".
+      security:
+        - orderAccess: []
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReturnCreateInput' }
+      responses:
+        '200':
+          description: Phát lại kết quả lần đầu.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            Idempotency-Replayed: { schema: { type: string, const: 'true' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequest' }
+        '201':
+          description: Đã tạo yêu cầu.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/return/cancel:
+    post:
+      tags: [returns]
+      operationId: cancelGuestReturnRequest
+      x-status: draft
+      x-priority: should
+      summary: Khách vãng lai huỷ yêu cầu trả hàng [Should, có thể cắt]
+      description: Như `cancelReturnRequest`; quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn).
+      security:
+        - orderAccess: []
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '200':
+          description: Yêu cầu sau khi huỷ.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/return/estimate:
+    post:
+      tags: [returns]
+      operationId: estimateGuestReturnAmount
+      x-status: draft
+      x-priority: should
+      summary: Dự kiến hoàn cho khách vãng lai [Should, có thể cắt]
+      description: Như `estimateReturnAmount`; quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn).
+      security:
+        - orderAccess: []
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReturnEstimateInput' }
+      responses:
+        '200':
+          description: Số tiền dự kiến.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnAmount' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/return/photos:
+    post:
+      tags: [return-photos]
+      operationId: uploadGuestReturnPhoto
+      x-status: draft
+      x-priority: should
+      summary: Khách vãng lai tải ảnh trả hàng [Should, có thể cắt]
+      description: Như `uploadReturnPhoto` (thân byte thô, cùng giới hạn, kho riêng tư); quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn). Ảnh gắn với ĐƠN (không với tài khoản) và chỉ gắn được vào yêu cầu của đơn này. 30 tệp / giờ / đơn (+ giới hạn IP hiện có).
+      security:
+        - orderAccess: []
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+          application/octet-stream: { schema: { type: string, format: binary } }
+      responses:
+        '201':
+          description: Ảnh đã lưu.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReturnPhoto' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/return/photos/{photoId}:
+    get:
+      tags: [return-photos]
+      operationId: getGuestReturnPhoto
+      x-status: draft
+      x-priority: should
+      summary: Xem ảnh trả hàng của đơn mình tra cứu [Should, có thể cắt]
+      description: Như `getMyReturnPhoto`; quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn); ảnh phải thuộc đơn này, nếu không -> `404`.
+      security:
+        - orderAccess: []
+        - storefrontSession: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/ReturnPhotoId'
+      responses:
+        '200':
+          description: Byte ảnh.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/returns:
+    get:
+      tags: [admin-returns]
+      operationId: adminListReturns
+      x-status: locked
+      summary: Danh sách yêu cầu trả hàng, tab đếm, tìm, sắp, phân trang (BR-RET-31)
+      description: |
+        Slice 9, status: locked (khách vãng lai: draft, hoãn). Quyền: staff, admin (`returns.process`). `state`: `requested` | `approved` | `received` | `refunded` | `closed` (= `rejected` + `cancelled`); vắng = tất cả; giá trị lạ -> `422`, `field: state`. `q` (cắt khoảng trắng, <= 100 ký tự, dài hơn -> `field: q`): mã đơn (chữ thường / `#` được chấp nhận), tên người nhận (không dấu, không phân biệt hoa thường), SĐT (>= 4 chữ số liên tiếp). `sort`: `requestedAt` (mặc định, mới trước) | `amount` (giảm, hoà `requestedAt` giảm); giá trị lạ -> `field: sort`. `page` >= 1, `limit` 20 (mặc định) | 50, khác -> `422` (`field: page` / `limit`). Hoà thời điểm: `returnId` giảm (thứ tự ổn định qua các trang). `counts` (số đếm mọi tab) tính theo cùng `q`, KHÔNG theo `state`; trang quá cuối -> `items` rỗng, `total` đúng. Bằng đúng số `todo.returnRequested|returnApproved|returnReceived` của Tổng quan khi không có `q`.
+      security:
+        - adminSession: []
+      parameters:
+        - { name: state, in: query, schema: { $ref: '#/components/schemas/ReturnStateFilter' } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: sort, in: query, schema: { type: string, enum: [requestedAt, amount], default: requestedAt } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, enum: [20, 50], default: 20 } }
+      responses:
+        '200':
+          description: Một trang.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminReturnPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/returns/{returnId}:
+    get:
+      tags: [admin-returns]
+      operationId: adminGetReturn
+      x-status: locked
+      summary: Chi tiết một yêu cầu trả hàng (BR-RET-32)
+      description: |
+        Staff + admin (`returns.process`). `returnId` sai dạng / không có -> `404 not-found`. Dữ liệu như `ReturnRequest` + người nhận (tên, SĐT, email đầy đủ như đơn), ảnh, lịch sử xử lý (ai, lúc nào, ghi chú; tên chụp lúc làm), `allowedActions` theo vai trò + trạng thái. Số tài khoản: staff luôn chỉ bản che; admin thấy ĐỦ SỐ **chỉ khi `state = received`** (trạng thái khác: bản che). Cùng dữ liệu nằm ở `AdminOrder.return` của đơn gốc.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+      responses:
+        '200':
+          description: Chi tiết.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminReturn' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/returns/{returnId}/approve:
+    post:
+      tags: [admin-returns]
+      operationId: adminApproveReturn
+      x-status: locked
+      summary: Duyệt yêu cầu (BR-RET-33)
+      description: |
+        Staff + admin (`returns.process`; thiếu quyền -> `403` trước khi đọc thân). `requested` -> `approved` so-sánh-rồi-đổi nguyên tử trên trạng thái; trạng thái khác / thua cuộc đua -> `409 invalid-transition` (`currentReturnState`), không để lại thay đổi hay sự kiện. Không đổi tồn, tiền, `payment_status`. `note` (hướng dẫn cho khách, <= 250 ký tự, hiện cho khách) tuỳ chọn; Should (BR-RET-44): `carrier` <= 50, `trackingNumber` <= 40, hiện cho khách. Thêm đúng 1 sự kiện `return_approved` (người = nhân viên, tên + vai trò chụp) và email "đã được duyệt". Không hỗ trợ `Idempotency-Key` (lặp lại -> `409`, FE tải lại).
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReturnApproveInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReturnUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/returns/{returnId}/reject:
+    post:
+      tags: [admin-returns]
+      operationId: adminRejectReturn
+      x-status: locked
+      summary: Từ chối / đóng yêu cầu không hoàn (BR-RET-34)
+      description: |
+        Staff + admin (`returns.process`). `requested` hoặc `approved` -> `rejected` (nguyên tử); `note` BẮT BUỘC 5..250 ký tự sau khi cắt (thiếu / ngoài khoảng -> `422`, `field: note`), hiện cho khách và vào email. Không đổi tồn, tiền, `payment_status`; XOÁ số tài khoản đầy đủ cùng giao dịch; đơn vẫn `completed`; không tạo lại được (`return-exists`). Sự kiện `return_rejected` + email "không được chấp nhận".
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReturnRejectInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReturnUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/returns/{returnId}/receive:
+    post:
+      tags: [admin-returns]
+      operationId: adminReceiveReturn
+      x-status: locked
+      summary: Nhận hàng trả về, kiểm từng dòng, nhập kho (BR-RET-35, 36)
+      description: |
+        Staff + admin (`returns.process`). `approved` -> `received`. `lines` PHẢI có đúng một phần tử cho MỖI dòng đã yêu cầu (`variantId`; thiếu / thừa / trùng / lạ -> `422`, `field: lines`): `acceptedQuantity` 0..số lượng yêu cầu; `disposition` (`restock` nhập lại kho bán | `writeoff` hỏng, không nhập) BẮT BUỘC khi `acceptedQuantity > 0` (bỏ qua khi 0). Có dòng đạt < yêu cầu -> `note` BẮT BUỘC 5..250 (`field: note`). Không có ô sửa số tiền: `amount` chốt = công thức BR-RET-30 trên số lượng ĐẠT, lưu lại (đổi cài đặt / `line_discount` sau đó không đổi số chốt).
+        Một giao dịch: mỗi dòng `restock` với `q > 0` cộng đúng `q` vào tồn của biến thể (kể cả biến thể ẩn / sản phẩm lưu trữ) và ghi ĐÚNG 1 dòng `inventory_adjustments` (`reason = return`, `delta = +q`, ghi chú `Trả hàng #<mã đơn>`, người + vai trò lúc đó); `writeoff` không đổi tồn, không dòng điều chỉnh (lưu `disposition`). Cộng đúng MỘT lần: lần hai / 20 yêu cầu song song -> đúng 1 thành công, còn lại `409 invalid-transition`.
+        **Đóng thẳng:** tổng đạt = 0 hoặc `amount` chốt <= 0 -> yêu cầu sang `rejected` (không đổi tồn, tiền, `payment_status`; xoá số tài khoản đầy đủ; `note` bắt buộc; hàng gửi lại khách do nhân viên sắp xếp ngoài hệ thống); phản hồi `200` có `state = rejected`. Sự kiện `return_received` (hoặc `return_rejected` khi đóng thẳng); Should: email "Đã nhận hàng trả về".
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReturnReceiveInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReturnUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/returns/{returnId}/refund:
+    post:
+      tags: [admin-returns]
+      operationId: adminConfirmRefund
+      x-status: locked
+      summary: Admin xác nhận ĐÃ chuyển tiền hoàn (BR-RET-37, 38)
+      description: |
+        CHỈ admin (`returns.refund`; staff -> `403`, dữ liệu không đổi, không sự kiện; kiểm trước khi đọc thân). `received` -> `refunded`. `amount` PHẢI bằng đúng số đã chốt (khác -> `422`, `field: amount`; FE tải lại); `refundReference` bắt buộc 4..60 ký tự sau khi cắt (`field: refundReference`). Hoàn tiền thật do admin chuyển khoản NGOÀI hệ thống trước khi bấm. Một giao dịch: `refunded_at`, người, mã; `orders.payment_status` -> `refunded` nếu Σ số lượng đạt của yêu cầu = Σ số lượng mua của MỌI dòng đơn, ngược lại `partially_refunded` (đơn vẫn `completed`; đây là chỗ DUY NHẤT đổi `payment_status`); XOÁ số tài khoản đầy đủ; sự kiện `return_refunded` (mang `paymentStatus` mới); email "Đã hoàn tiền" (số tiền, ngân hàng + 4 số cuối hoặc "tài khoản đã thanh toán", mã giao dịch; không có số đầy đủ). Hai admin cùng bấm: đúng 1 thành công, còn lại `409 invalid-transition`.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReturnRefundInput' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReturnUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReturnConflict' }
+        '422': { $ref: '#/components/responses/ReturnValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/return-photos/{photoId}:
+    get:
+      tags: [return-photos]
+      operationId: adminGetReturnPhoto
+      x-status: locked
+      summary: Staff / admin xem ảnh trả hàng (BR-RET-15)
+      description: 'Cần phiên `n2f_asid` (staff + admin đang hoạt động, đọc lại từ DB). Không phiên -> `401`; id sai dạng / không có -> `404`. Máy chủ đọc byte từ kho riêng tư và trả trực tiếp, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`. Mọi `ReturnPhoto.url` trong phản hồi admin trỏ về endpoint này. Chỉ ảnh đã gắn vào một yêu cầu (ảnh chưa gắn không xem được qua đây).'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReturnPhotoId'
+      responses:
+        '200':
+          description: Byte ảnh.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -2924,6 +3461,18 @@ components:
       required: true
       schema: { type: string, minLength: 16, maxLength: 64, pattern: '^[A-Za-z0-9-]+$' }
       description: 'Slice 7, BẮT BUỘC cho tạo nhân viên: FE sinh một khoá cho mỗi ý định, dùng lại khi "Thử lại" để mất mạng giữa chừng không làm lần bấm sau nhận `409 duplicate`. Cùng khoá + cùng người + cùng đường dẫn + cùng nội dung trong 24 giờ -> `200` kết quả lần đầu (`Idempotency-Replayed: true`); khác nội dung -> `409 idempotency-conflict`. Thiếu / sai dạng -> `422 validation`, `field: Idempotency-Key`.'
+    ReturnId:
+      name: returnId
+      in: path
+      required: true
+      description: 'Slice 9. UUID yêu cầu trả hàng; sai dạng hoặc không có -> `404 not-found`.'
+      schema: { type: string }
+    ReturnPhotoId:
+      name: photoId
+      in: path
+      required: true
+      description: 'Slice 9. UUID ảnh trả hàng; sai dạng, không có, hoặc không có quyền xem -> `404 not-found` (không phân biệt).'
+      schema: { type: string }
   headers:
     RetryAfter:
       description: Số giây chờ, bằng `error.retryAfterSeconds`.
@@ -3116,6 +3665,25 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ReturnValidation:
+      description: |
+        Slice 9. `validation` (+ `field`; `fieldErrors` đủ MỌI lỗi theo trường một lần ở `createReturnRequest` / `estimateReturnAmount` / `adminReceiveReturn`): `lines`, `reason`, `detail`, `conditionAck`, `photos`, `bank`, `accountNumber`, `accountName`, `Idempotency-Key` (thân yêu cầu khách); `note`, `lines` (nhận hàng), `amount`, `refundReference` (admin); `state`, `q`, `sort`, `page`, `limit` (query danh sách). `invalid-image` 422 kèm `reason` = `format` | `size` | `dimensions` (tải ảnh). Thông điệp KHÔNG bao giờ lặp lại giá trị đã nhập (đặc biệt số tài khoản).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ReturnConflict:
+      description: |
+        Slice 9. `not-returnable` (đơn chưa `completed` / thiếu `deliveredAt` / `paymentStatus` khác `paid`), `return-window-closed` (quá hạn 30 ngày), `return-exists` (đơn đã có yêu cầu không-`cancelled`), `invalid-transition` (kèm `currentReturnState`; chuyển trạng thái ngoài bảng, lặp lại, hoặc thua cuộc đua), `idempotency-conflict` (cùng `Idempotency-Key`, khác nội dung). Không để lại thay đổi hay sự kiện.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AdminReturnUpdated:
+      description: 'Slice 9. Yêu cầu sau thao tác (dạng admin, đủ trường, `allowedActions` mới).'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminReturn' }
   schemas:
     Email:
       type: string
@@ -3200,6 +3768,11 @@ components:
         | duplicate (dùng lại) | 409 | AC-USR-33 (Slice 7: `field: email`) |
         | version-conflict (dùng lại) | 409 | AC-SET-08 (Slice 8, draft; `PUT /admin/settings/store`) |
         | validation (dùng lại) | 422 | AC-INS-10, AC-DSH-01, AC-RPT-01, 02, 05, AC-SET-02..06, 09, AC-AUD-02 (Slice 8, draft; `field` theo tên tham số / đường dẫn trường) |
+        | not-returnable | 409 | AC-RET-10 (Slice 9, draft; đơn chưa `completed`, thiếu `deliveredAt`, hoặc `paymentStatus` khác `paid`) |
+        | return-window-closed | 409 | AC-RET-10 (Slice 9, draft; quá 23:59:59 giờ VN ngày thứ 30 kể từ ngày giao) |
+        | return-exists | 409 | AC-RET-09 (Slice 9, draft; đơn đã có yêu cầu không-`cancelled`) |
+        | invalid-transition (dùng lại) | 409 | AC-RET-08, 19, 33..39 (Slice 9, draft; kèm `currentReturnState`, không có `currentStatus`) |
+        | validation / invalid-image / idempotency-conflict (dùng lại) | 422 / 422 / 409 | AC-RET-11..14, 16, 18, 21, 31, 33..37 (Slice 9, draft; `field` phẳng: `lines`, `reason`, `detail`, `conditionAck`, `photos`, `bank`, `accountNumber`, `accountName`, `note`, `amount`, `refundReference`) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -3235,6 +3808,9 @@ components:
         - voucher-in-use
         - self-change
         - last-admin
+        - not-returnable
+        - return-window-closed
+        - return-exists
         - unavailable
     ErrorResponse:
       type: object
@@ -3260,7 +3836,7 @@ components:
             fieldErrors:
               type: array
               minItems: 1
-              description: 'Slice 8, chỉ `PUT /admin/settings/store` (`validation`): MỌI lỗi theo trường (AC-SET-02); phần tử đầu trùng `field` / `message` ở trên.'
+              description: 'Slice 8, `PUT /admin/settings/store` (`validation`): MỌI lỗi theo trường (AC-SET-02); phần tử đầu trùng `field` / `message` ở trên. Slice 9 (draft): thêm ở `createReturnRequest`, `estimateReturnAmount`, `adminReceiveReturn`. `message` không bao giờ lặp lại giá trị đã nhập.'
               items:
                 type: object
                 required: [field, message]
@@ -3291,6 +3867,9 @@ components:
             currentStatus:
               description: 'Slice 4: trạng thái hiện tại của đơn, có ở `invalid-transition`, `order-state-changed`, `condition-not-met` (BR-ADM-13).'
               $ref: '#/components/schemas/OrderStatus'
+            currentReturnState:
+              description: 'Slice 9 (draft): trạng thái hiện tại của yêu cầu trả hàng, có ở `invalid-transition` của thao tác trả hàng (thay cho `currentStatus`).'
+              $ref: '#/components/schemas/ReturnState'
             order:
               description: 'Slice 4: đơn hiện tại (dạng admin), luôn có ở `order-state-changed` để FE vẽ lại không gọi thêm (BR-ADM-14).'
               $ref: '#/components/schemas/AdminOrder'
@@ -3757,7 +4336,7 @@ components:
         actor: { type: string, enum: [customer, nine2fine], description: 'Slice 4. Người thực hiện: `customer` hiện "Khách", `nine2fine` cho nhân viên và hệ thống (không lộ tên nhân viên, BR-ADM-12). Dòng cũ (Slice 3) cũng được điền theo `actor` của sự kiện.' }
     Order:
       type: object
-      required: [id, placedAt, status, paymentStatus, paymentMethod, items, pricing, vouchers, recipient, shippingAddress, estimatedDelivery, canCancel, timeline]
+      required: [id, placedAt, status, paymentStatus, paymentMethod, items, pricing, vouchers, recipient, shippingAddress, estimatedDelivery, canCancel, canReturn, timeline]
       additionalProperties: false
       description: 'Chi tiết đơn. Không có `userId`, UUID nội bộ hay dữ liệu thanh toán nhạy cảm. Nhất quán: `pricing` ở đây, ở email, ở trang thành công là cùng một bộ số.'
       properties:
@@ -3833,6 +4412,9 @@ components:
             trackingNumber: { type: string }
             handedOverAt: { type: string, format: date-time }
         deliveredAt: { type: string, format: date-time, description: 'Slice 4. Thời điểm giao xong / thu tiền; chỉ khi `completed`.' }
+        canReturn: { type: boolean, description: 'Slice 9 (draft, BR-RET-10). Máy chủ tính: `status = completed`, có `deliveredAt`, `paymentStatus = paid`, chưa quá `returnDeadline`, và chưa có yêu cầu không-`cancelled`. FE bám cờ này (không tính hạn bằng đồng hồ máy khách).' }
+        returnDeadline: { type: string, format: date-time, description: 'Slice 9 (draft). 23:59:59 giờ VN của ngày thứ 30 kể từ ngày giao (ISO UTC). Chỉ khi có `deliveredAt`.' }
+        return: { allOf: [{ $ref: '#/components/schemas/ReturnRequest' }], description: 'Slice 9 (draft, BR-RET-20). Yêu cầu không-`cancelled` mới nhất của đơn; nếu chỉ có yêu cầu đã huỷ thì yêu cầu huỷ mới nhất; không có yêu cầu thì vắng. Chỉ ở các API đơn của khách (chi tiết, danh sách, huỷ); không có ở thư / phản hồi đặt đơn.' }
         willCallToConfirm: { type: boolean, description: 'COD cần CSKH gọi xác nhận trong 2 giờ làm việc (BR-CHK-20): false với thành viên đã có đơn `completed` và đơn < 1.000.000 ₫. Chỉ có ở đơn COD `to_ship`.' }
         timeline: { type: array, items: { $ref: '#/components/schemas/OrderTimelineEntry' }, description: 'Cũ nhất trước (khác timeline admin là mới nhất trước, chủ ý); mỗi lần đổi trạng thái một dòng (BR-CHK-22). Slice 4: chỉ các lần đổi trạng thái (không có lần gọi, xác nhận, ghi chú, hàng hoàn), người = `nine2fine` hoặc `customer` (BR-ADM-12).' }
     OrderReceipt:
@@ -3940,7 +4522,8 @@ components:
         role: { type: string, enum: [staff, admin] }
     AdminEventKind:
       type: string
-      enum: [placed, payment_received, call_attempt, confirmed, shipped, delivered, cancel_requested, cancel_approved, cancel_rejected, cancelled, stock_restocked, stock_written_off, note]
+      enum: [placed, payment_received, call_attempt, confirmed, shipped, delivered, cancel_requested, cancel_approved, cancel_rejected, cancelled, stock_restocked, stock_written_off, note, return_requested, return_approved, return_rejected, return_received, return_refunded, return_cancelled]
+      description: 'Sáu loại cuối thêm ở Slice 9 (draft): mỗi chuyển trạng thái của yêu cầu trả hàng đúng 1 sự kiện, `fromStatus = toStatus = completed`; `return_refunded` mang `paymentStatus` mới. Không bao giờ có số tài khoản.'
     AdminTimelineEntry:
       type: object
       required: [at, kind, toStatus, paymentStatus, actor, title]
@@ -3975,6 +4558,7 @@ components:
         hasCancelRequest: { type: boolean, description: 'Cờ "có yêu cầu huỷ": `status = cancel_requested`.' }
         tab: { $ref: '#/components/schemas/AdminOrderBucket' }
         overdue: { type: array, items: { $ref: '#/components/schemas/AdminOverdueFlag' }, description: 'Should (BR-ADM-40). Rỗng nếu trong hạn.' }
+        returnPending: { type: boolean, description: 'Slice 9 (draft, Should, BR-RET-44): đơn có yêu cầu trả hàng `requested`. Có thể vắng nếu chưa làm Should.' }
     AdminOrderPage:
       type: object
       required: [items, total, page, limit]
@@ -4102,6 +4686,7 @@ components:
         overdue: { type: array, items: { $ref: '#/components/schemas/AdminOverdueFlag' } }
         allowedActions: { type: array, items: { $ref: '#/components/schemas/AdminOrderAction' } }
         timeline: { type: array, items: { $ref: '#/components/schemas/AdminTimelineEntry' }, description: 'Mới nhất trước (BR-ADM-10).' }
+        return: { allOf: [{ $ref: '#/components/schemas/AdminReturn' }], description: 'Slice 9 (draft, BR-RET-42). Yêu cầu không-`cancelled` mới nhất (hoặc yêu cầu huỷ mới nhất nếu chỉ có huỷ); vắng nếu đơn chưa có yêu cầu. Số tài khoản đầy đủ theo quy tắc `AdminReturnRefundTo`.' }
     AdminExpectedStatusRequest:
       type: object
       required: [expectedStatus]
@@ -4212,6 +4797,7 @@ components:
       type: object
       required: [tier, spent, nextTierAt, reviewDate]
       additionalProperties: false
+      description: 'Slice 9 (draft, BR-RET-53): `spent` = Σ (`total` - tiền hàng đã hoàn - phí giao đã hoàn) của đơn `completed` trong năm (yêu cầu `refunded`); KHÔNG trừ phí gửi trả; hạng tính lại ở lần gọi sau (có thể hạ).'
       properties:
         tier: { type: string, enum: [bronze, silver, gold] }
         spent: { type: integer, minimum: 0 }
@@ -4736,7 +5322,7 @@ components:
         change: { type: [number, 'null'], minimum: -1 }
     AdminDashboardTodo:
       type: object
-      required: [toConfirm, pendingPayment, toFulfil, inTransit, cancelRequests, returning, lateDelivery, lowStock, outOfStock]
+      required: [toConfirm, pendingPayment, toFulfil, inTransit, cancelRequests, returning, lateDelivery, lowStock, outOfStock, returnRequested, returnApproved, returnReceived]
       additionalProperties: false
       description: 'Slice 8 (BR-DSH-03..05). Tại lúc gọi, không phụ thuộc `range`. Sáu số đầu = số tab cùng tên của `GET /admin/orders/counts` (`to-confirm`, `pending-payment`, `to-fulfil`, `in-transit`, `cancel-requests`, `returning`); `lowStock` / `outOfStock` = số tab "Sắp hết" / "Hết hàng" của Tồn kho (cùng hàm đếm, ngưỡng riêng SKU hoặc `low_stock_default`).'
       properties:
@@ -4749,6 +5335,9 @@ components:
         lateDelivery: { type: integer, minimum: 0, description: 'Should (BR-DSH-05): đơn `to_receive` có `estimated_to` sớm hơn hôm nay (VN).' }
         lowStock: { type: integer, minimum: 0 }
         outOfStock: { type: integer, minimum: 0 }
+        returnRequested: { type: integer, minimum: 0, description: 'Slice 9 (draft, BR-RET-50): số yêu cầu trả hàng `requested` (tab Chờ duyệt của `GET /admin/returns`). Cả staff và admin; không phụ thuộc `range`.' }
+        returnApproved: { type: integer, minimum: 0, description: 'Slice 9 (draft): số yêu cầu `approved` (Chờ nhận hàng).' }
+        returnReceived: { type: integer, minimum: 0, description: 'Slice 9 (draft): số yêu cầu `received` (Chờ hoàn tiền).' }
     AdminDashboardPeriod:
       type: object
       required: [from, to, previousFrom, previousTo]
@@ -4836,7 +5425,7 @@ components:
         sort: { type: string, enum: [units, revenue] }
         kpis:
           type: object
-          required: [revenue, completedOrders, units, averageOrderValue, discountTotal, shippingCollected, placedOrders, cancelledOrders, cancelRate]
+          required: [revenue, completedOrders, units, averageOrderValue, discountTotal, shippingCollected, placedOrders, cancelledOrders, cancelRate, refundedAmount, refundedUnits, returnedOrders]
           additionalProperties: false
           properties:
             revenue: { $ref: '#/components/schemas/AdminReportFigure' }
@@ -4848,6 +5437,10 @@ components:
             placedOrders: { $ref: '#/components/schemas/AdminReportFigure' }
             cancelledOrders: { $ref: '#/components/schemas/AdminReportFigure' }
             cancelRate: { $ref: '#/components/schemas/AdminReportFigure' }
+            refundedAmount: { allOf: [{ $ref: '#/components/schemas/AdminReportFigure' }], description: 'Slice 9 (draft, BR-RET-52): Σ tiền hàng đã hoàn (yêu cầu `refunded`) của đơn GIAO trong kỳ. `previous` null khi kỳ trước không có đơn `completed` nào được giao. `revenue` đã trừ số này (BR-RET-51), ghi vào NGÀY BÁN GỐC.' }
+            refundedUnits: { allOf: [{ $ref: '#/components/schemas/AdminReportFigure' }], description: 'Slice 9 (draft): Σ số lượng đạt đã hoàn của đơn giao trong kỳ (`units` đã trừ số này).' }
+            returnedOrders: { allOf: [{ $ref: '#/components/schemas/AdminReportFigure' }], description: 'Slice 9 (draft): số đơn giao trong kỳ có yêu cầu `refunded`.' }
+            returnRate: { allOf: [{ $ref: '#/components/schemas/AdminReportFigure' }], description: 'Slice 9 (draft, Should, BR-RET-52): `refundedUnits / (units + refundedUnits)`, 4 chữ số thập phân; mẫu 0 -> 0. Có thể vắng nếu chưa làm Should.' }
         byDay:
           type: array
           minItems: 1
@@ -5139,3 +5732,299 @@ components:
         total: { type: integer, minimum: 0 }
         page: { type: integer, minimum: 1 }
         limit: { type: integer, minimum: 1, maximum: 50 }
+    ReturnReason:
+      type: string
+      enum: [wrong-size, wrong-color, wrong-item, defective, not-fit, changed-mind]
+      description: 'Slice 9 (BR-RET-12). Lỗi của shop: `wrong-size`, `wrong-color`, `wrong-item`, `defective`; lỗi của khách: `not-fit`, `changed-mind`. Không có "khác" / "không như mô tả" (Won''t).'
+    ReturnFault:
+      type: string
+      enum: [shop, customer]
+      description: 'Suy ra từ `reason`: `shop` miễn phí gửi trả (+ hoàn phí giao khi trả toàn bộ đơn); `customer` trừ 30.000 phí gửi trả.'
+    ReturnState:
+      type: string
+      enum: [requested, approved, received, refunded, rejected, cancelled]
+      description: 'Slice 9 (BR-RET-08). requested -> approved | rejected | cancelled(khách); approved -> received | rejected; received -> refunded. `rejected`, `cancelled`, `refunded` là cuối. KHÔNG thêm giá trị vào `OrderStatus`: đơn giữ `completed`.'
+    ReturnStateFilter:
+      type: string
+      enum: [requested, approved, received, refunded, closed]
+      description: '`closed` = `rejected` + `cancelled`.'
+    ReturnDisposition:
+      type: string
+      enum: [restock, writeoff]
+    ReturnAmount:
+      type: object
+      required: [goodsAmount, shippingRefund, returnShippingFee, amount, final]
+      additionalProperties: false
+      description: 'Slice 9 (BR-RET-21, 30). `goodsAmount` = Σ hoàn tiền hàng của các dòng (dòng đủ số lượng = `unitPrice x quantity - lineDiscount`; một phần = làm tròn half-up theo tỉ lệ số lượng); `shippingRefund` = `shippingFee - shippingDiscount` CHỈ khi lỗi của shop VÀ mọi dòng đơn hoàn đủ số lượng, ngược lại 0; `returnShippingFee` = 30.000 khi lỗi của khách, ngược lại 0 (hằng số chính sách, không sửa ở Cài đặt); `amount = goodsAmount + shippingRefund - returnShippingFee` (>= 0). `final = false`: dự kiến theo số lượng khách chọn (`requested`, `approved`); `final = true`: đã chốt theo số lượng ĐẠT lúc nhận hàng (từ `received`).'
+      properties:
+        goodsAmount: { type: integer, minimum: 0 }
+        shippingRefund: { type: integer, minimum: 0 }
+        returnShippingFee: { type: integer, minimum: 0 }
+        amount: { type: integer, minimum: 0 }
+        final: { type: boolean }
+    ReturnLinesInput:
+      type: array
+      minItems: 1
+      maxItems: 32
+      description: 'Dòng của ĐƠN theo `variantId` (duy nhất trong đơn). Không trùng, không dòng lạ, số lượng nguyên 1..số đã mua; sai -> `422`, `field: lines`.'
+      items:
+        type: object
+        required: [variantId, quantity]
+        additionalProperties: false
+        properties:
+          variantId: { type: string, format: uuid }
+          quantity: { type: integer, minimum: 1, maximum: 99 }
+    ReturnEstimateInput:
+      type: object
+      required: [lines, reason]
+      additionalProperties: false
+      properties:
+        lines: { $ref: '#/components/schemas/ReturnLinesInput' }
+        reason: { $ref: '#/components/schemas/ReturnReason' }
+    ReturnCreateInput:
+      type: object
+      required: [lines, reason]
+      additionalProperties: false
+      description: 'Slice 9 (BR-RET-11..16). PHẲNG để `error.field` trùng tên trường. Trường lạ bị loại. KHÔNG có `refundAccount` lồng nhau: `bank`, `accountNumber`, `accountName` nằm ở cấp trên cùng.'
+      properties:
+        lines: { $ref: '#/components/schemas/ReturnLinesInput' }
+        reason: { $ref: '#/components/schemas/ReturnReason' }
+        detail: { type: string, maxLength: 500, description: 'Lỗi của shop: bắt buộc 10..500 sau chuẩn hoá. Lỗi của khách: tuỳ chọn <= 500.' }
+        conditionAck: { type: boolean, description: 'Lỗi của khách: bắt buộc `true` ("còn nguyên tem nhãn, chưa qua sử dụng, chưa giặt").' }
+        photos:
+          type: array
+          maxItems: 5
+          items: { type: string, format: uuid }
+          description: 'Id ảnh đã tải. Lỗi của shop: >= 1. Ảnh phải do chính người gửi tải trong 24 giờ qua và chưa gắn yêu cầu nào.'
+        bank: { type: string, maxLength: 80, description: 'Bắt buộc với đơn COD (2..60); đơn `bank-transfer` bỏ qua.' }
+        accountNumber: { type: string, maxLength: 30, description: 'Bỏ khoảng trắng còn 6..19 chữ số. Bắt buộc với đơn COD. KHÔNG bao giờ có trong phản hồi, email, sự kiện, nhật ký, log.' }
+        accountName: { type: string, maxLength: 80, description: '2..50 ký tự chữ cái và khoảng trắng; lưu IN HOA. Bắt buộc với đơn COD.' }
+    ReturnPhoto:
+      type: object
+      required: [id, url, width, height, size, contentType]
+      additionalProperties: false
+      description: 'Slice 9 (BR-RET-14, 15). `url` là đường dẫn CÓ KIỂM QUYỀN theo người xem (khách `/api/account/return-photos/{id}`, khách vãng lai `/api/orders/{code}/return/photos/{id}`, admin `/api/admin/return-photos/{id}`): cần cookie phiên tương ứng, không mở được khi không đăng nhập, không phải URL công khai hay URL ký.'
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        size: { type: integer, minimum: 1, description: 'Byte sau khi gỡ metadata.' }
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+    ReturnLine:
+      type: object
+      required: [variantId, name, color, size, sku, mediaId, quantity, goodsAmount]
+      additionalProperties: false
+      description: 'Dòng của yêu cầu (tên / màu / size / SKU / `mediaId` chụp từ dòng đơn). `goodsAmount`: dự kiến theo `quantity` (trước `received`), chốt theo `acceptedQuantity` (từ `received`).'
+      properties:
+        variantId: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+        size: { type: string }
+        sku: { type: string }
+        mediaId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        acceptedQuantity: { type: integer, minimum: 0, description: 'Có từ `received` (và ở `rejected` sau kiểm).' }
+        goodsAmount: { type: integer, minimum: 0 }
+    ReturnRefundTo:
+      type: object
+      required: [type]
+      additionalProperties: false
+      description: 'Nơi hoàn. `account`: đơn COD, chỉ ngân hàng + 4 số cuối + tên chủ (sau trạng thái cuối cũng còn đủ ba trường này). `original`: đơn chuyển khoản, hoàn về tài khoản đã thanh toán (không thu số).'
+      properties:
+        type: { type: string, enum: [account, original] }
+        bank: { type: string }
+        last4: { type: string, pattern: '^[0-9]{4}$' }
+        accountName: { type: string }
+    ReturnRequest:
+      type: object
+      required: [id, state, reason, fault, detail, conditionAck, requestedAt, lines, photos, amount, refundTo, canCancel]
+      additionalProperties: false
+      description: 'Slice 9 (BR-RET-20). Yêu cầu trả hàng dạng KHÁCH (cũng là `Order.return`). KHÔNG có số tài khoản đầy đủ, `refundReference`, `disposition`, ghi chú nội bộ, tên nhân viên.'
+      properties:
+        id: { type: string, format: uuid }
+        state: { $ref: '#/components/schemas/ReturnState' }
+        reason: { $ref: '#/components/schemas/ReturnReason' }
+        fault: { $ref: '#/components/schemas/ReturnFault' }
+        detail: { type: string }
+        conditionAck: { type: boolean }
+        requestedAt: { type: string, format: date-time }
+        approvedAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        refundedAt: { type: string, format: date-time }
+        rejectedAt: { type: string, format: date-time }
+        cancelledAt: { type: string, format: date-time }
+        lines: { type: array, items: { $ref: '#/components/schemas/ReturnLine' } }
+        photos: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/ReturnPhoto' } }
+        amount: { $ref: '#/components/schemas/ReturnAmount' }
+        refundedAmount: { type: integer, minimum: 0, description: 'Chỉ khi `refunded` (= `amount.amount`).' }
+        expectedRefundBy: { type: string, format: date, description: 'Từ `received` tới `refunded`: <= 3 ngày làm việc sau `receivedAt` (cùng hàm ngày làm việc của ngày giao dự kiến, có tính ngày lễ). Dự kiến, hệ thống không ép.' }
+        approveNote: { type: string, description: 'Hướng dẫn của nhân viên khi duyệt.' }
+        rejectNote: { type: string, description: 'Lý do từ chối / đóng (chỉ khi `rejected`).' }
+        carrier: { type: string, description: 'Should (BR-RET-44).' }
+        trackingNumber: { type: string, description: 'Should (BR-RET-44).' }
+        instructions: { type: string, description: 'Chỉ khi `approved`: hướng dẫn gửi hàng (địa chỉ cửa hàng lấy từ cài đặt + `approveNote`).' }
+        refundTo: { $ref: '#/components/schemas/ReturnRefundTo' }
+        canCancel: { type: boolean, description: 'true khi `state = requested`.' }
+    AdminReturnHistoryEntry:
+      type: object
+      required: [at, kind, actor]
+      additionalProperties: false
+      description: 'Một bước xử lý (từ `order_events` của yêu cầu; tên + vai trò chụp lúc làm). Chỉ ghi chú hiển thị cho khách (hướng dẫn, lý do từ chối), không có số tài khoản.'
+      properties:
+        at: { type: string, format: date-time }
+        kind: { type: string, enum: [return_requested, return_approved, return_rejected, return_received, return_refunded, return_cancelled] }
+        actor: { $ref: '#/components/schemas/AdminActor' }
+        note: { type: string }
+    AdminReturnAction:
+      type: string
+      enum: [approve, reject, receive, refund]
+      description: 'Theo trạng thái + vai trò (BR-RET-43): `approve` (requested), `reject` (requested, approved), `receive` (approved) cho staff + admin; `refund` (received) CHỈ admin.'
+    AdminReturnLine:
+      type: object
+      required: [variantId, name, color, size, sku, mediaId, quantity, goodsAmount]
+      additionalProperties: false
+      description: 'Như `ReturnLine` + `disposition` (chỉ staff / admin; có từ `received` khi `acceptedQuantity > 0`).'
+      properties:
+        variantId: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+        size: { type: string }
+        sku: { type: string }
+        mediaId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        acceptedQuantity: { type: integer, minimum: 0 }
+        goodsAmount: { type: integer, minimum: 0 }
+        disposition: { $ref: '#/components/schemas/ReturnDisposition' }
+    AdminReturnRefundTo:
+      type: object
+      required: [type]
+      additionalProperties: false
+      description: 'Như `ReturnRefundTo` + `accountNumber` (SỐ ĐẦY ĐỦ: chỉ khi người xem là admin VÀ `state = received` VÀ đơn COD, lúc cần chuyển tiền; staff, trạng thái khác, sau trạng thái cuối: vắng). Không bao giờ trong email, sự kiện, nhật ký, log, CSV, tên tệp.'
+      properties:
+        type: { type: string, enum: [account, original] }
+        bank: { type: string }
+        last4: { type: string, pattern: '^[0-9]{4}$' }
+        accountName: { type: string }
+        accountNumber: { type: string, pattern: '^[0-9]{6,19}$' }
+    AdminReturn:
+      type: object
+      required: [id, orderCode, state, reason, fault, detail, conditionAck, requestedAt, recipient, paymentMethod, lines, photos, amount, refundTo, history, allowedActions, overdue]
+      additionalProperties: false
+      description: 'Slice 9 (BR-RET-32). Dạng staff / admin của yêu cầu. Cũng là `AdminOrder.return`.'
+      properties:
+        id: { type: string, format: uuid }
+        orderCode: { $ref: '#/components/schemas/OrderCode' }
+        state: { $ref: '#/components/schemas/ReturnState' }
+        reason: { $ref: '#/components/schemas/ReturnReason' }
+        fault: { $ref: '#/components/schemas/ReturnFault' }
+        detail: { type: string }
+        conditionAck: { type: boolean }
+        requestedAt: { type: string, format: date-time }
+        approvedAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        refundedAt: { type: string, format: date-time }
+        rejectedAt: { type: string, format: date-time }
+        cancelledAt: { type: string, format: date-time }
+        recipient:
+          type: object
+          required: [name, phone, email]
+          additionalProperties: false
+          description: 'Như đơn (SĐT, email đầy đủ).'
+          properties:
+            name: { type: string }
+            phone: { type: string }
+            email: { type: string }
+        paymentMethod: { $ref: '#/components/schemas/PaymentMethod' }
+        lines: { type: array, items: { $ref: '#/components/schemas/AdminReturnLine' } }
+        photos: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/ReturnPhoto' } }
+        amount: { $ref: '#/components/schemas/ReturnAmount' }
+        refundedAmount: { type: integer, minimum: 0 }
+        expectedRefundBy: { type: string, format: date }
+        approveNote: { type: string }
+        rejectNote: { type: string }
+        receiveNote: { type: string }
+        carrier: { type: string }
+        trackingNumber: { type: string }
+        refundReference: { type: string, description: 'Mã giao dịch / nội dung chuyển khoản admin nhập (chỉ khi `refunded`).' }
+        refundTo: { $ref: '#/components/schemas/AdminReturnRefundTo' }
+        history: { type: array, items: { $ref: '#/components/schemas/AdminReturnHistoryEntry' }, description: 'Cũ nhất trước.' }
+        allowedActions: { type: array, items: { $ref: '#/components/schemas/AdminReturnAction' } }
+        overdue: { type: boolean, description: 'Should (BR-RET-44): `requested` quá 24 giờ kể từ `requestedAt`, tính khi đọc (không tác vụ nền). Luôn false nếu chưa làm Should.' }
+    AdminReturnSummary:
+      type: object
+      required: [id, orderCode, requestedAt, recipientName, reason, fault, state, itemCount, amount, overdue]
+      additionalProperties: false
+      description: 'Dòng của danh sách (BR-RET-31). `amount` = số dự kiến hoặc đã chốt tuỳ `final` của yêu cầu.'
+      properties:
+        id: { type: string, format: uuid }
+        orderCode: { $ref: '#/components/schemas/OrderCode' }
+        requestedAt: { type: string, format: date-time }
+        recipientName: { type: string }
+        reason: { $ref: '#/components/schemas/ReturnReason' }
+        fault: { $ref: '#/components/schemas/ReturnFault' }
+        state: { $ref: '#/components/schemas/ReturnState' }
+        itemCount: { type: integer, minimum: 1, description: 'Σ số lượng yêu cầu.' }
+        amount: { type: integer, minimum: 0 }
+        handledBy: { $ref: '#/components/schemas/StaffRef' }
+        handledAt: { type: string, format: date-time }
+        overdue: { type: boolean, description: 'Should (BR-RET-44).' }
+    AdminReturnCounts:
+      type: object
+      required: [all, requested, approved, received, refunded, closed]
+      additionalProperties: false
+      properties:
+        all: { type: integer, minimum: 0 }
+        requested: { type: integer, minimum: 0 }
+        approved: { type: integer, minimum: 0 }
+        received: { type: integer, minimum: 0 }
+        refunded: { type: integer, minimum: 0 }
+        closed: { type: integer, minimum: 0, description: '`rejected` + `cancelled`.' }
+    AdminReturnPage:
+      type: object
+      required: [items, total, page, limit, counts]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminReturnSummary' }, maxItems: 50 }
+        total: { type: integer, minimum: 0, description: 'Số yêu cầu khớp bộ lọc (mọi trang).' }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, enum: [20, 50] }
+        counts: { $ref: '#/components/schemas/AdminReturnCounts' }
+    AdminReturnApproveInput:
+      type: object
+      additionalProperties: false
+      properties:
+        note: { type: string, maxLength: 250 }
+        carrier: { type: string, maxLength: 50, description: 'Should (BR-RET-44).' }
+        trackingNumber: { type: string, maxLength: 40, description: 'Should (BR-RET-44).' }
+    AdminReturnRejectInput:
+      type: object
+      required: [note]
+      additionalProperties: false
+      properties:
+        note: { type: string, minLength: 5, maxLength: 250, description: 'Sau trim. Hiển thị cho khách và vào email.' }
+    AdminReturnReceiveInput:
+      type: object
+      required: [lines]
+      additionalProperties: false
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: object
+            required: [variantId, acceptedQuantity]
+            additionalProperties: false
+            properties:
+              variantId: { type: string, format: uuid }
+              acceptedQuantity: { type: integer, minimum: 0, maximum: 99 }
+              disposition: { $ref: '#/components/schemas/ReturnDisposition' }
+        note: { type: string, maxLength: 250, description: 'Bắt buộc 5..250 khi có dòng đạt < yêu cầu.' }
+    AdminReturnRefundInput:
+      type: object
+      required: [amount, refundReference]
+      additionalProperties: false
+      properties:
+        amount: { type: integer, minimum: 0, description: 'PHẢI bằng đúng `ReturnAmount.amount` đã chốt.' }
+        refundReference: { type: string, minLength: 4, maxLength: 60 }
