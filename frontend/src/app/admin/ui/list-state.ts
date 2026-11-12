@@ -85,7 +85,11 @@ export interface Loaded<T> {
  * Loads `fetch(query)` whenever `query` changes or `reload()` is called, keeping the previous data
  * while refreshing so the table does not jump.
  */
-export function loader<Q, T>(query: Signal<Q>, fetch: (query: Q) => Observable<T>) {
+export function loader<Q, T>(
+  query: Signal<Q>,
+  fetch: (query: Q) => Observable<T>,
+  describe: (error: unknown) => string = errorMessage,
+) {
   const tick = signal(0);
   const state = signal<Loaded<T>>({ data: null, loading: true, refreshing: false, error: null });
   const source = computed(() => ({ query: query(), tick: tick() }));
@@ -110,7 +114,7 @@ export function loader<Q, T>(query: Signal<Q>, fetch: (query: Q) => Observable<T
               data: state().data,
               loading: false,
               refreshing: false,
-              error: errorMessage(error),
+              error: describe(error),
             } as Loaded<T>),
           ),
         ),

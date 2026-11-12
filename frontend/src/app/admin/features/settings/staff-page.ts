@@ -30,12 +30,15 @@ import { ReasonDialog, ReasonDialogData } from '../../ui/reason-dialog';
 const ROLES: AccountRole[] = ['admin', 'staff'];
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
-/** Permissions of features that are not built yet (Won't of Slice 7): no row in the matrix. */
+/** Permissions of features that are not built yet (Won't): no row in the matrix. */
 const HIDDEN_PERMISSIONS: readonly Permission[] = [
-  'dashboard.revenue',
   'orders.export',
   'returns.process',
   'products.cost',
+];
+/** Slice 8 built these three; until `adminInsightsMode` is `http` they stay out of the matrix. */
+const INSIGHTS_PERMISSIONS: readonly Permission[] = [
+  'dashboard.revenue',
   'settings.store',
   'settings.audit',
 ];
@@ -301,10 +304,14 @@ export class StaffPage {
   protected readonly roleLabels = ROLE_LABELS;
   /** Real API: the rows of features that are not connected yet are left out (BR-USR-05). */
   private readonly live = inject(API_CONFIG).adminUsersMode === 'http';
+  private readonly insightsLive = inject(API_CONFIG).adminInsightsMode === 'http';
   protected readonly matrix = PERMISSION_MATRIX.map((group) => ({
     ...group,
     items: group.items.filter(
-      (item) => !this.live || !HIDDEN_PERMISSIONS.includes(item.permission),
+      (item) =>
+        !this.live ||
+        (!HIDDEN_PERMISSIONS.includes(item.permission) &&
+          (this.insightsLive || !INSIGHTS_PERMISSIONS.includes(item.permission))),
     ),
   })).filter((group) => group.items.length);
   protected readonly staff = signal<StaffAccount[] | null>(null);

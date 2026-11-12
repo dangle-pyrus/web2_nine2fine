@@ -68,7 +68,10 @@ export function adminErrors<T>(): OperatorFunction<T, T> {
         const code = (
           AUTH_CODES.includes(contract.code) ? contract.code : 'unavailable'
         ) as AdminErrorCode;
-        const fields = contract.field ? { [contract.field]: contract.message } : {};
+        const fields: Record<string, string> = contract.field
+          ? { [contract.field]: contract.message }
+          : {};
+        for (const item of contract.fieldErrors ?? []) fields[item.field] ??= item.message;
         return throwError(
           () =>
             new AdminApiError(

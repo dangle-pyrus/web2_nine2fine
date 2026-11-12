@@ -1,0 +1,108 @@
+<adm-page-header heading="Thông tin cửa hàng" back="/admin/settings">
+  <ng-container actions>
+    <div class="actions">
+      <button
+        type="button"
+        class="adm-btn"
+        data-testid="discard"
+        [disabled]="!dirty() || saving()"
+        (click)="discard()"
+      >
+        Hủy thay đổi
+      </button>
+      <button
+        type="button"
+        class="adm-btn adm-btn--primary"
+        data-testid="save"
+        [disabled]="!dirty() || saving() || !ready()"
+        [class.is-busy]="saving()"
+        (click)="save()"
+      >
+        Lưu
+      </button>
+    </div>
+  </ng-container>
+</adm-page-header>
+
+<div class="page-body page-body--narrow">
+  <div aria-live="polite" data-testid="notice">
+    @if (notice(); as n) {
+    <div
+      class="banner"
+      [class.is-error]="n.tone === 'error'"
+      [class.is-ok]="n.tone === 'ok'"
+      [attr.role]="n.tone === 'error' ? 'alert' : 'status'"
+    >
+      <adm-icon [name]="n.tone === 'ok' ? 'reiconCheckCircle' : 'reiconAlertCircle'" [size]="18" />
+      <p>{{ n.text }}</p>
+    </div>
+    }
+  </div>
+
+  @if (loadError(); as message) {
+  <div role="alert">
+    <adm-empty kind="error" heading="Không tải được cài đặt" [description]="message">
+      <button type="button" class="adm-btn" (click)="load()">Thử lại</button>
+    </adm-empty>
+  </div>
+  } @else if (loading() && !ready()) {
+  <div class="stack">
+    <div class="sk sk--title"></div>
+    <div class="sk"></div>
+    <div class="sk"></div>
+  </div>
+  } @else { @for (section of sections; track section.id) {
+  <section class="annotated" [attr.aria-labelledby]="'sec-' + section.id">
+    <div>
+      <h2 [id]="'sec-' + section.id">{{ section.title }}</h2>
+      <p class="annotated-desc small">{{ section.description }}</p>
+    </div>
+    <div class="card form-grid">
+      @for (field of section.fields; track field.path) {
+      <div class="field" [class.span-2]="field.wide">
+        <label [for]="fieldId(field.path)" [class.req]="field.required">{{ field.label }}</label>
+        <div class="affix">
+          <input
+            class="input"
+            [id]="fieldId(field.path)"
+            [type]="field.kind === 'date' ? 'date' : 'text'"
+            [attr.inputmode]="field.kind === 'int' ? 'numeric' : null"
+            autocomplete="off"
+            [value]="value(field.path)"
+            [attr.aria-invalid]="errorFor(field.path) ? 'true' : null"
+            [attr.aria-describedby]="fieldId(field.path) + '-msg'"
+            (input)="write(field.path, $any($event.target).value)"
+          />
+          @if (field.suffix) {
+          <span class="suffix">{{ field.suffix }}</span>
+          }
+        </div>
+        <div [id]="fieldId(field.path) + '-msg'">
+          @if (errorFor(field.path); as message) {
+          <p class="error" role="alert">
+            <adm-icon name="reiconAlertCircle" [size]="14" /> {{ message }}
+          </p>
+          } @else if (field.money && value(field.path) && isNumber(value(field.path))) {
+          <p class="hint">
+            {{ money(+value(field.path)) }}{{ field.hint ? '. ' + field.hint : '' }}
+          </p>
+          } @else if (field.hint) {
+          <p class="hint">{{ field.hint }}</p>
+          } @if (theirs()[field.path] !== undefined) {
+          <p class="hint current" data-testid="theirs">
+            Giá trị mới trên máy chủ: {{ theirs()[field.path] || '(để trống)' }}
+          </p>
+          }
+        </div>
+      </div>
+      } @if (section.id === 'shipping') {
+      <p class="hint span-2">
+        Thời gian giao hiển thị cho khách: <strong>{{ deliveryWindow() }}</strong>. @if
+        (lowStockDefault() !== undefined) { Ngưỡng sắp hết mặc định hiện là {{ lowStockDefault() }};
+        <a class="link" routerLink="/admin/inventory">Sửa ở Tồn kho</a>. }
+      </p>
+      }
+    </div>
+  </section>
+  } }
+</div>

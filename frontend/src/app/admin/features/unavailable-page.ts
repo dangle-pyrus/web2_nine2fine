@@ -5,7 +5,8 @@ import { AdmEmptyState } from '../ui/empty-state';
 
 /**
  * Every back-office page except the orders desk (and, with `adminCatalogMode` `http`, products,
- * inventory and promotions; with `adminUsersMode` `http`, customers and staff) while `adminOrdersMode` is `http` (BR-ADM-36): no
+ * inventory and promotions; with `adminUsersMode` `http`, customers and staff; with `adminInsightsMode` `http`, the dashboard,
+ * reports, store settings and audit log) while `adminOrdersMode` is `http` (BR-ADM-36): no
  * mock API is injected here, so no mock data shows up and no request leaves the page.
  */
 @Component({
@@ -31,6 +32,8 @@ export class AdminUnavailablePage {
     const modules = ['Đơn hàng'];
     if (config.adminCatalogMode === 'http') modules.push('Sản phẩm', 'Tồn kho', 'Khuyến mãi');
     if (config.adminUsersMode === 'http') modules.push('Khách hàng', 'Cài đặt › Nhân viên');
+    if (config.adminInsightsMode === 'http')
+      modules.unshift('Tổng quan', 'Báo cáo', 'Cài đặt › Cửa hàng', 'Cài đặt › Nhật ký');
     return `${modules.slice(0, -1).join(', ')}${modules.length > 1 ? ' và ' : ''}${modules.at(-1)}`;
   }
 }

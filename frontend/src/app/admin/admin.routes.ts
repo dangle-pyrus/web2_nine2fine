@@ -21,10 +21,21 @@ const catalogHttp: CanMatchFn = () => inject(API_CONFIG).adminCatalogMode === 'h
 
 /**
  * Slice 7: Khách hàng and Cài đặt › Nhân viên join the order desk when `adminUsersMode` is `http`
- * (BR-USR-05); with `mock` they stay "Chưa khả dụng" there. Store settings and the audit log stay
- * unavailable either way.
+ * (BR-USR-05); with `mock` they stay "Chưa khả dụng" there.
  */
 const usersHttp: CanMatchFn = () => inject(API_CONFIG).adminUsersMode === 'http';
+
+/**
+ * Slice 8: with `adminInsightsMode` `http`, `/admin` is the real dashboard and Báo cáo, Cài đặt ›
+ * Cửa hàng and Cài đặt › Nhật ký join the order desk (BR-INS-05); with `mock` the desk keeps
+ * redirecting `/admin` to the orders and these routes say "Chưa khả dụng".
+ */
+const insightsHttp: CanMatchFn = () => inject(API_CONFIG).adminInsightsMode === 'http';
+/** Cài đặt exists on the desk once either Nhân viên (Slice 7) or Cửa hàng / Nhật ký (Slice 8) does. */
+const settingsHttp: CanMatchFn = () => {
+  const config = inject(API_CONFIG);
+  return config.adminUsersMode === 'http' || config.adminInsightsMode === 'http';
+};
 
 const T = (title: string) => `${title} | nine2fine Admin`;
 
@@ -75,7 +86,27 @@ export const ADMIN_ROUTES: Routes = [
             path: '',
             canMatch: [deskMode],
             children: [
+              {
+                path: '',
+                pathMatch: 'full',
+                canMatch: [insightsHttp],
+                title: T('Tổng quan'),
+                loadComponent: () =>
+                  import('./features/insights/insights-dashboard-page').then(
+                    (m) => m.InsightsDashboardPage,
+                  ),
+              },
               { path: '', pathMatch: 'full', redirectTo: 'orders' },
+              {
+                path: 'reports',
+                canMatch: [insightsHttp],
+                title: T('Báo cáo'),
+                canActivate: [requirePermission('dashboard.revenue')],
+                loadComponent: () =>
+                  import('./features/insights/insights-reports-page').then(
+                    (m) => m.InsightsReportsPage,
+                  ),
+              },
               {
                 path: 'orders',
                 children: [
@@ -198,7 +229,7 @@ export const ADMIN_ROUTES: Routes = [
               },
               {
                 path: 'settings',
-                canMatch: [usersHttp],
+                canMatch: [settingsHttp],
                 children: [
                   {
                     path: '',
@@ -210,10 +241,32 @@ export const ADMIN_ROUTES: Routes = [
                   },
                   {
                     path: 'staff',
+                    canMatch: [usersHttp],
                     title: T('Nhân viên & phân quyền'),
                     canActivate: [requirePermission('settings.staff')],
                     loadComponent: () =>
                       import('./features/settings/staff-page').then((m) => m.StaffPage),
+                  },
+                  {
+                    path: 'store',
+                    canMatch: [insightsHttp],
+                    title: T('Thông tin cửa hàng'),
+                    canActivate: [requirePermission('settings.store')],
+                    canDeactivate: [unsavedChangesGuard],
+                    loadComponent: () =>
+                      import('./features/insights/insights-store-settings-page').then(
+                        (m) => m.InsightsStoreSettingsPage,
+                      ),
+                  },
+                  {
+                    path: 'audit',
+                    canMatch: [insightsHttp],
+                    title: T('Nhật ký hoạt động'),
+                    canActivate: [requirePermission('settings.audit')],
+                    loadComponent: () =>
+                      import('./features/insights/insights-audit-page').then(
+                        (m) => m.InsightsAuditPage,
+                      ),
                   },
                 ],
               },

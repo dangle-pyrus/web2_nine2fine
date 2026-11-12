@@ -42,6 +42,14 @@ export interface ApiConfig {
    * build picks `http` with `localStorage['n2f.e2e.adminUsersMode']`.
    */
   adminUsersMode: 'mock' | 'http';
+  /**
+   * Admin Tổng quan, Báo cáo, Cài đặt cửa hàng and Nhật ký (Slice 8), independent of `mode`. `http`:
+   * `/admin` is the real dashboard and Báo cáo, Cài đặt › Cửa hàng, Cài đặt › Nhật ký call
+   * `/api/admin/{dashboard,reports,settings/store,audit-log}`; the storefront footer and policies
+   * read `GET /api/store/settings`. `mock`: the earlier mock back office. The e2e build picks
+   * `http` with `localStorage['n2f.e2e.adminInsightsMode']` and the specs answer the requests.
+   */
+  adminInsightsMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -61,5 +69,6 @@ export const apiConfig: ApiConfig = {
   accountMode: 'http',
   adminCatalogMode: 'http',
   adminUsersMode: 'http',
+  adminInsightsMode: 'http',
   baseUrl: '/api',
 };

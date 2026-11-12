@@ -297,9 +297,14 @@ import { TOP_NAVIGATION, TopNavItem, UTILITY_LINKS } from './navigation/top-navi
       <address class="footer-legal container">
         <strong>{{ info.legalName }}</strong>
         <span
-          >Mã số doanh nghiệp {{ info.registrationNumber }} do {{ info.registrationIssuer }} cấp
-          ngày {{ registrationDate }}</span
-        >
+          >Mã số doanh nghiệp {{ info.registrationNumber }}
+          @if (info.registrationIssuer) {
+            do {{ info.registrationIssuer }} cấp
+          }
+          @if (registrationDate) {
+            ngày {{ registrationDate }}
+          }
+        </span>
         <span>Địa chỉ: {{ info.address }}</span>
         <span
           >Hotline: <a [href]="info.hotlineHref">{{ info.hotline }}</a> · Email:
@@ -334,7 +339,8 @@ export class StoreLayout {
     return storeSettings().info;
   }
   get registrationDate(): string {
-    return formatDate(storeSettings().info.registrationDate);
+    const date = storeSettings().info.registrationDate;
+    return date ? formatDate(date) : '';
   }
   readonly menus = TOP_NAVIGATION;
   readonly utilityLinks = UTILITY_LINKS;

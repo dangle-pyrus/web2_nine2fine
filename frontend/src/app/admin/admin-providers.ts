@@ -8,6 +8,7 @@ import { AdminCategories } from './data-access/admin-categories';
 import { adminCatalogAdapterProviders } from './admin-catalog-adapters';
 import { adminOrderAdapterProviders } from './admin-order-adapters';
 import { adminUsersAdapterProviders } from './admin-users-adapters';
+import * as insights from './data-access/insights-api';
 import { AdminDialogs } from './ui/dialogs';
 import { provideAdminIcons } from './ui/icons';
 
@@ -49,6 +50,11 @@ export function provideAdmin(): Provider[] {
       "adminUsersMode 'http' needs authMode 'http': without the admin session cookie every customer and staff request answers 401.",
     );
   }
+  if (config.adminInsightsMode === 'http' && config.authMode !== 'http') {
+    console.warn(
+      "adminInsightsMode 'http' needs authMode 'http': without the admin session cookie every dashboard, report, settings and audit request answers 401.",
+    );
+  }
   return [
     provideAdminIcons(),
     AdminDialogs,
@@ -58,6 +64,19 @@ export function provideAdmin(): Provider[] {
     ...adminCatalogAdapterProviders,
     // Slice 7 customers and staff: HTTP adapters, or the mock/HTTP choice in e2e.
     ...adminUsersAdapterProviders,
+    // Slice 8 dashboard, reports, store settings, audit log: HTTP only (the mock back office keeps
+    // its own ports below and is routed only while `adminInsightsMode` is `mock`).
+    insights.HttpInsightsDashboardApi,
+    insights.HttpInsightsReportsApi,
+    insights.HttpStoreSettingsAdminApi,
+    insights.HttpAuditLogApi,
+    {
+      provide: insights.ADMIN_INSIGHTS_DASHBOARD_API,
+      useExisting: insights.HttpInsightsDashboardApi,
+    },
+    { provide: insights.ADMIN_INSIGHTS_REPORTS_API, useExisting: insights.HttpInsightsReportsApi },
+    { provide: insights.ADMIN_STORE_SETTINGS_API, useExisting: insights.HttpStoreSettingsAdminApi },
+    { provide: insights.ADMIN_AUDIT_LOG_API, useExisting: insights.HttpAuditLogApi },
     AdminCategories,
     // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
     ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),

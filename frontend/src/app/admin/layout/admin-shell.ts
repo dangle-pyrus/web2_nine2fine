@@ -80,6 +80,8 @@ export class AdminShell {
   private readonly catalogHttp = inject(API_CONFIG).adminCatalogMode === 'http';
   /** Slice 7: Khách hàng, and Cài đặt › Nhân viên for admins, join the desk menu. */
   private readonly usersHttp = inject(API_CONFIG).adminUsersMode === 'http';
+  /** Slice 8: Tổng quan, Báo cáo and Cài đặt › Cửa hàng / Nhật ký call the API (admin only for the last three). */
+  private readonly insightsHttp = inject(API_CONFIG).adminInsightsMode === 'http';
   private readonly ordersApi = this.deskMode ? null : inject(ADMIN_ORDERS_API);
   private readonly returnsApi = this.deskMode ? null : inject(ADMIN_RETURNS_API);
   private readonly deskApi = this.deskMode ? inject(ADMIN_ORDER_DESK_API) : null;
@@ -168,9 +170,11 @@ export class AdminShell {
   protected readonly items = computed(() => {
     this.session.user();
     const deskLinks = [
+      ...(this.insightsHttp ? ['/admin'] : []),
       '/admin/orders',
       ...(this.catalogHttp ? DESK_CATALOG_LINKS : []),
       ...(this.usersHttp ? [DESK_CUSTOMER_LINK] : []),
+      ...(this.insightsHttp ? ['/admin/reports'] : []),
     ];
     const visible = this.deskMode
       ? this.nav
@@ -179,11 +183,13 @@ export class AdminShell {
       : this.nav;
     return visible.filter((item) => this.session.can(item.permission));
   });
-  /** Cài đặt: the whole menu entry in the earlier back office, only "Nhân viên" on the desk. */
+  /** Cài đặt: the whole menu entry in the earlier back office; on the desk only the connected groups. */
   protected readonly showSettings = computed(() => {
     this.session.user();
     return this.deskMode
-      ? this.usersHttp && this.session.can('settings.staff')
+      ? (this.usersHttp && this.session.can('settings.staff')) ||
+          (this.insightsHttp &&
+            (this.session.can('settings.store') || this.session.can('settings.audit')))
       : this.session.can('settings.store') ||
           this.session.can('settings.staff') ||
           this.session.can('settings.audit');

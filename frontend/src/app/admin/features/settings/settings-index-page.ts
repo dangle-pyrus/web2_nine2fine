@@ -120,12 +120,30 @@ const GROUPS: {
 })
 export class SettingsIndexPage {
   private readonly session = inject(AdminSession);
-  /** Orders desk (real API): store settings and the audit log are not connected yet. */
+  /** Orders desk (real API): only the groups whose slice is connected (Slice 7 staff, Slice 8). */
   private readonly desk = inject(API_CONFIG).adminOrdersMode !== 'mock';
+  private readonly live = new Set<string>([
+    ...(inject(API_CONFIG).adminUsersMode === 'http' ? ['staff'] : []),
+    ...(inject(API_CONFIG).adminInsightsMode === 'http' ? ['store', 'audit'] : []),
+  ]);
   protected readonly groups = computed(() =>
     GROUPS.filter(
       (group) =>
-        this.session.permissions().has(group.permission) && (!this.desk || group.link === 'staff'),
+        this.session.permissions().has(group.permission) &&
+        (!this.desk || this.live.has(group.link)),
+    ).map((group) =>
+      this.desk && group.link === 'store'
+        ? {
+            ...group,
+            title: 'Thông tin cửa hàng',
+            description: 'Thông tin pháp lý, liên hệ, phí vận chuyển và thanh toán.',
+          }
+        : this.desk && group.link === 'audit'
+          ? {
+              ...group,
+              description: 'Ai đã làm gì, lúc nào, trên đơn hàng, tồn kho, tài khoản và cài đặt.',
+            }
+          : group,
     ),
   );
 }

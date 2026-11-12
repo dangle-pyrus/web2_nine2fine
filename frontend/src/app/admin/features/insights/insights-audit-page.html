@@ -1,0 +1,133 @@
+<adm-page-header heading="Nhật ký hoạt động" back="/admin/settings" />
+<div class="page-body page-body--wide">
+  <form class="filters" (ngSubmit)="apply()" novalidate role="search" aria-label="Lọc nhật ký">
+    <div class="field">
+      <label for="aud-type">Đối tượng</label>
+      <select
+        id="aud-type"
+        class="select select--sm"
+        name="type"
+        [ngModel]="query().targetType"
+        (ngModelChange)="setType($event)"
+      >
+        @for (item of targets; track item.value) {
+        <option [value]="item.value">{{ item.label }}</option>
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="aud-from">Từ ngày</label>
+      <input
+        id="aud-from"
+        class="input input--sm"
+        type="date"
+        name="from"
+        [max]="today"
+        [ngModel]="fromDraft()"
+        (ngModelChange)="fromDraft.set($event)"
+        [attr.aria-invalid]="!!errors().from"
+      />
+      @if (errors().from; as message) {
+      <p class="error" role="alert">
+        <adm-icon name="reiconAlertCircle" [size]="14" /> {{ message }}
+      </p>
+      }
+    </div>
+    <div class="field">
+      <label for="aud-to">Đến ngày</label>
+      <input
+        id="aud-to"
+        class="input input--sm"
+        type="date"
+        name="to"
+        [ngModel]="toDraft()"
+        (ngModelChange)="toDraft.set($event)"
+        [attr.aria-invalid]="!!errors().to"
+      />
+      @if (errors().to; as message) {
+      <p class="error" role="alert">
+        <adm-icon name="reiconAlertCircle" [size]="14" /> {{ message }}
+      </p>
+      }
+    </div>
+    <button type="submit" class="adm-btn" data-testid="apply-range">Lọc</button>
+  </form>
+
+  @if (view.state().error; as message) {
+  <div role="alert">
+    <adm-empty kind="error" heading="Không tải được nhật ký" [description]="message">
+      <button type="button" class="adm-btn" (click)="reload()">Thử lại</button>
+    </adm-empty>
+  </div>
+  } @else if (page() && !page()!.total) {
+  <adm-empty
+    kind="first"
+    heading="Chưa có hoạt động trong khoảng này"
+    description="Thử mở rộng khoảng ngày hoặc chọn đối tượng khác."
+  />
+  } @else {
+  <div class="table-wrap" [class.is-refreshing]="view.state().refreshing">
+    <table class="table table--cards" data-testid="audit-table">
+      <thead>
+        <tr>
+          <th>Thời gian</th>
+          <th>Người thực hiện</th>
+          <th>Thao tác</th>
+          <th>Đối tượng</th>
+          <th>Chi tiết</th>
+        </tr>
+      </thead>
+      @if (view.state().loading || !page()) {
+      <tbody [admSkeleton]="10" [columns]="5"></tbody>
+      } @else {
+      <tbody>
+        @for (entry of page()!.items; track entry.id) {
+        <tr>
+          <td class="secondary nowrap">{{ entry.at | admDateTime }}</td>
+          <td data-label="Người thực hiện">
+            {{ entry.actor.name }}
+            <span class="secondary small">({{ roleLabels[entry.actor.role] }})</span>
+          </td>
+          <td data-label="Thao tác">{{ entry.action.label }}</td>
+          <td data-label="Đối tượng">
+            @if (link(entry); as url) {
+            <a class="link" [routerLink]="url">{{ entry.target.label }}</a>
+            } @else { {{ entry.target.label }} }
+          </td>
+          <td class="secondary small" data-label="Chi tiết">
+            @if (entry.reason) {
+            <span>Lý do: {{ entry.reason }}</span>
+            } @if (entry.roleBefore || entry.roleAfter) {
+            <span>
+              Vai trò: {{ entry.roleBefore ? roleLabels[entry.roleBefore] : '—' }} → {{
+              entry.roleAfter ? roleLabels[entry.roleAfter] : '—' }}
+            </span>
+            } @if (entry.changes?.length) {
+            <ul class="changes">
+              @for (change of entry.changes; track change.field) {
+              <li>
+                {{ change.label }}: {{ change.before || '—' }} →
+                <span class="after">{{ change.after || '—' }}</span>
+              </li>
+              }
+            </ul>
+            } @if (!entry.reason && !entry.roleBefore && !entry.roleAfter && !entry.changes?.length)
+            { — }
+          </td>
+        </tr>
+        }
+      </tbody>
+      }
+    </table>
+  </div>
+  @if (page(); as data) {
+  <adm-pager
+    [total]="data.total"
+    [page]="data.page"
+    [pageSize]="data.limit"
+    [sizes]="sizes"
+    (pageChange)="setPage($event)"
+    (sizeChange)="setLimit($event)"
+  />
+  } }
+</div>

@@ -38,6 +38,11 @@ export interface ApiConfig {
    * build picks `http` with `localStorage['n2f.e2e.adminUsersMode']`.
    */
   adminUsersMode: 'mock' | 'http';
+  /**
+   * Admin Tổng quan, Báo cáo, Cài đặt cửa hàng and Nhật ký (Slice 8); see `api-config.ts`. The e2e
+   * build picks `http` with `localStorage['n2f.e2e.adminInsightsMode']`.
+   */
+  adminInsightsMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -67,6 +72,13 @@ function readAdminUsersMode(): ApiConfig['adminUsersMode'] {
     return 'mock';
   }
 }
+function readAdminInsightsMode(): ApiConfig['adminInsightsMode'] {
+  try {
+    return localStorage.getItem('n2f.e2e.adminInsightsMode') === 'http' ? 'http' : 'mock';
+  } catch {
+    return 'mock';
+  }
+}
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
 export const apiConfig: ApiConfig = {
   mode: 'mock',
@@ -77,5 +89,6 @@ export const apiConfig: ApiConfig = {
   accountMode: 'mock',
   adminCatalogMode: readAdminCatalogMode(),
   adminUsersMode: readAdminUsersMode(),
+  adminInsightsMode: readAdminInsightsMode(),
   baseUrl: '/api',
 };

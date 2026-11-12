@@ -1,6 +1,6 @@
 import { inject, Injectable, InjectionToken, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { map, Observable } from 'rxjs';
 import { API_CONFIG } from './api-config';
 import { STORE_INFO, StoreInfo } from './store-info';
 import { MEMBERSHIP_POLICY, MembershipPolicy, STORE_POLICY, StorePolicy } from './store-policy';
@@ -43,13 +43,38 @@ export interface StoreSettingsApi {
 
 export const STORE_SETTINGS_API = new InjectionToken<StoreSettingsApi>('STORE_SETTINGS_API');
 
-/** Proposed contract only: `GET /api/store/settings`. */
+/** `StorePublicSettings` of docs/api/openapi.yaml (Slice 8, BR-SET-10): the whitelist only. */
+interface PublicStoreSettings {
+  info: Omit<StoreInfo, 'registrationDate' | 'notificationUrl'> & {
+    registrationDate: string | null;
+    notificationUrl: string | null;
+  };
+  policy: Pick<
+    StorePolicy,
+    'freeShippingFrom' | 'shippingFee' | 'deliveryWindow' | 'paymentHoldMinutes'
+  >;
+}
+
+/**
+ * `GET /api/store/settings` (public, `Cache-Control: public, max-age=60`). The answer has no
+ * membership rules and none of the return-policy numbers, so those keep their built-in values.
+ */
 @Injectable({ providedIn: 'root' })
 export class HttpStoreSettingsApi implements StoreSettingsApi {
   private readonly http = inject(HttpClient);
   private readonly base = inject(API_CONFIG).baseUrl;
 
   getStoreSettings(): Observable<StoreSettingsValue> {
-    return this.http.get<StoreSettingsValue>(`${this.base}/store/settings`);
+    return this.http.get<PublicStoreSettings>(`${this.base}/store/settings`).pipe(
+      map((value) => ({
+        info: {
+          ...value.info,
+          registrationDate: value.info.registrationDate ?? '',
+          notificationUrl: value.info.notificationUrl || null,
+        },
+        policy: { ...DEFAULT_STORE_SETTINGS.policy, ...value.policy },
+        membership: DEFAULT_STORE_SETTINGS.membership,
+      })),
+    );
   }
 }

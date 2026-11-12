@@ -1,0 +1,301 @@
+<adm-page-header heading="Báo cáo bán hàng">
+  <p subtitle class="secondary small" aria-live="polite">
+    @if (report()) { {{ periodText() }} Doanh thu tính trên đơn đã giao và đã thanh toán. Cập nhật
+    lúc {{ updatedAt() }}. } @else if (!view.state().error) { Đang tính số liệu… }
+  </p>
+  <ng-container actions>
+    <button
+      type="button"
+      class="adm-btn"
+      data-testid="export-csv"
+      [disabled]="!report() || exporting()"
+      [class.is-busy]="exporting()"
+      (click)="exportCsv()"
+    >
+      <adm-icon name="reiconDownload" [size]="16" /> Xuất CSV
+    </button>
+  </ng-container>
+</adm-page-header>
+
+<div class="page-body page-body--wide">
+  <form class="range-bar" (ngSubmit)="apply()" novalidate>
+    <div class="segmented" role="group" aria-label="Khoảng nhanh">
+      @for (item of quick; track item.days) {
+      <button
+        type="button"
+        [class.is-active]="activeQuick() === item.days"
+        [attr.aria-pressed]="activeQuick() === item.days"
+        (click)="pickQuick(item.days)"
+      >
+        {{ item.label }}
+      </button>
+      }
+    </div>
+    <div class="field">
+      <label for="rpt-from">Từ ngày</label>
+      <input
+        id="rpt-from"
+        class="input input--sm"
+        type="date"
+        name="from"
+        [max]="today"
+        [ngModel]="fromDraft()"
+        (ngModelChange)="fromDraft.set($event)"
+        [attr.aria-invalid]="!!errors().from"
+        [attr.aria-describedby]="errors().from ? 'rpt-from-err' : null"
+      />
+      @if (errors().from; as message) {
+      <p class="error" id="rpt-from-err" role="alert">
+        <adm-icon name="reiconAlertCircle" [size]="14" /> {{ message }}
+      </p>
+      }
+    </div>
+    <div class="field">
+      <label for="rpt-to">Đến ngày</label>
+      <input
+        id="rpt-to"
+        class="input input--sm"
+        type="date"
+        name="to"
+        [ngModel]="toDraft()"
+        (ngModelChange)="toDraft.set($event)"
+        [attr.aria-invalid]="!!errors().to"
+        [attr.aria-describedby]="errors().to ? 'rpt-to-err' : null"
+      />
+      @if (errors().to; as message) {
+      <p class="error" id="rpt-to-err" role="alert">
+        <adm-icon name="reiconAlertCircle" [size]="14" /> {{ message }}
+      </p>
+      }
+    </div>
+    <button type="submit" class="adm-btn adm-btn--primary" data-testid="apply-range">
+      Xem báo cáo
+    </button>
+  </form>
+
+  @if (view.state().error; as message) {
+  <div role="alert">
+    <adm-empty kind="error" heading="Không tải được báo cáo" [description]="message">
+      <button type="button" class="adm-btn" (click)="reload()">Thử lại</button>
+    </adm-empty>
+  </div>
+  } @else if (report(); as r) {
+  <div class="report" [class.is-refreshing]="view.state().refreshing">
+    <div class="kpis" data-testid="report-kpis">
+      @for (kpi of kpiRows(); track kpi.key) {
+      <div class="kpi" [attr.data-testid]="'kpi-' + kpi.key">
+        <p class="kpi-label">{{ kpi.label }}</p>
+        <p class="kpi-value num">{{ kpi.value }}</p>
+        <p
+          class="kpi-delta"
+          [class]="'kpi-delta ' + (kpi.delta.dir === 'up' ? 'good' : kpi.delta.dir === 'down' ? 'bad' : '')"
+        >
+          {{ kpi.delta.text }}
+        </p>
+        <p class="kpi-hint">Kỳ trước: {{ kpi.previous }}</p>
+        @if (kpi.hint) {
+        <p class="kpi-hint">{{ kpi.hint }}</p>
+        }
+      </div>
+      }
+    </div>
+
+    <section class="section" aria-labelledby="day-title">
+      <header>
+        <h2 id="day-title">Doanh thu theo ngày</h2>
+      </header>
+      @if (isEmpty()) {
+      <p class="secondary small">Chưa có đơn trong khoảng này.</p>
+      }
+      <adm-chart
+        type="line"
+        label="Doanh thu theo ngày trong khoảng đã chọn"
+        [labels]="chart().labels"
+        [series]="chart().series"
+        [format]="shortMoney"
+      />
+      <details class="as-table">
+        <summary class="small">Xem số liệu dạng bảng</summary>
+        <div class="table-wrap">
+          <table class="table" data-testid="by-day">
+            <thead>
+              <tr>
+                <th>Ngày</th>
+                <th class="num">Đơn hoàn tất</th>
+                <th class="num">Sản phẩm</th>
+                <th class="num">Doanh thu</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (day of r.byDay; track day.date) {
+              <tr>
+                <td>
+                  {{ day.date.slice(8, 10) }}/{{ day.date.slice(5, 7) }}/{{ day.date.slice(0, 4) }}
+                </td>
+                <td class="num">{{ day.completedOrders | admNum }}</td>
+                <td class="num">{{ day.units | admNum }}</td>
+                <td class="num">{{ day.revenue | admMoney }}</td>
+              </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
+
+    <section class="section" aria-labelledby="prod-title">
+      <header>
+        <h2 id="prod-title">Top 10 sản phẩm</h2>
+        <div class="segmented" role="group" aria-label="Sắp xếp sản phẩm">
+          <button
+            type="button"
+            [class.is-active]="applied().sort === 'units'"
+            [attr.aria-pressed]="applied().sort === 'units'"
+            (click)="setSort('units')"
+          >
+            Theo số lượng
+          </button>
+          <button
+            type="button"
+            [class.is-active]="applied().sort === 'revenue'"
+            [attr.aria-pressed]="applied().sort === 'revenue'"
+            (click)="setSort('revenue')"
+          >
+            Theo doanh thu
+          </button>
+        </div>
+      </header>
+      <div class="table-wrap">
+        <table class="table" data-testid="top-products">
+          <thead>
+            <tr>
+              <th>Sản phẩm</th>
+              <th>Danh mục</th>
+              <th class="num">Đã bán</th>
+              <th class="num">Doanh thu</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.topProducts; track row.productId) {
+            <tr>
+              <td>
+                <div class="cell-media">
+                  @if (imageUrl(row.image); as src) {
+                  <img class="thumb" [src]="src" alt="" />
+                  }
+                  <span class="cell-title">{{ row.name }}</span>
+                </div>
+              </td>
+              <td class="secondary">{{ row.category.name }}</td>
+              <td class="num">{{ row.units | admNum }}</td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="4" class="tertiary">Chưa có đơn trong khoảng này.</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="var-title">
+      <header>
+        <h2 id="var-title">Top 10 biến thể</h2>
+      </header>
+      <div class="table-wrap">
+        <table class="table" data-testid="top-variants">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Sản phẩm</th>
+              <th>Màu / size</th>
+              <th class="num">Đã bán</th>
+              <th class="num">Doanh thu</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.topVariants; track row.variantId) {
+            <tr>
+              <td class="secondary">{{ row.sku }}</td>
+              <td>{{ row.productName }}</td>
+              <td class="secondary">{{ row.color }} / {{ row.size }}</td>
+              <td class="num">{{ row.units | admNum }}</td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="5" class="tertiary">Chưa có đơn trong khoảng này.</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="section" aria-labelledby="cat-title">
+        <header>
+          <div>
+            <h2 id="cat-title">Doanh thu theo danh mục</h2>
+            <p class="small secondary">Theo danh mục hiện tại của sản phẩm</p>
+          </div>
+        </header>
+        <table class="table" data-testid="by-category">
+          <thead>
+            <tr>
+              <th>Danh mục</th>
+              <th class="num">Đã bán</th>
+              <th class="num">Doanh thu</th>
+              <th class="num">Tỉ trọng</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.byCategory; track row.category.slug) {
+            <tr>
+              <td class="strong">{{ row.category.name }}</td>
+              <td class="num">{{ row.units | admNum }}</td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+              <td class="num">{{ row.share | admPercent }}</td>
+            </tr>
+            } @empty {
+            <tr>
+              <td colspan="4" class="tertiary">Chưa có đơn trong khoảng này.</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+
+      <section class="section" aria-labelledby="pay-title">
+        <header>
+          <h2 id="pay-title">Doanh thu theo phương thức thanh toán</h2>
+        </header>
+        <table class="table" data-testid="by-payment">
+          <thead>
+            <tr>
+              <th>Phương thức</th>
+              <th class="num">Đơn hoàn tất</th>
+              <th class="num">Doanh thu</th>
+              <th class="num">Tỉ trọng</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of r.byPayment; track row.method) {
+            <tr>
+              <td class="strong">{{ paymentLabels[row.method] ?? row.method }}</td>
+              <td class="num">{{ row.completedOrders | admNum }}</td>
+              <td class="num">{{ row.revenue | admMoney }}</td>
+              <td class="num">{{ row.share | admPercent }}</td>
+            </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+  } @else {
+  <div class="sk chart-sk" style="height: 260px"></div>
+  }
+</div>

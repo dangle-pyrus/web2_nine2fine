@@ -123,7 +123,7 @@ export const appConfig: ApplicationConfig = {
     {
       provide: STORE_SETTINGS_API,
       useFactory: () =>
-        inject(API_CONFIG).mode === 'mock'
+        inject(API_CONFIG).adminInsightsMode !== 'http'
           ? inject(MockStoreSettingsApi)
           : inject(HttpStoreSettingsApi),
     },

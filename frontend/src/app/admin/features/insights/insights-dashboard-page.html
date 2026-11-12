@@ -1,0 +1,163 @@
+<adm-page-header heading="Tổng quan">
+  <p subtitle class="secondary" aria-live="polite" data-testid="updated-at">
+    @if (data()) { Cập nhật lúc {{ updatedAt() }} } @else if (!view.state().error) { Đang tải số
+    liệu… }
+  </p>
+  <ng-container actions>
+    @if (isAdmin()) {
+    <div class="segmented" role="group" aria-label="Khoảng thời gian">
+      @for (item of ranges; track item.value) {
+      <button
+        type="button"
+        [class.is-active]="range() === item.value"
+        [attr.aria-pressed]="range() === item.value"
+        (click)="setRange(item.value)"
+      >
+        {{ item.label }}
+      </button>
+      }
+    </div>
+    <a class="adm-btn" routerLink="/admin/reports">
+      <adm-icon name="reiconChartBar" [size]="16" /> Xem báo cáo
+    </a>
+    }
+    <button
+      type="button"
+      class="adm-btn"
+      (click)="reload()"
+      [class.is-busy]="view.state().refreshing"
+      [disabled]="view.state().refreshing"
+    >
+      <adm-icon name="reiconRefresh" [size]="16" /> Làm mới
+    </button>
+  </ng-container>
+</adm-page-header>
+
+<div class="page-body page-body--wide">
+  @if (view.state().error; as message) {
+  <div role="alert">
+    <adm-empty kind="error" heading="Không tải được số liệu" [description]="message">
+      <button type="button" class="adm-btn" (click)="reload()">Thử lại</button>
+    </adm-empty>
+  </div>
+  } @else {
+  <div class="kpis" [class.is-refreshing]="view.state().refreshing" data-testid="kpis">
+    @for (row of kpis(); track row.key) {
+    <div [class.kpi-main]="row.main" [attr.data-testid]="'kpi-' + row.key">
+      <p class="kpi-label">{{ row.label }}</p>
+      <p class="kpi-value num">
+        {{ row.money ? (row.kpi.value | admMoney) : (row.kpi.value | admNum) }}
+      </p>
+      <p class="kpi-delta" [class]="delta(row.kpi).dir">{{ delta(row.kpi).text }}</p>
+    </div>
+    } @empty { @for (i of [0, 1, 2]; track i) {
+    <div>
+      <span class="sk" style="width: 50%"></span
+      ><span class="sk sk--title" style="margin-top: 14px; width: 70%"></span>
+    </div>
+    } }
+  </div>
+  @if (noOrders()) {
+  <p class="secondary" data-testid="no-orders">Chưa có đơn trong khoảng này.</p>
+  }
+
+  <div class="grid">
+    <section class="section todo" aria-labelledby="todo-title">
+      <header>
+        <h2 id="todo-title">Cần xử lý</h2>
+      </header>
+      <ul data-testid="todo">
+        @for (item of todo(); track item.key) {
+        <li>
+          <a
+            [routerLink]="item.link"
+            [queryParams]="item.params"
+            [class.zero]="!item.count"
+            [attr.data-testid]="'todo-' + item.key"
+          >
+            <span class="count num">{{ item.count | admNum }}</span>
+            <span class="text">
+              <span class="label">{{ item.label }}</span>
+              <span class="hint">{{ item.hint }}</span>
+            </span>
+            <adm-icon name="reiconChevronRight" [size]="16" />
+          </a>
+        </li>
+        } @empty { @for (i of [0, 1, 2, 3]; track i) {
+        <li class="sk-row"><span class="sk" style="width: 60%"></span></li>
+        } }
+      </ul>
+    </section>
+
+    @if (isAdmin()) {
+    <section class="section chart" aria-labelledby="chart-title">
+      <header>
+        <div>
+          <h2 id="chart-title">Doanh thu 30 ngày</h2>
+          @if (data()?.revenueSeries) {
+          <p class="small secondary meta-list">
+            <span>Tổng {{ chart().total | admMoney }}</span>
+          </p>
+          }
+        </div>
+        <div class="legend small secondary">
+          <span><i class="line"></i>30 ngày qua</span>
+          <span><i class="line dashed"></i>30 ngày trước đó</span>
+        </div>
+      </header>
+      @if (data()?.revenueSeries) {
+      <adm-chart
+        type="line"
+        label="Doanh thu theo ngày trong 30 ngày"
+        [labels]="chart().labels"
+        [series]="chart().series"
+        [format]="shortMoney"
+      />
+      } @else {
+      <div class="sk chart-sk"></div>
+      }
+    </section>
+
+    <section class="section top" aria-labelledby="top-title">
+      <header>
+        <h2 id="top-title">Bán chạy trong khoảng đã chọn</h2>
+      </header>
+      <table class="table" data-testid="top-products">
+        <thead>
+          <tr>
+            <th>Sản phẩm</th>
+            <th class="num">Đã bán</th>
+            <th class="num">Doanh thu</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (product of data()?.topProducts ?? []; track product.productId) {
+          <tr>
+            <td>
+              <div class="cell-media">
+                @if (imageUrl(product.image); as src) {
+                <img class="thumb" [src]="src" alt="" />
+                } @if (catalogLive) {
+                <a class="cell-title link" [routerLink]="['/admin/products', product.productId]"
+                  >{{ product.name }}</a
+                >
+                } @else {
+                <span class="cell-title">{{ product.name }}</span>
+                }
+              </div>
+            </td>
+            <td class="num">{{ product.units | admNum }}</td>
+            <td class="num">{{ product.revenue | admMoney }}</td>
+          </tr>
+          } @empty {
+          <tr>
+            <td colspan="3" class="tertiary">Chưa có đơn trong khoảng này.</td>
+          </tr>
+          }
+        </tbody>
+      </table>
+    </section>
+    }
+  </div>
+  }
+</div>

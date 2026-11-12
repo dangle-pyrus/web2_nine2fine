@@ -71,6 +71,8 @@ export interface ApiErrorDetail {
   productId?: string;
   available?: number;
   reserved?: number;
+  /** Slice 8: every field error of `PUT /admin/settings/store` (`error.fieldErrors`). */
+  fieldErrors?: { field: string; message: string }[];
 }
 
 function readStockIssues(value: unknown): StockIssue[] | undefined {
@@ -79,6 +81,15 @@ function readStockIssues(value: unknown): StockIssue[] | undefined {
     (item): item is StockIssue =>
       typeof item?.variantId === 'string' && Number.isInteger(item?.available),
   );
+}
+
+function readFieldErrors(value: unknown): { field: string; message: string }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter(
+    (item): item is { field: string; message: string } =>
+      typeof item?.field === 'string' && typeof item?.message === 'string',
+  );
+  return items.length ? items : undefined;
 }
 
 function readQuote(value: unknown): CheckoutQuote | undefined {
@@ -124,5 +135,6 @@ export function readApiError(error: unknown): ApiErrorDetail {
     productId: typeof detail['productId'] === 'string' ? detail['productId'] : undefined,
     available: Number.isInteger(detail['available']) ? (detail['available'] as number) : undefined,
     reserved: Number.isInteger(detail['reserved']) ? (detail['reserved'] as number) : undefined,
+    fieldErrors: readFieldErrors(detail['fieldErrors']),
   };
 }
