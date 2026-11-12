@@ -35,9 +35,10 @@ export async function resetState(): Promise<void> {
   // Slice 6: products / vouchers / media / nhật ký kho có FK tới users nên TRUNCATE users CASCADE sẽ xoá cả catalog.
   // Truncate phía đơn / giỏ / phiên rồi DELETE users (FK SET NULL) để catalog sống sót như trước.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys", "account_events" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys", "account_events", "store_settings_events" RESTART IDENTITY CASCADE',
   );
   await prisma.$executeRawUnsafe('DELETE FROM "users"');
+  await resetStoreSettings();
   mails.length = 0;
   setMailTransport({
     async send(msg) {
@@ -45,6 +46,19 @@ export async function resetState(): Promise<void> {
     },
   });
   vi.useRealTimers();
+}
+
+/** Slice 8: đưa dòng `store_settings` id 1 (nếu có) về mặc định (thông tin cửa hàng + tham số) để test đổi cài đặt không rò sang test khác. */
+export async function resetStoreSettings(): Promise<void> {
+  assertLocalTestDb();
+  const cols = [
+    'legal_name', 'registration_number', 'registration_issuer', 'registration_date', 'address', 'hotline', 'email', 'privacy_email', 'hours',
+    'notification_url', 'social_facebook', 'social_instagram', 'social_tiktok', 'social_youtube',
+    'max_per_variant', 'max_items_per_order', 'max_cart_lines', 'cart_retention_days', 'shipping_fee', 'free_shipping_threshold', 'cod_max_total',
+    'cod_refusal_limit', 'cod_refusal_months', 'cod_open_order_limit', 'bank_hold_minutes', 'delivery_days_min', 'delivery_days_max', 'cutoff_hour',
+    'low_stock_default',
+  ];
+  await prisma.$executeRawUnsafe(`UPDATE "store_settings" SET ${cols.map((c) => `"${c}" = DEFAULT`).join(', ')} WHERE "id" = 1`);
 }
 
 /** Xoá toàn bộ catalog rồi seed lại 8 sản phẩm chuẩn. Không nằm trong resetState() của auth. */

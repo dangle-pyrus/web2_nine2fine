@@ -18,6 +18,10 @@ import { accountRouter } from './modules/account/account.routes';
 import { adminRateLimit } from './middleware/rate-limit';
 import { adminAccountsRouter, adminCustomersRouter, adminStaffRouter } from './modules/users-admin/users-admin.routes';
 import { mediaRouter } from './modules/media/media.routes';
+import { storeRouter } from './modules/store/store.routes';
+import {
+  adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
+} from './modules/insights-admin/insights-admin.routes';
 import {
   adminCategoriesRouter,
   adminInventoryRouter,
@@ -61,6 +65,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use(locationRouter);
   // Slice 6: ảnh tải lên công khai (GET), như catalog: phương thức ghi -> 404.
   api.use(mediaRouter);
+  // Slice 8: thông tin người bán công khai (GET), như catalog: phương thức ghi -> 404.
+  api.use(storeRouter);
   api.use(originGuard);
   // Slice 6: tải ảnh là byte thô nên đứng TRƯỚC requireJsonBody / express.json (cần cookieParser riêng).
   api.use(
@@ -95,6 +101,12 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/admin/customers', ...adminUsers, adminCustomersRouter);
   api.use('/admin/staff', ...adminUsers, adminStaffRouter);
   api.use('/admin/accounts', ...adminUsers, adminAccountsRouter);
+  // Slice 8: cùng khuôn; quyền theo hành động (`requirePermission`) ở router, trước Zod và trước DB.
+  const adminInsights = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
+  api.use('/admin/dashboard', ...adminInsights, adminDashboardRouter);
+  api.use('/admin/reports', ...adminInsights, adminReportsRouter);
+  api.use('/admin/settings', ...adminInsights, adminSettingsRouter);
+  api.use('/admin/audit-log', ...adminInsights, adminAuditRouter);
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);

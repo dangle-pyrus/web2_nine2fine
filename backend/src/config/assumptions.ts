@@ -145,3 +145,68 @@ export const USER_PERMISSIONS: Record<'staff' | 'admin', readonly UserPermission
 
 export const canSeeContact = (role: string): boolean =>
   (role === 'staff' || role === 'admin') && USER_PERMISSIONS[role].includes('customers.contact');
+
+/**
+ * GIẢ ĐỊNH Slice 8 (S8-Q1..Q10, mặc định PO; Orchestrator duyệt plan 2026-11-12).
+ * Đổi một câu trả lời = sửa đúng một chỗ ở đây (hoặc `revenue.sql.ts` cho S8-Q1) + BR/contract theo quy trình.
+ */
+export const INSIGHTS_ASSUMPTIONS = {
+  /** S8-Q5: báo cáo <= 366 ngày, nhật ký <= 92 ngày, biểu đồ Tổng quan 30 ngày. */
+  reportMaxDays: 366,
+  auditMaxDays: 92,
+  seriesDays: 30,
+  /** Khoảng mặc định khi thiếu `from`: `to` - 29 ngày (30 ngày gồm hai đầu). */
+  defaultSpanDays: 29,
+  topDashboard: 5,
+  topReport: 10,
+  auditLimit: { default: 20, max: 50 },
+  /** S8-Q9: `Cache-Control: public, max-age=<giây>` của `GET /store/settings`. */
+  publicSettingsMaxAge: 60,
+} as const;
+
+export type InsightPermission = 'dashboard.view' | 'dashboard.revenue' | 'settings.store' | 'settings.audit';
+
+/** Cùng tên với `frontend/src/app/admin/core/permissions.ts`. S8-Q2: staff không thấy tiền ở Tổng quan. */
+export const INSIGHT_PERMISSIONS: Record<'staff' | 'admin', readonly InsightPermission[]> = {
+  staff: ['dashboard.view'],
+  admin: ['dashboard.view', 'dashboard.revenue', 'settings.store', 'settings.audit'],
+};
+
+/**
+ * Giá trị mặc định thông tin cửa hàng + tham số (= `STORE_INFO` / `STORE_POLICY` của FE và DEFAULT của migration
+ * 20261112000100). Dùng khi thiếu dòng `store_settings` (`GET /store/settings` không ghi DB, không 500).
+ */
+export const STORE_SETTINGS_SEED = {
+  info: {
+    legalName: 'Công ty TNHH Thời trang Nine2Fine',
+    registrationNumber: '0319245768',
+    registrationIssuer: 'Sở Tài chính TP. Hồ Chí Minh',
+    registrationDate: '2025-08-15' as string | null,
+    address: 'Tầng 5, 172 Hai Bà Trưng, Phường Tân Định, TP. Hồ Chí Minh',
+    hotline: '1900 6868 29',
+    email: 'cskh@nine2fine.vn',
+    privacyEmail: 'dulieu@nine2fine.vn',
+    hours: '9:00 – 21:00, tất cả các ngày trong tuần',
+    notificationUrl: '',
+    social: { facebook: '', instagram: '', tiktok: '', youtube: '' },
+  },
+  operations: {
+    shippingFee: 30_000,
+    freeShippingThreshold: 1_000_000,
+    bankHoldMinutes: 30,
+    codMaxTotal: 5_000_000,
+    deliveryDaysMin: 2,
+    deliveryDaysMax: 4,
+    cutoffHour: 16,
+  },
+  cart: {
+    maxPerVariant: 5,
+    maxItemsPerOrder: 20,
+    maxCartLines: 30,
+    cartRetentionDays: 30,
+    codRefusalLimit: 2,
+    codRefusalMonths: 6,
+    codOpenOrderLimit: 3,
+  },
+  lowStockDefault: 5,
+} as const;

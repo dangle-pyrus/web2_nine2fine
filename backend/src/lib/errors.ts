@@ -73,6 +73,8 @@ const STATUS: Record<ErrorCode, number> = {
 
 export interface AppErrorExtras {
   field?: string;
+  /** Slice 8: MỌI lỗi theo trường của `PUT /admin/settings/store` (phần tử đầu trùng `field` / message). */
+  fieldErrors?: Array<{ field: string; message: string }>;
   retryAfterSeconds?: number;
   /** Slice 3: báo giá mới nhất kèm lỗi 409 (kiểu `Quote` của contract). */
   quote?: unknown;
@@ -109,6 +111,12 @@ const minutes = (s: number) => Math.max(1, Math.ceil(s / 60));
 
 export const Errors = {
   validation: (message: string, field?: string) => new AppError('validation', message, { field }),
+  /** Slice 8: nhiều lỗi theo trường một lần (AC-SET-02). `issues` không rỗng. */
+  validationMany: (issues: ReadonlyArray<{ field: string; message: string }>) =>
+    new AppError('validation', issues[0].message, {
+      field: issues[0].field,
+      fieldErrors: issues.map((i) => ({ field: i.field, message: i.message })),
+    }),
   underage: () => new AppError('underage', 'Bạn cần đủ 13 tuổi để tạo tài khoản.', { field: 'birthDate' }),
   invalidCode: () => new AppError('invalid-code', 'Mã xác thực không đúng hoặc đã hết hạn.'),
   codeLocked: (sec: number) =>

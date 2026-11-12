@@ -70,6 +70,9 @@ export const adminStaffCreateLimit = createRateLimit({
   key: byAdminUser,
 });
 
+/** Báo cáo bán hàng + CSV (AC-INS-06): 20 lần / 60 giây / admin, một bộ đếm chung hai endpoint. Đặt SAU requirePermission. */
+export const adminReportLimit = createRateLimit({ name: 'admin-report', windowMs: 60_000, max: 20, key: byAdminUser });
+
 /** Chỉ cho test. */
 export function resetCheckoutRateLimits(): void {
   for (const r of registry) r();

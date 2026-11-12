@@ -57,3 +57,21 @@ export function vnYearBounds(d: Date): { year: number; from: Date; to: Date } {
     to: new Date(Date.UTC(year + 1, 0, 1) - VN_OFFSET_MS),
   };
 }
+
+/** `YYYY-MM-DD` có thật trên lịch (bắt `2026-02-30`, `2026-13-01`). */
+export function isRealDate(iso: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
+/** Số ngày giữa hai ngày `YYYY-MM-DD` (b - a). */
+export const daysBetween = (a: string, b: string): number => Math.round((parseISO(b).getTime() - parseISO(a).getTime()) / 86_400_000);
+
+/** Khoảng nửa mở UTC [00:00 VN của `isoFrom`, 00:00 VN của ngày sau `isoTo`) (gồm cả hai đầu ngày). */
+export const vnDayBoundsUtc = (isoFrom: string, isoTo: string): { from: Date; to: Date } => ({
+  from: vnStartOfDay(isoFrom),
+  to: vnStartOfDay(addDays(isoTo, 1)),
+});

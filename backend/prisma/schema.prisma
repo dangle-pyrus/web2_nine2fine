@@ -52,6 +52,7 @@ model User {
   mediaAssets           MediaAsset[]          @relation("MediaAssetCreator")
   accountEventsActed    AccountEvent[]        @relation("AccountEventActor")
   accountEventsTargeted AccountEvent[]        @relation("AccountEventTarget")
+  storeSettingsEvents   StoreSettingsEvent[]    @relation("StoreSettingsEventActor")
 
   @@map("users")
 }
@@ -343,8 +344,36 @@ model StoreSetting {
   cutoffHour            Int      @default(16) @map("cutoff_hour")
   lowStockDefault       Int      @default(5) @map("low_stock_default") @db.SmallInt
   updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  legalName             String   @default("Công ty TNHH Thời trang Nine2Fine") @map("legal_name") @db.VarChar(120)
+  registrationNumber    String   @default("0319245768") @map("registration_number") @db.VarChar(13)
+  registrationIssuer    String   @default("Sở Tài chính TP. Hồ Chí Minh") @map("registration_issuer") @db.VarChar(100)
+  registrationDate      DateTime? @default(dbgenerated("'2025-08-15'::date")) @map("registration_date") @db.Date
+  address               String   @default("Tầng 5, 172 Hai Bà Trưng, Phường Tân Định, TP. Hồ Chí Minh") @db.VarChar(200)
+  hotline               String   @default("1900 6868 29") @db.VarChar(20)
+  email                 String   @default("cskh@nine2fine.vn") @db.VarChar(254)
+  privacyEmail          String   @default("dulieu@nine2fine.vn") @map("privacy_email") @db.VarChar(254)
+  hours                 String   @default("9:00 – 21:00, tất cả các ngày trong tuần") @db.VarChar(100)
+  notificationUrl       String   @default("") @map("notification_url") @db.VarChar(300)
+  socialFacebook        String   @default("") @map("social_facebook") @db.VarChar(300)
+  socialInstagram       String   @default("") @map("social_instagram") @db.VarChar(300)
+  socialTiktok          String   @default("") @map("social_tiktok") @db.VarChar(300)
+  socialYoutube         String   @default("") @map("social_youtube") @db.VarChar(300)
 
   @@map("store_settings")
+}
+
+/// Nhật ký đổi cài đặt cửa hàng (Slice 8, BR-SET-09): chỉ INSERT / SELECT trong mã.
+model StoreSettingsEvent {
+  eventId     String    @id @default(dbgenerated("gen_random_uuid()")) @map("event_id") @db.Uuid
+  at          DateTime  @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @db.Timestamp(6)
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  actorName   String    @map("actor_name") @db.VarChar(100)
+  actorRole   user_role @map("actor_role")
+  changes     Json
+  actor       User?     @relation("StoreSettingsEventActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
+
+  @@index([at(sort: Desc), eventId(sort: Desc)], map: "idx_store_settings_events_at")
+  @@map("store_settings_events")
 }
 
 model Holiday {
@@ -538,6 +567,7 @@ model Order {
   @@index([createdAt(sort: Desc), order_id(sort: Desc)], map: "idx_orders_created")
   @@index([status, createdAt(sort: Desc), order_id(sort: Desc)], map: "idx_orders_status_created")
   @@index([returnedFromTransit, returnHandledAt], map: "idx_orders_return_pending")
+  @@index([status, deliveredAt], map: "idx_orders_status_delivered")
   @@map("orders")
 }
 
@@ -586,6 +616,7 @@ model OrderEvent {
   order         Order             @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
   actorUser     User?             @relation("OrderEventActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
 
+  @@index([at(sort: Desc), event_id(sort: Desc)], map: "idx_order_events_at")
   @@index([orderId, at], map: "idx_order_events_order_at")
   @@index([emailSentAt, emailAttempts, at], map: "idx_order_events_email_pending")
   @@map("order_events")
@@ -632,6 +663,7 @@ model InventoryAdjustment {
   variant        ProductVariant @relation(fields: [variantId], references: [variant_id], onDelete: Cascade)
   actor          User?          @relation("InventoryAdjustActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
 
+  @@index([at(sort: Desc), adjustment_id(sort: Desc)], map: "idx_inv_adj_at")
   @@index([variantId, at(sort: Desc), adjustment_id(sort: Desc)], map: "idx_inv_adj_variant_at")
   @@map("inventory_adjustments")
 }
@@ -669,6 +701,7 @@ model AccountEvent {
   actor           User?      @relation("AccountEventActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
   target          User?      @relation("AccountEventTarget", fields: [targetUserId], references: [user_id], onDelete: SetNull)
 
+  @@index([at(sort: Desc), eventId(sort: Desc)], map: "idx_account_events_at")
   @@index([targetUserId, at(sort: Desc), eventId(sort: Desc)], map: "idx_account_events_target_at")
   @@map("account_events")
 }

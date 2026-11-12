@@ -42,6 +42,22 @@ export function parseBody<S extends z.ZodType>(schema: S, body: unknown): z.outp
   throw Errors.validation(issue.message, fieldOf(issue.path));
 }
 
+/** Như `parseBody` nhưng báo MỌI lỗi theo trường một lần (Slice 8, AC-SET-02): `error.fieldErrors`. Trùng `field` chỉ giữ lỗi đầu. */
+export function parseBodyAll<S extends z.ZodType>(schema: S, body: unknown): z.output<S> {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) throw Errors.validation(BODY_MSG);
+  const r = schema.safeParse(body);
+  if (r.success) return r.data;
+  const seen = new Set<string>();
+  const issues: Array<{ field: string; message: string }> = [];
+  for (const i of r.error.issues) {
+    const field = fieldOf(i.path) ?? 'body';
+    if (seen.has(field)) continue;
+    seen.add(field);
+    issues.push({ field, message: i.message });
+  }
+  throw Errors.validationMany(issues);
+}
+
 /** Body tuỳ chọn (vd. huỷ đơn): rỗng / không có -> {}. */
 export function parseOptionalBody<S extends z.ZodType>(schema: S, body: unknown): z.output<S> {
   return parseBody(schema, body === undefined || body === null ? {} : body);
