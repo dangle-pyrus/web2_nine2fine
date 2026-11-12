@@ -108,8 +108,8 @@ export async function listInventory(q: InventoryListQuery) {
   return { items: rows.map(toItem), total: counts[q.view], page: q.page, limit: q.limit };
 }
 
-async function countStatuses(where: Prisma.Sql): Promise<{ all: number; in: number; low: number; out: number }> {
-  const [c] = await prisma.$queryRaw<Array<{ all: number; in: number; low: number; out: number }>>(Prisma.sql`
+async function countStatuses(where: Prisma.Sql, db: Db = prisma): Promise<{ all: number; in: number; low: number; out: number }> {
+  const [c] = await db.$queryRaw<Array<{ all: number; in: number; low: number; out: number }>>(Prisma.sql`
     SELECT COUNT(*)::int AS "all",
            (COUNT(*) FILTER (WHERE ${STATUS_SQL} = 'in'))::int AS "in",
            (COUNT(*) FILTER (WHERE ${STATUS_SQL} = 'low'))::int AS "low",
@@ -133,6 +133,9 @@ function distinctColors(rows: Array<{ color_name: string; color_hex: string }>) 
   }
   return out;
 }
+
+/** Số biến thể theo tình trạng, không bộ lọc: cùng hàm đếm với `counts` của facets (Slice 8 Tổng quan dùng lại, AC-DSH-06). */
+export const inventoryCounts = (db: Db = prisma) => countStatuses(Prisma.sql`TRUE`, db);
 
 export async function inventoryFacets(f: InventoryFilter) {
   const [categories, colors, counts, settings, custom] = await Promise.all([

@@ -1,4 +1,8 @@
 import { Router } from 'express';
+import { now } from '../../lib/clock';
+import { requirePermission } from '../../middleware/require-permission';
+import { getDashboard } from './dashboard.service';
+import { parseRange } from './insights.schemas';
 
 /**
  * Routers Slice 8. Gắn ở app.ts SAU `noStore`, `requireAuth('admin')`, `requireRole('staff','admin')`, `adminRateLimit`
@@ -9,3 +13,9 @@ export const adminDashboardRouter = Router();
 export const adminReportsRouter = Router();
 export const adminSettingsRouter = Router();
 export const adminAuditRouter = Router();
+
+/* ---------------- GET /admin/dashboard ---------------- */
+adminDashboardRouter.get('/', requirePermission('dashboard.view'), async (req, res) => {
+  const range = parseRange({ ...req.query });
+  res.json(await getDashboard(req.auth!.user.role as 'staff' | 'admin', range, now()));
+});

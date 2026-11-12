@@ -585,3 +585,115 @@ export function assertNoSecrets(res: { text: string }): void {
 
 export const countEvents = (where: Record<string, unknown> = {}) => prisma.accountEvent.count({ where });
 export const activeAdmins = () => prisma.user.count({ where: { role: 'admin', isActive: true } });
+
+/* ======================= Slice 8: tổng quan, báo cáo, cài đặt, nhật ký ======================= */
+
+import { addCalendarDays as addDaysISO, vnStartOfDay as vnStartISO } from '../src/lib/vn-time';
+
+/** Thời điểm UTC của `HH:mm` (giờ VN) ngày `D + offset` (D = `YYYY-MM-DD` VN). */
+export const vnAt = (day: string, offset: number, hhmm = '00:00', sec = 0): Date => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return new Date(vnStartISO(addDaysISO(day, offset)).getTime() + ((h * 60 + m) * 60 + sec) * 1000);
+};
+
+export interface RevenueLine {
+  variantId: string;
+  quantity: number;
+  unitPrice: number;
+  lineDiscount?: number;
+}
+export interface InsertRevenueOrder {
+  deliveredAt: Date | null;
+  lines: RevenueLine[];
+  method?: 'cod' | 'bank_transfer';
+  shippingFee?: number;
+  shippingDiscount?: number;
+  status?: 'completed' | 'to_receive';
+  paymentStatus?: 'paid' | 'pending' | 'refunded' | 'failed' | 'partially_refunded';
+  createdAt?: Date;
+  userId?: string | null;
+  /** Tên / màu / size / SKU chụp trên dòng đơn (mặc định lấy từ biến thể hiện tại). */
+  snapshot?: { name?: string };
+}
+
+let revSeq = 0;
+/** Chèn thẳng đơn `completed` + `paid` + `delivered_at` + dòng đơn (không qua checkout). `lineDiscount` tuỳ ý mỗi dòng. */
+export async function insertRevenueOrder(o: InsertRevenueOrder): Promise<{ code: string; id: string }> {
+  const code = `N2F2612${String(++revSeq).padStart(6, '0')}`;
+  const variants = await prisma.productVariant.findMany({ where: { variant_id: { in: o.lines.map((l) => l.variantId) } }, include: { product: true } });
+  const subtotal = o.lines.reduce((n, l) => n + l.unitPrice * l.quantity, 0);
+  const discount = o.lines.reduce((n, l) => n + (l.lineDiscount ?? 0), 0);
+  const ship = o.shippingFee ?? 0;
+  const shipDisc = o.shippingDiscount ?? 0;
+  const delivered = o.deliveredAt;
+  const created = o.createdAt ?? new Date((delivered ?? new Date()).getTime() - 4 * 86_400_000);
+  const method = o.method ?? 'cod';
+  const order = await prisma.order.create({
+    data: {
+      code, status: o.status ?? 'completed', paymentStatus: o.paymentStatus ?? 'paid', userId: o.userId ?? null, paymentMethod: method,
+      email: 'khach@example.com', recipientName: 'Nguyễn Văn A', recipientPhone: '0912345678', provinceCode: '01', wardCode: await firstWard(),
+      provinceName: 'Hà Nội', wardName: 'Ba Đình', street: '12 Phố Huế', subtotal, discount, shippingFee: ship, shippingDiscount: shipDisc,
+      total: subtotal - discount + ship - shipDisc, estimatedFrom: new Date('2026-11-11'), estimatedTo: new Date('2026-11-13'),
+      termsAcceptedAt: created, itemsFingerprint: 'b'.repeat(64), createdAt: created, deliveredAt: delivered,
+      ...(o.status === 'to_receive' ? { carrier: 'GHN', trackingNumber: `TRK${revSeq}0000`, activeTrackingNumber: `TRK${revSeq}0000`, handedOverAt: created } : {}),
+      items: {
+        createMany: {
+          data: o.lines.map((l, i) => {
+            const v = variants.find((x) => x.variant_id === l.variantId)!;
+            return {
+              lineNo: i + 1, variantId: v.variant_id, productId: v.productId, productSlug: v.product.slug, name: o.snapshot?.name ?? v.product.name,
+              colorName: v.colorName, size: v.size, sku: v.sku, mediaId: v.product.coverMediaId || 'pexels-test-image', unitPrice: l.unitPrice,
+              quantity: l.quantity, lineDiscount: l.lineDiscount ?? 0,
+            };
+          }),
+        },
+      },
+    },
+  });
+  return { code, id: order.order_id };
+}
+
+export interface RevenueFixture {
+  D: string;
+  p1: { id: string; variantId: string };
+  p2: { id: string; variantId: string };
+  p3: { id: string; variantId: string };
+  codes: Record<'O1' | 'O2' | 'O3' | 'O4' | 'O5' | 'O6' | 'O7' | 'O8' | 'O9', string>;
+}
+
+/**
+ * Dữ liệu tham chiếu PRD Slice 8 mục 5 (D = ngày VN hôm nay). Đơn tính doanh thu: O1 (giao D 10:00, hàng 900.000 sau giảm 100.000, ship 30.000),
+ * O2 (giao D-1 23:30, chuyển khoản, 1.000.000), O3 (giao D 00:00:00, 300.000, ship 30.000), O8 (giao D-8, 2.000.000).
+ * Khác: O4 `to_ship` COD cần gọi (đặt D), O5 `cancelled` (đặt D), O6 `to_pay` (đặt D), O7 `to_receive` hạn D-1 (đặt D-3), O9 `completed` nhưng `refunded` (giao D).
+ * P1, P2 danh mục "tops" (Áo), P3 "bottoms" (Quần).
+ */
+export async function makeRevenueFixtures(D = '2026-11-12'): Promise<RevenueFixture> {
+  const mk = async (name: string, category: string, sku: string) => {
+    const p = await makeProduct({ name, category, status: 'ACTIVE', price: 500_000, variants: [{ sku, qty: 50 }] });
+    return { id: p.id, variantId: p.variants[0].id };
+  };
+  const p1 = await mk('Áo P1', 'tops', 'P8-P1-S');
+  const p2 = await mk('Áo P2', 'tops', 'P8-P2-S');
+  const p3 = await mk('Quần P3', 'bottoms', 'P8-P3-S');
+  const O1 = await insertRevenueOrder({
+    deliveredAt: vnAt(D, 0, '10:00'), shippingFee: 30_000,
+    lines: [{ variantId: p1.variantId, quantity: 1, unitPrice: 500_000, lineDiscount: 50_000 }, { variantId: p2.variantId, quantity: 1, unitPrice: 500_000, lineDiscount: 50_000 }],
+  });
+  const O2 = await insertRevenueOrder({ deliveredAt: vnAt(D, -1, '23:30'), method: 'bank_transfer', lines: [{ variantId: p2.variantId, quantity: 2, unitPrice: 500_000 }] });
+  const O3 = await insertRevenueOrder({ deliveredAt: vnAt(D, 0, '00:00'), shippingFee: 30_000, lines: [{ variantId: p3.variantId, quantity: 1, unitPrice: 300_000 }] });
+  const O8 = await insertRevenueOrder({ deliveredAt: vnAt(D, -8, '12:00'), lines: [{ variantId: p1.variantId, quantity: 4, unitPrice: 500_000 }] });
+  const O9 = await insertRevenueOrder({ deliveredAt: vnAt(D, 0, '09:00'), paymentStatus: 'refunded', lines: [{ variantId: p1.variantId, quantity: 1, unitPrice: 500_000 }] });
+  const items = [{ variantId: p1.variantId, quantity: 1 }];
+  const O4 = await makeOrder({ status: 'to_ship', needsCall: true, createdAt: vnAt(D, 0, '09:00'), items });
+  const O5 = await makeOrder({ status: 'cancelled', createdAt: vnAt(D, 0, '09:30'), items, data: { cancelledAt: vnAt(D, 0, '10:30'), cancelledBy: 'customer' } });
+  const O6 = await makeOrder({ status: 'to_pay', paymentMethod: 'bank_transfer', createdAt: vnAt(D, 0, '09:45'), items, data: { paymentDueAt: vnAt(D, 0, '23:00') } });
+  const O7 = await makeOrder({
+    status: 'to_receive', createdAt: vnAt(D, -3, '09:00'), items,
+    data: { carrier: 'GHN', trackingNumber: 'TRK70001', activeTrackingNumber: 'TRK70001', handedOverAt: vnAt(D, -2, '09:00'), estimatedTo: new Date(`${addDaysISO(D, -1)}T00:00:00.000Z`) },
+  });
+  return { D, p1, p2, p3, codes: { O1: O1.code, O2: O2.code, O3: O3.code, O4: O4.code, O5: O5.code, O6: O6.code, O7: O7.code, O8: O8.code, O9: O9.code } };
+}
+
+/** Gọi API admin Slice 8 (không tiền tố /api/admin: truyền đường dẫn đầy đủ sau /api/admin). */
+export const iGet = (path: string, cookie?: string) => get(`/api/admin${path}`, { cookie, ip: freshIp() });
+export const iPut = (path: string, body: unknown, cookie?: string) => put(`/api/admin${path}`, body, { cookie, ip: freshIp() });
