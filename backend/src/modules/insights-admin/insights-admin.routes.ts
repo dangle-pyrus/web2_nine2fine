@@ -5,7 +5,8 @@ import { requirePermission } from '../../middleware/require-permission';
 import prisma from '../../config/prisma';
 import { toSalesCsv } from './csv';
 import { getDashboard } from './dashboard.service';
-import { parseExportQuery, parseRange, parseReportQuery } from './insights.schemas';
+import { listAudit } from './audit.query';
+import { parseAuditQuery, parseExportQuery, parseRange, parseReportQuery } from './insights.schemas';
 import { getSalesReport } from './report.service';
 import { staffDisplayName } from '../order/order-event';
 import { getAdminSettings, SettingsActor, updateSettings } from './settings.service';
@@ -55,4 +56,9 @@ adminSettingsRouter.get('/store', requirePermission('settings.store'), async (_r
 
 adminSettingsRouter.put('/store', requirePermission('settings.store'), async (req, res) => {
   res.json(await updateSettings(actorOf(req), req.body, now()));
+});
+
+/* ---------------- GET /admin/audit-log (chỉ đọc; PUT / PATCH / DELETE -> 404) ---------------- */
+adminAuditRouter.get('/', requirePermission('settings.audit'), async (req, res) => {
+  res.json(await listAudit(prisma, parseAuditQuery({ ...req.query }, now())));
 });
