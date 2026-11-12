@@ -17,6 +17,7 @@ export type Permission =
   | 'orders.cancel-other'
   | 'orders.export'
   | 'returns.process'
+  | 'returns.refund'
   | 'products.view'
   | 'products.edit'
   | 'products.delete'
@@ -41,6 +42,7 @@ const ALL: readonly Permission[] = [
   'orders.cancel-other',
   'orders.export',
   'returns.process',
+  'returns.refund',
   'products.view',
   'products.edit',
   'products.delete',
@@ -98,7 +100,8 @@ export const PERMISSION_MATRIX: {
       { permission: 'orders.cancel', label: 'Hủy đơn (năm lý do cố định)' },
       { permission: 'orders.cancel-other', label: 'Hủy đơn với lý do khác' },
       { permission: 'orders.export', label: 'Xuất file' },
-      { permission: 'returns.process', label: 'Duyệt trả hàng' },
+      { permission: 'returns.process', label: 'Duyệt, nhận hàng trả' },
+      { permission: 'returns.refund', label: 'Xác nhận hoàn tiền (chỉ quản trị viên)' },
     ],
   },
   {

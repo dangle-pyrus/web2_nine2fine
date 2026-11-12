@@ -52,6 +52,8 @@ const AUTH_CODES: readonly string[] = [
   // Slice 7 (admin customers and staff).
   'self-change',
   'last-admin',
+  // Slice 9 (returns).
+  'invalid-transition',
 ];
 
 /**

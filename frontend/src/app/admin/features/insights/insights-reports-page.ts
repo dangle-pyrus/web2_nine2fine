@@ -9,6 +9,7 @@ import { ADMIN_INSIGHTS_REPORTS_API } from '../../data-access/insights-api';
 import { insightsErrorMessage } from '../../data-access/insights-errors';
 import type {
   ReportFigureKey,
+  ReturnFigureKey,
   ReportSort,
   SalesReportQuery,
 } from '../../data-access/insights-models';
@@ -47,7 +48,7 @@ export function validateRange(from: string, to: string, today: string): RangeErr
 }
 
 interface KpiCard {
-  key: ReportFigureKey;
+  key: ReportFigureKey | ReturnFigureKey;
   label: string;
   hint?: string;
   format: (value: number) => string;
@@ -68,6 +69,16 @@ const KPI_CARDS: KpiCard[] = [
   { key: 'placedOrders', label: 'Đơn đặt', format: num },
   { key: 'cancelledOrders', label: 'Đơn huỷ', format: num },
   { key: 'cancelRate', label: 'Tỉ lệ huỷ', format: percent },
+  // Slice 9 (BR-RET-52): present once the server sends them; revenue above is already net.
+  {
+    key: 'refundedAmount',
+    label: 'Tiền hàng đã hoàn',
+    format: money,
+    hint: 'Doanh thu đã trừ hàng trả',
+  },
+  { key: 'refundedUnits', label: 'Sản phẩm đã hoàn', format: num },
+  { key: 'returnedOrders', label: 'Đơn có trả hàng', format: num },
+  { key: 'returnRate', label: 'Tỉ lệ trả hàng', format: percent },
 ];
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -170,14 +181,17 @@ export class InsightsReportsPage {
   protected readonly kpiRows = computed(() => {
     const kpis = this.report()?.kpis;
     if (!kpis) return [];
-    return KPI_CARDS.map((card) => {
+    return KPI_CARDS.flatMap((card) => {
       const figure = kpis[card.key];
-      return {
-        ...card,
-        value: card.format(figure.value),
-        previous: figure.previous === null ? '—' : card.format(figure.previous),
-        delta: deltaText(ratioChange(figure.value, figure.previous), 'so với kỳ trước'),
-      };
+      if (!figure) return [];
+      return [
+        {
+          ...card,
+          value: card.format(figure.value),
+          previous: figure.previous === null ? '—' : card.format(figure.previous),
+          delta: deltaText(ratioChange(figure.value, figure.previous), 'so với kỳ trước'),
+        },
+      ];
     });
   });
 

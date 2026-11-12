@@ -51,7 +51,7 @@ function buildPolicies({ policy: P, info: S, membership: M }: StoreSettingsValue
         {
           heading: 'Thời hạn',
           blocks: [
-            `Bạn có thể gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận hàng thành công. Thời hạn này áp dụng cho mọi sản phẩm bán trên nine2fine.vn, kể cả sản phẩm giảm giá.`,
+            `Bạn có thể gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận hàng thành công (đến hết ngày thứ ${P.returnDays}, giờ Việt Nam). Thời hạn này áp dụng cho mọi sản phẩm bán trên nine2fine.vn, kể cả sản phẩm giảm giá.`,
           ],
         },
         {
@@ -77,7 +77,7 @@ function buildPolicies({ policy: P, info: S, membership: M }: StoreSettingsValue
             [
               'Thành viên: vào Tài khoản → Lịch sử mua hàng → chọn đơn → "Yêu cầu trả hàng", chọn sản phẩm, lý do và tài khoản nhận tiền hoàn.',
               `Khách mua không cần tài khoản: gọi ${S.hotline} hoặc gửi email đến ${S.email}, kèm mã đơn và số điện thoại đặt hàng.`,
-              'nine2fine xác nhận yêu cầu trong vòng 24 giờ làm việc và hẹn đơn vị vận chuyển đến lấy hàng tại địa chỉ của bạn.',
+              'Dự kiến nine2fine xác nhận yêu cầu trong vòng 24 giờ làm việc; sau khi duyệt, bạn nhận hướng dẫn gửi hàng trong chi tiết đơn và qua email.',
             ],
           ],
         },
@@ -94,7 +94,7 @@ function buildPolicies({ policy: P, info: S, membership: M }: StoreSettingsValue
           heading: 'Hoàn tiền',
           blocks: [
             'Số tiền hoàn bằng số tiền bạn thực trả cho các sản phẩm trả lại, tức giá bán sau khi trừ phần giảm giá của mã khuyến mãi được phân bổ theo giá trị từng sản phẩm.',
-            `nine2fine kiểm tra hàng trong 2 ngày làm việc kể từ khi nhận lại, sau đó hoàn tiền trong ${P.refundWorkingDays} ngày làm việc.`,
+            `Dự kiến nine2fine kiểm tra hàng trong 2 ngày làm việc kể từ khi nhận lại, sau đó hoàn tiền trong ${P.refundWorkingDays} ngày làm việc.`,
             [
               'Đơn đã chuyển khoản: hoàn về tài khoản đã thanh toán.',
               'Đơn COD: hoàn bằng chuyển khoản vào tài khoản ngân hàng bạn cung cấp khi gửi yêu cầu.',

@@ -10,7 +10,10 @@ import {
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import { catchError, map, of, switchMap, tap } from 'rxjs';
+import { API_CONFIG } from '../../../core/api-config';
 import { AdminSession } from '../../core/admin-session';
+import type { AdminReturn } from '../../data-access/returns-api';
+import { ReturnPanel } from '../returns/return-panel';
 import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import {
   ACTION_LABELS,
@@ -82,6 +85,7 @@ function kindOf(action: DeskAction): DeskActionKind | null {
     AdmIcon,
     AdmCopyButton,
     AdmEmptyState,
+    ReturnPanel,
     MoneyPipe,
     NumPipe,
     DateTimePipe,
@@ -97,6 +101,8 @@ export class OrderDeskDetailPage {
   private readonly router = inject(Router);
   private readonly code = routeParam('id');
   private readonly tick = signal(0);
+  /** Slice 9: the order shows its return request and the buttons to handle it. */
+  protected readonly returnsOn = inject(API_CONFIG).returnsMode === 'http';
 
   protected readonly state = signal<LoadState>({ kind: 'loading' });
   protected readonly order = computed(() => {
@@ -173,6 +179,18 @@ export class OrderDeskDetailPage {
   printSlip(): void {
     const order = this.order();
     if (order) void this.router.navigate(['/admin/orders', order.id, 'slip']);
+  }
+
+  /** A return step changed the request (and maybe `paymentStatus`): show it, then reload the order. */
+  onReturnUpdated(ret: AdminReturn): void {
+    const order = this.order();
+    if (order) this.state.set({ kind: 'ready', order: { ...order, return: ret } });
+    this.api
+      .get(this.code())
+      .pipe(catchError(() => of(null)))
+      .subscribe((fresh) => {
+        if (fresh) this.state.set({ kind: 'ready', order: fresh });
+      });
   }
 
   dismissNotice(): void {

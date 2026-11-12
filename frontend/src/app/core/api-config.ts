@@ -50,6 +50,14 @@ export interface ApiConfig {
    * `http` with `localStorage['n2f.e2e.adminInsightsMode']` and the specs answer the requests.
    */
   adminInsightsMode: 'mock' | 'http';
+  /**
+   * Returns and refunds (Slice 9), independent of `mode`. `http`: the shopper's return form and
+   * status block read `Order.canReturn` / `returnDeadline` / `return` from the server and call
+   * `/api/account/orders/{code}/return*`; `/admin/returns` and the order's return block call
+   * `/api/admin/returns*` (needs `authMode: 'http'`). `mock`: the earlier mock returns. The e2e
+   * build picks `http` with `localStorage['n2f.e2e.returnsMode']`.
+   */
+  returnsMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -70,5 +78,6 @@ export const apiConfig: ApiConfig = {
   adminCatalogMode: 'http',
   adminUsersMode: 'http',
   adminInsightsMode: 'http',
+  returnsMode: 'http',
   baseUrl: '/api',
 };

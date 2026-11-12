@@ -3,6 +3,8 @@ import { RouterLink } from '@angular/router';
 import { storeSettings } from '../../core/store-settings';
 import { policies } from './policy-content';
 
+const vnd = (value: number) => `${value.toLocaleString('vi-VN')} ₫`;
+
 /** `/help`: contact channels, seller identity and the questions shoppers ask most. */
 @Component({
   selector: 'n2f-help-page',
@@ -218,7 +220,7 @@ export class HelpPage {
         },
         {
           q: 'Nhận hàng sai size, sai màu thì làm sao?',
-          a: `Gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận. nine2fine chịu toàn bộ phí gửi trả và hoàn tiền sau khi nhận lại hàng.`,
+          a: `Gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận. Gửi trả miễn phí khi nine2fine giao sai hoặc sản phẩm lỗi; khi không vừa hoặc không còn nhu cầu, phí gửi trả ${vnd(P.returnShippingFee)} được trừ vào số tiền hoàn. nine2fine hoàn tiền sau khi nhận và kiểm tra hàng.`,
           link: { label: 'Chính sách trả hàng', path: '/policies/returns' },
         },
         {

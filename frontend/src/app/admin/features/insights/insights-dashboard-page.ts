@@ -131,7 +131,33 @@ export class InsightsDashboardPage {
   protected readonly todo = computed((): TodoRow[] => {
     const todo = this.data()?.todo;
     if (!todo) return [];
-    return [
+    const returns: TodoRow[] = [
+      {
+        key: 'returnRequested',
+        label: 'Trả hàng chờ duyệt',
+        hint: 'Khách gửi yêu cầu, cần duyệt hoặc từ chối',
+        count: todo.returnRequested,
+        link: '/admin/returns',
+        params: { state: 'requested' },
+      },
+      {
+        key: 'returnApproved',
+        label: 'Trả hàng chờ nhận hàng',
+        hint: 'Đã duyệt, chờ hàng về kho để kiểm',
+        count: todo.returnApproved,
+        link: '/admin/returns',
+        params: { state: 'approved' },
+      },
+      {
+        key: 'returnReceived',
+        label: 'Trả hàng chờ hoàn tiền',
+        hint: 'Đã nhận và kiểm hàng, chờ chuyển tiền cho khách',
+        count: todo.returnReceived,
+        link: '/admin/returns',
+        params: { state: 'received' },
+      },
+    ].flatMap((row) => (row.count === undefined ? [] : [{ ...row, count: row.count }]));
+    const rows: TodoRow[] = [
       {
         key: 'toConfirm',
         label: 'Đơn COD cần gọi xác nhận',
@@ -205,6 +231,7 @@ export class InsightsDashboardPage {
         params: { view: 'out' },
       },
     ];
+    return [...rows.slice(0, 6), ...returns, ...rows.slice(6)];
   });
 
   protected readonly chart = computed(() => {

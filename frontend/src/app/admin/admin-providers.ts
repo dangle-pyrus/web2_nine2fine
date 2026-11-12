@@ -9,6 +9,7 @@ import { adminCatalogAdapterProviders } from './admin-catalog-adapters';
 import { adminOrderAdapterProviders } from './admin-order-adapters';
 import { adminUsersAdapterProviders } from './admin-users-adapters';
 import * as insights from './data-access/insights-api';
+import { ADMIN_RETURN_DESK_API, HttpAdminReturnDeskApi } from './data-access/returns-api';
 import { AdminDialogs } from './ui/dialogs';
 import { provideAdminIcons } from './ui/icons';
 
@@ -55,6 +56,11 @@ export function provideAdmin(): Provider[] {
       "adminInsightsMode 'http' needs authMode 'http': without the admin session cookie every dashboard, report, settings and audit request answers 401.",
     );
   }
+  if (config.returnsMode === 'http' && config.authMode !== 'http') {
+    console.warn(
+      "returnsMode 'http' needs authMode 'http': without the admin session cookie every returns request answers 401.",
+    );
+  }
   return [
     provideAdminIcons(),
     AdminDialogs,
@@ -77,6 +83,9 @@ export function provideAdmin(): Provider[] {
     { provide: insights.ADMIN_INSIGHTS_REPORTS_API, useExisting: insights.HttpInsightsReportsApi },
     { provide: insights.ADMIN_STORE_SETTINGS_API, useExisting: insights.HttpStoreSettingsAdminApi },
     { provide: insights.ADMIN_AUDIT_LOG_API, useExisting: insights.HttpAuditLogApi },
+    // Slice 9 returns desk: HTTP only (routed only while `returnsMode` is `http`).
+    HttpAdminReturnDeskApi,
+    { provide: ADMIN_RETURN_DESK_API, useExisting: HttpAdminReturnDeskApi },
     AdminCategories,
     // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
     ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),

@@ -190,6 +190,12 @@ function returnedText(order: Order): string {
   return returned < total ? `Đã trả ${returned}/${total} sản phẩm` : `Đã trả ${returned} sản phẩm`;
 }
 
+const RETURN_STATE_TEXT: Record<string, string> = {
+  requested: 'Chờ nine2fine duyệt yêu cầu trả hàng',
+  approved: 'Đã duyệt, chờ bạn gửi hàng',
+  received: 'Đã nhận hàng, đang hoàn tiền',
+};
+
 export type OrderNoteTone = 'alert' | 'transit' | 'success' | 'muted';
 
 /** One-line status context shown on order cards (Figma `history-card` 193:2519). */
@@ -264,6 +270,15 @@ export function orderNote(
           tone: 'alert',
         };
       }
+      if (order.returnCase?.state === 'rejected') {
+        return {
+          text: `Yêu cầu trả hàng không được chấp nhận${order.returnCase.rejectNote ? ': ' + order.returnCase.rejectNote : ''}`,
+          tone: 'alert',
+        };
+      }
+      if (order.refundStatus === 'partial') {
+        return { text: 'Đã hoàn tiền một phần', tone: 'muted' };
+      }
       return order.delivery?.deliveredAt
         ? {
             text: `Đã giao thành công lúc ${formatDateTime(order.delivery.deliveredAt)}`,
@@ -278,6 +293,13 @@ export function orderNote(
       };
     }
     case 'return-requested': {
+      const apiCase = order.returnCase;
+      if (apiCase) {
+        return {
+          text: `${RETURN_STATE_TEXT[apiCase.state]} · gửi ngày ${formatDate(apiCase.requestedAt)} · ${apiCase.amount.final ? 'hoàn' : 'dự kiến hoàn'} ${money.format(apiCase.amount.amount)}`,
+          tone: 'transit',
+        };
+      }
       const request = order.returnRequest;
       return {
         text: request
@@ -287,6 +309,12 @@ export function orderNote(
       };
     }
     case 'returned': {
+      if (order.returnCase) {
+        return {
+          text: `Đã hoàn ${money.format(order.returnCase.refundedAmount ?? order.returnCase.amount.amount)}${order.returnCase.refundedAt ? ' ngày ' + formatDate(order.returnCase.refundedAt) : ''}`,
+          tone: 'muted',
+        };
+      }
       const refund = refundText(order);
       return {
         text: refund ? `${returnedText(order)} · ${refund}` : returnedText(order),
@@ -430,6 +458,13 @@ export function orderHeadline(order: Order): { eyebrow: string; title: string; d
       };
     }
     case 'return-requested':
+      if (order.returnCase) {
+        return {
+          eyebrow: 'Cập nhật đơn hàng',
+          title: 'Đang xử lý trả hàng',
+          detail: `${RETURN_STATE_TEXT[order.returnCase.state]}. Xem chi tiết yêu cầu bên dưới.`,
+        };
+      }
       return {
         eyebrow: 'Cập nhật đơn hàng',
         title: 'Đang xử lý trả hàng',
@@ -437,6 +472,13 @@ export function orderHeadline(order: Order): { eyebrow: string; title: string; d
           'nine2fine đã nhận yêu cầu và sẽ liên hệ trong 24 giờ làm việc để hẹn lấy hàng. Tiền được hoàn sau khi kiểm tra sản phẩm.',
       };
     case 'returned': {
+      if (order.returnCase) {
+        return {
+          eyebrow: 'Cập nhật đơn hàng',
+          title: 'Đã trả hàng và hoàn tiền',
+          detail: 'nine2fine đã hoàn tiền cho yêu cầu trả hàng của bạn.',
+        };
+      }
       const done = refundState(order)?.done;
       return {
         eyebrow: 'Cập nhật đơn hàng',

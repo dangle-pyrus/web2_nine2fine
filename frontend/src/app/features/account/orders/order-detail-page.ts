@@ -13,7 +13,8 @@ import {
   formatDate,
   formatDateTime,
 } from '../../orders/order-status';
-import { canRequestReturn, returnDeadline } from '../../orders/order-returns';
+import { canRequestReturn, returnDeadline, returnsEnabled } from '../../orders/order-returns';
+import { ReturnStatusSection } from '../../orders/return-status-section';
 import { ToastService } from '../../../shared/ui/toast';
 import { BuyAgain } from './buy-again';
 import { OrderStatusBadge } from '../../orders/order-status-badge';
@@ -23,7 +24,7 @@ import { OrderCancellation } from './order-cancellation';
 /** Figma `detail-order` (193:2518) with ProgressStep (226:94) and StatusBadge (226:95). */
 @Component({
   selector: 'n2f-order-detail-page',
-  imports: [RouterLink, IconComponent, OrderStatusBadge, OrderView],
+  imports: [RouterLink, IconComponent, OrderStatusBadge, OrderView, ReturnStatusSection],
   template: `
     <a class="back" routerLink="/account/orders"
       ><n2f-icon name="reiconArrowLeft" size="16px" /> Lịch sử mua hàng</a
@@ -91,6 +92,9 @@ import { OrderCancellation } from './order-cancellation';
           </div>
         }
       </n2f-order-view>
+      @if (current.returnCase; as request) {
+        <n2f-return-status [order]="current" [request]="request" (changed)="reload(current.id)" />
+      }
       <p class="help">
         Cần hỗ trợ đơn #{{ current.id }}?
         <a routerLink="/help"><strong>Liên hệ nine2fine →</strong></a>
@@ -177,7 +181,7 @@ export class OrderDetailPage {
   readonly notice = signal('');
   readonly busy = signal(false);
 
-  private readonly returnsEnabled = inject(API_CONFIG).checkoutMode === 'mock';
+  private readonly returnsEnabled = returnsEnabled(inject(API_CONFIG));
   private readonly api = inject(ORDERS_API);
   private readonly cancellation = inject(OrderCancellation);
   private readonly buyer = inject(BuyAgain);
@@ -214,7 +218,7 @@ export class OrderDetailPage {
   }
 
   returnable(order: Order): boolean {
-    // Returns have no API yet: with real orders the entry stays hidden.
+    // Mock returns only with mock orders; `returnsMode: http` follows the server's `canReturn`.
     return this.returnsEnabled && canRequestReturn(order);
   }
 
@@ -234,7 +238,7 @@ export class OrderDetailPage {
       .subscribe();
   }
 
-  private reload(id: string): void {
+  reload(id: string): void {
     this.api
       .get(id)
       .pipe(takeUntilDestroyed(this.destroyRef))

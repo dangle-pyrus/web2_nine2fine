@@ -44,6 +44,8 @@ export type DeskAction =
   | 'add-note'
   | 'print-slip';
 
+import type { AdminReturn } from './returns-api';
+
 export interface DeskStaffRef {
   name: string;
   role: 'staff' | 'admin';
@@ -68,7 +70,14 @@ export type DeskEventKind =
   | 'cancelled'
   | 'stock_restocked'
   | 'stock_written_off'
-  | 'note';
+  | 'note'
+  /** Slice 9: one event per step of a return request (never an account number). */
+  | 'return_requested'
+  | 'return_approved'
+  | 'return_rejected'
+  | 'return_received'
+  | 'return_refunded'
+  | 'return_cancelled';
 
 export interface DeskTimelineEntry {
   at: string;
@@ -180,6 +189,8 @@ export interface DeskOrder {
     note?: string;
   };
   stockRestoredAt?: string;
+  /** Slice 9 (`returnsMode: http`): latest return request, account number masked. */
+  return?: AdminReturn;
   deliveryRefusedAt?: string;
   overdue: DeskOverdueFlag[];
   allowedActions: DeskAction[];

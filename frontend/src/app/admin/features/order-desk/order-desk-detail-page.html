@@ -304,6 +304,8 @@
         handling.note }} }
       </p>
     </section>
+    } @if (order.return && returnsOn) {
+    <adm-return-panel [ret]="order.return" (updated)="onReturnUpdated($event)" />
     }
 
     <section class="section" aria-labelledby="history-title">

@@ -24,6 +24,10 @@ export interface DashboardTodo {
   lateDelivery: number;
   lowStock: number;
   outOfStock: number;
+  /** Slice 9: requests waiting for approval / goods / refund; absent in older answers. */
+  returnRequested?: number;
+  returnApproved?: number;
+  returnReceived?: number;
 }
 
 export interface RevenuePoint {
@@ -79,6 +83,9 @@ export type ReportFigureKey =
   | 'cancelledOrders'
   | 'cancelRate';
 
+/** Slice 9: revenue is net of refunds; these say how much came back. `returnRate` is Should. */
+export type ReturnFigureKey = 'refundedAmount' | 'refundedUnits' | 'returnedOrders' | 'returnRate';
+
 export interface ReportCategoryRef {
   slug: string;
   name: string;
@@ -92,7 +99,7 @@ export interface SalesReport {
   previousTo: string;
   days: number;
   sort: ReportSort;
-  kpis: Record<ReportFigureKey, ReportFigure>;
+  kpis: Record<ReportFigureKey, ReportFigure> & Partial<Record<ReturnFigureKey, ReportFigure>>;
   byDay: { date: string; revenue: number; completedOrders: number; units: number }[];
   topProducts: {
     productId: string;

@@ -7,6 +7,8 @@ import { MockAuthApi } from '../../mocks/mock-auth-api';
 import { MockCartApi } from '../../mocks/mock-cart-api';
 import { MockCatalogApi } from '../../mocks/mock-catalog-api';
 import { MockCheckoutApi } from '../../mocks/mock-checkout-api';
+import { HttpOrdersApi } from '../features/account/data-access/orders-api';
+import { apiConfig } from './api-config';
 import { MockOrdersApi } from '../../mocks/mock-orders-api';
 import { StorefrontBindings, toStorefrontProviders } from './storefront-adapter-tokens';
 
@@ -17,7 +19,8 @@ const bindings: StorefrontBindings = {
   CHECKOUT_API: { useExisting: MockCheckoutApi },
   PAYMENT_SIMULATOR: { useExisting: MockCheckoutApi },
   CART_API: { useExisting: MockCartApi },
-  ORDERS_API: { useExisting: MockOrdersApi },
+  // Slice 9 specs (`returnsMode: http`) answer /api/orders themselves: `canReturn` / `return` are the server's.
+  ORDERS_API: { useExisting: apiConfig.returnsMode === 'http' ? HttpOrdersApi : MockOrdersApi },
   AUTH_API: { useExisting: MockAuthApi },
   ACCOUNT_API: { useExisting: MockAccountApi },
 };

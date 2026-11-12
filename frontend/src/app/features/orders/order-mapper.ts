@@ -2,9 +2,11 @@ import {
   CancelMode,
   Order,
   OrderCancelRequest,
+  ReturnCase,
   OrderEvent,
   OrderItem,
   OrderPricing,
+  OrderStatus,
   PaymentMethod,
 } from './order-models';
 import { mapCancelledBy, mapOrderStatus } from './order-status-map';
@@ -44,6 +46,9 @@ export interface OrderDto {
   cancelMode?: CancelMode;
   cancelRequest?: OrderCancelRequest;
   willCallToConfirm?: boolean;
+  canReturn?: boolean;
+  returnDeadline?: string;
+  return?: ReturnCase;
   timeline?: { at: string; title: string; detail?: string; actor?: 'customer' | 'nine2fine' }[];
 }
 
@@ -58,9 +63,30 @@ const PAYMENT_LABELS: Record<string, string> = {
 /** API order -> FE order (status mapping, payment label, address and voucher shape). */
 export function toOrder(dto: OrderDto): Order {
   const mapped = mapOrderStatus(dto.status);
+  const refundStatus =
+    dto.paymentStatus === 'refunded'
+      ? 'full'
+      : dto.paymentStatus === 'partially_refunded'
+        ? 'partial'
+        : undefined;
+  const returnCase = dto.return;
+  // Slice 9: the order stays `completed` on the server; the label comes from the return request.
+  const status: OrderStatus =
+    mapped.status === 'completed' && returnCase
+      ? returnCase.state === 'requested' ||
+        returnCase.state === 'approved' ||
+        returnCase.state === 'received'
+        ? 'return-requested'
+        : returnCase.state === 'refunded' && refundStatus === 'full'
+          ? 'returned'
+          : 'completed'
+      : mapped.status;
   if (mapped.unknown) console.warn('Unknown order status from API:', dto.status);
   const method: PaymentMethod = dto.paymentMethod === 'bank-transfer' ? 'bank-transfer' : 'cod';
-  const paid = dto.paymentStatus === 'paid' || dto.paymentStatus === 'partially_refunded';
+  const paid =
+    dto.paymentStatus === 'paid' ||
+    dto.paymentStatus === 'partially_refunded' ||
+    dto.paymentStatus === 'refunded';
   const label =
     PAYMENT_LABELS[`${method}:${dto.paymentStatus}`] ??
     (paid ? 'Đã thanh toán' : 'Chưa thanh toán');
@@ -85,7 +111,7 @@ export function toOrder(dto: OrderDto): Order {
   return {
     id: dto.id,
     placedAt: dto.placedAt,
-    status: mapped.status,
+    status,
     statusNote: mapped.note,
     paymentDueAt: dto.paymentDueAt,
     paidAt: dto.paidAt,
@@ -110,6 +136,10 @@ export function toOrder(dto: OrderDto): Order {
     cancelMode: dto.canCancel ? dto.cancelMode : undefined,
     cancelRequest: dto.cancelRequest,
     willCallToConfirm: dto.willCallToConfirm,
+    canReturn: dto.canReturn ?? false,
+    returnDeadline: dto.returnDeadline,
+    returnCase,
+    refundStatus,
     estimatedDelivery: dto.estimatedDelivery,
     email: dto.recipient.email,
   };

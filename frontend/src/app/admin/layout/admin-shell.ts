@@ -33,6 +33,8 @@ interface NavItem {
   link: string;
   permission: Permission;
   exact?: boolean;
+  /** Only on the order desk (the earlier back office lists it under Đơn hàng). */
+  deskOnly?: boolean;
   /** Key into `counts` for the "needs action" number (2.1). */
   count?: 'toFulfil' | 'returns';
   children?: {
@@ -48,6 +50,7 @@ const COLLAPSE_KEY = 'n2f.admin.sidebar';
 const COUNTS_REFRESH_MS = 60_000;
 const DESK_CATALOG_LINKS = ['/admin/products', '/admin/inventory', '/admin/promotions'];
 const DESK_CUSTOMER_LINK = '/admin/customers';
+const DESK_RETURNS_LINK = '/admin/returns';
 /** Second key of a "G then O" jump must follow within this time. */
 const CHORD_MS = 1200;
 
@@ -82,6 +85,8 @@ export class AdminShell {
   private readonly usersHttp = inject(API_CONFIG).adminUsersMode === 'http';
   /** Slice 8: Tổng quan, Báo cáo and Cài đặt › Cửa hàng / Nhật ký call the API (admin only for the last three). */
   private readonly insightsHttp = inject(API_CONFIG).adminInsightsMode === 'http';
+  /** Slice 9: Trả hàng joins the desk menu. */
+  private readonly returnsHttp = inject(API_CONFIG).returnsMode === 'http';
   private readonly ordersApi = this.deskMode ? null : inject(ADMIN_ORDERS_API);
   private readonly returnsApi = this.deskMode ? null : inject(ADMIN_RETURNS_API);
   private readonly deskApi = this.deskMode ? inject(ADMIN_ORDER_DESK_API) : null;
@@ -127,6 +132,13 @@ export class AdminShell {
         { label: 'Đơn hàng', link: '/admin/orders' },
         { label: 'Trả hàng', link: '/admin/returns', count: 'returns' },
       ],
+    },
+    {
+      label: 'Trả hàng',
+      icon: 'reiconUndo',
+      link: DESK_RETURNS_LINK,
+      permission: 'returns.process',
+      deskOnly: true,
     },
     {
       label: 'Sản phẩm',
@@ -175,12 +187,13 @@ export class AdminShell {
       ...(this.catalogHttp ? DESK_CATALOG_LINKS : []),
       ...(this.usersHttp ? [DESK_CUSTOMER_LINK] : []),
       ...(this.insightsHttp ? ['/admin/reports'] : []),
+      ...(this.returnsHttp ? [DESK_RETURNS_LINK] : []),
     ];
     const visible = this.deskMode
       ? this.nav
           .filter((item) => deskLinks.includes(item.link))
           .map((item) => ({ ...item, children: undefined }))
-      : this.nav;
+      : this.nav.filter((item) => !item.deskOnly);
     return visible.filter((item) => this.session.can(item.permission));
   });
   /** Cài đặt: the whole menu entry in the earlier back office; on the desk only the connected groups. */

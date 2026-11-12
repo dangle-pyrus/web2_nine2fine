@@ -8,16 +8,36 @@ import {
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { finalize, map, startWith, Subscription, switchMap } from 'rxjs';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
+import {
+  catchError,
+  debounceTime,
+  finalize,
+  map,
+  Observable,
+  of,
+  startWith,
+  Subscription,
+  switchMap,
+} from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { PricePipe } from '../../../shared/commerce/price.pipe';
 import { ToastService } from '../../../shared/ui/toast';
 import { getMedia } from '../../../../media/media-manifest';
 import { storeSettings } from '../../../core/store-settings';
+import { API_CONFIG } from '../../../core/api-config';
+import { ORDERS_API, orderErrorMessage } from '../data-access/orders-api';
+import {
+  ReturnApiError,
+  ReturnCreateBody,
+  returnErrorBlocksOrder,
+  returnErrorMessage,
+  returnPhotoError,
+  RETURNS_API,
+} from '../../orders/returns-api';
 import { ACCOUNT_API, MAX_RETURN_PHOTO_BYTES, MAX_RETURN_PHOTOS } from '../data-access/account-api';
 import { accountErrorMessage } from '../account-messages';
-import { Order, ReturnLine, ReturnReason } from '../../orders/order-models';
+import { Order, ReturnAmount, ReturnLine, ReturnReason } from '../../orders/order-models';
 import { formatDate } from '../../orders/order-status';
 import {
   canRequestReturn,
@@ -58,6 +78,7 @@ interface Photo {
         <p class="lead">
           Đơn này không còn trong thời hạn trả hàng {{ policy.returnDays }} ngày hoặc đã có yêu cầu
           trả hàng. <a routerLink="/help">Liên hệ nine2fine</a> nếu bạn cần hỗ trợ.
+          <a [routerLink]="['/account/orders', orderId]">Xem chi tiết đơn</a>
         </p>
       } @else {
         <p class="lead">
@@ -99,6 +120,9 @@ interface Photo {
             @if (submitted() && !picked().size) {
               <p class="field-error">Chọn ít nhất một sản phẩm.</p>
             }
+            @if (serverError('lines'); as text) {
+              <p class="field-error" role="alert">{{ text }}</p>
+            }
           </fieldset>
 
           <fieldset>
@@ -120,6 +144,9 @@ interface Photo {
             </div>
             @if (invalid('reason')) {
               <p class="field-error">Chọn lý do trả hàng.</p>
+            }
+            @if (serverError('reason'); as text) {
+              <p class="field-error" role="alert">{{ text }}</p>
             }
           </fieldset>
 
@@ -143,7 +170,10 @@ interface Photo {
               [attr.aria-invalid]="invalid('detail')"
             ></textarea>
             @if (invalid('detail')) {
-              <p class="field-error">Mô tả ngắn vấn đề (ít nhất 10 ký tự).</p>
+              <p class="field-error">Mô tả ngắn vấn đề (từ 10 đến 500 ký tự).</p>
+            }
+            @if (serverError('detail'); as text) {
+              <p class="field-error" role="alert">{{ text }}</p>
             }
             <label class="upload">
               <n2f-icon name="reiconPlus" size="18px" /> Thêm ảnh ({{ photos().length }}/{{
@@ -193,6 +223,9 @@ interface Photo {
             @if (photoError()) {
               <p class="field-error" role="alert">{{ photoError() }}</p>
             }
+            @if (serverError('photos'); as text) {
+              <p class="field-error" role="alert">{{ text }}</p>
+            }
           </fieldset>
 
           <fieldset>
@@ -213,6 +246,9 @@ interface Photo {
                   @if (invalid('bank')) {
                     <p class="field-error">Nhập tên ngân hàng.</p>
                   }
+                  @if (serverError('bank'); as text) {
+                    <p class="field-error" role="alert">{{ text }}</p>
+                  }
                 </div>
                 <div class="field">
                   <label for="refund-number"
@@ -227,6 +263,9 @@ interface Photo {
                   />
                   @if (invalid('accountNumber')) {
                     <p class="field-error">Số tài khoản gồm 6–19 chữ số.</p>
+                  }
+                  @if (serverError('accountNumber'); as text) {
+                    <p class="field-error" role="alert">{{ text }}</p>
                   }
                 </div>
               </div>
@@ -243,6 +282,9 @@ interface Photo {
                 @if (invalid('accountName')) {
                   <p class="field-error">Nhập tên chủ tài khoản.</p>
                 }
+                @if (serverError('accountName'); as text) {
+                  <p class="field-error" role="alert">{{ text }}</p>
+                }
               </div>
             } @else {
               <p class="hint">Tiền được hoàn về phương thức bạn đã dùng để thanh toán đơn này.</p>
@@ -258,8 +300,13 @@ interface Photo {
               @if (refund().returnShippingFee) {
                 Đã trừ phí gửi trả {{ refund().returnShippingFee | vnd }}.
               }
-              Hoàn trong {{ policy.refundWorkingDays }} ngày làm việc sau khi nine2fine nhận và kiểm
-              tra hàng.
+              @if (httpMode) {
+                Số tiền dự kiến, chốt sau khi nine2fine kiểm hàng. Dự kiến hoàn trong
+                {{ policy.refundWorkingDays }} ngày làm việc sau khi nine2fine nhận hàng.
+              } @else {
+                Hoàn trong {{ policy.refundWorkingDays }} ngày làm việc sau khi nine2fine nhận và
+                kiểm tra hàng.
+              }
             </p>
           </section>
 
@@ -275,10 +322,18 @@ interface Photo {
             @if (invalid('condition')) {
               <p class="field-error">Vui lòng xác nhận tình trạng sản phẩm.</p>
             }
+            @if (serverError('conditionAck'); as text) {
+              <p class="field-error" role="alert">{{ text }}</p>
+            }
           }
 
           @if (error()) {
-            <p class="form-error" role="alert">{{ error() }}</p>
+            <p class="form-error" role="alert">
+              {{ error() }}
+              @if (blocked()) {
+                <a [routerLink]="['/account/orders', orderId]">Xem chi tiết đơn</a>
+              }
+            </p>
           }
           <div class="actions">
             <button class="pill" type="submit" [disabled]="busy() || uploading()">
@@ -535,6 +590,10 @@ interface Photo {
 })
 export class ReturnRequestPage {
   private readonly api = inject(ACCOUNT_API);
+  private readonly ordersApi = inject(ORDERS_API);
+  private readonly returns = inject(RETURNS_API);
+  /** `returnsMode: http`: server-computed eligibility and amount, raw-byte photos, idempotent send. */
+  readonly httpMode = inject(API_CONFIG).returnsMode === 'http';
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
@@ -548,6 +607,13 @@ export class ReturnRequestPage {
 
   readonly order = signal<Order | null>(null);
   readonly error = signal('');
+  /** Server field errors (422), keyed by contract field name. */
+  private readonly serverErrors = signal<Record<string, string>>({});
+  /** The request cannot be sent at all (not returnable / window closed / already requested). */
+  readonly blocked = signal(false);
+  /** Same body, same key: a retry after a lost answer never creates a second request. */
+  private sendKey: { fingerprint: string; key: string } | null = null;
+  private readonly serverAmount = signal<ReturnAmount | null>(null);
   readonly busy = signal(false);
   readonly submitted = signal(false);
   /** Line index → quantity to return. */
@@ -578,6 +644,8 @@ export class ReturnRequestPage {
   readonly refund = computed(() => {
     const order = this.order();
     const reason = this.reason() || 'changed-mind';
+    const server = this.serverAmount();
+    if (this.httpMode && server) return server;
     return order
       ? estimateRefund(order, this.lines(), reason)
       : { amount: 0, returnShippingFee: 0 };
@@ -587,7 +655,7 @@ export class ReturnRequestPage {
     inject(ActivatedRoute)
       .paramMap.pipe(
         map((params) => params.get('orderId') ?? ''),
-        switchMap((id) => this.api.getOrder(id)),
+        switchMap((id) => (this.httpMode ? this.ordersApi.get(id) : this.api.getOrder(id))),
         takeUntilDestroyed(),
       )
       .subscribe({
@@ -597,8 +665,12 @@ export class ReturnRequestPage {
           if (order.items.length === 1) this.picked.set(new Map([[0, order.items[0].quantity]]));
           this.setAccountValidators(this.needsAccount(order));
         },
-        error: (error: unknown) => this.error.set(accountErrorMessage(error)),
+        error: (error: unknown) =>
+          this.error.set(this.httpMode ? orderErrorMessage(error) : accountErrorMessage(error)),
       });
+    if (this.httpMode) this.watchEstimate();
+    // Any edit clears the server's complaint about that field.
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.clearServerErrors());
     // Fault reasons need a description; the shopper's own reasons need the condition confirmed.
     this.form.controls.reason.valueChanges.pipe(takeUntilDestroyed()).subscribe((reason) => {
       const fault = !!reason && returnReason(reason).sellerFault;
@@ -613,6 +685,46 @@ export class ReturnRequestPage {
       this.uploads.forEach((upload) => upload.unsubscribe());
       this.photos().forEach((photo) => URL.revokeObjectURL(photo.url));
     });
+  }
+
+  serverError(field: string): string {
+    return this.serverErrors()[field] ?? '';
+  }
+
+  private clearServerErrors(...fields: string[]): void {
+    this.serverErrors.update((current) => {
+      if (!Object.keys(current).length) return current;
+      if (!fields.length) return {};
+      const next = { ...current };
+      for (const field of fields) delete next[field];
+      return next;
+    });
+  }
+
+  /** "Dự kiến hoàn" from the server formula, refreshed as the lines or the reason change. */
+  private watchEstimate(): void {
+    const input = computed(() => {
+      const order = this.order();
+      const reason = this.reason();
+      const lines = this.lines().flatMap((line) => {
+        const variantId = order?.items[line.index]?.variantId;
+        return variantId ? [{ variantId, quantity: line.quantity }] : [];
+      });
+      return order && reason && lines.length ? { id: order.id, lines, reason } : null;
+    });
+    toObservable(input)
+      .pipe(
+        debounceTime(250),
+        switchMap((value) =>
+          value
+            ? this.returns
+                .estimate(value.id, value.lines, value.reason)
+                .pipe(catchError(() => of(null)))
+            : of(null),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((amount) => this.serverAmount.set(amount));
   }
 
   eligible(order: Order): boolean {
@@ -638,6 +750,7 @@ export class ReturnRequestPage {
   }
 
   toggle(index: number, quantity: number): void {
+    this.clearServerErrors('lines');
     this.picked.update((current) => {
       const next = new Map(current);
       if (next.has(index)) next.delete(index);
@@ -647,6 +760,7 @@ export class ReturnRequestPage {
   }
 
   setQuantity(index: number, value: string): void {
+    this.clearServerErrors('lines');
     this.picked.update((current) => new Map(current).set(index, Number(value)));
   }
 
@@ -670,6 +784,7 @@ export class ReturnRequestPage {
     this.uploads.get(photo.key)?.unsubscribe();
     this.uploads.delete(photo.key);
     URL.revokeObjectURL(photo.url);
+    this.clearServerErrors('photos');
     this.photos.update((photos) => photos.filter((_, i) => i !== index));
   }
 
@@ -684,13 +799,19 @@ export class ReturnRequestPage {
       ...photos,
       { key, name: file.name, url: URL.createObjectURL(file), status: 'uploading', progress: 0 },
     ]);
-    const upload = this.api.uploadReturnPhoto(file).subscribe({
+    const source$: Observable<
+      { kind: 'progress'; percent: number } | { kind: 'done'; photo: { id: string } }
+    > = this.httpMode ? this.returns.uploadPhoto(file) : this.api.uploadReturnPhoto(file);
+    const upload = source$.subscribe({
       next: (event) =>
         event.kind === 'progress'
           ? patch({ progress: event.percent })
           : patch({ status: 'done', progress: 100, id: event.photo.id }),
       error: (error: unknown) => {
-        patch({ status: 'error', error: accountErrorMessage(error) });
+        patch({
+          status: 'error',
+          error: this.httpMode ? returnPhotoError(error) : accountErrorMessage(error),
+        });
         this.uploads.delete(key);
       },
       complete: () => this.uploads.delete(key),
@@ -712,6 +833,11 @@ export class ReturnRequestPage {
     const value = this.form.getRawValue();
     this.busy.set(true);
     this.error.set('');
+    this.blocked.set(false);
+    if (this.httpMode) {
+      this.sendHttp(order, value, uploaded);
+      return;
+    }
     this.api
       .requestReturn(order.id, {
         lines: this.lines(),
@@ -740,6 +866,65 @@ export class ReturnRequestPage {
           void this.router.navigate(['/account/orders', updated.id]);
         },
         error: (error: unknown) => this.error.set(accountErrorMessage(error)),
+      });
+  }
+
+  private sendHttp(
+    order: Order,
+    value: ReturnType<typeof this.form.getRawValue>,
+    uploaded: Photo[],
+  ): void {
+    const lines = this.lines().map((line) => ({
+      variantId: order.items[line.index]?.variantId ?? '',
+      quantity: line.quantity,
+    }));
+    if (lines.some((line) => !line.variantId)) {
+      this.busy.set(false);
+      this.error.set('Không đọc được dòng sản phẩm của đơn. Tải lại trang rồi thử lại.');
+      return;
+    }
+    const body: ReturnCreateBody = {
+      lines,
+      reason: value.reason as ReturnReason,
+      ...(value.detail.trim() ? { detail: value.detail.trim() } : {}),
+      ...(this.sellerFault() ? {} : { conditionAck: value.condition }),
+      photos: uploaded.map((photo) => photo.id!),
+      ...(this.needsAccount(order)
+        ? {
+            bank: value.bank.trim(),
+            accountNumber: value.accountNumber.replace(/\s/g, ''),
+            accountName: value.accountName.trim(),
+          }
+        : {}),
+    };
+    // One key per content: a retry of the same body reuses it, an edited body gets a new one.
+    const fingerprint = JSON.stringify(body);
+    if (this.sendKey?.fingerprint !== fingerprint) {
+      this.sendKey = { fingerprint, key: crypto.randomUUID() };
+    }
+    this.returns
+      .create(order.id, body, this.sendKey.key)
+      .pipe(
+        finalize(() => this.busy.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: () => {
+          this.sendKey = null;
+          this.toast.show({
+            title: 'Đã gửi yêu cầu trả hàng',
+            detail: 'nine2fine sẽ xem và phản hồi qua email. Theo dõi trạng thái ở chi tiết đơn.',
+          });
+          void this.router.navigate(['/account/orders', order.id]);
+        },
+        error: (error: unknown) => {
+          if (error instanceof ReturnApiError) {
+            if (error.code === 'validation') this.serverErrors.set(error.fieldErrors);
+            if (error.code === 'idempotency-conflict') this.sendKey = null;
+          }
+          this.blocked.set(returnErrorBlocksOrder(error));
+          this.error.set(returnErrorMessage(error));
+        },
       });
   }
 

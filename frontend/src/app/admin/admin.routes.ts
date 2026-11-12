@@ -37,6 +37,13 @@ const settingsHttp: CanMatchFn = () => {
   return config.adminUsersMode === 'http' || config.adminInsightsMode === 'http';
 };
 
+/**
+ * Slice 9: `/admin/returns` and the return block of an order join the order desk when
+ * `returnsMode` is `http`; with `mock` the desk says "Chưa khả dụng" (the earlier back office keeps
+ * its mock returns page).
+ */
+const returnsHttp: CanMatchFn = () => inject(API_CONFIG).returnsMode === 'http';
+
 const T = (title: string) => `${title} | nine2fine Admin`;
 
 /**
@@ -106,6 +113,29 @@ export const ADMIN_ROUTES: Routes = [
                   import('./features/insights/insights-reports-page').then(
                     (m) => m.InsightsReportsPage,
                   ),
+              },
+              {
+                path: 'returns',
+                canMatch: [returnsHttp],
+                canActivate: [requirePermission('returns.process')],
+                children: [
+                  {
+                    path: '',
+                    title: T('Trả hàng'),
+                    loadComponent: () =>
+                      import('./features/returns/return-desk-list-page').then(
+                        (m) => m.ReturnDeskListPage,
+                      ),
+                  },
+                  {
+                    path: ':id',
+                    title: T('Chi tiết trả hàng'),
+                    loadComponent: () =>
+                      import('./features/returns/return-desk-detail-page').then(
+                        (m) => m.ReturnDeskDetailPage,
+                      ),
+                  },
+                ],
               },
               {
                 path: 'orders',

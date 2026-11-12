@@ -42,6 +42,10 @@ export const API_ERROR_CODES = [
   // Slice 7 (admin customers and staff).
   'self-change',
   'last-admin',
+  // Slice 9 (returns).
+  'not-returnable',
+  'return-window-closed',
+  'return-exists',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 
@@ -73,6 +77,8 @@ export interface ApiErrorDetail {
   reserved?: number;
   /** Slice 8: every field error of `PUT /admin/settings/store` (`error.fieldErrors`). */
   fieldErrors?: { field: string; message: string }[];
+  /** Slice 9: where the request is now when a transition lost a race (`invalid-transition`). */
+  currentReturnState?: string;
 }
 
 function readStockIssues(value: unknown): StockIssue[] | undefined {
@@ -136,5 +142,7 @@ export function readApiError(error: unknown): ApiErrorDetail {
     available: Number.isInteger(detail['available']) ? (detail['available'] as number) : undefined,
     reserved: Number.isInteger(detail['reserved']) ? (detail['reserved'] as number) : undefined,
     fieldErrors: readFieldErrors(detail['fieldErrors']),
+    currentReturnState:
+      typeof detail['currentReturnState'] === 'string' ? detail['currentReturnState'] : undefined,
   };
 }

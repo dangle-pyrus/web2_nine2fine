@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { provideIcons } from '@ng-icons/core';
 import { reiconDelivery, reiconPackage } from '@ng-icons/reicon';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { PricePipe } from '../../../shared/commerce/price.pipe';
+import { API_CONFIG } from '../../../core/api-config';
 import { Order } from '../../orders/order-models';
+import { canRequestReturn, returnsEnabled } from '../../orders/order-returns';
 import {
   canBuyAgain,
   canCancel,
@@ -91,6 +93,11 @@ import { OrderItems } from '../../orders/order-items';
               <a class="pill" [routerLink]="['/account/orders', current.id]">Theo dõi đơn hàng</a>
             }
             @case ('completed') {
+              @if (returnable()) {
+                <a class="pill outline" [routerLink]="['/account/orders', current.id, 'return']"
+                  >Yêu cầu trả hàng<span class="sr-only"> #{{ current.id }}</span></a
+                >
+              }
               <button
                 type="button"
                 class="pill"
@@ -283,6 +290,11 @@ export class OrderCard {
   readonly cancellable = computed(() => canCancel(this.order()));
   readonly labels = computed(() => cancelLabels(this.order()));
   readonly rebuyable = computed(() => canBuyAgain(this.order()));
+  private readonly returnsOn = returnsEnabled(inject(API_CONFIG));
+  /** Slice 9: only API orders carry the server's `canReturn`; the mock card keeps its earlier look. */
+  readonly returnable = computed(
+    () => this.returnsOn && this.order().canReturn === true && canRequestReturn(this.order()),
+  );
   readonly note = computed(() => orderNote(this.order()));
   /** Packing and transit notes carry a small icon; other tones are text only. */
   readonly noteIcon = computed(() => {

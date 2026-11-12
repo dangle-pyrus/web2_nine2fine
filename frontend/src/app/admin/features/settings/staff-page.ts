@@ -31,11 +31,9 @@ const ROLES: AccountRole[] = ['admin', 'staff'];
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** Permissions of features that are not built yet (Won't): no row in the matrix. */
-const HIDDEN_PERMISSIONS: readonly Permission[] = [
-  'orders.export',
-  'returns.process',
-  'products.cost',
-];
+const HIDDEN_PERMISSIONS: readonly Permission[] = ['orders.export', 'products.cost'];
+/** Slice 9 built these two; until `returnsMode` is `http` they stay out of the matrix. */
+const RETURNS_PERMISSIONS: readonly Permission[] = ['returns.process', 'returns.refund'];
 /** Slice 8 built these three; until `adminInsightsMode` is `http` they stay out of the matrix. */
 const INSIGHTS_PERMISSIONS: readonly Permission[] = [
   'dashboard.revenue',
@@ -305,13 +303,15 @@ export class StaffPage {
   /** Real API: the rows of features that are not connected yet are left out (BR-USR-05). */
   private readonly live = inject(API_CONFIG).adminUsersMode === 'http';
   private readonly insightsLive = inject(API_CONFIG).adminInsightsMode === 'http';
+  private readonly returnsLive = inject(API_CONFIG).returnsMode === 'http';
   protected readonly matrix = PERMISSION_MATRIX.map((group) => ({
     ...group,
     items: group.items.filter(
       (item) =>
         !this.live ||
         (!HIDDEN_PERMISSIONS.includes(item.permission) &&
-          (this.insightsLive || !INSIGHTS_PERMISSIONS.includes(item.permission))),
+          (this.insightsLive || !INSIGHTS_PERMISSIONS.includes(item.permission)) &&
+          (this.returnsLive || !RETURNS_PERMISSIONS.includes(item.permission))),
     ),
   })).filter((group) => group.items.length);
   protected readonly staff = signal<StaffAccount[] | null>(null);

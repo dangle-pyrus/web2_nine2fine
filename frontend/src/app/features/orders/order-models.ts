@@ -122,6 +122,69 @@ export interface ReturnDecision {
   note: string;
 }
 
+/** `ReturnRequest` of docs/api/openapi.yaml (Slice 9, `returnsMode: http`): server-computed, no full account number. */
+export type ReturnState =
+  'requested' | 'approved' | 'received' | 'refunded' | 'rejected' | 'cancelled';
+
+export interface ReturnAmount {
+  goodsAmount: number;
+  shippingRefund: number;
+  returnShippingFee: number;
+  amount: number;
+  /** false = estimate from the quantities the shopper picked; true = settled after inspection. */
+  final: boolean;
+}
+
+export interface ReturnCaseLine {
+  variantId: string;
+  name: string;
+  color: string;
+  size: string;
+  sku: string;
+  mediaId: string;
+  quantity: number;
+  acceptedQuantity?: number;
+  goodsAmount: number;
+}
+
+/** Photo of a request; `url` is a permission-checked same-origin path that needs the session cookie. */
+export interface ReturnCasePhoto {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  size: number;
+  contentType: string;
+}
+
+export interface ReturnCase {
+  id: string;
+  state: ReturnState;
+  reason: ReturnReason;
+  fault: 'shop' | 'customer';
+  detail: string;
+  conditionAck: boolean;
+  requestedAt: string;
+  approvedAt?: string;
+  receivedAt?: string;
+  refundedAt?: string;
+  rejectedAt?: string;
+  cancelledAt?: string;
+  lines: ReturnCaseLine[];
+  photos: ReturnCasePhoto[];
+  amount: ReturnAmount;
+  refundedAmount?: number;
+  /** `YYYY-MM-DD`. */
+  expectedRefundBy?: string;
+  approveNote?: string;
+  rejectNote?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  instructions?: string;
+  refundTo: { type: 'account' | 'original'; bank?: string; last4?: string; accountName?: string };
+  canCancel: boolean;
+}
+
 /** Who cancelled an order: the shopper, the shop (e.g. out of stock) or the system (payment expired). */
 export type CancelledBy = 'customer' | 'shop' | 'system';
 
@@ -178,6 +241,14 @@ export interface Order {
   voucherCode?: string;
   invoice?: OrderInvoice;
   returnRequest?: ReturnRequest;
+  /** API orders (Slice 9): the server says whether the shopper may send a return request now. */
+  canReturn?: boolean;
+  /** API orders: ISO datetime the return window closes (23:59:59 VN of day 30). */
+  returnDeadline?: string;
+  /** API orders: the latest return request. */
+  returnCase?: ReturnCase;
+  /** API orders: payment status `partially_refunded` / `refunded` after a refund. */
+  refundStatus?: 'partial' | 'full';
   /**
    * Return window in days, fixed when the order is delivered; missing on older
    * orders, which use today's policy.

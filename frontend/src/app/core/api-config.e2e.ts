@@ -43,6 +43,8 @@ export interface ApiConfig {
    * build picks `http` with `localStorage['n2f.e2e.adminInsightsMode']`.
    */
   adminInsightsMode: 'mock' | 'http';
+  /** Returns and refunds (Slice 9); see `api-config.ts`. The e2e build picks `http` with `localStorage['n2f.e2e.returnsMode']`. */
+  returnsMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -79,6 +81,13 @@ function readAdminInsightsMode(): ApiConfig['adminInsightsMode'] {
     return 'mock';
   }
 }
+function readReturnsMode(): ApiConfig['returnsMode'] {
+  try {
+    return localStorage.getItem('n2f.e2e.returnsMode') === 'http' ? 'http' : 'mock';
+  } catch {
+    return 'mock';
+  }
+}
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
 export const apiConfig: ApiConfig = {
   mode: 'mock',
@@ -90,5 +99,6 @@ export const apiConfig: ApiConfig = {
   adminCatalogMode: readAdminCatalogMode(),
   adminUsersMode: readAdminUsersMode(),
   adminInsightsMode: readAdminInsightsMode(),
+  returnsMode: readReturnsMode(),
   baseUrl: '/api',
 };

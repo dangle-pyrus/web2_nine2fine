@@ -32,6 +32,7 @@ export class AdminUnavailablePage {
     const modules = ['Đơn hàng'];
     if (config.adminCatalogMode === 'http') modules.push('Sản phẩm', 'Tồn kho', 'Khuyến mãi');
     if (config.adminUsersMode === 'http') modules.push('Khách hàng', 'Cài đặt › Nhân viên');
+    if (config.returnsMode === 'http') modules.push('Trả hàng');
     if (config.adminInsightsMode === 'http')
       modules.unshift('Tổng quan', 'Báo cáo', 'Cài đặt › Cửa hàng', 'Cài đặt › Nhật ký');
     return `${modules.slice(0, -1).join(', ')}${modules.length > 1 ? ' và ' : ''}${modules.at(-1)}`;
