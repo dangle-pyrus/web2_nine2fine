@@ -29,6 +29,7 @@ Slice 1 đóng có điều kiện theo yêu cầu Thắng (decisions 2026-11-07)
 | G7 | AC-CAT-52 (Should): đo p95 danh sách ≤ 500 ms, chi tiết ≤ 300 ms với 100 sản phẩm thử, đo ở máy chủ triển khai | backend-dev | Hoãn từ Slice 2; đo trên máy dev không có giá trị. |
 | G8 | Slice 2: `npm test` backend pass 3 lần liền hoặc pass trên Linux/CI (cùng việc với G1 và 1.21) | backend-dev | Tiền lệ Slice 1: M2 là crash môi trường vitest/Windows, không chặn nghiệm thu. |
 | G9 | **Thông tin pháp lý thật của cửa hàng** (Slice 8): Thắng nhập tên pháp lý, MST / số ĐKKD, nơi và ngày cấp, địa chỉ, hotline, email CSKH / dữ liệu, giờ làm việc, liên kết thông báo Bộ Công Thương (nếu đã có) qua Cài đặt › Thông tin cửa hàng; kiểm chân trang storefront hiện đúng | Thắng | Giá trị ban đầu là mẫu `STORE_INFO` ("thay trước khi ra mắt"); luật TMĐT bắt buộc hiện thông tin người bán. |
+| G10 | **Trả hàng chạy thật** (Slice 9): Thắng áp migration Slice 9 lên Supabase, xác nhận nơi lưu ảnh trả hàng không công khai, chạy thử một yêu cầu trả hàng thật (gửi, duyệt, nhận hàng, nhập kho, hoàn tiền, đọc 4 email) và đọc lại chữ chính sách trả hàng | Thắng | Chính sách trả hàng đã công bố 30 ngày / 30.000 / 1–3 ngày làm việc; hoàn tiền thủ công nên cần người chuyển khoản thật. |
 
 ---
 
@@ -353,6 +354,43 @@ Câu hỏi mở (chi tiết PRD Slice 8 mục 7). Tất cả theo mặc định 
 Điều kiện bắt đầu code (PO): Slice 7 lát 7.1..7.6 xong (đã đạt); 7.7 không chặn. Thứ tự: 8.1 → (8.2 ∥ 8.3 ∥ 8.4) → 8.5 → 8.6 → 8.7. Cắt giảm nếu thiếu thời gian: bỏ 8.5 và 8.6 trước, vẫn đủ go-live.
 
 DoD: theo DoD chung; thêm: ở `adminInsightsMode: http` Tổng quan, Báo cáo, Cài đặt cửa hàng, Nhật ký không dùng mock và không có ô Won't; một định nghĩa doanh thu, tổng theo ngày = sản phẩm = danh mục = phương thức = KPI (AC-INS-13); staff không nhận số tiền (AC-DSH-09, AC-INS-02); mỗi lần lưu cài đặt có thay đổi đúng 1 dòng nhật ký (AC-SET-12), đổi cài đặt không đổi đơn đã tạo (AC-SET-11); API công khai chỉ gồm whitelist (AC-SET-13); G9 ghi Đạt vào bảng go-live.
+
+---
+
+## Slice 9 — Trả hàng / hoàn tiền (P1, Thắng giao)
+
+PRD: `docs/product/PRD.md` › Slice 9 (BR-RET-01..09, 10..24, 30..44, 50..55; AC-RET-01..24, 30..44, 50..55). Thắng giao 2026-11-12, đang vắng: mọi câu hỏi mở theo mặc định PO. Mục tiêu: thành viên gửi / theo dõi / huỷ yêu cầu trả hàng; nhân viên duyệt, từ chối, nhận hàng + kiểm từng dòng (nhập lại kho / loại bỏ); admin xác nhận đã hoàn tiền (thủ công); số tiền một công thức; `payment_status`, doanh thu thuần, hạng thành viên, Tổng quan, nhật ký nhất quán; màn khách và `/admin/returns` chạy BE thật sau cờ `returnsMode`. Không đổi hàng. Con số chốt: hạn 30 ngày hết 23:59:59 giờ VN của ngày thứ 30 kể từ `delivered_at`; ≤ 5 ảnh ≤ 5 MB (lỗi shop bắt buộc ≥ 1); 1 yêu cầu không-`cancelled` mỗi đơn; phí gửi trả 30.000 chỉ với lý do của khách; hoàn phí giao khi lỗi shop và trả toàn bộ đơn; chỉ admin xác nhận hoàn tiền và xem số tài khoản đầy đủ.
+
+| # | Hạng mục | Mức | BR | AC | Người làm | Phụ thuộc | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 9.1 | Nền BE / contract: migration cộng thêm (yêu cầu, dòng trả, ảnh riêng tư, giá trị sự kiện đơn mới, chỉ mục duy nhất 1 yêu cầu không-`cancelled` / đơn, RLS), quyền `returns.refund`, giới hạn tần suất, mã lỗi, máy trạng thái, công thức tiền dùng chung (BR-RET-30), `openapi.yaml` (locked trước khi FE nối), tải ảnh riêng tư, cờ FE `returnsMode`, hằng số 30 ngày / 30.000 | Must | RET-03, 05..09, 30 | RET-03, 05..09 | BE | Slice 8 (xong) | Chưa |
+| 9.2 | BE khách: tạo yêu cầu (idempotent, kiểm hạn / dòng / lý do / mô tả / ảnh / tài khoản), huỷ, `canReturn` + `return` trong chi tiết đơn, `amount` dự kiến, che số tài khoản, sự kiện đơn, email "đã nhận yêu cầu" | Must | RET-01, 10..21, 40, 41(a) | RET-01, 09..21 | BE | 9.1 | Chưa |
+| 9.3 | BE admin: danh sách + tab đếm + tìm + phân trang, chi tiết, duyệt, từ chối / đóng, nhận hàng + kiểm từng dòng + nhập kho (`inventory_adjustments` lý do `return`), xác nhận hoàn tiền (admin) + cập nhật `payment_status`, nguyên tử / đồng thời, nhật ký (sự kiện đơn + audit Slice 8), email duyệt / từ chối / hoàn tiền, Tổng quan việc cần làm, doanh thu thuần + KPI hoàn (sửa `revenue.sql.ts` một nguồn), hạng thành viên trừ tiền hoàn | Must | RET-02, 08, 30..41, 50..53, 55 | RET-02, 08, 30..41, 50..53, 55 | BE | 9.1 (song song 9.2) | Chưa |
+| 9.4 | FE khách: nút / khối trạng thái ở chi tiết đơn, form `/account/orders/:orderId/return` nối API thật (ảnh tải ngay có tiến độ, lỗi từng ảnh, idempotency, giữ giá trị khi lỗi), nhãn trạng thái, huỷ yêu cầu, bỏ tính hạn bằng đồng hồ máy khách, sửa chữ chính sách / trợ giúp | Must | RET-04, 23, 24, 54 | RET-04, 23, 24, 54 | FE | 9.2 (contract locked) | Chưa |
+| 9.5 | FE admin: `/admin/returns` (tab đếm, tìm, phân trang), khối "Yêu cầu trả hàng" ở đơn gốc (duyệt, từ chối / đóng, nhận hàng + kiểm từng dòng, xác nhận hoàn tiền), phân quyền staff / admin, ma trận quyền, ô việc cần làm ở Tổng quan, KPI hoàn ở Báo cáo, ẩn ô Won't | Must | RET-04, 42, 43, 50, 52 | RET-04, 42, 43, 50, 52 | FE | 9.3 (contract locked) | Chưa |
+| 9.6 | Gói Should: khách vãng lai qua tra cứu đơn (OTP), cờ "Quá hạn xử lý" + `returnPending`, thông tin lấy hàng (đơn vị / mã vận đơn), email "đã nhận hàng trả về", KPI `returnRate`; chữ chính sách "hoặc Tra cứu đơn hàng" khi vãng lai phát hành | Should | RET-22, 44, 52 (`returnRate`), 54(d) | RET-22, 44, 52 | BE, FE | 9.2..9.5 | Chưa |
+| 9.7 | QA: `docs/qa/report-slice-9-returns.md` đối chiếu AC-RET (kể cả đua x20 nhập kho / hoàn tiền, đúng 1 yêu cầu, che số tài khoản, ảnh riêng tư, doanh thu khớp từng đồng); Playwright mock pass nguyên | Must | tất cả Must | tất cả AC Must | qa-reviewer | 9.1..9.5 | Chưa |
+| 9.8 | Nghiệm thu thật trên Supabase: áp migration Slice 9 (**cần Thắng duyệt**); xác nhận nơi lưu ảnh không công khai; chạy thử 1 yêu cầu thật (gửi → duyệt → nhận hàng → nhập kho → hoàn tiền) trên 2 trình duyệt, đọc 4 email; đối chiếu Báo cáo / hạng; migrate 2 lần (G10) | Must | RET-05, 15, 17, 41, 51 | RET-05, 15, 17, 41, 51 | Thắng, Orchestrator, qa-reviewer | 9.1..9.5 | Chưa |
+| 9.9 | Đổi hàng, lý do "khác" / "không như mô tả", nhân viên tạo hộ yêu cầu, sửa tay số tiền hoàn, hoàn nhiều đợt, yêu cầu lần hai sau khi bị từ chối, hoàn lượt voucher, cổng hoàn tiền tự động, tự tạo vận đơn / lấy hàng, tự xoá ảnh theo lịch, sửa hạn / phí gửi trả ở Cài đặt, `returnRate` ở Tổng quan, "Đã trả hàng" ở khách hàng, địa chỉ trả (`isReturn`) | Won't | — | — | slice sau | — | Ngoài phạm vi Thắng giao / chưa có nhu cầu; ẩn ở HTTP |
+
+Câu hỏi mở (chi tiết PRD Slice 9 mục 7). Tất cả theo mặc định PO (Thắng vắng, đổi được khi quay lại); không câu nào chặn 9.1–9.7:
+
+| # | Câu hỏi | Chặn lát | Làm trước theo mặc định? |
+| --- | --- | --- | --- |
+| S9-Q1 | Ai được yêu cầu (mặc định: thành viên Must; khách vãng lai qua OTP Should; nhân viên tạo hộ Won't) | 9.2, 9.6 | Có |
+| S9-Q2 | Cửa sổ thời gian (mặc định: 30 ngày, hết 23:59:59 giờ VN của ngày thứ 30 kể từ `delivered_at`, hằng số) | 9.2 | Có |
+| S9-Q3 | Trả một phần, lý do, phí gửi trả (mặc định: theo dòng + số lượng; 6 lý do như FE; lỗi shop miễn phí + hoàn phí giao khi trả toàn bộ; lỗi khách trừ 30.000) | 9.1, 9.2 | Có |
+| S9-Q4 | Ảnh minh chứng (mặc định: lỗi shop bắt buộc ≥ 1, ≤ 5 ảnh, ≤ 5 MB, riêng tư; nơi lưu không công khai cần Thắng xác nhận ở 9.8) | 9.1, 9.8 | Có (9.8 cần Thắng) |
+| S9-Q5 | Tài khoản nhận hoàn (mặc định: COD bắt buộc; che 4 số cuối; chỉ admin xem đủ ở `received`; xoá khi trạng thái cuối) | 9.2, 9.3 | Có |
+| S9-Q6, Q10 | Máy trạng thái 6 trạng thái; 1 yêu cầu không-`cancelled` mỗi đơn, idempotent, so-sánh-rồi-đổi | 9.1, 9.3 | Có |
+| S9-Q7 | Quyền: staff duyệt / từ chối / nhận hàng; chỉ admin xác nhận hoàn tiền (quyền mới `returns.refund`) | 9.1, 9.3, 9.5 | Có |
+| S9-Q8 | Doanh thu thuần theo ngày bán gốc, `partially_refunded` còn tính phần dư, hạng trừ tiền hoàn | 9.3 | Có |
+| S9-Q9, Q13 | Hoàn tiền thủ công, số tiền do máy chủ chốt, không sửa tay; nhánh chuyển khoản xây bằng dữ liệu seed | 9.3 | Có |
+| S9-Q11, Q12, Q14 | Email (4 Must + 1 Should), mốc 24 giờ / 2 ngày / 1–3 ngày là "dự kiến", trường FE không có dữ liệu = Won't | 9.3, 9.4, 9.6 | Có |
+
+Điều kiện bắt đầu code (PO): Slice 8 xong phần BE + FE + QA (đã đạt); 8.7 và 7.7 không chặn. Thứ tự: 9.1 → (9.2 ∥ 9.3) → (9.4 ∥ 9.5) → 9.6 → 9.7 → 9.8. Cắt giảm nếu thiếu thời gian: bỏ 9.6 trước (vãng lai vẫn gọi hotline, đúng chính sách hiện tại), vẫn đủ vận hành.
+
+DoD: theo DoD chung; thêm: ở `returnsMode: http` màn khách và `/admin/returns` không dùng mock và không có ô Won't; hoàn tiền và nhập kho đúng một lần dưới đua x20 (AC-RET-36, 39); số tiền theo một công thức (AC-RET-21, 30); `payment_status` chỉ đổi ở bước `refunded` (AC-RET-38); số tài khoản không có trong phản hồi cho khách / staff, email, sự kiện, nhật ký, log và bị xoá ở trạng thái cuối (AC-RET-17); ảnh không công khai (AC-RET-15); doanh thu thuần các khối khớp từng đồng (AC-RET-51, AC-INS-13); hạng thành viên theo chính sách đã công bố (AC-RET-53); chữ chính sách / trợ giúp khớp hành vi (AC-RET-54); sửa AC-INS-07, BR-INS-09, BR-DSH-07, K5 / S5-Q5 theo Slice 9; G10 ghi Đạt vào bảng go-live.
 
 ---
 
