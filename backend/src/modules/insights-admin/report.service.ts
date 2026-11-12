@@ -5,7 +5,7 @@ import { addCalendarDays } from '../../lib/vn-time';
 import type { ReportSort } from './insights.schemas';
 import { periodsOf } from './periods';
 import {
-  orderCounts, periodKpis, revenueByCategory, revenueByDay, revenueByPayment, topProducts, topVariants,
+  orderCounts, periodKpis, refundKpis, revenueByCategory, revenueByDay, revenueByPayment, topProducts, topVariants,
 } from './revenue.sql';
 
 /** Báo cáo bán hàng (BR-RPT-01..06). Mọi khối cùng một định nghĩa doanh thu (`revenue.sql.ts`) nên tổng khớp từng đồng (BR-INS-09). */
@@ -20,7 +20,7 @@ const aov = (revenue: number, orders: number): number => (orders > 0 ? divRoundH
 export async function getSalesReport(db: Db, q: { from: string; to: string; days: number; sort: ReportSort }, now: Date) {
   const { cur, prev } = periodsOf({ from: q.from, to: q.to }, now);
   const topN = INSIGHTS_ASSUMPTIONS.topReport;
-  const [[k, kp], [oc, ocp], dayMap, pay, cats, prods, vars] = await Promise.all([
+  const [[k, kp], [oc, ocp], dayMap, pay, cats, prods, vars, [rf, rfp]] = await Promise.all([
     periodKpis(db, cur, prev),
     orderCounts(db, cur, prev),
     revenueByDay(db, cur),
@@ -28,12 +28,17 @@ export async function getSalesReport(db: Db, q: { from: string; to: string; days
     revenueByCategory(db, cur),
     topProducts(db, cur, q.sort, topN),
     topVariants(db, cur, q.sort, topN),
+    refundKpis(db, cur, prev),
   ]);
 
   const hadRevenue = kp.orders > 0; // kỳ trước có đơn tính doanh thu?
   const hadOrders = ocp.placed + ocp.cancelled > 0;
   const rev = (v: number, p: number) => fig(v, hadRevenue ? p : null);
   const cnt = (v: number, p: number) => fig(v, hadOrders ? p : null);
+  // Slice 9: `previous` của KPI hoàn = null khi kỳ trước không có đơn `completed` nào được giao (khác nhóm doanh thu).
+  const hadDelivered = rfp.delivered > 0;
+  const rfig = (v: number, p: number) => fig(v, hadDelivered ? p : null);
+  const returnRate = (r: { refundedUnits: number }, units: number) => ratio4(r.refundedUnits, units + r.refundedUnits);
   const rate = (c: { placed: number; cancelled: number }) => ratio4(c.cancelled, c.placed + c.cancelled);
 
   const byDay = Array.from({ length: q.days }, (_, i) => {
@@ -61,6 +66,10 @@ export async function getSalesReport(db: Db, q: { from: string; to: string; days
       placedOrders: cnt(oc.placed, ocp.placed),
       cancelledOrders: cnt(oc.cancelled, ocp.cancelled),
       cancelRate: cnt(rate(oc), rate(ocp)),
+      refundedAmount: rfig(rf.refundedAmount, rfp.refundedAmount),
+      refundedUnits: rfig(rf.refundedUnits, rfp.refundedUnits),
+      returnedOrders: rfig(rf.returnedOrders, rfp.returnedOrders),
+      returnRate: rfig(returnRate(rf, k.units), returnRate(rfp, kp.units)),
     },
     byDay,
     topProducts: prods.map((p) => ({ productId: p.productId, name: p.name, image: p.image, category: p.category, units: p.units, revenue: p.revenue })),

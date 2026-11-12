@@ -31,6 +31,10 @@ const KPI_ROWS: Array<[keyof SalesReport['kpis'], string]> = [
   ['placedOrders', 'Đơn đặt'],
   ['cancelledOrders', 'Đơn huỷ'],
   ['cancelRate', 'Tỉ lệ huỷ'],
+  ['refundedAmount', 'Tiền hàng đã hoàn (đồng)'],
+  ['refundedUnits', 'Số lượng đã hoàn'],
+  ['returnedOrders', 'Đơn có trả hàng'],
+  ['returnRate', 'Tỉ lệ trả hàng'],
 ];
 
 export function toSalesCsv(r: SalesReport): string {

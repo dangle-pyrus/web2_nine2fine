@@ -7,7 +7,8 @@ import type { Span } from './periods';
  * MỘT nguồn định nghĩa doanh thu (S8-Q1 / BR-INS-09, plan mục 5). Tổng quan, Báo cáo, CSV đều gọi file này; điều kiện
  * `payment_status = 'paid'` chỉ xuất hiện ở đây (T-INS-30 quét tĩnh). Lật S8-Q1 = đổi `WHERE` của `ro` + test AC-INS-12/13.
  *
- * Đơn tính doanh thu = `completed` + `paid`, theo `delivered_at` (completed thiếu delivered_at tự loại vì so sánh NULL),
+ * Slice 9 (BR-RET-51): đơn tính doanh thu = `completed` + (`paid` hoặc `partially_refunded`); `li` đã trừ tiền hàng + số lượng ĐẠT của yêu cầu `refunded`,
+ * ghi vào NGÀY BÁN GỐC (không dịch sang ngày hoàn); `refunded` (hoàn đủ) bị loại. Gốc: đơn tính doanh thu = `completed` + `paid`, theo `delivered_at` (completed thiếu delivered_at tự loại vì so sánh NULL),
  * tiền hàng sau giảm của từng dòng, không gồm phí ship. Quy tắc thời gian (plan mục 4): ranh giới tính ở JS rồi qua `ts()`;
  * ngày VN = `(col + INTERVAL '7 hours')::date` (không đọc `timezone` của phiên); không dùng hàm thời gian của CSDL hay múi giờ theo tên vùng.
  */
@@ -24,14 +25,16 @@ function revenueCte(spans: readonly Span[]): Prisma.Sql {
              (o.delivered_at + INTERVAL '7 hours')::date AS vn_day,
              (CASE ${period} END) AS period
       FROM orders o
-      WHERE o.status = 'completed' AND o.payment_status = 'paid' AND (${anyOf('o.delivered_at', spans)})
+      WHERE o.status = 'completed' AND o.payment_status IN ('paid', 'partially_refunded') AND (${anyOf('o.delivered_at', spans)})
     ), li AS (
       SELECT ro.vn_day, ro.period, ro.order_id, ro.payment_method, ro.delivered_at,
              oi.product_id, oi.variant_id, oi.name, oi.color_name, oi.size, oi.sku, oi.media_id,
-             oi.quantity::int AS qty,
-             (oi.unit_price::bigint * oi.quantity - oi.line_discount) AS amount,
+             (oi.quantity - COALESCE(ri.accepted_quantity, 0))::int AS qty,
+             (oi.unit_price::bigint * oi.quantity - oi.line_discount - COALESCE(ri.goods_amount, 0)) AS amount,
              oi.line_discount::bigint AS discount
       FROM ro JOIN order_items oi ON oi.order_id = ro.order_id
+      LEFT JOIN order_returns rr ON rr.order_id = ro.order_id AND rr.state = 'refunded'
+      LEFT JOIN order_return_items ri ON ri.return_id = rr.return_id AND ri.order_item_id = oi.order_item_id
     )`;
 }
 
@@ -108,6 +111,7 @@ export async function revenueByCategory(db: Db, span: Span): Promise<CategoryRow
     JOIN products p ON p.product_id = l.product_id
     JOIN categories c ON c.category_id = p.category_id
     GROUP BY c.category_id, c.slug, c.name
+    HAVING SUM(l.qty) > 0 OR SUM(l.amount) > 0
     ORDER BY revenue DESC, c.slug ASC`);
   return rows.map((r) => ({ slug: r.slug, name: r.name, revenue: n(r.revenue), units: n(r.units) }));
 }
@@ -141,6 +145,7 @@ export async function topProducts(db: Db, span: Span, sort: TopSort, limit: numb
     JOIN products p ON p.product_id = l.product_id
     JOIN categories c ON c.category_id = p.category_id
     GROUP BY l.product_id, p.cover_media_id, c.slug, c.name
+    HAVING SUM(l.qty) > 0 OR SUM(l.amount) > 0
     ORDER BY ${orderBy(sort, 'l.product_id')}
     LIMIT ${limit}`);
   return rows.map((r) => {
@@ -179,6 +184,7 @@ export async function topVariants(db: Db, span: Span, sort: TopSort, limit: numb
            SUM(l.qty)::bigint AS units, SUM(l.amount)::bigint AS revenue
     FROM li l
     GROUP BY l.variant_id, l.product_id
+    HAVING SUM(l.qty) > 0 OR SUM(l.amount) > 0
     ORDER BY ${orderBy(sort, 'l.variant_id')}
     LIMIT ${limit}`);
   return rows.map((r) => ({
@@ -211,4 +217,31 @@ export async function orderCounts(db: Db, cur: Span, prev: Span): Promise<[Order
     { placed: n(r.cp), cancelled: n(r.cc) },
     { placed: n(r.pp), cancelled: n(r.pc) },
   ];
+}
+
+export interface RefundKpi {
+  delivered: number;
+  refundedAmount: number;
+  refundedUnits: number;
+  returnedOrders: number;
+}
+const ZERO_REFUND: RefundKpi = { delivered: 0, refundedAmount: 0, refundedUnits: 0, returnedOrders: 0 };
+
+/**
+ * KPI hoàn tiền của hai kỳ (Slice 9, BR-RET-52), theo NGÀY GIAO của đơn gốc (cùng `bound()` với doanh thu). `delivered` = số đơn `completed`
+ * giao trong kỳ (cho "kỳ trước có đơn không"); `refundedAmount` = Σ tiền hàng hoàn; `refundedUnits` = Σ số lượng đạt; `returnedOrders`.
+ */
+export async function refundKpis(db: Db, cur: Span, prev: Span): Promise<[RefundKpi, RefundKpi]> {
+  const period = Prisma.sql`(CASE WHEN ${bound('o.delivered_at', cur)} THEN 0 WHEN ${bound('o.delivered_at', prev)} THEN 1 END)`;
+  const rows = await db.$queryRaw<Array<{ period: number; delivered: number; amount: bigint; units: bigint; returned: number }>>(Prisma.sql`
+    SELECT ${period} AS period, COUNT(DISTINCT o.order_id)::int AS delivered, COALESCE(SUM(ri.goods_amount), 0)::bigint AS amount,
+           COALESCE(SUM(ri.accepted_quantity), 0)::bigint AS units, COUNT(DISTINCT rr.order_id)::int AS returned
+    FROM orders o
+    LEFT JOIN order_returns rr ON rr.order_id = o.order_id AND rr.state = 'refunded'
+    LEFT JOIN order_return_items ri ON ri.return_id = rr.return_id
+    WHERE o.status = 'completed' AND (${anyOf('o.delivered_at', [cur, prev])})
+    GROUP BY 1`);
+  const out: [RefundKpi, RefundKpi] = [{ ...ZERO_REFUND }, { ...ZERO_REFUND }];
+  for (const r of rows) out[r.period] = { delivered: n(r.delivered), refundedAmount: n(r.amount), refundedUnits: n(r.units), returnedOrders: n(r.returned) };
+  return out;
 }

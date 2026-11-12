@@ -1,4 +1,6 @@
-import type { Prisma, User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { User } from '@prisma/client';
+import { NET_SPENT_JOIN, NET_TOTAL } from '../returns/net-spent.sql';
 import prisma from '../../config/prisma';
 import { ACCOUNT_ASSUMPTIONS } from '../../config/assumptions';
 import { getConfig } from '../../config/env';
@@ -110,10 +112,11 @@ export interface MembershipDto {
 export async function getMembership(userId: string): Promise<MembershipDto> {
   await loadUser(userId);
   const { year, from, to } = vnYearBounds(now());
-  const rows = await prisma.$queryRaw<Array<{ spent: bigint | number | null }>>`
-    SELECT COALESCE(SUM("total"), 0)::bigint AS spent FROM "orders"
-    WHERE "user_id" = ${userId}::uuid AND "status" = 'completed'
-      AND (COALESCE("delivered_at", "created_at") AT TIME ZONE 'UTC') >= ${from} AND (COALESCE("delivered_at", "created_at") AT TIME ZONE 'UTC') < ${to}`;
+  // Slice 9: chi tiêu RÒNG (trừ tiền hàng + phí giao đã hoàn), cùng fragment với admin khách hàng.
+  const rows = await prisma.$queryRaw<Array<{ spent: bigint | number | null }>>(Prisma.sql`
+    SELECT COALESCE(SUM(${NET_TOTAL}), 0)::bigint AS spent FROM "orders" o ${NET_SPENT_JOIN}
+    WHERE o."user_id" = ${userId}::uuid AND o."status" = 'completed'
+      AND (COALESCE(o."delivered_at", o."created_at") AT TIME ZONE 'UTC') >= ${from} AND (COALESCE(o."delivered_at", o."created_at") AT TIME ZONE 'UTC') < ${to}`);
   const spent = Number(rows[0]?.spent ?? 0);
   const tiers = ACCOUNT_ASSUMPTIONS.tiers;
   let idx = 0;

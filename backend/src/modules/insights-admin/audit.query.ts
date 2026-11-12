@@ -9,7 +9,8 @@ import type { AuditQuery } from './insights.schemas';
  * Cửa sổ ngày VN `[00:00 from, 00:00 to + 1)` tính ở JS rồi qua `ts()` (không phụ thuộc múi giờ phiên).
  */
 
-const ORDER_KINDS = ['call_attempt', 'confirmed', 'shipped', 'delivered', 'cancelled', 'cancel_approved', 'cancel_rejected', 'stock_restocked', 'stock_written_off', 'note'];
+const ORDER_KINDS = ['call_attempt', 'confirmed', 'shipped', 'delivered', 'cancelled', 'cancel_approved', 'cancel_rejected', 'stock_restocked', 'stock_written_off', 'note',
+  'return_approved', 'return_rejected', 'return_received', 'return_refunded'];
 
 const ACTION_LABELS: Record<string, string> = {
   'order.call-attempt': 'Gọi xác nhận đơn',
@@ -22,6 +23,10 @@ const ACTION_LABELS: Record<string, string> = {
   'order.stock-restocked': 'Nhập lại kho hàng hoàn',
   'order.stock-written-off': 'Xuất huỷ hàng hoàn',
   'order.note-added': 'Thêm ghi chú nội bộ cho đơn',
+  'order.return-approved': 'Duyệt yêu cầu trả hàng',
+  'order.return-rejected': 'Từ chối / đóng yêu cầu trả hàng',
+  'order.return-received': 'Nhận hàng trả về',
+  'order.return-refunded': 'Xác nhận hoàn tiền trả hàng',
   'account.staff-created': 'Tạo tài khoản nhân viên',
   'account.locked': 'Khoá tài khoản',
   'account.unlocked': 'Mở khoá tài khoản',

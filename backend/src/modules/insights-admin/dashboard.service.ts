@@ -7,6 +7,7 @@ import { addCalendarDays, vnDateISO, vnStartOfDay } from '../../lib/vn-time';
 import { inventoryCounts } from '../catalog-admin/inventory.query';
 import { countOrders } from '../order-admin/order-admin.query';
 import { DashboardRange, periodsOf, Span } from './periods';
+import { countReturns } from '../returns/return.query';
 import { orderCounts, periodKpis, revenueByDay, topProducts } from './revenue.sql';
 
 /**
@@ -49,11 +50,12 @@ export async function getDashboard(role: 'staff' | 'admin', range: DashboardRang
   const { cur, prev } = periodsOf(range, now);
   const withMoney = INSIGHT_PERMISSIONS[role].includes('dashboard.revenue');
 
-  const [oc, counts, inv, late] = await Promise.all([
+  const [oc, counts, inv, late, rc] = await Promise.all([
     orderCounts(prisma, cur, prev),
     countOrders({}),
     inventoryCounts(prisma),
     lateDelivery(prisma, now),
+    countReturns(prisma),
   ]);
   const base = {
     generatedAt: now.toISOString(),
@@ -65,6 +67,10 @@ export async function getDashboard(role: 'staff' | 'admin', range: DashboardRang
       inTransit: counts['in-transit'],
       cancelRequests: counts['cancel-requests'],
       returning: counts.returning,
+      // Slice 9: cùng hàm đếm với `counts` của danh sách yêu cầu trả hàng; mọi vai trò.
+      returnRequested: rc.requested,
+      returnApproved: rc.approved,
+      returnReceived: rc.received,
       lateDelivery: late,
       lowStock: inv.low,
       outOfStock: inv.out,

@@ -139,7 +139,7 @@ describe('T-DSH-07 AC-DSH-09: staff không có khoá tiền', () => {
       'averageOrderValue', 'completedOrders', 'generatedAt', 'newCustomers', 'orders', 'period', 'range', 'revenue', 'revenueSeries', 'todo', 'topProducts',
     ]);
     expect(Object.keys(a.body.todo).sort()).toEqual([
-      'cancelRequests', 'inTransit', 'lateDelivery', 'lowStock', 'outOfStock', 'pendingPayment', 'returning', 'toConfirm', 'toFulfil',
+      'cancelRequests', 'inTransit', 'lateDelivery', 'lowStock', 'outOfStock', 'pendingPayment', 'returnApproved', 'returnReceived', 'returnRequested', 'returning', 'toConfirm', 'toFulfil',
     ]);
     assertNoSecrets(s);
   });

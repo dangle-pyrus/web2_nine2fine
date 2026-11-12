@@ -7,6 +7,7 @@ import { foldCol } from '../../lib/sql-fold';
 import { Db, ts } from '../../lib/sql';
 import { foldVi } from '../../lib/text';
 import { UUID_RE } from '../../lib/validate';
+import { NET_SPENT_JOIN, NET_TOTAL } from '../returns/net-spent.sql';
 import { vnYearBounds } from '../../lib/vn-time';
 import { toAdminSummary } from '../order-admin/order-admin.mapper';
 import { listOrders } from '../order-admin/order-admin.query';
@@ -52,12 +53,12 @@ function baseSql(opts: { q?: string; userId?: string }): Prisma.Sql {
     FROM "users" u
     LEFT JOIN LATERAL (
       SELECT COUNT(*) FILTER (WHERE o."status" <> 'cancelled')::int AS order_count,
-             COALESCE(SUM(o."total") FILTER (WHERE o."status" = 'completed'), 0)::bigint AS total_spent,
+             COALESCE(SUM(${NET_TOTAL}) FILTER (WHERE o."status" = 'completed'), 0)::bigint AS total_spent,
              MAX(o."created_at") FILTER (WHERE o."status" <> 'cancelled') AS last_order_at,
-             COALESCE(SUM(o."total") FILTER (WHERE o."status" = 'completed'
+             COALESCE(SUM(${NET_TOTAL}) FILTER (WHERE o."status" = 'completed'
                AND COALESCE(o."delivered_at", o."created_at") >= ${ts(from)}
                AND COALESCE(o."delivered_at", o."created_at") < ${ts(to)}), 0)::bigint AS year_spent
-      FROM "orders" o WHERE o."user_id" = u."user_id") agg ON true
+      FROM "orders" o ${NET_SPENT_JOIN} WHERE o."user_id" = u."user_id") agg ON true
     WHERE ${Prisma.join(conds, ' AND ')}`;
 }
 

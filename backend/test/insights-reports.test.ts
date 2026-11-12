@@ -84,6 +84,10 @@ describe('T-RPT-02 AC-RPT-03, AC-INS-12: KPI, kỳ trước, đơn đủ điều
       placedOrders: { value: 2, previous: null }, // D-1 không có đơn đặt / huỷ -> null
       cancelledOrders: { value: 1, previous: null },
       cancelRate: { value: 0.3333, previous: null },
+      refundedAmount: { value: 0, previous: 0 },
+      refundedUnits: { value: 0, previous: 0 },
+      returnedOrders: { value: 0, previous: 0 },
+      returnRate: { value: 0, previous: 0 },
     });
     assertNoSecrets(r);
   });
@@ -386,7 +390,7 @@ describe('T-INS-30 AC-INS-13 (cấu trúc): quét tĩnh', () => {
     });
 
   it("`payment_status = 'paid'` chỉ ở revenue.sql.ts (trong module insights-admin)", () => {
-    const hits = files(path.join(root, 'modules/insights-admin')).filter((f) => /payment_status\s*=\s*'paid'/.test(readFileSync(f, 'utf8')));
+    const hits = files(path.join(root, 'modules/insights-admin')).filter((f) => /payment_status\s*(=|IN)\s*\(?\s*'(paid|refunded|partially_refunded)'/.test(readFileSync(f, 'utf8')));
     expect(hits.map((f) => path.basename(f))).toEqual(['revenue.sql.ts']);
   });
 
