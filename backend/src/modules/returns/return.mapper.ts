@@ -1,10 +1,13 @@
 import { RETURNS_ASSUMPTIONS } from '../../config/assumptions';
+import { Errors } from '../../lib/errors';
+import { now as clockNow } from '../../lib/clock';
 import type { Db } from '../../lib/sql';
+import { decryptAccountNumber } from './account-secret';
 import { addWorkingDays, vnDateISO } from '../../lib/vn-time';
 import { loadHolidays } from '../checkout/delivery';
 import { getPublicSettings } from '../store/settings.service';
-import type { ReturnRow } from './return.query';
-import type { ReturnFault, ReturnReason, ReturnState } from './return-rules';
+import { loadAccountCipher, loadReturn, type ReturnRow } from './return.query';
+import { allowedActions, type ReturnAction, type ReturnFault, type ReturnReason, type ReturnState } from './return-rules';
 
 /** DTO khách (`ReturnRequest`) và dạng ảnh. KHÔNG có số tài khoản đầy đủ, `refundReference`, `disposition`, tên nhân viên, ghi chú nội bộ. */
 
@@ -156,4 +159,83 @@ export async function toReturnRequest(
     dto.instructions = `Vui lòng đóng gói sản phẩm cần trả (còn nguyên tem nhãn, kèm hoá đơn / mã đơn) và gửi về: ${address}.${r.approveNote ? ` ${r.approveNote}` : ''}`;
   }
   return dto;
+}
+
+/* ------------------------------ Dạng admin (`AdminReturn`) ------------------------------ */
+
+export interface AdminReturnDto extends Omit<ReturnRequestDto, 'lines' | 'photos' | 'refundTo' | 'canCancel' | 'instructions'> {
+  orderCode: string;
+  recipient: { name: string; phone: string; email: string };
+  paymentMethod: 'cod' | 'bank-transfer';
+  lines: Array<ReturnLineDto & { disposition?: 'restock' | 'writeoff' }>;
+  photos: ReturnPhotoDto[];
+  receiveNote?: string;
+  refundReference?: string;
+  refundTo: ReturnRefundToDto & { accountNumber?: string };
+  history: Array<{ at: string; kind: string; actor: { type: string; name?: string; role?: 'staff' | 'admin' }; note?: string }>;
+  allowedActions: ReturnAction[];
+  overdue: boolean;
+}
+
+/** Quá 24 giờ kể từ `requestedAt` khi còn `requested` (tính khi đọc, không tác vụ nền). */
+export const isOverdue = (state: string, requestedAt: Date, at: Date): boolean =>
+  state === 'requested' && at.getTime() - requestedAt.getTime() > RETURNS_ASSUMPTIONS.overdueHours * 3_600_000;
+
+/**
+ * `AdminReturn` (cũng là `AdminOrder.return`). Số tài khoản đầy đủ CHỈ khi người xem là admin VÀ `state = received` VÀ đơn COD VÀ còn bản mã:
+ * giải mã tại đây (không từ truy vấn); mọi trường hợp khác chỉ bản che. Trả null nếu không có yêu cầu.
+ */
+export async function buildAdminReturn(db: Db, returnId: string, role: 'staff' | 'admin', showAccountNumber = true): Promise<AdminReturnDto | null> {
+  const r = await loadReturn(db, returnId);
+  if (!r) return null;
+  const order = await db.order.findUniqueOrThrow({
+    where: { order_id: r.orderId },
+    select: { code: true, recipientName: true, recipientPhone: true, email: true, paymentMethod: true },
+  });
+  const events = await db.orderEvent.findMany({
+    where: { returnId }, orderBy: [{ at: 'asc' }, { event_id: 'asc' }],
+    select: { at: true, kind: true, actor: true, actorName: true, actorRole: true, detail: true },
+  });
+  const base = await toReturnRequest(db, r, order.paymentMethod, { kind: 'admin' });
+  const { canCancel: _c, instructions: _i, ...rest } = base;
+  void _c;
+  void _i;
+  const state = r.state as ReturnState;
+  const refundTo: AdminReturnDto['refundTo'] = { ...base.refundTo };
+  if (showAccountNumber && role === 'admin' && state === 'received' && order.paymentMethod === 'cod') {
+    const enc = await loadAccountCipher(db, returnId);
+    if (enc) {
+      try {
+        refundTo.accountNumber = decryptAccountNumber(enc, returnId);
+      } catch {
+        // Mất khoá / bản mã hỏng: chỉ bản che (không lộ lỗi, không log nội dung).
+      }
+    }
+  }
+  const dto: AdminReturnDto = {
+    ...rest,
+    orderCode: order.code,
+    recipient: { name: order.recipientName, phone: order.recipientPhone, email: order.email },
+    paymentMethod: order.paymentMethod === 'bank_transfer' ? 'bank-transfer' : 'cod',
+    lines: r.items.map((i) => ({ ...toLineDto(i), ...(i.disposition ? { disposition: i.disposition as 'restock' | 'writeoff' } : {}) })),
+    refundTo,
+    history: events.map((e) => ({
+      at: iso(e.at),
+      kind: String(e.kind),
+      actor: e.actor === 'shop' ? { type: 'staff', name: e.actorName ?? 'Nhân viên', role: e.actorRole === 'admin' ? 'admin' : 'staff' } : { type: e.actor },
+      ...(e.detail ? { note: e.detail } : {}),
+    })),
+    allowedActions: allowedActions(state, role),
+    overdue: isOverdue(state, r.requestedAt, clockNow()),
+  };
+  if (r.receiveNote) dto.receiveNote = r.receiveNote;
+  if (state === 'refunded' && r.refundReference) dto.refundReference = r.refundReference;
+  if (state === 'rejected' && r.rejectNote) dto.rejectNote = r.rejectNote;
+  return dto;
+}
+
+export async function loadAdminReturnOr404(db: Db, returnId: string, role: 'staff' | 'admin'): Promise<AdminReturnDto> {
+  const d = await buildAdminReturn(db, returnId, role);
+  if (!d) throw Errors.notFound();
+  return d;
 }

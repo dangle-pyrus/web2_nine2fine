@@ -1,6 +1,9 @@
 import type { Order, OrderEvent, OrderItem, User, user_role } from '@prisma/client';
 import { now as clockNow } from '../../lib/clock';
 import { kindOf, toOrderDto } from '../order/order.mapper';
+import { buildAdminReturn } from '../returns/return.mapper';
+import { loadReturnOfOrder } from '../returns/return.query';
+import type { Db } from '../../lib/sql';
 import type { SummaryRow } from './order-admin.query';
 import { overdueOf } from './overdue';
 import { AdminAction, callStatsOf, computeAllowedActions, needsCall, StateOrder, tabOf } from './order-state';
@@ -42,6 +45,12 @@ const TITLES: Record<string, string> = {
   stock_restocked: 'Hàng hoàn đã nhập kho',
   stock_written_off: 'Hàng hoàn không nhập kho (hỏng / mất)',
   note: 'Ghi chú nội bộ',
+  return_requested: 'Khách gửi yêu cầu trả hàng',
+  return_approved: 'Duyệt yêu cầu trả hàng',
+  return_rejected: 'Từ chối / đóng yêu cầu trả hàng',
+  return_received: 'Nhận hàng trả về',
+  return_refunded: 'Xác nhận hoàn tiền trả hàng',
+  return_cancelled: 'Khách huỷ yêu cầu trả hàng',
 };
 
 /** Timeline admin: MỚI NHẤT TRƯỚC (BR-ADM-10); người = tên + vai trò chụp tại lúc làm. */
@@ -85,6 +94,17 @@ function refFor(events: OrderEvent[], kinds: string[], user: User | null): Staff
   if (e?.actorName) return { name: e.actorName, role: staffRole(e.actorRole) };
   if (user) return { name: userName(user), role: staffRole(user.role) };
   return e ? { name: 'Nhân viên', role: 'staff' } : undefined;
+}
+
+/**
+ * Slice 9: `AdminOrder.return` (yêu cầu sống mới nhất, không có thì `cancelled` mới nhất). LUÔN bản che số tài khoản (không số đầy đủ):
+ * `AdminOrder` còn được lưu làm snapshot idempotency; số đầy đủ chỉ ra ở `GET /admin/returns/{id}` (admin + `received`).
+ */
+export async function withAdminReturn(db: Db, dto: Record<string, unknown>, orderId: string, role: user_role): Promise<Record<string, unknown>> {
+  const r = await loadReturnOfOrder(db, orderId);
+  if (!r) return dto;
+  const ret = await buildAdminReturn(db, r.return_id, role === 'admin' ? 'admin' : 'staff', false);
+  return ret ? { ...dto, return: ret } : dto;
 }
 
 export function toAdminOrder(o: AdminOrderRow, role: user_role) {

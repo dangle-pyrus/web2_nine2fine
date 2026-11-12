@@ -5,7 +5,7 @@ import { Errors } from '../../lib/errors';
 import { parseBody } from '../../lib/validate';
 import { adminRateLimit } from '../../middleware/rate-limit';
 import { normalizeOrderCode } from '../order/order-code';
-import { ADMIN_ORDER_INCLUDE, toAdminOrder, toAdminSummary } from './order-admin.mapper';
+import { ADMIN_ORDER_INCLUDE, toAdminOrder, toAdminSummary, withAdminReturn } from './order-admin.mapper';
 import { countOrders, listOrders } from './order-admin.query';
 import { ActionInput, Actor, runAction } from './order-admin.service';
 import {
@@ -50,7 +50,7 @@ orderAdminRouter.get(
     if (!code) throw Errors.notFound();
     const order = await prisma.order.findUnique({ where: { code }, include: ADMIN_ORDER_INCLUDE });
     if (!order) throw Errors.notFound();
-    res.json(toAdminOrder(order, req.auth!.user.role));
+    res.json(await withAdminReturn(prisma, toAdminOrder(order, req.auth!.user.role), order.order_id, req.auth!.user.role));
   }),
 );
 

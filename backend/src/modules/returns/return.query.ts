@@ -1,5 +1,8 @@
 import { Prisma } from '@prisma/client';
+import { foldCol } from '../../lib/sql-fold';
+import { foldVi } from '../../lib/text';
 import type { Db } from '../../lib/sql';
+import { normalizeOrderCode } from '../order/order-code';
 import { isLive, type ReturnState } from './return-rules';
 
 /**
@@ -53,7 +56,7 @@ export async function loadAccountCipher(db: Db, returnId: string): Promise<strin
   return r?.accountNumberEnc ?? null;
 }
 
-/** Số yêu cầu theo tab (một truy vấn, `COUNT(*) FILTER`); dùng chung cho danh sách admin và Tổng quan (9.3 / 9.4). */
+/** Số yêu cầu theo tab. Một truy vấn `COUNT(*) FILTER`; dùng chung cho danh sách admin (`counts`) và Tổng quan (`todo`). */
 export interface ReturnCounts {
   all: number;
   requested: number;
@@ -61,4 +64,77 @@ export interface ReturnCounts {
   received: number;
   refunded: number;
   closed: number;
+}
+
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/** `q`: mã đơn (chuẩn hoá, tiền tố), SĐT (>= 4 chữ số, bỏ ký tự phân cách), tên (không dấu). */
+function searchSql(q: string): Prisma.Sql {
+  const parts: Prisma.Sql[] = [];
+  const code = normalizeOrderCode(q) ?? q.replace(/^#/, '').toUpperCase();
+  if (code.length >= 6) parts.push(Prisma.sql`o."code" LIKE ${escapeLike(code) + '%'} ESCAPE '\\'`);
+  let digits = q.replace(/[\s.\-]/g, '');
+  if (/^\+?84/.test(digits)) digits = digits.replace(/^\+?84/, '0');
+  if (/^[0-9]{4,}$/.test(digits)) parts.push(Prisma.sql`o."recipient_phone" LIKE ${'%' + digits + '%'}`);
+  const folded = foldVi(q);
+  if (folded) parts.push(Prisma.sql`${foldCol('o."recipient_name"')} LIKE ${'%' + escapeLike(folded) + '%'} ESCAPE '\\'`);
+  return Prisma.sql`(${Prisma.join(parts, ' OR ')})`;
+}
+
+const STATE_SQL: Record<string, Prisma.Sql> = {
+  requested: Prisma.sql`r."state" = 'requested'`,
+  approved: Prisma.sql`r."state" = 'approved'`,
+  received: Prisma.sql`r."state" = 'received'`,
+  refunded: Prisma.sql`r."state" = 'refunded'`,
+  closed: Prisma.sql`r."state" IN ('rejected', 'cancelled')`,
+};
+
+export async function countReturns(db: Db, q?: string): Promise<ReturnCounts> {
+  const where = q ? Prisma.sql`WHERE ${searchSql(q)}` : Prisma.empty;
+  const [row] = await db.$queryRaw<Array<Record<string, number>>>(Prisma.sql`
+    SELECT COUNT(*)::int AS "all",
+      (COUNT(*) FILTER (WHERE ${STATE_SQL.requested}))::int AS "requested", (COUNT(*) FILTER (WHERE ${STATE_SQL.approved}))::int AS "approved",
+      (COUNT(*) FILTER (WHERE ${STATE_SQL.received}))::int AS "received", (COUNT(*) FILTER (WHERE ${STATE_SQL.refunded}))::int AS "refunded",
+      (COUNT(*) FILTER (WHERE ${STATE_SQL.closed}))::int AS "closed"
+    FROM "order_returns" r JOIN "orders" o ON o."order_id" = r."order_id" ${where}`);
+  return { all: row.all, requested: row.requested, approved: row.approved, received: row.received, refunded: row.refunded, closed: row.closed };
+}
+
+export interface ReturnSummaryRow {
+  return_id: string;
+  code: string;
+  requested_at: Date;
+  recipient_name: string;
+  reason: string;
+  fault: string;
+  state: string;
+  amount: number;
+  item_count: number;
+  handled_by: string | null;
+  handled_role: string | null;
+  handled_at: Date | null;
+}
+
+export async function listReturns(
+  db: Db,
+  f: { state?: string; q?: string; sort: 'requestedAt' | 'amount'; page: number; limit: number },
+): Promise<{ rows: ReturnSummaryRow[]; total: number }> {
+  const conds: Prisma.Sql[] = [];
+  if (f.q) conds.push(searchSql(f.q));
+  if (f.state) conds.push(STATE_SQL[f.state]);
+  const where = conds.length ? Prisma.sql`WHERE ${Prisma.join(conds, ' AND ')}` : Prisma.empty;
+  const order = f.sort === 'amount' ? Prisma.sql`r."amount" DESC, r."requested_at" DESC, r."return_id" DESC` : Prisma.sql`r."requested_at" DESC, r."return_id" DESC`;
+  const [rows, [cnt]] = await Promise.all([
+    db.$queryRaw<ReturnSummaryRow[]>(Prisma.sql`
+      SELECT r."return_id"::text AS "return_id", o."code", r."requested_at", o."recipient_name", r."reason", r."fault", r."state", r."amount",
+        (SELECT COALESCE(SUM(i."quantity"), 0)::int FROM "order_return_items" i WHERE i."return_id" = r."return_id") AS "item_count",
+        h."actor_name" AS "handled_by", h."actor_role"::text AS "handled_role", h."at" AS "handled_at"
+      FROM "order_returns" r JOIN "orders" o ON o."order_id" = r."order_id"
+      LEFT JOIN LATERAL (
+        SELECT e."actor_name", e."actor_role", e."at" FROM "order_events" e WHERE e."return_id" = r."return_id" AND e."actor" = 'shop'
+        ORDER BY e."at" DESC, e."event_id" DESC LIMIT 1) h ON TRUE
+      ${where} ORDER BY ${order} LIMIT ${f.limit} OFFSET ${(f.page - 1) * f.limit}`),
+    db.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*) AS "n" FROM "order_returns" r JOIN "orders" o ON o."order_id" = r."order_id" ${where}`),
+  ]);
+  return { rows, total: Number(cnt.n) };
 }

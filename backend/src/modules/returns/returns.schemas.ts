@@ -159,7 +159,7 @@ export const lc = (s: string): string => s.toLowerCase();
 /* ------------------------------ Admin ------------------------------ */
 
 export const MSG_ADMIN = {
-  note: 'Ghi chú chưa hợp lệ (tối đa 250 ký tự).',
+  note: 'Ghi chú tối đa 250 ký tự.',
   rejectNote: 'Lý do từ 5 đến 250 ký tự.',
   receiveNote: 'Cần ghi chú từ 5 đến 250 ký tự khi có sản phẩm không đạt.',
   lines: 'Danh sách sản phẩm nhận chưa hợp lệ.',
@@ -167,5 +167,59 @@ export const MSG_ADMIN = {
   refundReference: 'Mã giao dịch từ 4 đến 60 ký tự.',
   carrier: 'Đơn vị vận chuyển tối đa 50 ký tự.',
   trackingNumber: 'Mã vận đơn tối đa 40 ký tự.',
-  query: 'Tham số tìm kiếm chưa hợp lệ.',
+  state: 'Trạng thái lọc không hợp lệ.',
+  q: 'Từ khoá tìm kiếm tối đa 100 ký tự.',
+  sort: 'Cách sắp xếp không hợp lệ.',
+  page: 'Trang phải là số nguyên từ 1.',
+  limit: 'Số dòng mỗi trang chỉ nhận 20 hoặc 50.',
 } as const;
+
+const optText = (max: number, msg: string) => z.string({ error: msg }).transform(cleanText).refine((v) => v.length <= max, { error: msg });
+
+export const approveSchema = z.object({
+  note: optText(250, MSG_ADMIN.note).optional(),
+  carrier: optText(50, MSG_ADMIN.carrier).optional(),
+  trackingNumber: optText(40, MSG_ADMIN.trackingNumber).optional(),
+});
+
+export const rejectSchema = z.object({
+  note: z.string({ error: MSG_ADMIN.rejectNote }).transform(cleanText).refine((v) => v.length >= 5 && v.length <= 250, { error: MSG_ADMIN.rejectNote }),
+});
+
+export const receiveSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        variantId: uuid,
+        acceptedQuantity: z.number().int().min(0).max(99),
+        disposition: z.enum(['restock', 'writeoff']).optional(),
+      }),
+      { error: MSG_ADMIN.lines },
+    )
+    .min(1, { error: MSG_ADMIN.lines })
+    .max(32, { error: MSG_ADMIN.lines }),
+  note: optText(250, MSG_ADMIN.note).optional(),
+});
+
+export const refundSchema = z.object({
+  amount: z.number({ error: MSG_ADMIN.amount }).int({ error: MSG_ADMIN.amount }).min(0, { error: MSG_ADMIN.amount }),
+  refundReference: z.string({ error: MSG_ADMIN.refundReference }).transform(cleanText).refine((v) => v.length >= 4 && v.length <= 60, { error: MSG_ADMIN.refundReference }),
+});
+
+export type ReturnStateFilter = 'requested' | 'approved' | 'received' | 'refunded' | 'closed';
+export interface ReturnListQuery {
+  state?: ReturnStateFilter;
+  q?: string;
+  sort: 'requestedAt' | 'amount';
+  page: number;
+  limit: 20 | 50;
+}
+
+const intStr = (msg: string) => z.string({ error: msg }).regex(/^[0-9]{1,9}$/, { error: msg }).transform(Number);
+export const listQuerySchema = z.object({
+  state: z.enum(['requested', 'approved', 'received', 'refunded', 'closed'], { error: MSG_ADMIN.state }).optional(),
+  q: z.string({ error: MSG_ADMIN.q }).transform(cleanText).refine((v) => v.length <= 100, { error: MSG_ADMIN.q }).optional(),
+  sort: z.enum(['requestedAt', 'amount'], { error: MSG_ADMIN.sort }).default('requestedAt'),
+  page: intStr(MSG_ADMIN.page).refine((n) => n >= 1, { error: MSG_ADMIN.page }).default(1),
+  limit: intStr(MSG_ADMIN.limit).refine((n) => n === 20 || n === 50, { error: MSG_ADMIN.limit }).default(20),
+});

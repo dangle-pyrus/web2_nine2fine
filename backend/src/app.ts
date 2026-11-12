@@ -18,7 +18,7 @@ import { accountRouter } from './modules/account/account.routes';
 import { adminRateLimit } from './middleware/rate-limit';
 import { adminAccountsRouter, adminCustomersRouter, adminStaffRouter } from './modules/users-admin/users-admin.routes';
 import { mediaRouter } from './modules/media/media.routes';
-import { accountReturnPhotosRouter, accountReturnsRouter } from './modules/returns/returns.routes';
+import { accountReturnPhotosRouter, accountReturnsRouter, adminReturnPhotosRouter, adminReturnsRouter } from './modules/returns/returns.routes';
 import { storeRouter } from './modules/store/store.routes';
 import {
   adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
@@ -110,6 +110,10 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/admin/reports', ...adminInsights, adminReportsRouter);
   api.use('/admin/settings', ...adminInsights, adminSettingsRouter);
   api.use('/admin/audit-log', ...adminInsights, adminAuditRouter);
+  // Slice 9: cùng khuôn; quyền theo hành động (`requirePermission`) ở router, trước Zod và trước DB.
+  const adminReturns = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
+  api.use('/admin/returns', ...adminReturns, adminReturnsRouter);
+  api.use('/admin/return-photos', ...adminReturns, adminReturnPhotosRouter);
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);

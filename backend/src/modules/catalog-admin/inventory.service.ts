@@ -154,3 +154,22 @@ export async function setThresholds(input: ThresholdsInput): Promise<{ defaultTh
     }
   }
 }
+
+/**
+ * Slice 9: cộng tồn do khách trả hàng (hàng đạt, nhập lại kho bán) trong giao dịch của người gọi. Cùng cách cộng nguyên tử có điều kiện
+ * như `applyDelta` (kể cả biến thể ẩn / sản phẩm lưu trữ) và đúng 1 dòng `inventory_adjustments` (`reason = return`, `delta = +qty`).
+ * Vượt tồn tối đa -> `422 lines`. KHÔNG đổi hành vi `adjustStock`.
+ */
+export async function restockVariantTx(tx: Db, p: { variantId: string; qty: number; at: Date; actor: Actor; note: string }): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ inventory_qty: number }>>(Prisma.sql`
+    UPDATE product_variants SET inventory_qty = inventory_qty + ${p.qty}, updated_at = ${ts(p.at)}
+    WHERE variant_id = ${p.variantId}::uuid AND inventory_qty + ${p.qty} <= ${STOCK.maxQty}
+    RETURNING inventory_qty`);
+  if (!rows[0]) throw Errors.validation('Số lượng nhập lại kho vượt mức tối đa cho phép.', 'lines');
+  await tx.inventoryAdjustment.create({
+    data: {
+      variantId: p.variantId, at: p.at, delta: p.qty, availableAfter: Number(rows[0].inventory_qty), reason: 'return', note: p.note.slice(0, 200),
+      actorUserId: p.actor.id, actorName: p.actor.name.slice(0, 100), actorRole: p.actor.role,
+    },
+  });
+}

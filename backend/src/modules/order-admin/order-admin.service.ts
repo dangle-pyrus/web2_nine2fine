@@ -11,7 +11,7 @@ import { cancelOrderWith, restockReturnedTx } from '../order/cancel-order.servic
 import { acquireIdempotency, completeIdempotency, requestHash } from '../order/idempotency';
 import { EventActorUser, insertOrderEvent, staffDisplayName } from '../order/order-event';
 import { scheduleEventEmail } from '../order/order-email.service';
-import { ADMIN_ORDER_INCLUDE, toAdminOrder } from './order-admin.mapper';
+import { ADMIN_ORDER_INCLUDE, toAdminOrder, withAdminReturn } from './order-admin.mapper';
 import type { CallAttemptBody, CancelBody, NoteBody, RejectCancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
 import {
   AdminAction, AdminCancelReason, callStatsOf, cancelActionOf, checkTransition, SHOP_CANCEL_REASON_TEXT, StateOrder,
@@ -88,7 +88,7 @@ const actionOf = (a: ActionInput): AdminAction => {
 
 async function loadAdminOrder(db: Db, orderId: string, role: user_role) {
   const row = await db.order.findUniqueOrThrow({ where: { order_id: orderId }, include: ADMIN_ORDER_INCLUDE });
-  return toAdminOrder(row, role);
+  return withAdminReturn(db, toAdminOrder(row, role), orderId, role);
 }
 
 async function callTimes(tx: Db, orderId: string): Promise<Date[]> {
