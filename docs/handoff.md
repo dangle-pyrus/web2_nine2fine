@@ -16,6 +16,10 @@
 - Xong: PRD/backlog (9b583fb), contract + plan (9bd91d9), contract **locked**, 17 điểm lệch plan mục 14 đã duyệt (decisions.md).
 - Bước tiếp theo: backend-dev làm lát 8.1 (nền, migration `20261112000100_admin_insights_schema` chỉ áp cục bộ) rồi 8.2–8.5; frontend-dev nối FE sau cờ `adminInsightsMode`; cuối slice qa-reviewer.
 
+### Slice 8 — QA (2026-11-12)
+- `docs/qa/report-slice-8-admin-insights.md`: ĐẠT DoD cục bộ, 52/55 Pass, 3 một phần (AC-SET-04, 11, 14), 0 Blocker, 0 Major. Minor để lại: m-1 footer chưa hiện MXH; m-2 thiếu test trực tiếp `payment_due_at` sau đổi `bankHoldMinutes`; m-3 rate limit trong RAM (kế thừa); m-4 chưa chạy FE trình duyệt trên BE thật (làm ở 8.7).
+- Còn lại: lát 8.7 cần Thắng: trong `backend/` với `.env` Supabase chạy `npx prisma migrate deploy` (áp `20261112000100_admin_insights_schema`, chỉ cộng thêm), rồi nhập thông tin pháp lý thật ở Cài đặt › Cửa hàng (G9).
+
 ### Slice 8 — FE (frontend-dev, 2026-11-12, commit 8bee8a7)
 - Cờ `adminInsightsMode` (`http` bản thường; e2e mặc định `mock`, chọn `http` bằng `localStorage['n2f.e2e.adminInsightsMode']`). `data-access/insights-{models,api,errors}.ts`, màn mới `features/insights/` (Tổng quan, Báo cáo + tải CSV, Cài đặt › Cửa hàng, Nhật ký). Staff chỉ có Tổng quan, ô tiền vắng thì ẩn. 409 giữ bản đang nhập + hiện giá trị máy chủ; 422 gắn `fieldErrors` vào ô; 429 nêu số giây. Storefront đọc `GET /api/store/settings` khi `http`, lỗi thì giữ giá trị dựng sẵn.
 - Kiểm (agent báo): lint, format, build qua (initial 546,46 kB); Playwright admin-insights/admin-users/admin/admin-login 132 pass, 2 skip; operations:58, :103 fail cũ đã biết.
