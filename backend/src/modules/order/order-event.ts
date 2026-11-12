@@ -30,6 +30,8 @@ export interface OrderEventInput {
   internalNote?: string | null;
   /** Tên thư cần gửi cho sự kiện này (NULL = không có thư). */
   emailTemplate?: string | null;
+  /** Slice 9: yêu cầu trả hàng liên quan (dựng lịch sử + thư). */
+  returnId?: string | null;
 }
 
 /** MỌI ghi sự kiện đơn đi qua đây (BR-ADM-11: mỗi thao tác đúng 1 dòng, cùng giao dịch). Trả `event_id`. */
@@ -37,11 +39,11 @@ export async function insertOrderEvent(tx: Db, e: OrderEventInput): Promise<stri
   const u = e.actorUser;
   const [row] = await tx.$queryRaw<Array<{ event_id: string }>>(Prisma.sql`
     INSERT INTO "order_events" ("order_id", "at", "from_status", "to_status", "payment_status", "actor", "detail", "kind",
-      "actor_user_id", "actor_name", "actor_role", "reason_code", "internal_note", "email_template")
+      "actor_user_id", "actor_name", "actor_role", "reason_code", "internal_note", "email_template", "return_id")
     VALUES (${e.orderId}::uuid, ${ts(e.at)}, ${e.fromStatus}::"order_status", ${e.toStatus}::"order_status",
       ${e.paymentStatus}::"payment_status", ${e.actor}::"order_actor", ${e.detail ?? null}, ${e.kind}::"order_event_kind",
       ${u ? u.id : null}::uuid, ${u ? u.name : null}, ${u ? u.role : null}::"user_role", ${e.reasonCode ?? null},
-      ${e.internalNote ?? null}, ${e.emailTemplate ?? null})
+      ${e.internalNote ?? null}, ${e.emailTemplate ?? null}, ${e.returnId ?? null}::uuid)
     RETURNING "event_id"`);
   return row.event_id;
 }

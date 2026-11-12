@@ -18,6 +18,7 @@ import { accountRouter } from './modules/account/account.routes';
 import { adminRateLimit } from './middleware/rate-limit';
 import { adminAccountsRouter, adminCustomersRouter, adminStaffRouter } from './modules/users-admin/users-admin.routes';
 import { mediaRouter } from './modules/media/media.routes';
+import { accountReturnPhotosRouter, accountReturnsRouter } from './modules/returns/returns.routes';
 import { storeRouter } from './modules/store/store.routes';
 import {
   adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
@@ -78,6 +79,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
     adminRateLimit,
     adminUploadsRouter,
   );
+  // Slice 9: ảnh trả hàng (thành viên) cũng là byte thô nên đứng TRƯỚC requireJsonBody; kho riêng tư, kiểm quyền mỗi lần đọc.
+  api.use('/account/return-photos', cookieParser(), noStore, requireAuth('storefront'), accountReturnPhotosRouter);
   api.use(requireJsonBody);
   // 16 KB toàn cục; POST / PUT /admin/products dùng parser 64 KB riêng trong router của nó (mô tả dài + 32 biến thể).
   const json16 = express.json({ limit: '16kb' });
@@ -112,6 +115,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/cart', cartRouter);
   api.use('/orders', orderRouter);
   // Slice 5: noStore TRƯỚC requireAuth để cả 401 có Cache-Control: no-store (BR-ACC-01).
+  // Slice 9: chỉ `/:orderCode/return*`; đứng TRƯỚC accountRouter (path khác rơi xuống tiếp).
+  api.use('/account/orders', noStore, requireAuth('storefront'), accountReturnsRouter);
   api.use('/account', noStore, requireAuth('storefront'), accountRouter);
   options.extraApiRoutes?.(api);
   app.use('/api', api);

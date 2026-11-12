@@ -1,5 +1,8 @@
 import type { Order, OrderEvent, OrderItem, order_event_kind, order_status } from '@prisma/client';
 import { ASSUMPTIONS } from '../../config/assumptions';
+import { now as clockNow } from '../../lib/clock';
+import type { ReturnRequestDto } from '../returns/return.mapper';
+import { checkEligibility, returnDeadline } from '../returns/return-rules';
 
 /** Dạng `Order` của contract. Không có `userId`, UUID nội bộ hay dữ liệu thanh toán nhạy cảm. */
 export interface OrderDto {
@@ -34,6 +37,10 @@ export interface OrderDto {
   cancelledAt?: string;
   cancelReason?: string;
   canCancel: boolean;
+  /** Slice 9: máy chủ tính (đủ điều kiện + còn hạn + chưa có yêu cầu sống; `withReturn` chỉnh theo yêu cầu). */
+  canReturn: boolean;
+  returnDeadline?: string;
+  return?: ReturnRequestDto;
   cancelMode?: 'cancel' | 'request';
   cancelRequest?: { requestedAt: string; outcome: 'pending' | 'rejected' | 'approved'; rejectReason?: string };
   shipment?: { carrier: string; trackingNumber: string; handedOverAt: string };
@@ -58,6 +65,7 @@ export function kindOf(e: Pick<OrderEvent, 'kind' | 'fromStatus' | 'toStatus'>):
 /** Chỉ các lần đổi trạng thái khách cần thấy (BR-ADM-12): không có lần gọi, xác nhận, ghi chú, hàng hoàn. */
 const CUSTOMER_KINDS: ReadonlySet<order_event_kind> = new Set<order_event_kind>([
   'placed', 'payment_received', 'shipped', 'delivered', 'cancel_requested', 'cancel_approved', 'cancel_rejected', 'cancelled',
+  'return_requested', 'return_approved', 'return_rejected', 'return_received', 'return_refunded', 'return_cancelled',
 ]);
 
 function timelineTitle(kind: order_event_kind, e: OrderEvent): string {
@@ -74,6 +82,19 @@ function timelineTitle(kind: order_event_kind, e: OrderEvent): string {
       return 'Đã gửi yêu cầu huỷ';
     case 'cancel_rejected':
       return 'Yêu cầu huỷ chưa được chấp nhận';
+    // Slice 9: nhánh `default` là bẫy ("Đã huỷ đơn") nên mỗi loại trả hàng có `case` riêng.
+    case 'return_requested':
+      return 'Đã gửi yêu cầu trả hàng';
+    case 'return_approved':
+      return 'Yêu cầu trả hàng đã được duyệt';
+    case 'return_rejected':
+      return 'Yêu cầu trả hàng không được chấp nhận';
+    case 'return_received':
+      return 'Đã nhận hàng trả về';
+    case 'return_refunded':
+      return 'Đã hoàn tiền';
+    case 'return_cancelled':
+      return 'Đã huỷ yêu cầu trả hàng';
     default:
       return 'Đã huỷ đơn';
   }
@@ -126,6 +147,7 @@ export function toOrderDto(o: OrderRow): OrderDto {
     shippingAddress: { street: o.street, ward: o.wardName, province: o.provinceName },
     estimatedDelivery: { from: isoDate(o.estimatedFrom), to: isoDate(o.estimatedTo) },
     canCancel: false,
+    canReturn: false,
     timeline: events.map(({ e, kind }) => ({
       at: e.at.toISOString(),
       title: timelineTitle(kind, e),
@@ -155,7 +177,12 @@ export function toOrderDto(o: OrderRow): OrderDto {
   if (o.carrier && o.trackingNumber && o.handedOverAt) {
     dto.shipment = { carrier: o.carrier, trackingNumber: o.trackingNumber, handedOverAt: o.handedOverAt.toISOString() };
   }
-  if (o.status === 'completed' && o.deliveredAt) dto.deliveredAt = o.deliveredAt.toISOString();
+  if (o.status === 'completed' && o.deliveredAt) {
+    dto.deliveredAt = o.deliveredAt.toISOString();
+    dto.returnDeadline = returnDeadline(o.deliveredAt).toISOString();
+  }
+  // Phần thuần (đơn đủ điều kiện + còn hạn); `withReturn` hạ xuống false khi đơn đã có yêu cầu sống.
+  dto.canReturn = checkEligibility({ status: o.status, paymentStatus: o.paymentStatus, deliveredAt: o.deliveredAt }, clockNow()) === 'ok';
   if (o.cancelledBy) dto.cancelledBy = o.cancelledBy;
   if (o.cancelledAt) dto.cancelledAt = o.cancelledAt.toISOString();
   if (o.cancelReason) dto.cancelReason = o.cancelReason;

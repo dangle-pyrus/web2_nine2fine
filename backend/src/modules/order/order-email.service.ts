@@ -11,6 +11,8 @@ import {
   orderDeliveredMail, orderShippedMail,
 } from '../../mail/order-templates';
 import type { MailContact } from '../../mail/order-templates';
+import { RETURN_TEMPLATES } from '../../mail/return-templates';
+import { loadReturnMailData } from '../returns/return-mail-data';
 import { mailContact } from '../store/settings.service';
 import type { OrderDto } from './order.mapper';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
@@ -114,21 +116,32 @@ const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean, contact?:
 
 /** Một lần thử: CAS `email_attempts` (ai thắng mới gửi, nên gửi nền và job bù không trùng; mỗi sự kiện tối đa 1 thư). */
 async function attemptEventOnce(eventId: string, at: Date): Promise<Attempt> {
-  const claimed = await prisma.$queryRaw<Array<{ order_id: string; email_template: string | null }>>(Prisma.sql`
+  const claimed = await prisma.$queryRaw<Array<{ order_id: string; email_template: string | null; return_id: string | null }>>(Prisma.sql`
     UPDATE "order_events" SET "email_attempts" = "email_attempts" + 1
     WHERE "event_id" = ${eventId}::uuid AND "email_sent_at" IS NULL AND "email_template" IS NOT NULL AND "email_attempts" < ${MAX_ATTEMPTS}
-    RETURNING "order_id", "email_template"`);
+    RETURNING "order_id", "email_template", "return_id"`);
   const c = claimed[0];
   if (!c || !c.email_template) return 'skipped';
-  const build = EVENT_TEMPLATES[c.email_template];
   const order = await prisma.order.findUnique({ where: { order_id: c.order_id }, include: ORDER_INCLUDE });
-  if (!build || !order) {
+  // Slice 9: thư trả hàng (sự kiện mang return_id) dựng từ yêu cầu; thư Slice 4 giữ nguyên.
+  const returnBuild = c.return_id ? RETURN_TEMPLATES[c.email_template] : undefined;
+  const build = c.return_id ? undefined : EVENT_TEMPLATES[c.email_template];
+  if ((!build && !returnBuild) || !order) {
     // Mẫu lạ / đơn mất: đánh dấu để khỏi thử lại (không có thư).
     await prisma.$executeRaw(Prisma.sql`UPDATE "order_events" SET "email_sent_at" = ${ts(at)} WHERE "event_id" = ${eventId}::uuid`);
     return 'skipped';
   }
   try {
-    await sendMail(build(toOrderDto(order), order.userId !== null, await mailContact()));
+    if (returnBuild) {
+      const data = await loadReturnMailData(prisma, c.return_id!, order.paymentMethod);
+      if (!data) {
+        await prisma.$executeRaw(Prisma.sql`UPDATE "order_events" SET "email_sent_at" = ${ts(at)} WHERE "event_id" = ${eventId}::uuid`);
+        return 'skipped';
+      }
+      await sendMail(returnBuild(toOrderDto(order), data, await mailContact()));
+    } else {
+      await sendMail(build!(toOrderDto(order), order.userId !== null, await mailContact()));
+    }
   } catch (err) {
     logger.error('order-event-email-failed', { order: order.code, eventId, reason: err instanceof Error ? err.name : 'unknown' });
     return 'failed';

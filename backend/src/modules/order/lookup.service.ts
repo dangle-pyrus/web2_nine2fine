@@ -119,7 +119,7 @@ export async function verifyLookup(
           data: { tokenHash: hashSessionToken(grant), orderId: order.order_id, createdAt: t, expiresAt: addMs(t, ASSUMPTIONS.orderAccessTtlMs) },
         });
         setGrantCookie(res, grant);
-        return toOrderDto(order);
+        return { ...toOrderDto(order), canReturn: false }; // trả hàng của khách vãng lai: lát 9.6 (hoãn)
       }
     }
   }

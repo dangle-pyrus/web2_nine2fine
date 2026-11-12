@@ -783,3 +783,72 @@ export async function insertReturn(o: InsertReturnOpts): Promise<{ id: string; a
 
 /** Ảnh trả hàng tối thiểu hợp lệ (JPEG 400x400) để tải lên. */
 export const makeReturnPhoto = (w = 400, h = 400): Buffer => makeJpeg(w, h);
+
+export interface ReturnFixture {
+  D: string;
+  M: Awaited<ReturnType<typeof loginMember>>;
+  N: Awaited<ReturnType<typeof loginMember>>;
+  v1: string;
+  v2: string;
+  v3: string;
+  R: Record<'R1' | 'R2' | 'R3' | 'R4' | 'R5' | 'R6' | 'R7' | 'R8', { code: string; id: string }>;
+}
+
+/**
+ * Dữ liệu tham chiếu PRD Slice 9 (D = ngày VN hôm nay): V1 (áo, tồn 7), V2 (quần, tồn 4), V3 (tồn 10); thành viên M, N.
+ * R1 (M) L1 = V1 500.000 x 2 giảm 100.000, L2 = V2 300.000 x 1, giao D-5 10:00 (total 1.200.000); R2 (M) áo 400.000 ship 30.000, giao D-30 08:00;
+ * R3 như R2 giao D-31 10:00; R4 (M) `to_receive`; R5 (M) V3 400.000 x 3 giảm 200.000, giao D-2; R6 (M) 25.000 ship 30.000, giao D-1;
+ * R7 (khách vãng lai) như R2 giao D-3; R8 (M) như R2 chuyển khoản, giao D-3.
+ */
+export async function makeReturnFixtures(D = '2026-11-12'): Promise<ReturnFixture> {
+  const mk = async (name: string, sku: string, qty: number) => (await makeProduct({ name, category: 'tops', status: 'ACTIVE', price: 400_000, variants: [{ sku, qty }] })).variants[0].id;
+  const v1 = await mk('Áo V1', 'RET-V1', 7);
+  const v2 = await mk('Quần V2', 'RET-V2', 4);
+  const v3 = await mk('Áo V3', 'RET-V3', 10);
+  const M = await loginMember(`m-ret${++memberSeq}@example.com`);
+  const N = await loginMember(`n-ret${++memberSeq}@example.com`);
+  const R1 = await insertRevenueOrder({
+    deliveredAt: vnAt(D, -5, '10:00'), userId: M.user.user_id,
+    lines: [{ variantId: v1, quantity: 2, unitPrice: 500_000, lineDiscount: 100_000 }, { variantId: v2, quantity: 1, unitPrice: 300_000 }],
+  });
+  const one = (deliveredAt: Date | null, o: Partial<InsertRevenueOrder> = {}) =>
+    insertRevenueOrder({ deliveredAt, userId: M.user.user_id, shippingFee: 30_000, lines: [{ variantId: v1, quantity: 1, unitPrice: 400_000 }], ...o });
+  const R2 = await one(vnAt(D, -30, '08:00'));
+  const R3 = await one(vnAt(D, -31, '10:00'));
+  const R4 = await one(null, { status: 'to_receive', paymentStatus: 'pending' });
+  const R5 = await insertRevenueOrder({ deliveredAt: vnAt(D, -2, '10:00'), userId: M.user.user_id, lines: [{ variantId: v3, quantity: 3, unitPrice: 400_000, lineDiscount: 200_000 }] });
+  const R6 = await insertRevenueOrder({ deliveredAt: vnAt(D, -1, '10:00'), userId: M.user.user_id, shippingFee: 30_000, lines: [{ variantId: v2, quantity: 1, unitPrice: 25_000 }] });
+  const R7 = await one(vnAt(D, -3, '10:00'), { userId: null });
+  const R8 = await one(vnAt(D, -3, '11:00'), { method: 'bank_transfer' });
+  return { D, M, N, v1, v2, v3, R: { R1, R2, R3, R4, R5, R6, R7, R8 } };
+}
+
+/** `POST /account/orders/{code}/return` bằng cookie thành viên; khoá mặc định mới mỗi lần. */
+export const createReturnReq = (cookie: string | undefined, code: string, body: unknown, key: string | null = newKey(), ip: string = freshIp()) =>
+  post(`/api/account/orders/${code}/return`, body, { cookie, ip, headers: key === null ? {} : { 'Idempotency-Key': key } });
+
+/** `POST /account/return-photos` (byte thô). */
+export function uploadMyPhoto(cookie: string | undefined, body: Buffer | string, contentType = 'application/octet-stream', ip: string = freshIp()) {
+  const r = request(app).post('/api/account/return-photos');
+  r.set('X-Forwarded-For', ip).set('Origin', ORIGIN).set('X-Requested-With', 'n2f').set('Content-Type', contentType);
+  if (cookie) r.set('Cookie', cookie);
+  return r.send(body);
+}
+
+/** Tải một ảnh hợp lệ và trả id. */
+export async function uploadOkPhoto(cookie: string, w = 400, h = 400): Promise<string> {
+  const r = await uploadMyPhoto(cookie, makeReturnPhoto(w, h), 'image/jpeg');
+  if (r.status !== 201) throw new Error(`upload photo ${r.status}`);
+  return r.body.id as string;
+}
+
+/** Số tài khoản mẫu: không được xuất hiện ở bất kỳ nơi nào ngoài kênh admin `received` (assertNoSecrets). */
+export const SEED_ACCOUNT = { bank: 'Vietcombank', accountNumber: '1234567890', accountName: 'NGUYEN VAN A' };
+
+/** Phản hồi (ngoài admin `received` của admin) không chứa bản mã, tên cột bản mã hay số tài khoản mẫu. */
+export function assertNoAccountSecrets(res: { text: string }): void {
+  assertNoSecrets(res);
+  for (const k of ['account_number_enc', 'accountNumberEnc', SEED_ACCOUNT.accountNumber]) {
+    if (res.text.includes(k)) throw new Error(`response contains forbidden token "${k}"`);
+  }
+}
