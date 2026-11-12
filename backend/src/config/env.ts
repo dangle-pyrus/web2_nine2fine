@@ -42,6 +42,9 @@ const schema = z
     SUPABASE_URL: opt(z.string()),
     SUPABASE_SERVICE_ROLE_KEY: opt(z.string()),
     SUPABASE_STORAGE_BUCKET: z.preprocess(emptyToUndefined, z.string().default('product-images')),
+    SUPABASE_RETURN_BUCKET: z.preprocess(emptyToUndefined, z.string().default('return-photos')),
+    RETURN_PHOTO_LOCAL_DIR: opt(z.string()),
+    RETURN_ACCOUNT_KEY: opt(z.string()),
   })
   .superRefine((env, ctx) => {
     if (env.MAIL_MODE === 'smtp') {
@@ -88,6 +91,15 @@ export interface AppConfig {
     localDir?: string;
     supabase: { url: string; serviceRoleKey: string; bucket: string } | null;
   };
+  /** Slice 9: kho ảnh trả hàng RIÊNG TƯ + khoá mã hoá số tài khoản nhận hoàn (32 byte, base64). */
+  returns: {
+    photoLocalDir?: string;
+    /** Bucket riêng tư (mặc định `return-photos`). */
+    photoBucket: string;
+    /** Bucket công khai của ảnh sản phẩm: driver riêng tư từ chối nếu trùng. */
+    publicBucket: string;
+    accountKey: Buffer | null;
+  };
 }
 
 function parseTrustProxy(v: string): boolean | number {
@@ -96,6 +108,13 @@ function parseTrustProxy(v: string): boolean | number {
   if (s === 'true') return 1;
   const n = Number(s);
   return Number.isInteger(n) && n > 0 ? n : false;
+}
+
+/** Khoá 32 byte từ base64; sai độ dài / thiếu -> null (KHÔNG ném: server vẫn chạy, tạo yêu cầu COD báo `unavailable`). */
+function parseAccountKey(v: string | undefined): Buffer | null {
+  if (!v) return null;
+  const b = Buffer.from(v.trim(), 'base64');
+  return b.length === 32 ? b : null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -141,6 +160,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         e.SUPABASE_URL && e.SUPABASE_SERVICE_ROLE_KEY
           ? { url: e.SUPABASE_URL.replace(/\/$/, ''), serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY, bucket: e.SUPABASE_STORAGE_BUCKET }
           : null,
+    },
+    returns: {
+      photoLocalDir: e.RETURN_PHOTO_LOCAL_DIR,
+      photoBucket: e.SUPABASE_RETURN_BUCKET,
+      publicBucket: e.SUPABASE_STORAGE_BUCKET,
+      accountKey: parseAccountKey(e.RETURN_ACCOUNT_KEY),
     },
   };
 }

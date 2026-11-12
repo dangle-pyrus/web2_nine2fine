@@ -25,6 +25,8 @@ async function main(): Promise<void> {
   const { mediaStorageWarning } = await import('./lib/storage');
   const mediaWarning = mediaStorageWarning();
   if (mediaWarning) logger.warn(mediaWarning);
+  const { returnStorageWarning, returnAccountKeyWarning } = await import('./lib/storage/private');
+  for (const w of [returnStorageWarning(), returnAccountKeyWarning()]) if (w) logger.warn(w);
 
   const server = app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);

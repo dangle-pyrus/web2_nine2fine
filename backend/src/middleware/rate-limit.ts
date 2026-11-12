@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { Errors } from '../lib/errors';
+import { RETURNS_ASSUMPTIONS } from '../config/assumptions';
 import { now } from '../lib/clock';
 
 /**
@@ -72,6 +73,11 @@ export const adminStaffCreateLimit = createRateLimit({
 
 /** Báo cáo bán hàng + CSV (AC-INS-06): 20 lần / 60 giây / admin, một bộ đếm chung hai endpoint. Đặt SAU requirePermission. */
 export const adminReportLimit = createRateLimit({ name: 'admin-report', windowMs: 60_000, max: 20, key: byAdminUser });
+
+const byUser = (req: Request): string => req.auth?.user.user_id ?? req.ip ?? 'unknown';
+/** Trả hàng (S9, BR-RET-18, 15): tạo 10 / giờ / tài khoản, tải ảnh 30 / giờ / tài khoản (đếm mọi lần gọi tới được thân). */
+export const returnCreateLimit = createRateLimit({ name: 'return-create', ...RETURNS_ASSUMPTIONS.createRateLimit, key: byUser });
+export const returnPhotoLimit = createRateLimit({ name: 'return-photo', ...RETURNS_ASSUMPTIONS.photoRateLimit, key: byUser });
 
 /** Chỉ cho test. */
 export function resetCheckoutRateLimits(): void {

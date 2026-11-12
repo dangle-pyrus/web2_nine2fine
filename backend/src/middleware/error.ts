@@ -20,6 +20,7 @@ function body(e: AppError) {
       ...(e.extras.removedVoucherCodes ? { removedVoucherCodes: e.extras.removedVoucherCodes } : {}),
       ...(e.extras.existingOrderCode ? { existingOrderCode: e.extras.existingOrderCode } : {}),
       ...(e.extras.currentStatus ? { currentStatus: e.extras.currentStatus } : {}),
+      ...(e.extras.currentReturnState ? { currentReturnState: e.extras.currentReturnState } : {}),
       ...(e.extras.order !== undefined ? { order: e.extras.order } : {}),
       ...(e.extras.missing ? { missing: e.extras.missing } : {}),
       ...(e.extras.productId ? { productId: e.extras.productId } : {}),
@@ -49,7 +50,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     // JSON hỏng, body > 16 KB: 422 validation (contract không dùng 400/413).
     // Tải ảnh quá giới hạn: 422 invalid-image reason size (Slice 6).
     appErr =
-      (err as { type: string }).type === 'entity.too.large' && req.originalUrl.split('?')[0].startsWith('/api/admin/uploads')
+      (err as { type: string }).type === 'entity.too.large' && /^\/api\/(admin\/uploads|account\/return-photos|orders\/[^/]+\/return\/photos)/.test(req.originalUrl.split('?')[0])
         ? Errors.invalidImage('size')
         : Errors.validation('Dữ liệu gửi lên không hợp lệ.');
   } else {

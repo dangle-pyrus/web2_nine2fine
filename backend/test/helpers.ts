@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import request from 'supertest';
 import type { Router } from 'express';
 import { vi } from 'vitest';
@@ -35,9 +36,11 @@ export async function resetState(): Promise<void> {
   // Slice 6: products / vouchers / media / nhật ký kho có FK tới users nên TRUNCATE users CASCADE sẽ xoá cả catalog.
   // Truncate phía đơn / giỏ / phiên rồi DELETE users (FK SET NULL) để catalog sống sót như trước.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys", "account_events", "store_settings_events" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "sessions", "auth_action_tokens", "auth_rate_limits", "login_attempts", "addresses", "carts", "cart_lines", "orders", "order_items", "order_events", "voucher_redemptions", "order_access_grants", "idempotency_keys", "account_events", "store_settings_events", "order_returns", "order_return_items", "return_photos" RESTART IDENTITY CASCADE',
   );
   await prisma.$executeRawUnsafe('DELETE FROM "users"');
+  // Slice 9: dọn kho ảnh riêng tư cục bộ của tiến trình test.
+  await rm(process.env.RETURN_PHOTO_LOCAL_DIR!, { recursive: true, force: true });
   await resetStoreSettings();
   mails.length = 0;
   setMailTransport({
@@ -697,3 +700,86 @@ export async function makeRevenueFixtures(D = '2026-11-12'): Promise<RevenueFixt
 /** Gọi API admin Slice 8 (không tiền tố /api/admin: truyền đường dẫn đầy đủ sau /api/admin). */
 export const iGet = (path: string, cookie?: string) => get(`/api/admin${path}`, { cookie, ip: freshIp() });
 export const iPut = (path: string, body: unknown, cookie?: string) => put(`/api/admin${path}`, body, { cookie, ip: freshIp() });
+
+/* ======================= Slice 9: trả hàng ======================= */
+
+import { computeReturnAmount } from '../src/modules/returns/return-amount';
+import { encryptAccountNumber, last4Of } from '../src/modules/returns/account-secret';
+import { faultOf, type ReturnReason, type ReturnState } from '../src/modules/returns/return-rules';
+import { randomUUID } from 'node:crypto';
+
+export interface InsertReturnOpts {
+  orderId: string;
+  state?: ReturnState;
+  reason?: ReturnReason;
+  /** Mặc định: mọi dòng đơn, đủ số lượng. `accepted` mặc định = quantity khi state đã `received` / `refunded`. */
+  lines?: Array<{ variantId: string; quantity: number; accepted?: number; disposition?: 'restock' | 'writeoff' }>;
+  requestedAt?: Date;
+  requestedBy?: string | null;
+  detail?: string;
+  /** Tài khoản nhận hoàn (đơn COD). Số đầy đủ chỉ được lưu khi state còn `requested` / `approved` / `received`. */
+  account?: { bank: string; number: string; name: string };
+  actorId?: string | null;
+  rejectNote?: string;
+  refundReference?: string;
+}
+
+const FINAL_STATES: readonly ReturnState[] = ['received', 'refunded'];
+
+/** Chèn THẲNG yêu cầu trả hàng theo trạng thái (không qua API): số tiền theo `computeReturnAmount`, `amount_final` khi đã `received`. */
+export async function insertReturn(o: InsertReturnOpts): Promise<{ id: string; amount: number }> {
+  const state = o.state ?? 'requested';
+  const reason = o.reason ?? 'wrong-size';
+  const fault = faultOf(reason);
+  const order = await prisma.order.findUniqueOrThrow({ where: { order_id: o.orderId }, include: { items: true } });
+  const chosen: NonNullable<InsertReturnOpts['lines']> = o.lines ?? order.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
+  const byVariant = new Map(order.items.map((i) => [i.variantId, i]));
+  const final = FINAL_STATES.includes(state);
+  const qty = new Map<string, number>();
+  for (const l of chosen) {
+    const item = byVariant.get(l.variantId)!;
+    qty.set(item.order_item_id, final ? (l.accepted ?? l.quantity) : l.quantity);
+  }
+  const amt = computeReturnAmount({
+    orderLines: order.items.map((i) => ({ orderItemId: i.order_item_id, unitPrice: i.unitPrice, quantity: i.quantity, lineDiscount: i.lineDiscount })),
+    qtyByItem: qty, fault, shippingFee: order.shippingFee, shippingDiscount: order.shippingDiscount,
+  });
+  const at = o.requestedAt ?? new Date();
+  const later = (min: number) => new Date(at.getTime() + min * 60_000);
+  const id = randomUUID();
+  const keepsSecret = state === 'requested' || state === 'approved' || state === 'received';
+  const stepAt = state === 'requested' || state === 'cancelled' ? {} : { approvedAt: later(10), approvedBy: o.actorId ?? null };
+  await prisma.orderReturn.create({
+    data: {
+      return_id: id, orderId: o.orderId, activeOrderId: state === 'cancelled' ? null : o.orderId, state, reason, fault, detail: o.detail ?? 'Mô tả lỗi của sản phẩm',
+      conditionAck: fault === 'customer', requestedVia: 'member', requestedBy: o.requestedBy ?? order.userId, requestedAt: at,
+      ...(state === 'rejected'
+        ? { approvedAt: null, approvedBy: null, rejectedAt: later(20), rejectedBy: o.actorId ?? null, rejectNote: o.rejectNote ?? 'Sản phẩm đã qua sử dụng' }
+        : stepAt),
+      ...(final ? { receivedAt: later(60), receivedBy: o.actorId ?? null, receiveNote: null } : {}),
+      ...(state === 'refunded' ? { refundedAt: later(120), refundedBy: o.actorId ?? null, refundReference: o.refundReference ?? 'CK-TEST-0001' } : {}),
+      ...(state === 'cancelled' ? { cancelledAt: later(5) } : {}),
+      goodsAmount: amt.goodsAmount, shippingRefund: amt.shippingRefund, returnShippingFee: amt.returnShippingFee, amount: amt.amount, amountFinal: final,
+      ...(o.account
+        ? {
+            bankName: o.account.bank, accountLast4: last4Of(o.account.number), accountName: o.account.name,
+            accountNumberEnc: keepsSecret ? encryptAccountNumber(o.account.number, id) : null,
+          }
+        : {}),
+      items: {
+        create: chosen.map((l) => {
+          const item = byVariant.get(l.variantId)!;
+          const acc = final ? (l.accepted ?? l.quantity) : null;
+          return {
+            orderItemId: item.order_item_id, quantity: l.quantity, acceptedQuantity: acc,
+            disposition: acc && acc > 0 ? (l.disposition ?? 'restock') : null, goodsAmount: amt.lines.get(item.order_item_id) ?? 0,
+          };
+        }),
+      },
+    },
+  });
+  return { id, amount: amt.amount };
+}
+
+/** Ảnh trả hàng tối thiểu hợp lệ (JPEG 400x400) để tải lên. */
+export const makeReturnPhoto = (w = 400, h = 400): Buffer => makeJpeg(w, h);

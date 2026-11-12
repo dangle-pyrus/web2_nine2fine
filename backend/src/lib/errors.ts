@@ -32,7 +32,10 @@ export type ErrorCode =
   | 'variant-in-use'
   | 'voucher-in-use'
   | 'self-change'
-  | 'last-admin';
+  | 'last-admin'
+  | 'not-returnable'
+  | 'return-window-closed'
+  | 'return-exists';
 
 const STATUS: Record<ErrorCode, number> = {
   validation: 422,
@@ -69,6 +72,9 @@ const STATUS: Record<ErrorCode, number> = {
   'voucher-in-use': 409,
   'self-change': 409,
   'last-admin': 409,
+  'not-returnable': 409,
+  'return-window-closed': 409,
+  'return-exists': 409,
 };
 
 export interface AppErrorExtras {
@@ -83,6 +89,8 @@ export interface AppErrorExtras {
   existingOrderCode?: string;
   /** Slice 4: trạng thái đơn hiện tại (`invalid-transition`, `order-state-changed`, `condition-not-met`). */
   currentStatus?: string;
+  /** Slice 9: trạng thái yêu cầu trả hàng hiện tại (`invalid-transition`). */
+  currentReturnState?: string;
   /** Slice 4: `AdminOrder` hiện tại kèm `order-state-changed`. */
   order?: unknown;
   /** Slice 6. */
@@ -209,4 +217,10 @@ export const Errors = {
   lastAdmin: () => new AppError('last-admin', 'Hệ thống phải còn ít nhất một quản trị viên đang hoạt động.'),
   stockChangedAdmin: (available: number, reserved: number) =>
     new AppError('stock-changed', 'Số lượng vừa thay đổi. Kiểm tra lại số hiện tại rồi thử lại.', { available, reserved }),
+  /** Slice 9 (trả hàng). */
+  notReturnable: () => new AppError('not-returnable', 'Đơn hàng này hiện chưa thể trả hàng.'),
+  returnWindowClosed: () => new AppError('return-window-closed', 'Đơn hàng đã quá thời hạn trả hàng.'),
+  returnExists: () => new AppError('return-exists', 'Đơn hàng này đã có yêu cầu trả hàng.'),
+  invalidReturnTransition: (currentReturnState: string) =>
+    new AppError('invalid-transition', 'Thao tác này không hợp lệ với trạng thái hiện tại của yêu cầu trả hàng.', { currentReturnState }),
 };

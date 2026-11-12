@@ -8,3 +8,6 @@ dev-outbox/
 .claude/
 .cursor/
 .devin/
+
+# Slice 9: ảnh trả hàng (kho riêng tư, driver local)
+.media-private/

@@ -210,3 +210,38 @@ export const STORE_SETTINGS_SEED = {
   },
   lowStockDefault: 5,
 } as const;
+
+/**
+ * GIẢ ĐỊNH Slice 9 (S9-Q1..Q14, mặc định PO; Orchestrator duyệt plan 2026-11-12).
+ * Đổi một câu trả lời = sửa đúng một chỗ ở đây (hoặc `return-rules.ts` / `return-amount.ts`) + BR/contract theo quy trình.
+ */
+export const RETURNS_ASSUMPTIONS = {
+  /** S9-Q2: hạn trả = hết 23:59:59 giờ VN của ngày thứ N kể từ ngày giao (ngày giao = ngày 0). */
+  windowDays: 30,
+  /** S9-Q3: phí gửi trả (đồng), chỉ khi lỗi của khách. Hằng số chính sách, không sửa ở Cài đặt. */
+  returnShippingFee: 30_000,
+  /** S9-Q4: ảnh minh chứng (kho riêng tư). */
+  photo: {
+    maxBytes: 5 * 1024 * 1024,
+    minShort: 200,
+    maxLong: 8000,
+    max: 5,
+    attachWindowMs: 24 * HOUR,
+  },
+  /** S9-Q12: mốc "dự kiến" (không ép). */
+  overdueHours: 24,
+  refundWorkingDays: 3,
+  /** Giới hạn tần suất (key = tài khoản). */
+  createRateLimit: { max: 10, windowMs: HOUR },
+  photoRateLimit: { max: 30, windowMs: HOUR },
+  listLimit: { default: 20, max: 50 },
+  q: { max: 100, minDigits: 4 },
+} as const;
+
+export type ReturnPermission = 'returns.process' | 'returns.refund';
+
+/** S9-Q7: staff xem / duyệt / từ chối / nhận hàng; chỉ admin xác nhận hoàn tiền + xem số tài khoản đầy đủ. Cùng tên với `frontend/.../permissions.ts`. */
+export const RETURN_PERMISSIONS: Record<'staff' | 'admin', readonly ReturnPermission[]> = {
+  staff: ['returns.process'],
+  admin: ['returns.process', 'returns.refund'],
+};

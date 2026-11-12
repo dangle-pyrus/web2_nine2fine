@@ -52,7 +52,13 @@ model User {
   mediaAssets           MediaAsset[]          @relation("MediaAssetCreator")
   accountEventsActed    AccountEvent[]        @relation("AccountEventActor")
   accountEventsTargeted AccountEvent[]        @relation("AccountEventTarget")
-  storeSettingsEvents   StoreSettingsEvent[]    @relation("StoreSettingsEventActor")
+  storeSettingsEvents   StoreSettingsEvent[]  @relation("StoreSettingsEventActor")
+  returnsRequested      OrderReturn[]         @relation("ReturnRequester")
+  returnsApproved       OrderReturn[]         @relation("ReturnApprover")
+  returnsRejected       OrderReturn[]         @relation("ReturnRejecter")
+  returnsReceived       OrderReturn[]         @relation("ReturnReceiver")
+  returnsRefunded       OrderReturn[]         @relation("ReturnRefunder")
+  returnPhotos          ReturnPhoto[]
 
   @@map("users")
 }
@@ -289,6 +295,12 @@ enum order_event_kind {
   stock_restocked
   stock_written_off
   note
+  return_requested
+  return_approved
+  return_rejected
+  return_received
+  return_refunded
+  return_cancelled
 }
 
 enum order_status {
@@ -326,38 +338,38 @@ enum voucher_kind {
 }
 
 model StoreSetting {
-  id                    Int      @id @default(1)
-  maxPerVariant         Int      @default(5) @map("max_per_variant")
-  maxItemsPerOrder      Int      @default(20) @map("max_items_per_order")
-  maxCartLines          Int      @default(30) @map("max_cart_lines")
-  cartRetentionDays     Int      @default(30) @map("cart_retention_days")
-  shippingFee           Int      @default(30000) @map("shipping_fee")
-  freeShippingThreshold Int      @default(1000000) @map("free_shipping_threshold")
-  codMaxTotal           Int      @default(5000000) @map("cod_max_total")
-  codRefusalLimit       Int      @default(2) @map("cod_refusal_limit")
-  codRefusalMonths      Int      @default(6) @map("cod_refusal_months")
-  codOpenOrderLimit     Int      @default(3) @map("cod_open_order_limit")
-  bankHoldMinutes       Int      @default(30) @map("bank_hold_minutes")
-  bankTransferEnabled   Boolean  @default(false) @map("bank_transfer_enabled")
-  deliveryDaysMin       Int      @default(2) @map("delivery_days_min")
-  deliveryDaysMax       Int      @default(4) @map("delivery_days_max")
-  cutoffHour            Int      @default(16) @map("cutoff_hour")
-  lowStockDefault       Int      @default(5) @map("low_stock_default") @db.SmallInt
-  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  legalName             String   @default("Công ty TNHH Thời trang Nine2Fine") @map("legal_name") @db.VarChar(120)
-  registrationNumber    String   @default("0319245768") @map("registration_number") @db.VarChar(13)
-  registrationIssuer    String   @default("Sở Tài chính TP. Hồ Chí Minh") @map("registration_issuer") @db.VarChar(100)
+  id                    Int       @id @default(1)
+  maxPerVariant         Int       @default(5) @map("max_per_variant")
+  maxItemsPerOrder      Int       @default(20) @map("max_items_per_order")
+  maxCartLines          Int       @default(30) @map("max_cart_lines")
+  cartRetentionDays     Int       @default(30) @map("cart_retention_days")
+  shippingFee           Int       @default(30000) @map("shipping_fee")
+  freeShippingThreshold Int       @default(1000000) @map("free_shipping_threshold")
+  codMaxTotal           Int       @default(5000000) @map("cod_max_total")
+  codRefusalLimit       Int       @default(2) @map("cod_refusal_limit")
+  codRefusalMonths      Int       @default(6) @map("cod_refusal_months")
+  codOpenOrderLimit     Int       @default(3) @map("cod_open_order_limit")
+  bankHoldMinutes       Int       @default(30) @map("bank_hold_minutes")
+  bankTransferEnabled   Boolean   @default(false) @map("bank_transfer_enabled")
+  deliveryDaysMin       Int       @default(2) @map("delivery_days_min")
+  deliveryDaysMax       Int       @default(4) @map("delivery_days_max")
+  cutoffHour            Int       @default(16) @map("cutoff_hour")
+  lowStockDefault       Int       @default(5) @map("low_stock_default") @db.SmallInt
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  legalName             String    @default("Công ty TNHH Thời trang Nine2Fine") @map("legal_name") @db.VarChar(120)
+  registrationNumber    String    @default("0319245768") @map("registration_number") @db.VarChar(13)
+  registrationIssuer    String    @default("Sở Tài chính TP. Hồ Chí Minh") @map("registration_issuer") @db.VarChar(100)
   registrationDate      DateTime? @default(dbgenerated("'2025-08-15'::date")) @map("registration_date") @db.Date
-  address               String   @default("Tầng 5, 172 Hai Bà Trưng, Phường Tân Định, TP. Hồ Chí Minh") @db.VarChar(200)
-  hotline               String   @default("1900 6868 29") @db.VarChar(20)
-  email                 String   @default("cskh@nine2fine.vn") @db.VarChar(254)
-  privacyEmail          String   @default("dulieu@nine2fine.vn") @map("privacy_email") @db.VarChar(254)
-  hours                 String   @default("9:00 – 21:00, tất cả các ngày trong tuần") @db.VarChar(100)
-  notificationUrl       String   @default("") @map("notification_url") @db.VarChar(300)
-  socialFacebook        String   @default("") @map("social_facebook") @db.VarChar(300)
-  socialInstagram       String   @default("") @map("social_instagram") @db.VarChar(300)
-  socialTiktok          String   @default("") @map("social_tiktok") @db.VarChar(300)
-  socialYoutube         String   @default("") @map("social_youtube") @db.VarChar(300)
+  address               String    @default("Tầng 5, 172 Hai Bà Trưng, Phường Tân Định, TP. Hồ Chí Minh") @db.VarChar(200)
+  hotline               String    @default("1900 6868 29") @db.VarChar(20)
+  email                 String    @default("cskh@nine2fine.vn") @db.VarChar(254)
+  privacyEmail          String    @default("dulieu@nine2fine.vn") @map("privacy_email") @db.VarChar(254)
+  hours                 String    @default("9:00 – 21:00, tất cả các ngày trong tuần") @db.VarChar(100)
+  notificationUrl       String    @default("") @map("notification_url") @db.VarChar(300)
+  socialFacebook        String    @default("") @map("social_facebook") @db.VarChar(300)
+  socialInstagram       String    @default("") @map("social_instagram") @db.VarChar(300)
+  socialTiktok          String    @default("") @map("social_tiktok") @db.VarChar(300)
+  socialYoutube         String    @default("") @map("social_youtube") @db.VarChar(300)
 
   @@map("store_settings")
 }
@@ -557,6 +569,8 @@ model Order {
   redemptions               VoucherRedemption[]
   grants                    OrderAccessGrant[]
   idempotencyKeys           IdempotencyKey[]
+  returns                   OrderReturn[]
+  returnPhotos              ReturnPhoto[]
 
   @@index([userId, createdAt(sort: Desc), order_id], map: "idx_orders_user_created")
   @@index([status, paymentDueAt], map: "idx_orders_status_due")
@@ -572,23 +586,24 @@ model Order {
 }
 
 model OrderItem {
-  order_item_id  String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orderId        String         @map("order_id") @db.Uuid
-  lineNo         Int            @map("line_no") @db.SmallInt
-  variantId      String         @map("variant_id") @db.Uuid
-  productId      String         @map("product_id") @db.Uuid
-  productSlug    String         @map("product_slug") @db.VarChar(80)
-  name           String         @db.VarChar(120)
-  colorName      String         @map("color_name") @db.VarChar(50)
-  size           String         @db.VarChar(10)
-  sku            String         @db.VarChar(64)
-  mediaId        String         @map("media_id") @db.VarChar(100)
-  unitPrice      Int            @map("unit_price")
-  compareAtPrice Int?           @map("compare_at_price")
+  order_item_id  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String            @map("order_id") @db.Uuid
+  lineNo         Int               @map("line_no") @db.SmallInt
+  variantId      String            @map("variant_id") @db.Uuid
+  productId      String            @map("product_id") @db.Uuid
+  productSlug    String            @map("product_slug") @db.VarChar(80)
+  name           String            @db.VarChar(120)
+  colorName      String            @map("color_name") @db.VarChar(50)
+  size           String            @db.VarChar(10)
+  sku            String            @db.VarChar(64)
+  mediaId        String            @map("media_id") @db.VarChar(100)
+  unitPrice      Int               @map("unit_price")
+  compareAtPrice Int?              @map("compare_at_price")
   quantity       Int
-  lineDiscount   Int            @default(0) @map("line_discount")
-  order          Order          @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
-  variant        ProductVariant @relation(fields: [variantId], references: [variant_id], onDelete: Restrict)
+  lineDiscount   Int               @default(0) @map("line_discount")
+  order          Order             @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
+  variant        ProductVariant    @relation(fields: [variantId], references: [variant_id], onDelete: Restrict)
+  returnItems    OrderReturnItem[]
 
   @@unique([orderId, variantId], map: "uq_order_items_order_variant")
   @@index([variantId], map: "idx_order_items_variant")
@@ -613,12 +628,15 @@ model OrderEvent {
   emailTemplate String?           @map("email_template") @db.VarChar(30)
   emailAttempts Int               @default(0) @map("email_attempts") @db.SmallInt
   emailSentAt   DateTime?         @map("email_sent_at") @db.Timestamp(6)
+  returnId      String?           @map("return_id") @db.Uuid
   order         Order             @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
   actorUser     User?             @relation("OrderEventActor", fields: [actorUserId], references: [user_id], onDelete: SetNull)
+  orderReturn   OrderReturn?      @relation(fields: [returnId], references: [return_id], onDelete: Cascade)
 
   @@index([at(sort: Desc), event_id(sort: Desc)], map: "idx_order_events_at")
   @@index([orderId, at], map: "idx_order_events_order_at")
   @@index([emailSentAt, emailAttempts, at], map: "idx_order_events_email_pending")
+  @@index([returnId, at], map: "idx_order_events_return")
   @@map("order_events")
 }
 
@@ -704,4 +722,96 @@ model AccountEvent {
   @@index([at(sort: Desc), eventId(sort: Desc)], map: "idx_account_events_at")
   @@index([targetUserId, at(sort: Desc), eventId(sort: Desc)], map: "idx_account_events_target_at")
   @@map("account_events")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 9: Trả hàng / hoàn tiền (chỉ cộng thêm). CHECK + RLS thêm tay trong migration 20261112000300.
+// ---------------------------------------------------------------------------
+
+/// Yêu cầu trả hàng. Trạng thái / lý do là VARCHAR + CHECK. `activeOrderId` = orderId khi state <> 'cancelled' (UNIQUE: tối đa 1 yêu cầu sống / đơn).
+model OrderReturn {
+  return_id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId           String            @map("order_id") @db.Uuid
+  activeOrderId     String?           @unique(map: "uq_order_returns_active") @map("active_order_id") @db.Uuid
+  state             String            @db.VarChar(10)
+  reason            String            @db.VarChar(14)
+  fault             String            @db.VarChar(8)
+  detail            String            @default("") @db.VarChar(500)
+  conditionAck      Boolean           @default(false) @map("condition_ack")
+  requestedVia      String            @map("requested_via") @db.VarChar(6)
+  requestedBy       String?           @map("requested_by") @db.Uuid
+  requestedAt       DateTime          @map("requested_at") @db.Timestamp(6)
+  approvedAt        DateTime?         @map("approved_at") @db.Timestamp(6)
+  approvedBy        String?           @map("approved_by") @db.Uuid
+  approveNote       String?           @map("approve_note") @db.VarChar(250)
+  carrier           String?           @db.VarChar(50)
+  trackingNumber    String?           @map("tracking_number") @db.VarChar(40)
+  rejectedAt        DateTime?         @map("rejected_at") @db.Timestamp(6)
+  rejectedBy        String?           @map("rejected_by") @db.Uuid
+  rejectNote        String?           @map("reject_note") @db.VarChar(250)
+  receivedAt        DateTime?         @map("received_at") @db.Timestamp(6)
+  receivedBy        String?           @map("received_by") @db.Uuid
+  receiveNote       String?           @map("receive_note") @db.VarChar(250)
+  refundedAt        DateTime?         @map("refunded_at") @db.Timestamp(6)
+  refundedBy        String?           @map("refunded_by") @db.Uuid
+  refundReference   String?           @map("refund_reference") @db.VarChar(60)
+  cancelledAt       DateTime?         @map("cancelled_at") @db.Timestamp(6)
+  goodsAmount       Int               @map("goods_amount")
+  shippingRefund    Int               @default(0) @map("shipping_refund")
+  returnShippingFee Int               @default(0) @map("return_shipping_fee")
+  amount            Int
+  amountFinal       Boolean           @default(false) @map("amount_final")
+  bankName          String?           @map("bank_name") @db.VarChar(60)
+  accountLast4      String?           @map("account_last4") @db.Char(4)
+  accountName       String?           @map("account_name") @db.VarChar(50)
+  accountNumberEnc  String?           @map("account_number_enc") @db.VarChar(200)
+  order             Order             @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
+  requester         User?             @relation("ReturnRequester", fields: [requestedBy], references: [user_id], onDelete: SetNull)
+  approver          User?             @relation("ReturnApprover", fields: [approvedBy], references: [user_id], onDelete: SetNull)
+  rejecter          User?             @relation("ReturnRejecter", fields: [rejectedBy], references: [user_id], onDelete: SetNull)
+  receiver          User?             @relation("ReturnReceiver", fields: [receivedBy], references: [user_id], onDelete: SetNull)
+  refunder          User?             @relation("ReturnRefunder", fields: [refundedBy], references: [user_id], onDelete: SetNull)
+  items             OrderReturnItem[]
+  photos            ReturnPhoto[]
+  events            OrderEvent[]
+
+  @@index([state, requestedAt(sort: Desc), return_id(sort: Desc)], map: "idx_order_returns_state_requested")
+  @@index([orderId, requestedAt(sort: Desc)], map: "idx_order_returns_order")
+  @@map("order_returns")
+}
+
+model OrderReturnItem {
+  return_item_id   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  returnId         String      @map("return_id") @db.Uuid
+  orderItemId      String      @map("order_item_id") @db.Uuid
+  quantity         Int
+  acceptedQuantity Int?        @map("accepted_quantity")
+  disposition      String?     @db.VarChar(8)
+  goodsAmount      Int         @map("goods_amount")
+  orderReturn      OrderReturn @relation(fields: [returnId], references: [return_id], onDelete: Cascade)
+  orderItem        OrderItem   @relation(fields: [orderItemId], references: [order_item_id], onDelete: Cascade)
+
+  @@unique([returnId, orderItemId], map: "uq_order_return_items")
+  @@map("order_return_items")
+}
+
+/// Ảnh minh chứng (kho RIÊNG TƯ). `storageKey` = rp-<32 hex>.<ext> (khác MEDIA_ID_RE: không bao giờ qua /api/media).
+model ReturnPhoto {
+  photo_id       String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  returnId       String?      @map("return_id") @db.Uuid
+  orderId        String?      @map("order_id") @db.Uuid
+  uploaderUserId String?      @map("uploader_user_id") @db.Uuid
+  storageKey     String       @unique(map: "uq_return_photos_key") @map("storage_key") @db.VarChar(40)
+  storage        String       @db.VarChar(10)
+  contentType    String       @map("content_type") @db.VarChar(20)
+  byteSize       Int          @map("byte_size")
+  width          Int
+  height         Int
+  createdAt      DateTime     @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(6)
+  orderReturn    OrderReturn? @relation(fields: [returnId], references: [return_id], onDelete: Cascade)
+  order          Order?       @relation(fields: [orderId], references: [order_id], onDelete: Cascade)
+  uploader       User?        @relation(fields: [uploaderUserId], references: [user_id], onDelete: SetNull)
+
+  @@index([returnId], map: "idx_return_photos_return")
+  @@map("return_photos")
 }
