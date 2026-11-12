@@ -16,6 +16,9 @@
 - Xong: PRD/backlog (9b583fb), contract + plan (9bd91d9), contract **locked**, 17 điểm lệch plan mục 14 đã duyệt (decisions.md).
 - Bước tiếp theo: backend-dev làm lát 8.1 (nền, migration `20261112000100_admin_insights_schema` chỉ áp cục bộ) rồi 8.2–8.5; frontend-dev nối FE sau cờ `adminInsightsMode`; cuối slice qa-reviewer.
 
+### Slice 8 — Supabase (2026-11-12 01:25Z)
+- Thắng yêu cầu, Orchestrator chạy `npx prisma migrate deploy`: `20261112000100_admin_insights_schema` đã áp, `migrate status` "up to date". Kiểm chỉ đọc: `store_settings` 32 cột, `store_settings_events` RLS bật, 0 dòng; chỉ mục `idx_orders_status_delivered` có; users 6, orders 1, products 8, store_settings 1 (không đổi). Còn: Thắng nhập thông tin pháp lý thật (G9), chạy FE trên BE thật.
+
 ### Slice 8 — QA (2026-11-12)
 - `docs/qa/report-slice-8-admin-insights.md`: ĐẠT DoD cục bộ, 52/55 Pass, 3 một phần (AC-SET-04, 11, 14), 0 Blocker, 0 Major. Minor để lại: m-1 footer chưa hiện MXH; m-2 thiếu test trực tiếp `payment_due_at` sau đổi `bankHoldMinutes`; m-3 rate limit trong RAM (kế thừa); m-4 chưa chạy FE trình duyệt trên BE thật (làm ở 8.7).
 - Còn lại: lát 8.7 cần Thắng: trong `backend/` với `.env` Supabase chạy `npx prisma migrate deploy` (áp `20261112000100_admin_insights_schema`, chỉ cộng thêm), rồi nhập thông tin pháp lý thật ở Cài đặt › Cửa hàng (G9).
