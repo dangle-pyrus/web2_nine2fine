@@ -1983,3 +1983,302 @@ Mặc định PO (Thắng đang vắng), làm trước theo mặc định; Thắ
 | Ma trận quyền chỉ `returns.process` | Thêm `returns.refund` (admin) | Cập nhật `permissions.ts`, ma trận ở Cài đặt › Nhân viên |
 | Nhóm "Đổi trả" ở Cài đặt (`returnDays`, phí gửi trả) | Hằng số trong `store-policy`, không có cột | Vẫn ẩn (BR-SET-12); không sửa được lần này |
 | Tab đơn `returns` (`return-requested` / `returned`) | Không có ở `order_status`; hàng hoàn Slice 4 là `returning` | Ẩn ở HTTP; xem trả hàng ở `/admin/returns` |
+
+---
+
+## Slice 10: Gói P1 (trả hàng vãng lai, đánh giá, wishlist, gợi ý, Moment, khuyến mãi, nội dung)
+
+Nguồn: master plan mục 0, 8.3 (Shop by Moment), 8.8 (Reviews), 13 (Wishlist), 32 (Moment), 52 (P1); Slice 1 (BR-AUTH-32), Slice 2 (BR-CAT-16, 17, 18; `ids`), Slice 3 (voucher, `line_discount`, `excludeSaleItems`), Slice 4 (BR-ADM-23, 29 grant vãng lai), Slice 6 (sản phẩm, `compareAtPrice`, ảnh `media_assets`, quyền), Slice 8 (nhóm Đổi trả), Slice 9 (BR-RET-22, 44, 54(d), lát 9.6 hoãn). Thắng giao 2026-11-13: gom 7 hạng mục P1 vào MỘT đợt; Thắng đang vắng, mọi câu hỏi mở chốt theo mặc định PO (mục 7). Mã BR: `BR-P1` (nền chung), `BR-RET-60..66` (A), `BR-REV` (B), `BR-WISH` (C), `BR-REC` (D), `BR-MOM` (E), `BR-PROMO` (F), `BR-CMS` (G); AC cùng tiền tố `AC-`. Tên endpoint, bảng, cột, mã lỗi do Backend chốt trong `openapi.yaml`; PRD chỉ nêu dữ liệu và hành vi. Tiền là số nguyên đồng; múi giờ Asia/Ho_Chi_Minh (GMT+7); thời điểm API là ISO 8601 UTC. Không đổi hàng, không ML, không thanh toán mới.
+
+Hiện trạng đã đọc (quyết định phạm vi bám các điểm này):
+- **Trả hàng vãng lai (A):** 9.2 đã làm cho thành viên; đơn do vãng lai xem (OTP) hiện trả `canReturn = false`, không có khối `return`. Đã có sẵn từ 9.3/9.4: cờ `overdue` ("Quá hạn xử lý"), thông tin lấy hàng (đơn vị, mã vận đơn), email "đã nhận hàng trả về", KPI `returnRate`. Còn thiếu: 5 operation vãng lai, `AdminOrderSummary.returnPending`, chữ chính sách. `order_access_grants` (token băm, theo đơn) có sẵn.
+- **Đánh giá (B):** BE chưa có bảng; `GET /products/{id}/reviews` luôn `200 []` (BR-CAT-17); FE có `review-form` (sao, fit, size, chiều cao, tiêu đề ≤ 80, nội dung ≥ 20 / ≤ 1000), `product-reviews`, trang admin `reviews` (xem, trả lời, ẩn) chạy mock; `ProductReview.sample` chỉ là dữ liệu mẫu.
+- **Wishlist (C):** chỉ ở `localStorage` (`n2f.wishlist.v1`), bắt đăng nhập (quyết định 2026-10-11); BE chỉ có lọc `ids` ≤ 48 (BR-CAT-16).
+- **Gợi ý (D):** PDP "Có thể bạn cũng thích" = FE gọi danh sách theo `moment` đầu tiên, `limit` 5; giỏ = bán chạy chưa có trong giỏ, 4 thẻ. Cột `sales_rank` có ở `products`.
+- **Moment (E):** `product_moment` (`work`, `dinner`, `event`, `weekend`) và lọc `moment` **đã chạy thật** ở catalog (BE + FE). Phần còn fixture: thẻ Moment ở trang chủ (chữ, ảnh) và `LandingContent` đến từ `MockHomeContentApi` (`apiConfig.mode = 'mock'`); `GET /api/content/home` mới là đề xuất FE, BE chưa có.
+- **Khuyến mãi (F):** voucher `percent` / `fixed` / `free_shipping` + điều kiện + admin CRUD đã xong (Slice 3, 6). **Câu hỏi "voucher free-ship" đã chốt từ 2026-11-07 (Thắng: giữ) và đã chạy; không làm lại.** Sản phẩm có `price` + `compare_at_price` nhập tay (giá gạch), chưa có giá giảm theo hạn; `excludeSaleItems` coi "đang giảm" = `compare_at_price` > `price`.
+- **Nội dung (G):** trang admin `collections`, `size-chart`, `home-content`, `reviews` chạy mock, ở HTTP là "Chưa khả dụng" (AC-INS-07). BE có `size_charts` (theo danh mục, JSON, chỉ đọc, `max-age=3600`). **Không có bảng bộ sưu tập, không có trang bộ sưu tập ở storefront** (chỉ admin mock); `product-form` ẩn ô bộ sưu tập ở HTTP.
+
+### 1. Vấn đề và mục tiêu
+
+**Vấn đề.** Bảy khu còn mock hoặc hoãn: khách vãng lai không tự trả hàng được; không có bằng chứng xã hội thật; yêu thích mất khi đổi máy; gợi ý chỉ là danh sách thô; trang chủ phụ thuộc fixture nên không sửa được nội dung thật; không có cách khuyến mãi theo thời hạn ngoài voucher; bảng size và nội dung không chỉnh được mà không sửa mã.
+
+**Mục tiêu.** (1) Khách vãng lai trả hàng cùng quy tắc với thành viên qua Tra cứu đơn. (2) Người đã nhận hàng viết đúng một đánh giá cho mỗi sản phẩm; shop kiểm duyệt sau; điểm trung bình đúng từng review đang hiển thị. (3) Yêu thích đồng bộ theo tài khoản, gộp an toàn khi đăng nhập, không hồi sinh mục đã xoá. (4) Gợi ý do quy tắc xác định, cùng đầu vào cho cùng đầu ra. (5) Trang chủ, thẻ Moment, bảng size đọc từ DB và admin sửa được, có kiểm giá trị. (6) Khuyến mãi theo thời hạn không làm lệch giá giữa danh sách, giỏ, checkout, đơn. (7) Mỗi khu bật / tắt riêng bằng cờ FE, migration chỉ cộng thêm.
+
+**Không phải mục tiêu.** Đổi hàng; ảnh / video / bình chọn "hữu ích" cho đánh giá; thư mời đánh giá tự động; Moment mới do admin tạo; cá nhân hoá, "xem gần đây", học máy, theo dõi click; nháp / lịch đăng nội dung; mua X tặng Y, flash sale đếm ngược, mã tự áp; giá theo biến thể; UGC mạng xã hội; GSAP (chỉ FE).
+
+### 2. Phạm vi
+
+| Hạng mục | Mức | Lý do |
+| --- | --- | --- |
+| Nền: migration cộng thêm, 5 cờ FE riêng, quyền mới, mã lỗi, giới hạn tần suất | Must | Mỗi khu phát hành / hoàn tác độc lập (mẫu `returnsMode`). |
+| A. Vãng lai gửi / xem / huỷ yêu cầu trả hàng qua OTP, chữ chính sách | Must | Chính sách hiện bắt khách vãng lai gọi hotline; đóng nợ hoãn của 9.6. |
+| A. `returnPending` ở danh sách đơn; nhãn nguồn "Khách vãng lai" ở admin | Should | Tiện, không chặn vận hành (cờ quá hạn, email, `returnRate` đã có). |
+| B. Gửi đánh giá (đã nhận hàng, 1 lần), hiển thị, điểm trung bình, admin ẩn / hiện / trả lời | Must | Đủ để tin cậy và kiểm soát nội dung; bỏ BR-CAT-17 cho khu này. |
+| B. Lọc đánh giá theo sao; "Viết đánh giá" từ chi tiết đơn | Should | Thêm lối vào, không chặn. |
+| B. Sửa / xoá đánh giá của khách, ảnh, bình chọn hữu ích, thư mời, duyệt trước khi hiện | Won't | Tốn công, lượng đánh giá thấp; hậu kiểm là đủ. |
+| C. Đồng bộ wishlist theo tài khoản, gộp khi đăng nhập, tối đa 100 mục | Must | Bỏ mất dữ liệu khi đổi máy. |
+| C. Thống kê "được yêu thích" cho admin; chia sẻ wishlist | Won't | Không có nhu cầu vận hành. |
+| D. Gợi ý PDP và giỏ theo quy tắc cùng danh mục / Moment / bán chạy, một hàm dùng chung | Must | Thay logic FE thô bằng quy tắc kiểm được. |
+| D. Gợi ý "cùng bộ sưu tập", "mua cùng" (≥ 3 đơn) | Should | "Mua cùng" tốn truy vấn đơn; bộ sưu tập chưa có dữ liệu. |
+| E. Thẻ Moment trang chủ từ DB (chữ, ảnh, số sản phẩm thật, ẩn khi 0 sản phẩm) | Must | Phần còn lại của Moment đã thật; đi cùng G. |
+| E. Thêm / xoá / đổi tên Moment | Won't | Moment là enum cố định; đổi cần migration. |
+| F. Giá khuyến mãi có hạn theo sản phẩm (giá hiệu lực một hàm), admin sửa, nhãn "-X%" | Must | Khuyến mãi theo thời gian thực tế; voucher đã có. |
+| F. Giảm hàng loạt theo danh mục (xem trước); lọc `sale=true`; nhãn "đến dd/MM" | Should | Tiện, có thể thay bằng sửa từng sản phẩm. |
+| F. Mua X tặng Y, bậc số lượng, flash sale, mã tự áp, ví voucher, nhiều đợt / sản phẩm, giá theo biến thể | Won't | Không có dữ liệu / ngoài phạm vi; giữ giá nhất quán. |
+| G. Trang chủ: `GET /content/home` công khai + admin sửa khối (kiểm giá trị, chống ghi chồng) | Must | Hiện trang chủ chạy fixture; không sửa được nội dung thật. |
+| G. Bảng size: admin sửa theo danh mục; storefront đọc bản mới ≤ 60 giây | Must | Bảng size ảnh hưởng đổi trả. |
+| G. Bộ sưu tập (CRUD + trang `/collections/:slug`); "Khôi phục mặc định" trang chủ | Should | Storefront chưa có trang bộ sưu tập; cắt không ảnh hưởng vận hành. |
+| G. Nháp / xem trước / lịch đăng; nhật ký đổi nội dung hợp nhất | Won't | Bản lưu = bản công khai; chỉ ghi "cập nhật bởi / lúc". |
+
+### 3. Hiện trạng và hành vi được chọn
+
+| # | Điểm | Chọn | Lý do |
+| --- | --- | --- | --- |
+| D1 | Cờ FE | 5 cờ mới: `reviewsMode`, `wishlistMode`, `recommendationsMode`, `contentMode` (trang chủ + Moment + bảng size + bộ sưu tập, cả storefront và admin), `promotionsMode` (giá khuyến mãi ở admin; storefront đọc giá qua catalog). A dùng `returnsMode` sẵn có, máy chủ quyết định `canReturn`. `http` ở bản thường; e2e chọn bằng `localStorage['n2f.e2e.<tên>']` | Mỗi khu bật / tắt riêng; sai một khu không kéo khu khác. |
+| D2 | Đánh giá và BR-CAT-17 | Khi `reviewsMode = http`, BR-CAT-17 thôi áp cho đánh giá (đọc, điểm sao, form); "Báo khi có hàng" vẫn ẩn | Cờ riêng thay quyết định "ẩn tạm". |
+| D3 | Danh tính người đánh giá | Hiển thị "Họ + chữ cái đầu của tên" (ví dụ "Nguyễn V."); không email / SĐT / id | Riêng tư; vẫn nhận ra là người thật. |
+| D4 | Giá hiệu lực | Một hàm `giá hiệu lực(T)`: trong đợt giảm = `sale_price`, ngoài đợt = `price`; tính khi đọc bằng giờ máy chủ, không tác vụ nền; đơn lưu giá hiệu lực lúc đặt | Hết hạn đúng giờ không cần job; đơn cũ không đổi. |
+| D5 | Gộp wishlist | Máy chủ là nguồn sự thật; chỉ gộp các mục thêm khi chưa đồng bộ (khách / offline), không gộp cả bản local cũ | Tránh hồi sinh mục đã xoá ở thiết bị khác. |
+| D6 | Bộ sưu tập | Should: BE + FE chỉ làm khi hai lát còn lại xong | Chưa có nơi hiển thị ở storefront. |
+| D7 | Nội dung trang chủ | Một bản ghi duy nhất (khối có thứ tự, `enabled`), seed từ fixture hiện tại, không đè bản admin đã sửa | Idempotent như seed catalog. |
+
+### 4. Business Rules
+
+**Nền chung**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-P1-01 | Must | Migration chỉ cộng thêm (không `DROP` / `TRUNCATE` / đổi kiểu): bảng đánh giá (duy nhất theo tài khoản + sản phẩm), mục yêu thích (khoá chính tài khoản + sản phẩm), nội dung trang chủ (một dòng), bộ sưu tập + sản phẩm trong bộ sưu tập, cột giá giảm + thời điểm đầu / cuối đợt ở sản phẩm (CHECK nhất quán), cột nguồn / grant cho ảnh trả hàng vãng lai; bảng mới bật RLS. `migrate deploy` 2 lần: lần 2 không có gì; số dòng `products`, `orders`, `order_items`, `users`, `vouchers`, `order_returns` không đổi. |
+| BR-P1-02 | Must | Cờ FE theo D1. `mock`: hành vi cũ, Playwright mock pass nguyên. `http`: khu đó gọi API thật, không đọc / ghi mock, ẩn mọi ô Won't. Tắt một cờ (đặt `mock` hoặc ẩn) không làm lỗi khu khác. |
+| BR-P1-03 | Must | Quyền (kiểm ở máy chủ, đọc lại vai trò mỗi yêu cầu, thiếu quyền → 403 `forbidden`, dữ liệu không đổi): `reviews.moderate` staff + admin; `content.edit` chỉ admin (staff xem được nội dung nhưng không sửa); giá khuyến mãi dùng `promotions.edit` sẵn có (chỉ admin). Thêm dòng vào ma trận quyền ở Cài đặt › Nhân viên. |
+| BR-P1-04 | Must | Mã lỗi ổn định, FE map theo `code`: dùng lại `unauthenticated`, `forbidden`, `not-found`, `validation` (+`fieldErrors`), `version-conflict`, `rate-limited` (+`retryAfterSeconds`); thêm `not-eligible` 409, `already-reviewed` 409, `wishlist-full` 409. Không stack trace / SQL. |
+| BR-P1-05 | Must | Giới hạn tần suất (vượt → 429 `rate-limited`): gửi đánh giá 5 / giờ / tài khoản; ghi wishlist 60 / phút / tài khoản; admin ghi dùng bộ đếm sẵn có (60 / 60 giây); đọc công khai dùng 120 / 60 giây / IP của catalog. |
+
+**A. Trả hàng cho khách vãng lai (BR-RET-60..66)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-RET-60 | Must | Khách vãng lai đã qua Tra cứu đơn (mã đơn + email + OTP, có `order_access_grants` còn hạn) gửi / xem / huỷ yêu cầu **chỉ cho đơn của grant đó**. Grant hết hạn hoặc thiếu → 401 `unauthenticated`; đơn khác hoặc đơn thuộc tài khoản thành viên → 404 `not-found`. Thời hạn grant giữ như hiện có (không đổi). |
+| BR-RET-61 | Must | Áp đúng BR-RET-09..21 và 30 (điều kiện đơn + hạn 30 ngày hết 23:59:59 giờ VN, dòng / số lượng, 6 lý do, mô tả, ảnh, tài khoản nhận hoàn COD, `Idempotency-Key`, huỷ khi `requested`, một yêu cầu không-`cancelled` mỗi đơn, công thức tiền). Chi tiết đơn vãng lai trả `canReturn`, `returnDeadline`, `return` (thay `canReturn = false` hiện tại). |
+| BR-RET-62 | Must | Ảnh vãng lai: tải 30 / giờ / grant và 60 / giờ / IP; gắn vào yêu cầu phải do **chính grant đó** tải trong 24 giờ qua và chưa gắn; ảnh chỉ xem được bằng grant đó hoặc staff / admin, mỗi lần kiểm quyền, không đoán được từ id; cùng quy tắc định dạng / dung lượng / gỡ metadata BR-RET-14, 15. |
+| BR-RET-63 | Must | Tạo yêu cầu vãng lai: 5 / giờ / grant và 10 / giờ / IP (chặt hơn thành viên vì không có định danh). Sự kiện đơn ghi người = khách (không tên). Thư gửi tới email của đơn theo BR-RET-41, **không** chứa mã tra cứu, OTP hay số tài khoản đầy đủ. |
+| BR-RET-64 | Must | Số tài khoản nhận hoàn, che 4 số cuối, xoá ở trạng thái cuối, chỉ admin xem đủ ở `received`: giữ nguyên BR-RET-17 cho yêu cầu vãng lai; không có đường nào trả số đầy đủ cho vãng lai. |
+| BR-RET-65 | Should | `AdminOrderSummary.returnPending` = đơn có yêu cầu `requested`; danh sách / chi tiết admin hiện nhãn nguồn "Khách vãng lai" hoặc "Thành viên". Nhãn "Quá hạn xử lý", email "đã nhận hàng trả về", `returnRate` (BR-RET-44, 52) đã có: chỉ kiểm lại, không làm mới. |
+| BR-RET-66 | Must | Chữ chính sách trả hàng / trợ giúp mục "Cách gửi yêu cầu" thêm "hoặc Tra cứu đơn hàng" khi A phát hành; vẫn giữ hotline cho đơn quá hạn / lỗi. |
+
+**B. Đánh giá sản phẩm (BR-REV)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-REV-01 | Must | Đủ điều kiện đánh giá sản phẩm X khi tài khoản có ≥ 1 đơn `completed` có `delivered_at` trong **365 ngày** qua chứa X **và** không phải trường hợp mọi số lượng X của các đơn đó đã hoàn (yêu cầu trả hàng `refunded` hết dòng X). Chưa mua, mua chưa nhận (`to_receive`), đơn huỷ, quá 365 ngày, đã trả hết: không đủ (409 `not-eligible`). Khách vãng lai không đánh giá (Won't). |
+| BR-REV-02 | Must | `GET` đủ điều kiện (cần cookie): `status` ∈ `sign-in` (không phiên; vẫn 200), `not-purchased`, `reviewed`, `eligible` (+`sizeBought`). `sizeBought` do máy chủ lấy từ đơn đủ điều kiện **mới giao nhất**; FE không quyết định. |
+| BR-REV-03 | Must | Dữ liệu gửi (NFC, cắt khoảng trắng hai đầu, không ký tự điều khiển ngoài xuống dòng): `rating` nguyên 1–5; `fit` ∈ {-1, 0, 1}; `height` tuỳ chọn ≤ 20 ký tự; `title` 2–80 ký tự, có ≥ 1 ký tự không phải khoảng trắng; `body` 20–1000 ký tự. Sai → 422 `fieldErrors` theo trường, trả đủ mọi lỗi một lần. `sizeBought`, tác giả, ngày, `verified` do máy chủ đặt (bỏ qua nếu FE gửi). |
+| BR-REV-04 | Must | Mỗi (tài khoản, sản phẩm) **một** đánh giá, ràng buộc ở DB. Gửi lần hai → 409 `already-reviewed`; 10 yêu cầu đồng thời: đúng 1 thành công. Hiện ngay sau khi gửi (hậu kiểm). Khách không sửa / xoá được (Won't). |
+| BR-REV-05 | Must | Danh sách công khai `GET /products/{id}/reviews`: chỉ đánh giá `visible` của sản phẩm `ACTIVE`, mới nhất trước, `limit` mặc định 10 (≤ 20), phân trang; mỗi mục: `rating`, `fit`, `sizeBought`, `height`, `title`, `body`, `date` (ngày VN), `author` (D3), `verified = true`, `reply` (nếu có). Không `sample`. Công khai, không cần cookie, `public, max-age=10`. |
+| BR-REV-06 | Must | Điểm trung bình: sản phẩm có `rating = {average, count}` (PDP, thẻ PLP) chỉ tính đánh giá `visible`; `average` = Σ sao / `count` làm tròn **1 chữ số thập phân half-up**; `count` = 0 thì không có `rating` (FE ẩn sao). Phản ánh ẩn / hiện / gửi mới trong ≤ 30 giây (BR-CAT-11). |
+| BR-REV-07 | Must | Kiểm duyệt (`reviews.moderate`): danh sách admin lọc `view` ∈ tất cả / chưa trả lời / sao thấp (≤ 2) / đã ẩn, lọc `rating` 1–5, `limit` 20 / 50, phân trang, số đếm mỗi tab. Ẩn (lý do bắt buộc 5–250 ký tự) và hiện lại; trả lời công khai 5–500 ký tự (sửa / xoá được); ghi người + thời điểm; `updatedAt` chống ghi chồng → 409 `version-conflict`. Đánh giá ẩn không hiện công khai và không vào điểm trung bình. Sản phẩm không `ACTIVE`: ẩn khỏi công khai nhưng giữ dữ liệu. |
+| BR-REV-08 | Must | FE `reviewsMode = http`: PDP hiện đánh giá thật, không nhãn "mẫu"; form chỉ khi `eligible`; theo `status` hiện "Đăng nhập để đánh giá" / "Chỉ người đã nhận hàng mới đánh giá" / "Bạn đã đánh giá"; nút Gửi khoá khi đang gửi; 422 gắn đúng ô; mất mạng / 5xx giữ nguyên nội dung nhập; 409 `already-reviewed` / `not-eligible` có câu riêng; thành công hiện đánh giá của mình ngay. |
+| BR-REV-09 | Should | Lọc công khai theo sao (`rating` 1–5); trong chi tiết đơn `completed` mỗi dòng đủ điều kiện có liên kết "Viết đánh giá". |
+
+**C. Wishlist (BR-WISH)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-WISH-01 | Must | API wishlist chỉ nhận phiên `n2f_sid`; không phiên → 401, `no-store`. Dữ liệu riêng tư theo tài khoản; admin không xem (Won't). Khách chưa đăng nhập giữ BR-AUTH-32 (bấm tim → đăng nhập → quay lại → sản phẩm được lưu). |
+| BR-WISH-02 | Must | Lưu theo **sản phẩm** (không theo biến thể), tối đa **100** mục `ACTIVE` mỗi tài khoản; thêm mục 101 → 409 `wishlist-full`. Thêm mục đã có → 200 không đổi; xoá mục không có → 204; id không tồn tại hoặc không `ACTIVE` → 404 `not-found` (xoá mục của sản phẩm vừa bị ẩn vẫn 204). |
+| BR-WISH-03 | Must | Đọc: danh sách id sản phẩm `ACTIVE`, mới thêm trước, kèm `addedAt`; mục của sản phẩm đã ẩn giữ trong DB nhưng không trả và không tính vào 100, trở lại nếu sản phẩm công khai lại. FE lấy thẻ bằng lọc `ids` (≤ 48 mỗi lượt, BR-CAT-16). |
+| BR-WISH-04 | Must | Gộp khi đăng nhập / đăng ký: FE gửi các id **chưa đồng bộ** (≤ 100 id; > 100 → 422); máy chủ hợp với mục đã có, bỏ id không hợp lệ, thêm theo thứ tự gửi tới khi đủ 100, trả danh sách cuối + `skipped` (số id bị bỏ vì không hợp lệ hoặc vượt 100). Idempotent (gọi lại không nhân đôi). Lỗi mạng: giữ nguyên danh sách chưa đồng bộ trên thiết bị và thử lại lần mở trang sau (BR-AUTH-32: không mất mục chờ). |
+| BR-WISH-05 | Must | Sau khi đã đồng bộ, máy chủ là nguồn sự thật: bản trên thiết bị chỉ là cache, không gửi lên lại; mục xoá ở thiết bị A không quay lại khi thiết bị B (cache cũ) đăng nhập. Thiết bị khác thấy thay đổi khi tải lại trang (không thời gian thực). Đăng xuất chủ động xoá cache wishlist của thiết bị; hết phiên thì giữ, đăng nhập lại cùng tài khoản không nhân đôi. |
+| BR-WISH-06 | Must | FE `wishlistMode = http`: tim đổi ngay (lạc quan), lỗi thì hoàn lại + thông báo; 409 `wishlist-full` có câu riêng ("Danh sách yêu thích đã đủ 100 sản phẩm"); 429 nêu số giây; mất mạng thì giữ ở danh sách chưa đồng bộ. Trang Yêu thích chia `ids` ≤ 48 mỗi request. |
+
+**D. Gợi ý sản phẩm (BR-REC)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-REC-01 | Must | Gợi ý cho một sản phẩm X do **một hàm xác định**: loại X, loại sản phẩm không `ACTIVE`, loại sản phẩm hết hàng ở mọi biến thể; lấy lần lượt đến đủ `limit` (mặc định 4, ≤ 8), không trùng: (1) cùng danh mục **và** ≥ 1 Moment chung, xếp số Moment chung giảm; (2) cùng danh mục còn lại; (3) cùng Moment khác danh mục; (4) bán chạy toàn shop. Trong mỗi bước xếp `sales_rank` tăng, rồi `slug`. Cùng dữ liệu + cùng tham số → cùng kết quả và thứ tự. |
+| BR-REC-02 | Must | Gợi ý cho giỏ (≤ 10 sản phẩm): mỗi sản phẩm trong giỏ sinh danh sách BR-REC-01 (8 mục); điểm = số danh sách chứa sản phẩm đó; xếp điểm giảm, rồi `sales_rank` tăng, rồi `slug`; loại mọi sản phẩm đang trong giỏ; `limit` mặc định 4. Cùng một endpoint công khai với PDP (đầu vào: một hoặc nhiều id / slug). Giỏ rỗng → bán chạy. |
+| BR-REC-03 | Must | Kết quả ít hơn `limit` thì trả ít hơn (không bù sản phẩm sai điều kiện); rỗng thì FE ẩn cả khối (không tiêu đề trống). Phần tử gợi ý dùng cùng DTO thẻ sản phẩm của catalog (giá hiệu lực, nhãn). `Cache-Control: public, max-age=30`; đầu vào > 10 id → 422; id lạ bị bỏ qua. |
+| BR-REC-04 | Must | FE `recommendationsMode = http`: PDP và giỏ gọi endpoint này thay logic FE; lỗi / mất mạng thì ẩn khối, không chặn trang; không dùng dữ liệu người dùng (cùng kết quả cho khách và thành viên). |
+| BR-REC-05 | Should | Thêm bước 0 "mua cùng": sản phẩm có ≥ **3** đơn `completed` chung với X trong 365 ngày, xếp số đơn chung giảm; thêm bước "cùng bộ sưu tập" trước bước (1) khi có bộ sưu tập (BR-CMS-07). |
+
+**E. Shop by Moment (BR-MOM)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-MOM-01 | Must | Có đúng 4 Moment cố định: `work`, `dinner`, `event`, `weekend` (thứ tự này); admin gán 1–4 Moment cho sản phẩm (đã có, Slice 6); không thêm / xoá / đổi mã (Won't). Moment lạ ở lọc → danh sách rỗng, không lỗi (hành vi catalog hiện có). |
+| BR-MOM-02 | Must | `GET /content/home` trả `moments[]`: `moment`, `label`, `lines` (≤ 2 dòng, mỗi dòng ≤ 60 ký tự), `mediaId`, `href` (`/shop?moment=<mã>`), `count` = số sản phẩm `ACTIVE` thuộc Moment đó (tính khi đọc). Thẻ có `count` = 0 không được trả / không hiện (không liên kết tới danh sách rỗng). |
+| BR-MOM-03 | Must | FE `contentMode = http`: thẻ Moment trang chủ và menu Moment đọc từ API; không còn `MOMENTS`/fixture làm nguồn chữ; bấm thẻ mở danh sách lọc đúng Moment, số sản phẩm khớp `count`. Lỗi tải nội dung → trang chủ vẫn dựng các khối còn lại, thẻ Moment ẩn. |
+
+**F. Khuyến mãi (BR-PROMO)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-PROMO-01 | Must | Mỗi sản phẩm có tối đa **một** đợt giảm: `salePrice` (nguyên đồng, 1.000 ≤ `salePrice` < `price`), `saleStartsAt` = 00:00:00 giờ VN của ngày bắt đầu, `saleEndsAt` = 23:59:59 giờ VN của ngày kết thúc (gồm cả ngày đó), độ dài ≤ **90 ngày**, `saleEndsAt` ≥ `saleStartsAt`. Thiếu một trong ba, hoặc sai khoảng → 422 theo trường (`salePrice`, `saleStartsAt`, `saleEndsAt`). Đặt đợt mới ghi đè đợt cũ; gỡ đợt = để trống ba trường. Chỉ admin (`promotions.edit`). |
+| BR-PROMO-02 | Must | Giá hiệu lực (D4): `saleStartsAt` ≤ T ≤ `saleEndsAt` thì `price_hiệu_lực = salePrice` và `compareAtPrice` hiển thị = `price` gốc (đè giá gạch nhập tay trong đợt); ngoài đợt = `price` và `compareAtPrice` nhập tay như cũ. **Một hàm duy nhất** dùng ở danh sách, tìm kiếm, chi tiết, giỏ, báo giá, đặt đơn, gợi ý, trang Yêu thích; lọc `maxPrice` và sắp xếp theo giá dùng giá hiệu lực. |
+| BR-PROMO-03 | Must | Đơn lưu `unit_price` = giá hiệu lực tại lúc đặt (giữ cơ chế kiểm lại giá Slice 3: giá đổi giữa báo giá và đặt → báo thay đổi giá, không đặt ngầm); `compare_at_price` của dòng = giá gốc khi trong đợt. Hết đợt không đổi đơn đã đặt, doanh thu, trả hàng (BR-RET-30 dùng `unit_price` đã lưu). Giỏ cũ khi giá đổi theo cơ chế làm tươi giá sẵn có. |
+| BR-PROMO-04 | Must | "Đang giảm" = trong đợt giảm **hoặc** `compare_at_price` > `price` (hiện trạng), cùng một hàm; voucher có `excludeSaleItems` loại dòng đang giảm; voucher không loại thì tính trên giá hiệu lực (cộng dồn). Free-ship (voucher và ngưỡng miễn phí) tính trên tiền hàng sau giảm đợt như hiện nay; không đổi quy tắc Slice 3. |
+| BR-PROMO-05 | Must | Sửa `price` khi có đợt: nếu `salePrice` ≥ `price` mới → 422 `salePrice`. Chống ghi chồng bằng `updatedAt` sản phẩm sẵn có (409 `version-conflict`). Sản phẩm `DRAFT` / `ARCHIVED` có thể có đợt nhưng không hiển thị. |
+| BR-PROMO-06 | Must | FE `promotionsMode = http`: form sản phẩm admin thêm khối "Giảm giá có hạn" (giá giảm, ngày bắt đầu / kết thúc, gỡ đợt, hiển thị "Đang chạy / Sắp tới / Đã kết thúc" tính từ giờ máy chủ); storefront hiện giá hiệu lực, giá gạch. Thẻ và PDP có nhãn "-X%" với X = làm tròn **xuống** của (1 − giá giảm / giá gốc) × 100, do máy chủ trả (`discountPercent`) để không lệch làm tròn. |
+| BR-PROMO-07 | Should | Giảm hàng loạt: admin chọn danh mục + % (5–70) + khoảng ngày (≤ 90) → máy chủ tính `salePrice` = giá gốc × (100 − %) / 100 làm tròn **xuống** bội số 1.000 (≥ 1.000), có bước **xem trước** (số sản phẩm áp / bỏ qua, danh sách); sản phẩm đang có đợt chạy hoặc `salePrice` tính ra ≥ `price` bị bỏ qua và liệt kê; áp trong một giao dịch (tất cả hoặc không). Lọc công khai `sale=true` (danh sách các sản phẩm trong đợt); nhãn "Giảm giá đến dd/MM" từ `saleEndsAt`. |
+| BR-PROMO-08 | Must | Free-ship voucher, voucher phần trăm / cố định, điều kiện, admin CRUD voucher: **giữ nguyên Slice 3 / 6**, không làm lại; câu hỏi "voucher free-ship" của master plan đóng (Thắng 2026-11-07). |
+
+**G. Quản lý nội dung (BR-CMS)**
+
+| Mã | Mức | Quy tắc |
+| --- | --- | --- |
+| BR-CMS-01 | Must | `GET /content/home` công khai, `public, max-age=60`: `categories[]`, `moments[]` (BR-MOM-02), `blocks[]` chỉ gồm khối `enabled`, đúng cấu trúc FE `LandingContent` (khối `campaign`, `products`, `shop`, `categories`). Chưa có bản lưu → bản mặc định seed từ fixture hiện tại; seed idempotent, không đè bản admin đã sửa. Admin đọc được cả khối tắt. |
+| BR-CMS-02 | Must | Admin lưu trang chủ (`content.edit`, chỉ admin) bằng **một lần ghi nguyên văn bản** kèm `updatedAt`; lệch → 409 `version-conflict` (kèm bản hiện tại), không ghi chồng. Giới hạn: ≤ **12** khối; `id` khối duy nhất; `eyebrow` ≤ 40, `title` ≤ 80, `description` ≤ 200 ký tự; khối `products` ≤ **6** thẻ; `href` chỉ là đường dẫn nội bộ bắt đầu `/` (không `//`, không có `:` trước dấu `/` đầu, tức không `javascript:` / `http:`); `mediaId` phải tồn tại ở thư viện ảnh hoặc là id seed hợp lệ; bật / tắt `enabled`; thứ tự = thứ tự mảng. Sai → 422 `fieldErrors` có đường dẫn đầy đủ (`blocks[2].title`). Lưu ghi `updated_by` / `updated_at`; hiển thị "Cập nhật bởi … lúc …". |
+| BR-CMS-03 | Must | Bảng size: admin sửa theo **danh mục** (`categories`, hiện 4) qua một lần ghi nguyên bảng kèm `updatedAt`: `body` và `garment` mỗi bảng ≤ **12** hàng, ≤ **8** cột; nhãn size 1–10 ký tự và duy nhất trong bảng; mỗi ô không rỗng, ≤ 20 ký tự; thiếu / thừa cột so với `bodyColumns` / `garmentColumns` → 422 theo đường dẫn; lệch `updatedAt` → 409. Chỉ admin. Đổi `Cache-Control` của `GET /size-charts/{category}` từ 3600 giây xuống **60 giây** để khách thấy bản mới trong ≤ 60 giây. |
+| BR-CMS-04 | Must | FE `contentMode = http`: trang chủ đọc `GET /content/home` (không `MockHomeContentApi`); admin có mục "Nội dung" (Trang chủ, Bảng size) chạy API thật, 409 hiện giá trị máy chủ và giữ bản đang nhập, 422 gắn đúng ô, mất mạng giữ form; ô Won't (nháp, xem trước, lịch) ẩn; `/admin/content`, `/admin/size-charts` không còn "Chưa khả dụng" (sửa AC-INS-07). Staff thấy nội dung nhưng nút lưu bị ẩn / khoá (403 ở máy chủ). |
+| BR-CMS-05 | Must | Ảnh khối / thẻ chọn từ thư viện ảnh admin đã có (Slice 6); nội dung chỉ lưu `mediaId`. Xoá ảnh đang được trang chủ dùng không được làm hỏng trang: nếu `mediaId` không còn thì khối vẫn trả nhưng FE dùng ảnh thay thế, không lỗi trang trắng. |
+| BR-CMS-06 | Should | Nút "Khôi phục mặc định" trang chủ (hộp xác nhận, chỉ admin, ghi `updated_by`); cảnh báo (không chặn) khi `href` trỏ sản phẩm không còn `ACTIVE`. |
+| BR-CMS-07 | Should | Bộ sưu tập: `name` ≤ 80, `slug` 2–50 ký tự `[a-z0-9-]` duy nhất, `description` ≤ 300, `status` `active` / `draft`, ≤ 200 sản phẩm, thứ tự; công khai chỉ `active` (`GET /collections`, `GET /collections/{slug}` kèm danh sách sản phẩm `ACTIVE`), trang storefront `/collections/:slug`; admin CRUD (`content.edit`), xoá bộ sưu tập không xoá sản phẩm; slug đã `active` không đổi. Làm sau cùng của G; nếu cắt, ô / menu bộ sưu tập ẩn ở HTTP. |
+
+### 5. Acceptance criteria
+
+Dữ liệu tham chiếu (mỗi AC chạy trên DB sạch với dữ liệu sau trừ khi nói khác; hôm nay = D giờ VN): admin A, staff S, thành viên M, N, khách vãng lai G (g@x.vn). Sản phẩm: **P1** Áo (Moment work + dinner, `sales_rank` 1, còn hàng, giá 500.000), **P2** Áo (work, 2, giá 500.000), **P3** Quần (work, 3), **P4** Đầm (event, 4), **P5** Áo khoác (weekend, 5), **P6** Áo hết hàng mọi biến thể (work, 6), **P7** `DRAFT`. Đơn: **R1** (M) `completed`, `paid`, giao D−5, 2 dòng P1 và P3; **R2** (M) `completed`, giao D−400, 1 dòng P2; **R3** (N) `to_receive`, 1 dòng P1; **R7** (G) như R7 của Slice 9 (COD, `completed`, `paid`, giao D−3, 1 dòng áo 400.000, ship 30.000), có grant OTP còn hạn; **R9** (M) `completed`, giao D−10, 1 dòng P4 đã được trả hết (`refunded`).
+
+**Nền chung**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-P1-01 | P1-01 | DB có dữ liệu Slice 1–9 | `migrate deploy` 2 lần; chèn bằng SQL đánh giá thứ hai cho cùng (M, P1); chèn mục yêu thích trùng | Lần 2 không có migration; không DROP / TRUNCATE / đổi kiểu; bảng mới có RLS; số dòng `products`, `orders`, `order_items`, `users`, `vouchers`, `order_returns` không đổi; hai lần chèn trùng bị DB từ chối. |
+| AC-P1-02 | P1-02 | Bản thường (cả 5 cờ `http`) rồi từng cờ đổi sang `mock` | Mở PDP, trang Yêu thích, trang chủ, admin sản phẩm; chạy Playwright mock | Mỗi cờ `http` không gọi mock ở khu của nó; đổi một cờ sang `mock` chỉ đổi khu đó, khu khác chạy bình thường không lỗi console; bản `mock` pass nguyên. |
+| AC-P1-03 | P1-03 | S, A | S gọi ghi nội dung trang chủ, ghi bảng size, đặt giá giảm; S trả lời / ẩn đánh giá; A gọi cả ba; hạ A xuống staff bằng SQL rồi gọi lại | S: 403 `forbidden` cho ba thao tác nội dung / giá (DB không đổi), 200 cho đánh giá; A: 200; sau khi hạ vai trò: 403 ngay (đọc từ DB mỗi lần). |
+| AC-P1-04 | P1-04, 05 | M | Gửi 6 đánh giá hợp lệ trong 1 giờ (6 sản phẩm đủ điều kiện); 61 yêu cầu ghi wishlist trong 1 phút; gây từng lỗi AC trong slice | Đánh giá thứ 6 và ghi thứ 61: 429 `rate-limited` + `retryAfterSeconds` + `Retry-After`; năm đánh giá đầu thành công; mọi lỗi có `code` ổn định + HTTP đúng, không stack trace / SQL; FE có câu riêng cho `not-eligible`, `already-reviewed`, `wishlist-full`, `version-conflict`, `rate-limited`. |
+
+**A. Trả hàng vãng lai**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-RET-60 | RET-60 | R7 và grant của G còn hạn; grant hết hạn; grant của R7 dùng cho R2 (M) | G tạo / xem / huỷ yêu cầu cho R7; dùng grant hết hạn; dùng grant R7 cho R2; không grant | R7: 2xx; grant hết hạn / không grant: 401 `unauthenticated`, `no-store`, DB không đổi; R2: 404 `not-found` (giống đơn không tồn tại). |
+| AC-RET-61 | RET-61 | R7; đồng hồ giả | G gửi `wrong-size` 1 dòng lúc D+27 23:59:59 (ngày thứ 30 kể từ giao D−3) và lúc ngày kế sau 00:00:00; gửi dòng lạ; gửi lý do `other`; gửi 2 yêu cầu song song với 2 khoá; gửi `changed-mind` với `conditionAck = false` | Trong hạn: 201; sau hạn: 409 `return-window-closed`; dòng lạ: 422 `field: lines`; `other`: 422 `field: reason`; song song: đúng 1 × 201, còn lại 409 `return-exists`; `conditionAck` sai: 422; chi tiết đơn của G có `canReturn`, `returnDeadline`, `return`; số tiền dự kiến đúng BR-RET-30 (R7 toàn đơn + `changed-mind` = 400.000 − 30.000 = 370.000). |
+| AC-RET-62 | RET-62 | Grant G, grant H (đơn khác) | G tải ảnh JPEG 3 MB (201), tải ảnh thứ 31 trong 1 giờ; gắn ảnh do H tải vào yêu cầu của G; mở URL ảnh không grant, bằng grant G, bằng S | Ảnh thứ 31: 429; ảnh của H: 422 `field: photos`; URL ảnh: không grant → 401 / 404 không có nội dung; grant G và S: 200 ảnh đúng; không URL nào trong phản hồi mở được khi thiếu grant; EXIF GPS không còn trong ảnh lưu. |
+| AC-RET-63 | RET-63 | Grant G; SMTP giả bắt thư | G tạo 6 yêu cầu trong 1 giờ (đơn / lần huỷ lặp lại); G gửi yêu cầu hợp lệ rồi đọc thư và sự kiện đơn | Yêu cầu thứ 6: 429 `rate-limited`; thư "Đã nhận yêu cầu trả hàng" tới `g@x.vn`, không chứa mã tra cứu, OTP hay số tài khoản đầy đủ; sự kiện đơn người = khách, không tên. |
+| AC-RET-64 | RET-64 | Yêu cầu vãng lai COD số `1234567890` qua đủ trạng thái | G, S, A đọc; grep email, sự kiện, nhật ký, log | G và S: chỉ ngân hàng + "7890" + tên; A: đầy đủ chỉ ở `received`; chuỗi số đầy đủ không có trong email / sự kiện / nhật ký / log; sau trạng thái cuối SQL cho thấy đã xoá. |
+| AC-RET-65 (Should) | RET-65 | Yêu cầu `requested` của G và của M; một đơn không có yêu cầu | A xem danh sách đơn và danh sách trả hàng; kiểm lại AC-RET-44, AC-RET-52 | `returnPending` = 2 đơn đúng; nhãn nguồn "Khách vãng lai" / "Thành viên" đúng; "Quá hạn xử lý", email "đã nhận hàng trả về", `returnRate` vẫn đạt như AC-RET-44, 52. |
+| AC-RET-66 | RET-66 | A phát hành | Đọc chính sách trả hàng và trợ giúp | Có "hoặc Tra cứu đơn hàng" ở mục "Cách gửi yêu cầu"; còn hotline; mốc thời gian vẫn ghi "dự kiến". |
+
+**B. Đánh giá**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-REV-01 | REV-01, 02 | M (R1, R2, R9), N (R3), G, khách không phiên; đồng hồ giả | Gọi trạng thái đủ điều kiện: M cho P1, M cho P2, M cho P4, N cho P1, G / không phiên cho P1; M gửi đánh giá P4 và P2 | M-P1 `eligible` kèm `sizeBought` từ R1; M-P2 (giao D−400, quá 365 ngày), M-P4 (đã trả hết), N-P1 (`to_receive`): `not-purchased`; không phiên: 200 `sign-in`; gửi P4 / P2: 409 `not-eligible`, không tạo bản ghi; vãng lai không có đường gửi. |
+| AC-REV-02 | REV-03 | M đủ điều kiện P1 | Gửi: `rating` 0 / 1 / 5 / 6; tiêu đề 1 / 2 / 80 / 81 ký tự; nội dung 19 / 20 / 1000 / 1001; `height` 21 ký tự; `fit` 2; tiêu đề toàn khoảng trắng; ký tự điều khiển; gửi kèm `sizeBought` giả và `verified` | Hợp lệ chỉ khi 1, 5; 2, 80; 20, 1000; còn lại 422 `fieldErrors` đúng trường, nhiều lỗi trả cùng lúc; `sizeBought` lưu theo đơn thật, `verified` bỏ qua giá trị FE; NFC và cắt khoảng trắng. |
+| AC-REV-03 | REV-04 | M đủ điều kiện P1; đã có đánh giá | Gửi lần hai; 10 yêu cầu song song (khoá khác nhau) cho M-P1 mới; gửi lúc SQL đã có hàng trùng | Lần hai: 409 `already-reviewed`; song song: đúng 1 × 201, 9 × 409, SQL 1 hàng; trạng thái eligibility → `reviewed`; đánh giá hiện ngay ở danh sách công khai. |
+| AC-REV-04 | REV-05 | P1 có 5 đánh giá `visible`, 1 đã ẩn, 1 của P7 (`DRAFT`) | Không cookie gọi danh sách P1 (`limit` mặc định, 3, 21); P7 | Không cookie vẫn 200, `public, max-age=10`; mặc định 5 mục (không có mục ẩn), mới nhất trước; `limit = 3` có phân trang đúng `total`; `limit = 21`: 422; P7: 404 hoặc `[]` (không lộ); mỗi mục có `author` "Nguyễn V." không email / id, `verified = true`, không `sample`. |
+| AC-REV-05 | REV-06 | P1 có đánh giá visible 5, 4, 4 và một đánh giá 1 sao đã ẩn | Đọc sản phẩm; ẩn một đánh giá 4; hiện lại; ẩn hết; gửi đánh giá mới 3 sao (chờ ≤ 30 giây) | `rating` = `average` 4,3, `count` 3 (13/3 = 4,333 → 4,3); sau ẩn một đánh giá 4: 4,5 / 2; hiện lại: 4,3 / 3; ẩn hết: không có `rating` (FE ẩn sao); với 5, 4, 4 hiện, thêm 3 sao: 16/4 = 4,0 / 4; thẻ PLP và PDP cùng số; sau ≤ 30 giây phản ánh. |
+| AC-REV-06 | REV-07 | 25 đánh giá: 6 chưa trả lời, 4 ≤ 2 sao, 3 ẩn; S, A | Mở danh sách theo từng `view`, lọc `rating`, `limit` 20 / 50 / 51; ẩn với lý do 4 / 5 / 250 / 251 ký tự; trả lời 4 / 5 / 500 / 501; hai nhân viên ẩn / hiện đồng thời; `updatedAt` cũ | Số đếm đúng; `limit` 51: 422; lý do 4, 251 và trả lời 4, 501: 422; 5, 250, 5, 500 hợp lệ; đánh giá ẩn biến khỏi công khai; trả lời hiện "Phản hồi từ nine2fine"; `updatedAt` cũ: 409 `version-conflict`; đồng thời: 1 × 200, còn lại 409; ghi người + thời điểm. |
+| AC-REV-07 | REV-08 | `reviewsMode = http`; M ở PDP P1 và P4; khách | Xem từng trạng thái; gửi hợp lệ; chặn mạng rồi Gửi, bỏ chặn bấm Thử lại; 422; 409 | Không nhãn "mẫu"; form chỉ ở `eligible`; câu riêng cho `sign-in` / `not-purchased` / `reviewed`; mất mạng giữ nguyên nội dung nhập, Thử lại không tạo hai đánh giá; 422 cạnh đúng ô; nút khoá khi đang gửi; thành công hiện đánh giá của mình ngay. |
+| AC-REV-08 (Should) | REV-09 | P1 có đánh giá 5, 4, 3 sao; R1 đủ điều kiện | Lọc `rating = 4`; mở chi tiết R1 | Chỉ đánh giá 4 sao, `total` đúng; chi tiết R1 có "Viết đánh giá" cho dòng P1 (và P3 nếu đủ điều kiện), không có cho dòng đã đánh giá. |
+
+**C. Wishlist**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-WISH-01 | WISH-01 | M, N, khách | Gọi đọc / thêm / xoá không cookie; M thêm P1; N đọc | Không cookie: 401 `unauthenticated`, `no-store`, DB không đổi; N không thấy P1 của M; không có API admin xem wishlist. |
+| AC-WISH-02 | WISH-02, 03 | M có P1 | Thêm P1 lần hai; thêm P2; xoá P5 (không có); thêm id lạ; thêm P7 (`DRAFT`); xoá mục của sản phẩm vừa bị ẩn | Thêm lại: 200 không đổi, 1 hàng; P2: 200; xoá P5: 204; id lạ và P7: 404 `not-found`; xoá mục sản phẩm đã ẩn: 204; đọc: mới thêm trước, có `addedAt`. |
+| AC-WISH-03 | WISH-02 | M có 100 mục `ACTIVE`; 1 mục thuộc sản phẩm đã ẩn | Thêm mục thứ 101; ẩn 1 sản phẩm trong danh sách rồi thêm; xoá 1 mục rồi thêm lại; 20 yêu cầu thêm song song khi M có 99 | Mục 101: 409 `wishlist-full`, DB không đổi; sản phẩm ẩn không tính nên thêm được; song song: tổng không vượt 100, số 200 = số chỗ trống, còn lại 409. |
+| AC-WISH-04 | WISH-03 | M có 60 mục | FE mở trang Yêu thích | Đủ 60 thẻ; mỗi request lọc `ids` ≤ 48; mục sản phẩm đã ẩn không hiện. |
+| AC-WISH-05 | WISH-04 | Server của M: [P3]; local khách: [P1, P2, id lạ, P7] | Đăng nhập (gộp); gọi gộp lần hai; gửi 101 id; server 99 mục + gộp 3 id mới hợp lệ | Kết quả {P3, P1, P2}, `skipped` = 2; lần hai: không nhân đôi, `skipped` giữ logic; 101 id: 422; 99 + 3: thêm 1 mục đủ 100, `skipped` ≥ 2, mục server không bị bỏ; sau gộp FE local = server. |
+| AC-WISH-06 | WISH-04, 05 | Thiết bị A và B cùng M; sau đồng bộ cả hai có {P1, P2} | Ở A xoá P1; ở B (cache cũ có P1) đăng xuất rồi đăng nhập / tải lại; ở B chặn mạng khi thêm P4 rồi bỏ chặn | P1 **không** quay lại; B thấy {P2} sau tải lại; P4 nằm ở danh sách chưa đồng bộ khi mất mạng, tự gộp lần mở sau, không mất; đăng xuất chủ động xoá cache wishlist thiết bị. |
+| AC-WISH-07 | WISH-06 | `wishlistMode = http`; khách ở PLP | Bấm tim P1 → đăng nhập; M bấm tim P2 khi chặn mạng; 429; 409 | Sau đăng nhập về đúng trang cũ, P1 đã lưu (1 hàng, 1 lần gộp); lỗi mạng: tim hoàn lại + thông báo, không lưu nửa vời; 409: "đủ 100 sản phẩm"; 429 nêu số giây. |
+
+**D. Gợi ý**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-REC-01 | REC-01 | Dữ liệu tham chiếu | Gọi gợi ý cho P1 với `limit` = 4, 2, 8, 9, 0 | `limit` 4: [P2, P3, P4, P5] (P2 cùng danh mục + Moment work; P3 cùng Moment khác danh mục; P4, P5 bán chạy; P6 hết hàng và P7 `DRAFT` bị loại; không P1); `limit` 2: [P2, P3]; `limit` 8: đủ 4 phần tử hợp lệ (không bù sai điều kiện); 9, 0: 422. |
+| AC-REC-02 | REC-01 | Gọi lặp 20 lần, 2 tiến trình; đổi `sales_rank` P4 ↔ P5 | Gọi lại | 20 lần cùng thứ tự; sau đổi `sales_rank`, P5 đứng trước P4 ở bước (4); hai sản phẩm cùng `sales_rank` xếp theo `slug`. |
+| AC-REC-03 | REC-01 | P2 đặt hết hàng; P6 nhập lại hàng | Gọi gợi ý cho P1 | P2 biến khỏi danh sách (≤ 30 giây), P6 xuất hiện ở bước (1) / theo bậc đúng quy tắc; sản phẩm `ARCHIVED` không bao giờ xuất hiện. |
+| AC-REC-04 | REC-02 | Giỏ [P1, P3] | Gọi gợi ý giỏ `limit` 4; giỏ [P1]; giỏ rỗng; 11 id; id lạ | [P2, P4, P5] (P2 xuất hiện trong cả hai danh sách nên điểm cao nhất; P1, P3 bị loại; chỉ 3 phần tử hợp lệ nên trả 3); giỏ [P1] = như PDP P1 trừ P1; giỏ rỗng: bán chạy [P1, P2, P3, P4]; 11 id: 422; id lạ bị bỏ qua. |
+| AC-REC-05 | REC-03 | Mọi sản phẩm cùng danh mục đã hết hàng | Gọi; FE hiển thị | Trả ít hơn `limit` hoặc `[]`; FE ẩn cả khối khi rỗng (không tiêu đề trống); DTO có giá hiệu lực và nhãn như thẻ catalog; `public, max-age=30`. |
+| AC-REC-06 | REC-04 | `recommendationsMode = http`; chặn `*/api/*` | Mở PDP và giỏ; bỏ chặn tải lại; khách và thành viên | Lỗi: ẩn khối, trang vẫn dùng được; có API: PDP và giỏ không còn logic `moment`/bán chạy ở FE; kết quả giống nhau cho khách và thành viên. |
+| AC-REC-07 (Should) | REC-05 | P1 và P3 có chung 3 đơn `completed` trong 365 ngày; P1 và P5 chung 2 đơn | Gợi ý cho P1 | P3 đứng đầu (bước 0); P5 không vào bước 0 (2 < 3); bỏ 1 đơn chung của P3 → P3 rời bước 0. |
+
+**E. Moment**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-MOM-01 | MOM-01 | Dữ liệu tham chiếu | Lọc `moment` = `work`, `weekend`, `party`; tạo sản phẩm với `moments = []` | `work`: P1, P2, P3, P6 (danh sách catalog liệt kê cả sản phẩm hết hàng như hiện nay; P7 `DRAFT` không có), `weekend`: P5; `party`: danh sách rỗng 200; `[]`: 422 (hành vi Slice 6 giữ nguyên); admin không có thao tác thêm / xoá Moment. |
+| AC-MOM-02 | MOM-02 | `moment` `dinner` chỉ có P1; `event` chỉ có P4; đặt P4 về `DRAFT` | Gọi `GET /content/home` trước / sau | Trước: 4 thẻ theo thứ tự work, dinner, event, weekend, `count` đúng theo sản phẩm `ACTIVE` (work 4: P1, P2, P3, P6; dinner 1; event 1; weekend 1); sau: thẻ `event` có `count` 0 **không được trả**; `lines` ≤ 2 dòng ≤ 60 ký tự; `href` `/shop?moment=<mã>`. |
+| AC-MOM-03 | MOM-03 | `contentMode = http` | Mở trang chủ, bấm thẻ `weekend`; chặn `*/api/content/*` rồi tải lại | Số hiển thị khớp `count` và danh sách lọc; thẻ ẩn khi `count` 0; lỗi tải nội dung: các khối khác vẫn dựng, thẻ Moment ẩn, không trang trắng, không lỗi console. |
+
+**F. Khuyến mãi**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-PROMO-01 | PROMO-01 | P2 giá 500.000; A, S | A đặt đợt: `salePrice` 500.000 / 499.000 / 999 / 350.000; ngày bắt đầu D, kết thúc D−1 / D / D+89 / D+90; thiếu `saleEndsAt`; S đặt đợt | 500.000 và 999: 422 `salePrice`; 499.000 hợp lệ (< `price`, ≥ 1.000); kết thúc D−1: 422 `saleEndsAt`; D và D+89 hợp lệ; D+90 (91 ngày): 422; thiếu ngày: 422 theo trường; S: 403; đặt đợt mới ghi đè cũ; để trống ba trường gỡ đợt. |
+| AC-PROMO-02 | PROMO-02 | P2 `salePrice` 350.000 bắt đầu D 00:00:00, kết thúc D+2 23:59:59 giờ VN; đồng hồ giả | Đọc danh sách / chi tiết / tìm kiếm / giỏ / báo giá ở D−1 23:59:59, D 00:00:00, D+2 23:59:59, D+3 00:00:00; `maxPrice` = 400.000; `sort = price-asc` với P3 giá 380.000 | Trước và từ D+3: giá 500.000, `compareAtPrice` như cũ; từ D 00:00:00 đến D+2 23:59:59: 350.000, `compareAtPrice` 500.000, `discountPercent` 30; `maxPrice` 400.000 chọn P2 trong đợt và loại ngoài đợt; `price-asc` xếp P2 (350.000) trước P3 (380.000) chỉ trong đợt; mọi nơi cùng một số. |
+| AC-PROMO-03 | PROMO-03 | Giỏ có P2 trong đợt; checkout | Đặt đơn COD lúc đợt đang chạy; hết đợt giữa báo giá và đặt; xem đơn cũ sau khi hết đợt; trả hàng đơn cũ | Đơn lưu `unit_price` 350.000, `compare_at_price` 500.000, `line_discount`, tổng đúng `subtotal − discount + ship − shipDiscount`; đặt sau khi hết đợt giữa chừng: báo giá thay đổi (không đặt ngầm giá cũ); đơn cũ và tiền hoàn dùng 350.000, không đổi; doanh thu theo `unit_price` đã lưu. |
+| AC-PROMO-04 | PROMO-04 | Voucher V1 `excludeSaleItems`, V2 không loại; giỏ [P2 trong đợt, P3 không giảm] | Áp V1, V2; P3 có `compare_at_price` > `price` (không đợt); free-ship ngưỡng | V1 loại dòng P2 (và P3 nếu có giá gạch) khỏi cơ sở tính; V2 tính trên 350.000 + giá P3; "đang giảm" nhất quán giữa lý do `excluded-sale-items`, nhãn thẻ, báo giá; ngưỡng free-ship tính trên tiền hàng sau giảm đợt. |
+| AC-PROMO-05 | PROMO-05 | P2 đợt `salePrice` 350.000 | A sửa `price` P2 thành 300.000 / 360.000; hai admin sửa đồng thời; P7 có đợt | 300.000: 422 `salePrice` (≥ giá mới), không ghi; 360.000: hợp lệ; `updatedAt` cũ: 409 `version-conflict`; P7 không hiển thị ở storefront dù có đợt. |
+| AC-PROMO-06 | PROMO-06 | `promotionsMode = http`; A mở form P2; khách mở PLP / PDP | Đặt đợt bắt đầu ngày mai; sửa đợt đang chạy; gỡ đợt; chặn mạng khi lưu | Trạng thái "Sắp tới / Đang chạy / Đã kết thúc" theo giờ máy chủ; khách chỉ thấy giá giảm khi Đang chạy; nhãn "-30%" từ `discountPercent` (floor: 499.000/500.000 → 0, 350.000 → 30); mất mạng giữ form; 422 gắn đúng ô. |
+| AC-PROMO-07 (Should) | PROMO-07 | Danh mục Áo có P1 (500.000), P2 (đang có đợt chạy), P6 (hết hàng, giá 500.000); một sản phẩm Áo giá 1.100.000 | Xem trước và áp 30% từ D đến D+6; % = 4, 5, 70, 71; áp lúc 1 sản phẩm bị lỗi giữa chừng; mở `sale=true` | Xem trước: áp P1 (350.000), P6 (350.000) và sản phẩm 1.100.000 (770.000), bỏ qua P2 (đang có đợt) và liệt kê; giá 1.100.000 × 70% = 770.000 đã là bội 1.000; 4 và 71: 422, 5 và 70 hợp lệ; `salePrice` làm tròn xuống bội 1.000 (ví dụ 333.333 → 333.000); giao dịch tất cả hoặc không; `sale=true` chỉ trả sản phẩm trong đợt; nhãn "Giảm giá đến dd/MM". |
+| AC-PROMO-08 | PROMO-08 | Voucher free-ship, % và cố định như Slice 3 | Chạy lại AC-VOU của Slice 3 và AC-INV-40..46 | Mọi AC đó vẫn Đạt, không đổi hành vi; không có chức năng free-ship mới. |
+
+**G. Nội dung**
+
+| Mã | BR | Given | When | Then |
+| --- | --- | --- | --- | --- |
+| AC-CMS-01 | CMS-01 | DB chưa có bản trang chủ; sau đó A đã sửa | Không cookie gọi `GET /content/home`; chạy seed lần hai | Lần đầu: bản mặc định đủ khối + 4 thẻ Moment, `public, max-age=60`; chỉ khối `enabled`; admin đọc thấy cả khối tắt; seed lần hai không đè bản A đã sửa. |
+| AC-CMS-02 | CMS-02 | A có bản `updatedAt` U | Lưu với: 12 / 13 khối; `title` 80 / 81; `description` 200 / 201; khối `products` 6 / 7 thẻ; `href` `/shop`, `//evil.com`, `https://x`, `javascript:alert(1)`; `mediaId` lạ; `id` khối trùng; `updatedAt` cũ; hai admin lưu đồng thời | 12, 80, 200, 6 và `/shop` hợp lệ; 13, 81, 201, 7, các `href` còn lại, `mediaId` lạ, trùng `id`: 422 `fieldErrors` đường dẫn `blocks[i]...`; `updatedAt` cũ: 409 kèm bản hiện tại; đồng thời: 1 × 200, còn lại 409; sau lưu có "cập nhật bởi / lúc"; thứ tự mảng = thứ tự trang. |
+| AC-CMS-03 | CMS-02, 05 | Khối dùng `mediaId` ảnh tải lên U1 | A xoá / làm mất U1 rồi khách mở trang chủ | Trang dựng đủ, khối dùng ảnh thay thế, không trang trắng, không lỗi console. |
+| AC-CMS-04 | CMS-03 | `size_charts` danh mục Áo; A, S | Lưu bảng: 12 / 13 hàng; 8 / 9 cột; nhãn size 11 ký tự; trùng nhãn; ô rỗng; ô 21 ký tự; thiếu cột; `updatedAt` cũ; S lưu | 12 hàng, 8 cột hợp lệ; 13, 9, các lỗi còn lại: 422 theo đường dẫn; `updatedAt` cũ: 409; S: 403; thành công: bảng mới hiện ở PDP trong ≤ 60 giây (`max-age=60`, không còn 3600). |
+| AC-CMS-05 | CMS-04 | `contentMode = http`; A, S | Mở `/admin/content`, `/admin/size-charts` ; 409; 422; chặn mạng khi lưu; staff mở | Không còn "Chưa khả dụng"; 409 giữ bản đang nhập + hiện giá trị máy chủ; 422 gắn đúng ô; mất mạng giữ form; staff thấy nội dung, nút lưu ẩn / khoá; không ô nháp / xem trước / lịch; không request tới mock. |
+| AC-CMS-06 (Should) | CMS-06 | A đã sửa trang chủ; một khối trỏ `/product/<slug>` của sản phẩm đã `DRAFT` | "Khôi phục mặc định"; xem cảnh báo | Hộp xác nhận; sau khôi phục bản mặc định, `updated_by` = A; cảnh báo (không chặn) khi `href` trỏ sản phẩm không `ACTIVE`; staff không thấy nút. |
+| AC-CMS-07 (Should) | CMS-07 | A | Tạo bộ sưu tập: `slug` `Hè 2027`, `he-2027`, trùng, 1 / 2 ký tự; 200 / 201 sản phẩm; đổi slug sau khi `active`; xoá; khách mở `/collections/he-2027` (`active` / `draft`) | `Hè 2027`, 1 ký tự: 422; `he-2027` hợp lệ, trùng: 422 `duplicate`; 200 hợp lệ, 201: 422; đổi slug khi `active`: 422; xoá không xoá sản phẩm; `draft`: 404 công khai; `active`: trang + chỉ sản phẩm `ACTIVE`. |
+
+### 6. Định nghĩa xong của Slice 10
+
+- AC Must đạt (test BE / E2E ghi mã AC); AC Should (AC-RET-65, AC-REV-08, AC-REC-07, AC-PROMO-07, AC-CMS-06, 07) ghi làm hay hoãn theo thứ tự cắt giảm ở backlog.
+- `openapi.yaml` có tag cho từng khu (locked trước khi FE nối); migration chỉ cộng thêm; `decisions.md`, `handoff.md` cập nhật.
+- Ở mỗi cờ `http`: khu đó không dùng mock, không còn ô Won't; Playwright mock pass nguyên.
+- Giá nhất quán: một hàm giá hiệu lực (AC-PROMO-02, 03); không lệch giữa danh sách, giỏ, báo giá, đơn.
+- Đánh giá: điểm trung bình khớp từng review đang hiển thị (AC-REV-05); một đánh giá mỗi (tài khoản, sản phẩm) dưới đua x10 (AC-REV-03).
+- Wishlist: không mất mục chờ, không hồi sinh mục đã xoá (AC-WISH-05, 06); không vượt 100 dưới đua (AC-WISH-03).
+- Trả hàng vãng lai: số tài khoản không rò ra (AC-RET-64); ảnh không công khai (AC-RET-62).
+- Cần cập nhật tài liệu cũ: AC-INS-07 (menu admin: các mục Nội dung, Đánh giá, Bộ sưu tập theo cờ), BR-CAT-17 / AC-CAT-43 (không áp khi `reviewsMode = http`), BR-AUTH-32 (wishlist đồng bộ sau gộp), BR-RET-54(d) (khi A phát hành), BR-ADM-23 (không đổi; liên kết "Viết đánh giá" ở chi tiết đơn là Should), `Cache-Control` size chart (openapi: 3600 → 60).
+- Lát nghiệm thu thật trên Supabase (10.9) cần Thắng duyệt áp migration và kiểm tay các luồng thật (gửi đánh giá bằng đơn đã giao, trả hàng vãng lai có thư thật, wishlist hai trình duyệt, nội dung trang chủ, giá giảm đặt đơn thật).
+
+### 7. Câu hỏi mở
+
+Mặc định PO (Thắng vắng), làm trước theo mặc định; Thắng đổi được khi quay lại. **Không câu nào chặn code 10.1–10.8**; chỉ lát 10.9 cần Thắng duyệt áp migration và kiểm quy trình thật.
+
+| # | Câu hỏi | Ảnh hưởng | Mặc định PO | Trạng thái |
+| --- | --- | --- | --- | --- |
+| S10-Q1 | Đánh giá hiện ngay hay duyệt trước? | BR-REV-04, 07 | Hiện ngay, shop hậu kiểm (ẩn / trả lời); đủ điều kiện mua thật đã chặn spam | Mặc định PO |
+| S10-Q2 | Ai được đánh giá, hạn, số lần | BR-REV-01 | Chỉ người đã nhận hàng (đơn `completed`), 365 ngày, 1 lần / sản phẩm; loại sản phẩm đã trả hết; vãng lai không | Mặc định PO |
+| S10-Q3 | Tên hiển thị người đánh giá | BR-REV-05, D3 | "Họ + chữ cái đầu của tên" | Mặc định PO |
+| S10-Q4 | Giới hạn và quy tắc gộp wishlist | BR-WISH-02, 04, 05 | 100 mục, theo sản phẩm, máy chủ là nguồn sự thật, chỉ gộp mục chưa đồng bộ | Mặc định PO |
+| S10-Q5 | Quy tắc gợi ý | BR-REC-01, 02 | Cùng danh mục + Moment → cùng danh mục → cùng Moment → bán chạy; không ML; "mua cùng" (≥ 3 đơn) và "cùng bộ sưu tập" là Should | Mặc định PO |
+| S10-Q6 | Phạm vi khuyến mãi mở rộng | BR-PROMO | Giá giảm có hạn theo sản phẩm (1 đợt, ≤ 90 ngày, không theo biến thể); hàng loạt theo danh mục là Should; free-ship voucher đã có và giữ (Thắng 2026-11-07); mua X tặng Y, flash sale, mã tự áp: Won't | Mặc định PO |
+| S10-Q7 | Giá giảm đè giá gạch nhập tay | BR-PROMO-02 | Trong đợt, giá gạch = giá gốc; hết đợt trở lại giá gạch nhập tay | Mặc định PO |
+| S10-Q8 | Bộ sưu tập | BR-CMS-07, REC-05 | Should, làm sau cùng; chưa có trang storefront nên cắt được; nếu cắt thì ẩn ô / menu ở HTTP | Mặc định PO |
+| S10-Q9 | Nội dung trang chủ: nháp / lịch | BR-CMS-02 | Không; lưu là công khai (≤ 60 giây); có khôi phục mặc định (Should) | Mặc định PO |
+| S10-Q10 | Phân quyền | BR-P1-03 | Staff kiểm duyệt đánh giá; chỉ admin sửa nội dung, bảng size, giá khuyến mãi | Mặc định PO |
+| S10-Q11 | Giới hạn trả hàng vãng lai | BR-RET-62, 63 | 5 yêu cầu / giờ / grant, 10 / giờ / IP; ảnh 30 / giờ / grant, 60 / giờ / IP | Mặc định PO |
+| S10-Q12 | Cache công khai | BR-CMS-01, 03, REC-03 | Nội dung 60 giây, bảng size 60 giây (đổi từ 3600), gợi ý 30 giây, đánh giá 10 giây | Mặc định PO |
+
+### 8. Khác biệt FE mock và DB / API thật
+
+| Trường / hành vi FE mock | Thực tế DB / API | Xử lý ở HTTP |
+| --- | --- | --- |
+| `ProductReview.sample`, đánh giá mẫu `reviews.ts` | Không có dữ liệu mẫu trong DB | Bỏ nhãn "mẫu"; mock giữ |
+| `ProductReview.author` đầy đủ | "Họ + chữ cái đầu của tên" từ máy chủ | FE hiển thị nguyên chuỗi |
+| `ReviewInput.sizeBought` do FE gửi | Máy chủ lấy từ đơn đủ điều kiện | FE hiện sẵn, không gửi / gửi cũng bị bỏ qua |
+| `AdminReview.sample`, `status` (`visible` / `hidden`), `reply.author` | Có `status`, người + lúc ẩn / trả lời; không `sample` | Ẩn cột `sample` |
+| `Product.rating` | Có từ `reviewsMode = http`, chỉ khi `count` ≥ 1 | FE ẩn sao khi thiếu |
+| Wishlist `localStorage` là nguồn | Máy chủ là nguồn sau đồng bộ; local = cache + danh sách chưa đồng bộ | `WishlistState` đọc / ghi API; giữ cache offline |
+| `WishlistState.pendingId` chờ đăng nhập | Thêm bằng PUT sau đăng nhập, rồi gộp | Giữ hành vi (BR-AUTH-32) |
+| PDP gợi ý = lọc `moment` đầu, `limit` 5 | Endpoint gợi ý (BR-REC-01) | FE bỏ logic cũ ở HTTP |
+| Giỏ gợi ý = bán chạy chưa có trong giỏ | BR-REC-02 (điểm theo sản phẩm trong giỏ) | Gọi endpoint, bỏ `bestSellers` ở HTTP |
+| `MOMENTS`, `home-content.ts` `moments.cards` làm nguồn chữ | `moments[]` từ `GET /content/home` | FE đọc API; copy hero / story (`home-story`) vẫn trong bundle (Won't) |
+| `MockHomeContentApi` (`apiConfig.mode = mock`) | `GET /content/home` | Đổi chọn adapter theo `contentMode` thay `apiConfig.mode` toàn cục |
+| `LandingBlock` `member` (nội dung khác khi đăng nhập) | Lưu trong khối, server trả nguyên | Giữ; FE chọn theo phiên |
+| Admin `AdminCollection.productIds` (`p01`) | Id sản phẩm thật (uuid) | Ánh xạ id; Should |
+| Admin `AdminSizeChart` (category, label, rows) | `size_charts.data` JSON theo danh mục + `updatedAt` | Thêm `updatedAt` cho khoá ghi chồng |
+| `Product.compareAtPrice` nhập tay; không có đợt | Thêm `salePrice`, `saleStartsAt`, `saleEndsAt`, `discountPercent` (chỉ đọc) | Form admin thêm khối "Giảm giá có hạn"; storefront đọc giá hiệu lực |
+| `Order.canReturn = false` với vãng lai | `canReturn` / `return` theo grant (A) | FE vãng lai hiện nút / khối trạng thái ở Tra cứu đơn |
+| Menu admin: Bộ sưu tập, Đánh giá, Nội dung = "Chưa khả dụng" (AC-INS-07) | Mở theo cờ `reviewsMode` / `contentMode` | Cập nhật AC-INS-07 khi phát hành |

@@ -30,6 +30,7 @@ Slice 1 đóng có điều kiện theo yêu cầu Thắng (decisions 2026-11-07)
 | G8 | Slice 2: `npm test` backend pass 3 lần liền hoặc pass trên Linux/CI (cùng việc với G1 và 1.21) | backend-dev | Tiền lệ Slice 1: M2 là crash môi trường vitest/Windows, không chặn nghiệm thu. |
 | G9 | **Thông tin pháp lý thật của cửa hàng** (Slice 8): Thắng nhập tên pháp lý, MST / số ĐKKD, nơi và ngày cấp, địa chỉ, hotline, email CSKH / dữ liệu, giờ làm việc, liên kết thông báo Bộ Công Thương (nếu đã có) qua Cài đặt › Thông tin cửa hàng; kiểm chân trang storefront hiện đúng | Thắng | Giá trị ban đầu là mẫu `STORE_INFO` ("thay trước khi ra mắt"); luật TMĐT bắt buộc hiện thông tin người bán. |
 | G10 | **Trả hàng chạy thật** (Slice 9): Thắng áp migration Slice 9 lên Supabase, xác nhận nơi lưu ảnh trả hàng không công khai, chạy thử một yêu cầu trả hàng thật (gửi, duyệt, nhận hàng, nhập kho, hoàn tiền, đọc 4 email) và đọc lại chữ chính sách trả hàng | Thắng | Chính sách trả hàng đã công bố 30 ngày / 30.000 / 1–3 ngày làm việc; hoàn tiền thủ công nên cần người chuyển khoản thật. |
+| G11 | **Gói P1 chạy thật** (Slice 10): Thắng áp migration Slice 10 lên Supabase, thử 1 đánh giá thật, 1 trả hàng vãng lai (thư thật), wishlist 2 trình duyệt, sửa trang chủ + bảng size, 1 giá giảm có hạn rồi đặt đơn thử; chỉ bật `http` cho khu đã đạt | Thắng | Mỗi khu có cờ riêng nên bật dần được; nội dung trang chủ thật (10.3) và trả hàng vãng lai (10.2) nên xong trước go-live. |
 
 ---
 
@@ -394,17 +395,57 @@ DoD: theo DoD chung; thêm: ở `returnsMode: http` màn khách và `/admin/retu
 
 ---
 
+## Slice 10 — Gói P1 (Thắng giao 2026-11-13)
+
+PRD: `docs/product/PRD.md` › Slice 10 (BR-P1-01..05, BR-RET-60..66, BR-REV-01..09, BR-WISH-01..06, BR-REC-01..05, BR-MOM-01..03, BR-PROMO-01..08, BR-CMS-01..07 = 50 BR; AC tương ứng = 51 AC). Thắng giao gom 7 hạng mục P1 vào một đợt, đang vắng: mọi câu hỏi mở theo mặc định PO (S10-Q1..Q12), không câu nào chặn code. Mỗi khu một cờ FE riêng (`reviewsMode`, `wishlistMode`, `recommendationsMode`, `contentMode`, `promotionsMode`; A dùng `returnsMode`), một lát giao được độc lập sau lát nền. Migration chỉ cộng thêm. Free-ship voucher đã có từ Slice 3 (giữ, Thắng 2026-11-07): không làm lại.
+
+| # | Hạng mục | Mức | BR | AC | Người làm | Phụ thuộc | Trạng thái |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 10.1 | Nền: một migration cộng thêm cho cả đợt (đánh giá, mục yêu thích, nội dung trang chủ, bộ sưu tập, cột giá giảm + đợt ở sản phẩm, cột grant cho ảnh trả hàng), RLS, quyền `reviews.moderate` / `content.edit`, mã lỗi mới, giới hạn tần suất, `openapi.yaml` (locked trước khi FE nối), 5 cờ FE + adapter | Must | P1-01..05 | P1-01..04 | BE → FE | Slice 9 | Chưa |
+| 10.2 | A. Trả hàng vãng lai: 5 operation qua grant OTP (tạo, xem, huỷ, tải ảnh, ước tính), `canReturn` / `return` cho đơn vãng lai, giới hạn 5/giờ/grant, ảnh gắn theo grant, FE ở Tra cứu đơn, chữ chính sách; Should: `returnPending`, nhãn nguồn | Must (+ Should) | RET-60..64, 66; RET-65 (Should) | RET-60..64, 66; RET-65 | BE, FE | 10.1 | Chưa |
+| 10.3 | E + G(lõi). Nội dung thật: `GET /content/home` (seed mặc định không đè), thẻ Moment từ DB (`count`, ẩn khi 0), admin sửa trang chủ (kiểm giá trị, chống ghi chồng), admin sửa bảng size theo danh mục + cache 60 giây, trang chủ storefront bỏ `MockHomeContentApi` | Must | MOM-01..03; CMS-01..05 | MOM-01..03; CMS-01..05 | BE, FE (storefront + admin) | 10.1 | Chưa |
+| 10.4 | C. Wishlist theo tài khoản: đọc / thêm / xoá / gộp, tối đa 100, nguồn sự thật ở máy chủ, danh sách chưa đồng bộ, đăng xuất xoá cache; FE `WishlistState` đổi sang API | Must | WISH-01..06 | WISH-01..07 | BE, FE | 10.1 | Chưa |
+| 10.5 | B. Đánh giá: đủ điều kiện, gửi (1 lần / sản phẩm), danh sách công khai, `rating` trung bình, admin ẩn / hiện / trả lời; FE PDP + trang admin Đánh giá; bỏ BR-CAT-17 khi `reviewsMode = http`; Should: lọc theo sao, "Viết đánh giá" ở chi tiết đơn | Must (+ Should) | REV-01..08; REV-09 (Should) | REV-01..07; REV-08 | BE, FE | 10.1 (cần đơn `completed`, đã có) | Chưa |
+| 10.6 | D. Gợi ý: một hàm xác định cho PDP và giỏ (cùng danh mục + Moment → danh mục → Moment → bán chạy), endpoint công khai, FE thay logic cũ; Should: "mua cùng" ≥ 3 đơn, "cùng bộ sưu tập" | Must (+ Should) | REC-01..04; REC-05 (Should) | REC-01..06; REC-07 | BE, FE | 10.1 (REC-05 cần 10.8) | Chưa |
+| 10.7 | F. Giá khuyến mãi có hạn theo sản phẩm: một hàm giá hiệu lực dùng ở catalog (lọc `maxPrice`, sắp xếp), giỏ, báo giá, đặt đơn; admin khối "Giảm giá có hạn"; `discountPercent`; `excludeSaleItems` theo cùng hàm. Should: giảm hàng loạt theo danh mục (xem trước), lọc `sale=true`, nhãn "đến dd/MM" | Must (+ Should) | PROMO-01..06, 08; PROMO-07 (Should) | PROMO-01..06, 08; PROMO-07 | BE, FE | 10.1; chạm giá nên làm sau cùng trong các lát Must | Chưa |
+| 10.8 | G(Should). Bộ sưu tập (CRUD + `/collections/:slug`), "Khôi phục mặc định" trang chủ, cảnh báo link chết | Should | CMS-06, 07 | CMS-06, 07 | BE, FE | 10.3 | Chưa |
+| 10.9 | QA: `docs/qa/report-slice-10-p1.md` đối chiếu AC (kể cả đua x10 đánh giá, x20 wishlist, một hàm giá hiệu lực khớp mọi nơi, số tài khoản không rò ở vãng lai, 4 AC của Slice 3/6 chạy lại ở AC-PROMO-08); Playwright mock pass nguyên | Must | tất cả Must | tất cả AC Must | qa-reviewer | 10.1..10.7 | Chưa |
+| 10.10 | Nghiệm thu thật trên Supabase (**cần Thắng duyệt**): áp migration Slice 10; 1 đánh giá thật từ đơn đã giao; 1 yêu cầu trả hàng vãng lai (OTP + thư thật); wishlist trên 2 trình duyệt; sửa trang chủ + bảng size, kiểm storefront ≤ 60 giây; đặt 1 giá giảm có hạn rồi đặt đơn thử; migrate 2 lần (G11) | Must | P1-01; REV-04; RET-60..64; WISH-05; CMS-01..03; PROMO-02, 03 | P1-01; REV-03; RET-60..64; WISH-06; CMS-01..04; PROMO-02, 03 | Thắng, Orchestrator, qa-reviewer | 10.1..10.7 | Chưa |
+| 10.11 | Moment mới / đổi mã; ảnh, video, "hữu ích" cho đánh giá; thư mời đánh giá; sửa / xoá đánh giá của khách; cá nhân hoá, "xem gần đây", ML; mua X tặng Y, bậc số lượng, flash sale, mã tự áp, ví voucher, giá theo biến thể, nhiều đợt / sản phẩm; nháp / xem trước / lịch đăng; thống kê wishlist | Won't | — | — | slice sau (P2) | — | Ngoài phạm vi / chưa có nhu cầu; ẩn ở HTTP |
+
+Câu hỏi mở (chi tiết PRD Slice 10 mục 7). Tất cả theo mặc định PO (Thắng vắng, đổi được khi quay lại); không câu nào chặn 10.1–10.9:
+
+| # | Câu hỏi | Chặn lát | Làm trước theo mặc định? |
+| --- | --- | --- | --- |
+| S10-Q1..Q3 | Đánh giá: hiện ngay + hậu kiểm; chỉ người đã nhận hàng, 365 ngày, 1 lần / sản phẩm; tên "Nguyễn V." | 10.5 | Có |
+| S10-Q4 | Wishlist 100 mục, máy chủ là nguồn sự thật, chỉ gộp mục chưa đồng bộ | 10.4 | Có |
+| S10-Q5 | Gợi ý theo quy tắc, không ML; "mua cùng" và "cùng bộ sưu tập" là Should | 10.6 | Có |
+| S10-Q6, Q7 | Khuyến mãi: giá giảm có hạn theo sản phẩm, 1 đợt ≤ 90 ngày; trong đợt giá gạch = giá gốc; hàng loạt là Should; free-ship voucher đã có | 10.7 | Có |
+| S10-Q8 | Bộ sưu tập là Should, làm sau cùng, cắt được | 10.8 | Có |
+| S10-Q9, Q10 | Trang chủ không có nháp / lịch; staff kiểm duyệt đánh giá, chỉ admin sửa nội dung / giá | 10.1, 10.3 | Có |
+| S10-Q11, Q12 | Giới hạn trả hàng vãng lai; cache 60 / 60 / 30 / 10 giây | 10.2, 10.3 | Có |
+
+Thứ tự đề xuất (giá trị vận hành trước, rủi ro tiền sau): 10.1 → 10.2 (đóng nợ 9.6, rẻ) → 10.3 (trang chủ đang chạy fixture, chặn go-live nội dung) → (10.4 ∥ 10.5) → 10.6 → 10.7 → 10.8 → 10.9 → 10.10. 10.2 đến 10.6 chỉ cần 10.1 nên chạy song song theo số agent; 10.7 chạm giá ở mọi nơi nên dồn cuối các lát Must.
+
+Cắt giảm nếu thiếu thời gian (bỏ từ trên xuống, mỗi lát cắt không ảnh hưởng lát khác): (1) 10.8 bộ sưu tập + mọi Should; (2) 10.7 khuyến mãi (rủi ro lớn nhất, voucher hiện có vẫn đủ khuyến mãi); (3) 10.6 gợi ý (FE giữ logic cũ); (4) 10.4 wishlist (vẫn lưu cục bộ); (5) 10.5 đánh giá (vẫn ẩn như BR-CAT-17). Không cắt 10.1, 10.2, 10.3 trước go-live (trả hàng vãng lai và nội dung thật).
+
+DoD: theo DoD chung; thêm: mỗi cờ `http` không dùng mock và không còn ô Won't, đổi một cờ không lỗi khu khác (AC-P1-02); một hàm giá hiệu lực khớp ở mọi nơi (AC-PROMO-02, 03); điểm trung bình khớp từng đánh giá hiển thị (AC-REV-05); không hồi sinh mục wishlist đã xoá (AC-WISH-06); số tài khoản không rò ở vãng lai (AC-RET-64); sửa AC-INS-07, BR-CAT-17 / AC-CAT-43, cache bảng size trong `openapi.yaml`; G11 ghi Đạt vào bảng go-live.
+
+---
+
 ## Sau các slice P0 (tóm tắt từ master plan mục 52)
 
 Các P0 còn lại cần nối BE: Account (profile, địa chỉ, voucher, hạng thành viên), Order Tracking timeline, SEO cơ bản, accessibility cơ bản, responsive QA — gom vào slice Account và slice Admin sau Slice 3.
 
 | Mức | Hạng mục | Ghi chú |
 | --- | --- | --- |
-| P1 | Wishlist (đồng bộ máy chủ, gộp khi đăng nhập) | FE đã có, bắt đăng nhập. |
-| P1 | Shop by Moment | FE đã có với fixture. |
-| P1 | Reviews (gửi đánh giá khi đã nhận hàng) | Phụ thuộc Slice 3. |
-| P1 | Recommendations | |
-| P1 | GSAP storytelling | Chỉ FE. |
-| P1 | UGC | |
-| P1 | Promotion system | Liên quan câu hỏi voucher free-ship. |
+| P1 | Wishlist (đồng bộ máy chủ, gộp khi đăng nhập) | **Slice 10, lát 10.4** (PRD BR-WISH). FE đã có, bắt đăng nhập. |
+| P1 | Shop by Moment | **Slice 10, lát 10.3** (BR-MOM; lọc Moment đã thật từ Slice 2, còn thẻ trang chủ). |
+| P1 | Reviews (gửi đánh giá khi đã nhận hàng) | **Slice 10, lát 10.5** (BR-REV). Phụ thuộc Slice 3, 4 (đã xong). |
+| P1 | Recommendations | **Slice 10, lát 10.6** (BR-REC; quy tắc xác định, không ML). |
+| P1 | GSAP storytelling | Chỉ FE; ngoài Slice 10. |
+| P1 | UGC | Won't ở Slice 10 (ảnh / video đánh giá); chờ P2. |
+| P1 | Promotion system | **Slice 10, lát 10.7** (BR-PROMO). Voucher free-ship đã chốt giữ từ 2026-11-07, đã chạy (Slice 3). |
+| P1 | Trả hàng cho khách vãng lai (phần hoãn 9.6) | **Slice 10, lát 10.2** (BR-RET-60..66). |
+| P1 | Quản lý nội dung admin (trang chủ, bảng size, bộ sưu tập) | **Slice 10, lát 10.3 và 10.8** (BR-CMS). |
 | P2 | Personalization, Recently viewed, Advanced recommendation, Loyalty, Omnichannel inventory UI, AI styling assistant | Chưa lên kế hoạch. |
