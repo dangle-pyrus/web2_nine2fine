@@ -167,7 +167,7 @@ export interface KpiValue {
 
 // ---------- Orders ----------
 
-export type PaymentState = 'paid' | 'unpaid' | 'cod' | 'refunded' | 'void';
+export type PaymentState = 'paid' | 'unpaid' | 'cod' | 'refunded' | 'partially-refunded' | 'void';
 
 export interface OrderCustomerRef {
   /** Null for guest checkout. */

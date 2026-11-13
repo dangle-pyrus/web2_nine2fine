@@ -51,6 +51,7 @@ const PAYMENT: Record<PaymentState, BadgeSpec> = {
   unpaid: { label: 'Chưa thanh toán', tone: 'warning' },
   cod: { label: 'Thu khi giao', tone: 'neutral' },
   refunded: { label: 'Đã hoàn tiền', tone: 'neutral' },
+  'partially-refunded': { label: 'Đã hoàn tiền một phần', tone: 'neutral' },
   void: { label: 'Không thu tiền', tone: 'neutral' },
 };
 

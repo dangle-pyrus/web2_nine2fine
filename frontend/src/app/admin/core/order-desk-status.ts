@@ -57,8 +57,9 @@ export function paymentState(order: {
     case 'paid':
       return 'paid';
     case 'refunded':
-    case 'partially_refunded':
       return 'refunded';
+    case 'partially_refunded':
+      return 'partially-refunded';
     case 'failed':
       return 'unpaid';
     case 'pending':
