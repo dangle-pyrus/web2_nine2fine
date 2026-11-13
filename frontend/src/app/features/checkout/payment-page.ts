@@ -13,7 +13,7 @@ import { AuthSession } from '../auth/auth-session';
 import { PricePipe } from '../../shared/commerce/price.pipe';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { formatDateTime } from '../orders/order-status';
-import { CHECKOUT_API, PAYMENT_SIMULATOR, PaymentSession } from './checkout-api';
+import { CHECKOUT_API, CheckoutError, PAYMENT_SIMULATOR, PaymentSession } from './checkout-api';
 import { API_CONFIG } from '../../core/api-config';
 import { STORE_INFO } from '../../core/store-info';
 import { CartState } from '../cart/cart-state';
@@ -62,8 +62,8 @@ const POLL_MS = 3000;
               </div>
               <dl>
                 <div class="amount">
-                  <dt>Số tiền</dt>
-                  <dd>{{ pay.amount | vnd }}</dd>
+                  <dt>{{ pay.shortfall ? 'Số tiền còn thiếu' : 'Số tiền' }}</dt>
+                  <dd>{{ pay.shortfall ?? pay.amount | vnd }}</dd>
                 </div>
                 <div>
                   <dt>Ngân hàng</dt>
@@ -77,25 +77,58 @@ const POLL_MS = 3000;
                       type="button"
                       class="copy"
                       [attr.aria-label]="'Sao chép số tài khoản ' + pay.account.accountNumber"
-                      (click)="copy(pay.account.accountNumber)"
+                      (click)="copy(pay.account.accountNumber, 'account')"
                     >
                       <n2f-icon
-                        [name]="copied() ? 'reiconCopySuccess' : 'reiconCopy'"
+                        [name]="copied() === 'account' ? 'reiconCopySuccess' : 'reiconCopy'"
                         size="18px"
                       />
-                      {{ copied() ? 'Đã chép' : 'Sao chép' }}
+                      {{ copied() === 'account' ? 'Đã chép' : 'Sao chép' }}
                     </button>
                   </dd>
                 </div>
+                @if (pay.transferContent) {
+                  <div>
+                    <dt>Nội dung chuyển khoản</dt>
+                    <dd class="account">
+                      <strong>{{ pay.transferContent }}</strong>
+                      <button
+                        type="button"
+                        class="copy"
+                        [attr.aria-label]="'Sao chép nội dung chuyển khoản ' + pay.transferContent"
+                        (click)="copy(pay.transferContent, 'content')"
+                      >
+                        <n2f-icon
+                          [name]="copied() === 'content' ? 'reiconCopySuccess' : 'reiconCopy'"
+                          size="18px"
+                        />
+                        {{ copied() === 'content' ? 'Đã chép' : 'Sao chép' }}
+                      </button>
+                    </dd>
+                  </div>
+                }
                 <div>
                   <dt>Chủ tài khoản</dt>
                   <dd>{{ pay.account.accountName }}</dd>
                 </div>
               </dl>
-              <p class="va-note">
-                Đây là tài khoản ảo chỉ dành cho đơn này. Chuyển đúng số tiền, không cần nhập nội
-                dung chuyển khoản.
-              </p>
+              @if (pay.shortfall) {
+                <p class="va-note warn" role="status">
+                  Chúng tôi đã nhận {{ pay.amount - pay.shortfall | vnd }}, đơn còn thiếu
+                  {{ pay.shortfall | vnd }}. Mã QR đã cập nhật đúng số còn thiếu, vui lòng chuyển
+                  nốt trước khi hết hạn.
+                </p>
+              } @else if (pay.transferContent) {
+                <p class="va-note">
+                  Quét mã QR là đã có sẵn số tiền và nội dung. Nếu chuyển tay, nhập đúng số tiền và
+                  nội dung <strong>{{ pay.transferContent }}</strong> để đơn được xác nhận tự động.
+                </p>
+              } @else {
+                <p class="va-note">
+                  Đây là tài khoản ảo chỉ dành cho đơn này. Chuyển đúng số tiền, không cần nhập nội
+                  dung chuyển khoản.
+                </p>
+              }
             </section>
 
             <p class="status" aria-live="polite">
@@ -287,6 +320,10 @@ const POLL_MS = 3000;
       font-size: 14px;
       line-height: 1.6;
     }
+    .va-note.warn {
+      border-left: 3px solid var(--brand);
+      color: var(--ink);
+    }
     .status {
       display: flex;
       align-items: center;
@@ -404,7 +441,8 @@ export class PaymentPage {
 
   readonly session = signal<PaymentSession | null>(null);
   readonly failed = signal(false);
-  readonly copied = signal(false);
+  /** Which value was just copied (account number or transfer content). */
+  readonly copied = signal<'account' | 'content' | null>(null);
   private readonly now = signal(Date.now());
 
   readonly remainingMs = computed(() => {
@@ -421,18 +459,32 @@ export class PaymentPage {
   );
   readonly orderQuery = computed(() => (this.auth.signedIn() ? null : { orderCode: this.orderId }));
   readonly hotline = STORE_INFO.hotline;
-  /** HTTP without the QR service (assumption Q2): no payment call is made, the page says so. */
-  readonly unavailable = computed(() => !this.isMock && !this.cart.policy().bankTransferEnabled);
+  /**
+   * HTTP without the QR service: the server answers 404. The page may be opened straight from the
+   * email (no quote yet, so the local policy flag is not reliable): always ask, then explain.
+   */
+  readonly unavailable = signal(false);
 
   constructor() {
     // Poll until the backend reports a final state (paid or expired).
     timer(0, POLL_MS)
       .pipe(
-        takeWhile(() => !this.unavailable()),
         switchMap(() =>
           this.api.paymentSession(this.orderId).pipe(
-            catchError(() => {
-              this.failed.set(true);
+            catchError((error: unknown) => {
+              // A blip while the QR is shown keeps polling with the last known state.
+              const last = this.session();
+              if (last) return of(last);
+              if (
+                error instanceof CheckoutError &&
+                error.code === 'not-found' &&
+                !this.isMock &&
+                !this.cart.policy().bankTransferEnabled
+              ) {
+                this.unavailable.set(true);
+              } else {
+                this.failed.set(true);
+              }
               return of(null);
             }),
           ),
@@ -448,10 +500,10 @@ export class PaymentPage {
       .subscribe(() => this.now.set(Date.now()));
   }
 
-  copy(value: string): void {
+  copy(value: string, which: 'account' | 'content'): void {
     void navigator.clipboard?.writeText(value.replace(/\s/g, '')).then(() => {
-      this.copied.set(true);
-      setTimeout(() => this.copied.set(false), 2000);
+      this.copied.set(which);
+      setTimeout(() => this.copied.set(null), 2000);
     });
   }
 

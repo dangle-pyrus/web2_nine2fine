@@ -20,6 +20,7 @@ import { adminAccountsRouter, adminCustomersRouter, adminStaffRouter } from './m
 import { mediaRouter } from './modules/media/media.routes';
 import { accountReturnPhotosRouter, accountReturnsRouter, adminReturnPhotosRouter, adminReturnsRouter } from './modules/returns/returns.routes';
 import { storeRouter } from './modules/store/store.routes';
+import { sepayWebhookRouter } from './modules/payment/sepay.routes';
 import {
   adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
 } from './modules/insights-admin/insights-admin.routes';
@@ -68,6 +69,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use(mediaRouter);
   // Slice 8: thông tin người bán công khai (GET), như catalog: phương thức ghi -> 404.
   api.use(storeRouter);
+  // Webhook SePay: máy chủ gọi máy chủ (không Origin, không cookie) nên đứng TRƯỚC originGuard; tự xác thực bằng API key.
+  api.use('/payments/sepay', sepayWebhookRouter);
   api.use(originGuard);
   // Slice 6: tải ảnh là byte thô nên đứng TRƯỚC requireJsonBody / express.json (cần cookieParser riêng).
   api.use(

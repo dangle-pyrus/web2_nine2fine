@@ -3,7 +3,7 @@ import { HOUR, MINUTE } from '../lib/clock';
 /**
  * GIẢ ĐỊNH CHỜ THẮNG (Slice 3), gom một chỗ để đổi dễ. Đổi hành vi ở đây là đổi contract locked (qua handoff).
  * - Q1 COMMON: tên trạng thái nằm ở enum DB `order_status` / `payment_status` (đổi cần migration + contract).
- * - Q2 QR/SePay: mặc định chưa bật (cờ DB `store_settings.bank_transfer_enabled` = false, lát 3.8 không làm).
+ * - Q2 QR/SePay: đã tích hợp (webhook `POST /api/payments/sepay/webhook`); chỉ bật khi cờ DB `store_settings.bank_transfer_enabled` = true VÀ đủ BANK_* + SEPAY_WEBHOOK_KEY.
  * - Q3 địa giới: 34 tỉnh/thành, seed `prisma/seed-data/vn-locations.json`.
  * - Q4 huỷ `to_ship`: thay bởi S4-Q1 (xem `toShipCancelMode`); lát 4.5 đã phát hành với 'request'.
  */

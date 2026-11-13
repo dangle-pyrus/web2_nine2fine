@@ -55,7 +55,7 @@ info:
 
     **Giả định chờ Thắng (đánh dấu `[giả định chờ Thắng]`, đổi thì sửa theo quy trình contract locked):**
     1. COMMON-01..06 không có nội dung: tên trạng thái đơn / thanh toán theo danh sách nêu trong CHK-PAY-14; mã giảm % làm tròn **xuống** tới 1.000 ₫; tra cứu đơn khách bằng OTP theo thông số BR-AUTH-04..09 (8 số, 10 phút, gửi lại sau 60 giây), quyền xem đơn sau OTP 30 phút.
-    2. Chuyển khoản QR tự đối soát (SePay hoặc tương đương) chưa có tài khoản nhận: khi `bankTransferEnabled = false` thì `bank-transfer` bị khoá trong `paymentMethods`, `POST /orders` với `bank-transfer` -> `422 validation` (`field: paymentMethod`), `GET /orders/{orderCode}/payment` -> `404 not-found`. Webhook đối soát là điểm mở rộng phía máy chủ (plan mục 4.8), chưa thuộc contract này.
+    2. Chuyển khoản QR tự đối soát (SePay hoặc tương đương) chưa có tài khoản nhận: khi `bankTransferEnabled = false` thì `bank-transfer` bị khoá trong `paymentMethods`, `POST /orders` với `bank-transfer` -> `422 validation` (`field: paymentMethod`), `GET /orders/{orderCode}/payment` -> `404 not-found`. **Cập nhật 2026-11-13:** đã chọn SePay; webhook `POST /payments/sepay/webhook` (máy chủ SePay gọi, xem path) và `bankTransferEnabled` hiệu lực = cờ DB `store_settings.bank_transfer_enabled` VÀ đủ `BANK_*` + `SEPAY_WEBHOOK_KEY`. Thiếu một trong số đó thì hành vi khi tắt như trên.
     3. Địa giới: toàn quốc, 34 tỉnh/thành và phường/xã sau 01/07/2025.
     4. Khách tự huỷ đơn `to_ship` thẳng (`cancelledBy = customer`) cho tới khi có slice Admin; khi đó `to_ship` chuyển sang `cancel_requested` (đổi hành vi, cần quy trình contract).
 
@@ -1221,7 +1221,7 @@ paths:
     get:
       tags: [order]
       operationId: getOrderPayment
-      summary: Trang thanh toán chuyển khoản QR của một đơn (BR-CHK-21) [giả định chờ Thắng]
+      summary: Trang thanh toán chuyển khoản QR của một đơn (BR-CHK-21)
       description: |
         Chỉ cho đơn `bank-transfer`; chủ đơn hoặc cookie `n2f_oa`. Khi `bankTransferEnabled = false` hoặc đơn là COD -> `404 not-found`. Trả `status`: `awaiting` (đang chờ, còn hạn), `paid` (đã nhận đủ), `expired` (hết 30 phút, đơn đã `cancelled`). FE poll mỗi 5 giây tới khi khác `awaiting`. `transferContent` = mã đơn.
       security:
@@ -1240,6 +1240,48 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /payments/sepay/webhook:
+    post:
+      tags: [order]
+      operationId: sepayWebhook
+      summary: SePay báo tiền về tài khoản nhận (BR-CHK-21) — chỉ máy chủ SePay gọi
+      description: |
+        Không phải API cho FE. Đứng trước kiểm Origin / CSRF, không cookie. Xác thực `Authorization: Apikey <SEPAY_WEBHOOK_KEY>` (so sánh hằng thời gian); thiếu khoá cấu hình thì mọi yêu cầu `401`.
+        Mã đơn tách bằng `/N2F\d{10}/i` từ `code` rồi `content` + `description`. Idempotent theo `id` (SePay gửi lại không cộng tiền hai lần).
+        Đơn `to_pay` nhận đủ (cộng dồn các lần) -> `paid` + `to_ship`, sự kiện `payment_received`, email "Đã nhận thanh toán"; thiếu -> giữ `to_pay`, `GET /orders/{orderCode}/payment` trả `shortfall`; thừa / sau khi đã đủ / sau khi huỷ -> ghi sự kiện để kế toán hoàn tay (không khôi phục đơn đã huỷ). Không khớp đơn -> lưu `unmatched`.
+        Luôn `200 {success:true}` khi đã ghi nhận (kể cả trùng, không khớp, tiền ra) để SePay không gửi lại; lỗi máy chủ `5xx` để SePay thử lại.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, transferType, transferAmount]
+              properties:
+                id: { oneOf: [{ type: integer }, { type: string, pattern: '^\d{1,30}$' }] }
+                gateway: { type: [string, 'null'] }
+                transactionDate: { type: [string, 'null'], description: '"YYYY-MM-DD HH:mm:ss" giờ Việt Nam.' }
+                accountNumber: { type: [string, 'null'] }
+                code: { type: [string, 'null'] }
+                content: { type: [string, 'null'] }
+                transferType: { type: string, enum: [in, out] }
+                transferAmount: { type: integer, minimum: 0 }
+                referenceCode: { type: [string, 'null'] }
+                description: '{ type: [string, ''null''] }'
+      responses:
+        '200':
+          description: Đã ghi nhận.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: { type: boolean, const: true }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/Validation' }
         '500': { $ref: '#/components/responses/Unavailable' }
   /admin/orders:
     get:
@@ -4436,7 +4478,7 @@ components:
       type: object
       required: [orderId, amount, status, expiresAt, transferContent, account, qrImageUrl]
       additionalProperties: false
-      description: '`[giả định chờ Thắng]` cần dịch vụ đối soát. `paidAt` có khi `status = paid`.'
+      description: 'Đối soát qua SePay (webhook). `paidAt` có khi `status = paid`. Khi đã chuyển thiếu: `shortfall` có giá trị và `qrImageUrl` nhúng đúng số còn thiếu (`amount` vẫn là tổng đơn).'
       properties:
         orderId: { $ref: '#/components/schemas/OrderCode' }
         amount: { type: integer, minimum: 1, description: Số tiền chính xác phải chuyển (= `pricing.total`). }
@@ -4452,7 +4494,7 @@ components:
             bank: { type: string }
             accountName: { type: string }
             accountNumber: { type: string }
-        qrImageUrl: { type: string, description: 'URL ảnh VietQR đã nhúng số tiền và nội dung.' }
+        qrImageUrl: { type: string, description: 'URL ảnh QR động SePay (`qr.sepay.vn`, chuẩn VietQR) đã nhúng số tài khoản, số tiền và nội dung = mã đơn.' }
         shortfall: { type: integer, minimum: 1, description: 'Số còn thiếu khi đã chuyển thiếu (CHK-PAY-10).' }
     AdminOrderTab:
       type: string

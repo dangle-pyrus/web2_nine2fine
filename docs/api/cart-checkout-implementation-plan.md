@@ -432,6 +432,7 @@ RETURNING order_id, payment_status;
 - Quét dọn trong cùng job: xoá `idempotency_keys` hết hạn, `order_access_grants` hết hạn, `auth_action_tokens` lookup hết hạn; giỏ hết 30 ngày (`DELETE FROM carts WHERE updated_at < $now - 30 days`, cascade). Cũng xoá lười lúc `GET /cart`.
 
 ### 4.8 Chuyển khoản QR và điểm mở rộng webhook (G2, lát 3.8, không bắt buộc)
+**Đã làm 2026-11-13 (SePay):** biến môi trường là `SEPAY_WEBHOOK_KEY` (thay `PAYMENT_WEBHOOK_KEY`), QR dùng `qr.sepay.vn`, bảng thêm cột `reference` và `outcome`; chi tiết ở `docs/handoff.md`.
 Đã có sẵn ở các lát trước (để khi có SePay chỉ thêm route): bước 8 mục 4.4 tạo đơn `to_pay`; hết hạn mục 4.7; `GET /orders/{code}/payment` trả `awaiting|paid|expired`, `transferContent` = mã đơn, `qrImageUrl` dựng từ `BANK_*` (VietQR, nhúng số tiền và nội dung); khi `bankTransferEnabled` sai trả `404`.
 Điểm mở rộng: `payment.service.applyIncomingTransfer({ provider, providerTxId, content, amount, receivedAt })` (hàm thuần theo giao dịch, chưa có route):
 1. Tách mã đơn bằng `/N2F\d{10}/i` trong `content`; không có -> ghi `payment_transactions` (matched=false), dừng.

@@ -7,7 +7,7 @@ import { CancelledBy, Order, OrderStatus } from './order-models';
 export const SLICE3_ASSUMPTIONS = {
   /** Q1: COMMON status names `to_pay`/`to_ship`/... and their mapping below. */
   statusNames: 'COMMON',
-  /** Q2: with HTTP the QR/bank transfer stays hidden until `policy.bankTransferEnabled`. */
+  /** Q2 (SePay, 2026-11-13): with HTTP the QR shows once the server reports `policy.bankTransferEnabled`. */
   qrNeedsPolicyFlag: true,
   /** Q3: provinces/wards come from the public API. */
   locationsFromApi: true,

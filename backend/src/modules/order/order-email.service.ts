@@ -8,7 +8,7 @@ import { runInBackground, sendMail } from '../../mail/mailer';
 import type { MailMessage } from '../../mail/mailer';
 import {
   cancelApprovedMail, cancelRejectedMail, emailFailureSupportMail, eventEmailFailureSupportMail, orderAwaitingPaymentMail, orderCancelledMail, orderConfirmedMail,
-  orderDeliveredMail, orderShippedMail,
+  orderDeliveredMail, orderShippedMail, paymentReceivedMail,
 } from '../../mail/order-templates';
 import type { MailContact } from '../../mail/order-templates';
 import { RETURN_TEMPLATES } from '../../mail/return-templates';
@@ -112,6 +112,8 @@ const EVENT_TEMPLATES: Record<string, (o: OrderDto, isMember: boolean, contact?:
   'order-cancelled-shop': orderCancelledMail,
   'cancel-approved': cancelApprovedMail,
   'cancel-rejected': cancelRejectedMail,
+  // Chuyển khoản QR: SePay báo đủ tiền (BR-CHK-21).
+  'payment-received': paymentReceivedMail,
 };
 
 /** Một lần thử: CAS `email_attempts` (ai thắng mới gửi, nên gửi nền và job bù không trùng; mỗi sự kiện tối đa 1 thư). */

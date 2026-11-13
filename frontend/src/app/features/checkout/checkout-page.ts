@@ -209,7 +209,7 @@ export class CheckoutPage {
   readonly paymentChoices = computed<PaymentChoice[]>(() => {
     const options = this.quote()?.paymentMethods ?? [
       { method: 'cod', available: true },
-      { method: 'bank-transfer', available: this.isMock },
+      { method: 'bank-transfer', available: this.isMock || this.cart.policy().bankTransferEnabled },
     ];
     const hold = this.quote()?.policy.bankHoldMinutes ?? storeSettings().policy.paymentHoldMinutes;
     return (options as PaymentOption[])
