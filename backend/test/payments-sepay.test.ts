@@ -202,3 +202,71 @@ describe('T-QR-01 chuyển khoản QR (SePay)', () => {
     expect(parseSepayDate('sai', new Date(0)).getTime()).toBe(0);
   });
 });
+
+describe('Chế độ giả lập (PAYMENT_SIMULATOR)', () => {
+  const sim = (code: string, action: string, cookie?: string) =>
+    post(`/api/orders/${code}/payment/simulate`, { action }, { cookie, ip: freshIp() });
+  const simulatorOnly = () => {
+    for (const k of [...Object.keys(BANK), 'SEPAY_WEBHOOK_KEY']) delete process.env[k];
+    process.env.PAYMENT_SIMULATOR = 'true';
+    resetConfigCache();
+  };
+  afterAll(() => {
+    delete process.env.PAYMENT_SIMULATOR;
+    resetConfigCache();
+  });
+
+  it('không cần BANK_* / khoá webhook: QR bật với tài khoản demo, simulated = true; webhook vẫn 401', async () => {
+    simulatorOnly();
+    const { m, code } = await bankOrder();
+    const p = await payment(code, m.cookie);
+    expect(p.status).toBe(200);
+    expect(p.body).toMatchObject({ status: 'awaiting', simulated: true, account: { accountName: 'NINE2FINE DEMO' } });
+    expect((await hook(sepay({ content: code, transferAmount: 1000 }))).status).toBe(401);
+  });
+
+  it('pay-partial rồi pay: thiếu -> shortfall, đủ -> paid + to_ship + email; cùng luồng đối soát (provider simulator)', async () => {
+    simulatorOnly();
+    const { m, code, total } = await bankOrder();
+    const half = await sim(code, 'pay-partial', m.cookie);
+    expect(half.status).toBe(200);
+    expect(half.body.status).toBe('awaiting');
+    expect(half.body.shortfall).toBeGreaterThan(0);
+    expect(half.body.shortfall).toBeLessThan(total);
+    const full = await sim(code, 'pay', m.cookie);
+    expect(full.body).toMatchObject({ status: 'paid', simulated: true });
+    expect(await dbOrder(code)).toMatchObject({ status: 'to_ship', paymentStatus: 'paid' });
+    const txs = await prisma.paymentTransaction.findMany({ orderBy: { createdAt: 'asc' } });
+    expect(txs.map((t) => [t.provider, t.outcome])).toEqual([['simulator', 'partial'], ['simulator', 'paid']]);
+    expect(txs.reduce((n, t) => n + t.amount, 0)).toBe(total);
+    await flushMail();
+    expect(mails.map((x) => x.subject)).toContain(`nine2fine – Đã nhận thanh toán đơn #${code}`);
+    // Bấm lại sau khi đã trả: không ghi thêm giao dịch.
+    expect((await sim(code, 'pay', m.cookie)).body.status).toBe('paid');
+    expect(await prisma.paymentTransaction.count()).toBe(2);
+  });
+
+  it('expire -> expired, đơn huỷ, hoàn tồn', async () => {
+    simulatorOnly();
+    const { m, code } = await bankOrder();
+    expect(await stockOf(blazer)).toBe(4);
+    const r = await sim(code, 'expire', m.cookie);
+    expect(r.body.status).toBe('expired');
+    expect((await dbOrder(code)).status).toBe('cancelled');
+    expect(await stockOf(blazer)).toBe(5);
+  });
+
+  it('quyền: không cookie -> 401; người khác -> 404; action sai -> 422; chế độ tắt -> 404', async () => {
+    simulatorOnly();
+    const { m, code } = await bankOrder();
+    expect((await sim(code, 'pay')).status).toBe(401);
+    const other = await loginMember('nguoikhac@example.com');
+    expect((await sim(code, 'pay', other.cookie)).status).toBe(404);
+    expect((await sim(code, 'free-money', m.cookie)).status).toBe(422);
+    delete process.env.PAYMENT_SIMULATOR;
+    enableEnv();
+    expect((await sim(code, 'pay', m.cookie)).status).toBe(404);
+    expect((await payment(code, m.cookie)).body.simulated).toBeUndefined();
+    expect((await dbOrder(code)).status).toBe('to_pay');
+  });
+});

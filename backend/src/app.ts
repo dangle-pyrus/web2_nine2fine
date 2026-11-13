@@ -26,6 +26,7 @@ import { recommendationsRouter } from './modules/recommendations/recommendations
 import { adminCollectionsRouter, adminContentRouter, adminSizeChartsRouter, contentPublicRouter } from './modules/content/content.routes';
 import { adminSalesRouter } from './modules/sales-admin/sales-admin.routes';
 import { sepayWebhookRouter } from './modules/payment/sepay.routes';
+import { paymentSimulatorRouter } from './modules/payment/simulator.routes';
 import {
   adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
 } from './modules/insights-admin/insights-admin.routes';
@@ -137,6 +138,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);
+  // Giả lập chuyển khoản (PAYMENT_SIMULATOR); tắt thì router tự trả 404.
+  api.use('/orders', paymentSimulatorRouter);
   api.use('/orders', orderRouter);
   // Slice 5: noStore TRƯỚC requireAuth để cả 401 có Cache-Control: no-store (BR-ACC-01).
   // Slice 9: chỉ `/:orderCode/return*`; đứng TRƯỚC accountRouter (path khác rơi xuống tiếp).

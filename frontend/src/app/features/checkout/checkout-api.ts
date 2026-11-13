@@ -115,7 +115,12 @@ export interface PaymentSession {
   transferContent?: string;
   /** Amount still missing after a partial transfer. */
   shortfall?: number;
+  /** HTTP demo mode (server `PAYMENT_SIMULATOR`): the page offers buttons that fake the transfer. */
+  simulated?: boolean;
 }
+
+/** Server demo actions on `POST /orders/{code}/payment/simulate`. */
+export type SimulateAction = 'pay' | 'pay-partial' | 'expire';
 
 /** Demo-only controls for the mock payment flow; null with a real backend. */
 export interface PaymentSimulator {
@@ -219,6 +224,8 @@ export interface CheckoutApi {
   getOrder(orderCode: string): Observable<Order>;
   cancel(orderCode: string, reason?: string): Observable<Order>;
   paymentSession(orderCode: string): Observable<PaymentSession>;
+  /** HTTP demo mode only (see `PaymentSession.simulated`). */
+  simulateServerPayment?(orderCode: string, action: SimulateAction): Observable<PaymentSession>;
 }
 
 export const CHECKOUT_API = new InjectionToken<CheckoutApi>('CHECKOUT_API');
@@ -268,7 +275,21 @@ interface PaymentSessionDto {
   account: VirtualAccount;
   qrImageUrl: string;
   shortfall?: number;
+  simulated?: boolean;
 }
+
+const toPaymentSession = (dto: PaymentSessionDto): PaymentSession => ({
+  orderId: dto.orderId,
+  amount: dto.amount,
+  status: dto.status,
+  expiresAt: dto.expiresAt,
+  paidAt: dto.paidAt ?? null,
+  account: dto.account,
+  qrImage: dto.qrImageUrl,
+  transferContent: dto.transferContent,
+  shortfall: dto.shortfall,
+  simulated: dto.simulated,
+});
 
 @Injectable({ providedIn: 'root' })
 export class HttpCheckoutApi implements CheckoutApi {
@@ -365,19 +386,16 @@ export class HttpCheckoutApi implements CheckoutApi {
       .get<PaymentSessionDto>(`${this.baseUrl}/orders/${encodeURIComponent(orderCode)}/payment`, {
         context: this.guest,
       })
-      .pipe(
-        map((dto): PaymentSession => ({
-          orderId: dto.orderId,
-          amount: dto.amount,
-          status: dto.status,
-          expiresAt: dto.expiresAt,
-          paidAt: dto.paidAt ?? null,
-          account: dto.account,
-          qrImage: dto.qrImageUrl,
-          transferContent: dto.transferContent,
-          shortfall: dto.shortfall,
-        })),
-        catchError(toCheckoutError),
-      );
+      .pipe(map(toPaymentSession), catchError(toCheckoutError));
+  }
+
+  simulateServerPayment(orderCode: string, action: SimulateAction): Observable<PaymentSession> {
+    return this.http
+      .post<PaymentSessionDto>(
+        `${this.baseUrl}/orders/${encodeURIComponent(orderCode)}/payment/simulate`,
+        { action },
+        { context: this.guest },
+      )
+      .pipe(map(toPaymentSession), catchError(toCheckoutError));
   }
 }

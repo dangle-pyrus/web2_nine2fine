@@ -1282,6 +1282,39 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/payment/simulate:
+    post:
+      tags: [order]
+      operationId: simulateOrderPayment
+      summary: Giả lập tiền về cho đơn chuyển khoản (chỉ khi máy chủ bật PAYMENT_SIMULATOR)
+      description: |
+        Chế độ demo cho đồ án, không liên kết ngân hàng. Tắt (mặc định) -> `404 not-found`. Quyền như `GET /orders/{orderCode}/payment` (chủ đơn hoặc cookie `n2f_oa`).
+        `pay` = chuyển đúng số còn thiếu, `pay-partial` = một nửa số còn thiếu (làm tròn xuống 1.000 ₫), cả hai đi qua đúng luồng đối soát của webhook SePay (`payment_transactions.provider = simulator`); `expire` = hết hạn ngay (đơn huỷ, hoàn tồn). Đơn không còn `awaiting` thì không làm gì, trả phiên hiện tại.
+      security:
+        - storefrontSession: []
+        - orderAccess: []
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              additionalProperties: false
+              properties:
+                action: { type: string, enum: [pay, pay-partial, expire] }
+      responses:
+        '200':
+          description: Phiên thanh toán sau khi giả lập.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentSession' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /payments/sepay/webhook:
     post:
       tags: [order]
@@ -5319,6 +5352,7 @@ components:
             accountNumber: { type: string }
         qrImageUrl: { type: string, description: 'URL ảnh QR động SePay (`qr.sepay.vn`, chuẩn VietQR) đã nhúng số tài khoản, số tiền và nội dung = mã đơn.' }
         shortfall: { type: integer, minimum: 1, description: 'Số còn thiếu khi đã chuyển thiếu (CHK-PAY-10).' }
+        simulated: { type: boolean, const: true, description: 'Có khi máy chủ bật PAYMENT_SIMULATOR: FE hiện nút giả lập (`POST .../payment/simulate`).' }
     AdminOrderTab:
       type: string
       enum: [all, pending-payment, to-confirm, to-fulfil, in-transit, cancel-requests, returning, completed, cancelled]

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { Request } from 'express';
 import { getConfig } from '../../config/env';
@@ -31,6 +32,8 @@ export interface PaymentSessionDto {
   account: { bank: string; accountName: string; accountNumber: string };
   qrImageUrl: string;
   shortfall?: number;
+  /** Chế độ giả lập (PAYMENT_SIMULATOR): FE hiện nút giả lập tiền về. */
+  simulated?: boolean;
 }
 
 /** Ảnh QR động của SePay (chuẩn VietQR/Napas 247): nhúng số tài khoản, số tiền và nội dung = mã đơn. */
@@ -68,13 +71,14 @@ export async function getPaymentSession(req: Request, rawCode: string): Promise<
     account: { bank: bank.name, accountName: bank.accountName, accountNumber: bank.accountNumber },
     qrImageUrl: sepayQrUrl(bank, shortfall ?? o.total, o.code),
     ...(shortfall ? { shortfall } : {}),
+    ...(getConfig().paymentSimulator ? { simulated: true } : {}),
   };
 }
 
 /* ======================= Đối soát tiền về ======================= */
 
 export interface IncomingTransfer {
-  provider: 'sepay';
+  provider: 'sepay' | 'simulator';
   /** Mã giao dịch phía nhà cung cấp (SePay `id`): khoá idempotent. */
   providerTxId: string;
   /** Nội dung chuyển khoản (và `code` SePay tách sẵn, nếu có). */
@@ -196,4 +200,36 @@ export async function applyIncomingTransfer(t: IncomingTransfer, at: Date = cloc
   if (result.eventId) scheduleEventEmail(result.eventId);
   logger.info('payment-transfer', { provider: t.provider, outcome: result.outcome, ...(result.orderCode ? { order: result.orderCode } : {}) });
   return { outcome: result.outcome, ...(result.orderCode ? { orderCode: result.orderCode } : {}) };
+}
+
+/* ======================= Chế độ giả lập (PAYMENT_SIMULATOR) ======================= */
+
+export type SimulateAction = 'pay' | 'pay-partial' | 'expire';
+
+/**
+ * Giả lập cho đồ án (không liên kết ngân hàng): chủ đơn / khách có quyền xem đơn bấm trên trang QR.
+ * `pay` = chuyển đúng số còn thiếu, `pay-partial` = chuyển một nửa số còn thiếu (làm tròn xuống 1.000 ₫, tối thiểu 1.000 ₫),
+ * cả hai đi qua `applyIncomingTransfer` (cùng luồng với webhook SePay, provider `simulator`). `expire` = hết hạn ngay.
+ * Chế độ tắt -> 404 not-found (như route không tồn tại).
+ */
+export async function simulatePayment(req: Request, rawCode: string, action: SimulateAction): Promise<PaymentSessionDto> {
+  if (!getConfig().paymentSimulator) throw Errors.notFound();
+  const session = await getPaymentSession(req, rawCode); // kiểm quyền + QR bật + đơn chuyển khoản; lười hết hạn
+  if (session.status === 'awaiting') {
+    if (action === 'expire') {
+      const at = clockNow();
+      await prisma.order.updateMany({ where: { code: session.orderId, status: 'to_pay' }, data: { paymentDueAt: new Date(at.getTime() - 1000) } });
+    } else {
+      const remaining = session.shortfall ?? session.amount;
+      const amount = action === 'pay' ? remaining : Math.max(1000, Math.floor(remaining / 2 / 1000) * 1000);
+      await applyIncomingTransfer({
+        provider: 'simulator',
+        providerTxId: `sim-${randomUUID()}`,
+        content: `GIA LAP ${session.orderId}`,
+        amount: Math.min(amount, remaining),
+        receivedAt: clockNow(),
+      });
+    }
+  }
+  return getPaymentSession(req, rawCode);
 }

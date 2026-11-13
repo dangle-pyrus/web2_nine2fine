@@ -50,8 +50,9 @@ export async function getSettings(db: Db): Promise<Settings> {
     codRefusalMonths: row.codRefusalMonths,
     codOpenOrderLimit: row.codOpenOrderLimit,
     bankHoldMinutes: row.bankHoldMinutes,
-    // QR chỉ bật khi đủ: cờ DB + tài khoản nhận + khoá webhook SePay (không có webhook thì đơn không bao giờ được xác nhận).
-    bankTransferEnabled: row.bankTransferEnabled && getConfig().bank !== null && getConfig().sepayWebhookKey !== null,
+    // QR chỉ bật khi đủ: cờ DB + tài khoản nhận + cách xác nhận tiền về (khoá webhook SePay, hoặc chế độ giả lập).
+    bankTransferEnabled:
+      row.bankTransferEnabled && getConfig().bank !== null && (getConfig().sepayWebhookKey !== null || getConfig().paymentSimulator),
     deliveryDaysMin: row.deliveryDaysMin,
     deliveryDaysMax: row.deliveryDaysMax,
     cutoffHour: row.cutoffHour,

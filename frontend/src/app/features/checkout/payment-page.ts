@@ -13,7 +13,13 @@ import { AuthSession } from '../auth/auth-session';
 import { PricePipe } from '../../shared/commerce/price.pipe';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { formatDateTime } from '../orders/order-status';
-import { CHECKOUT_API, CheckoutError, PAYMENT_SIMULATOR, PaymentSession } from './checkout-api';
+import {
+  CHECKOUT_API,
+  CheckoutError,
+  PAYMENT_SIMULATOR,
+  PaymentSession,
+  SimulateAction,
+} from './checkout-api';
 import { API_CONFIG } from '../../core/api-config';
 import { STORE_INFO } from '../../core/store-info';
 import { CartState } from '../cart/cart-state';
@@ -147,6 +153,39 @@ const POLL_MS = 3000;
                     Giả lập đã nhận tiền
                   </button>
                   <button type="button" class="button" (click)="simulate('expired')">
+                    Giả lập hết hạn
+                  </button>
+                </div>
+              </aside>
+            } @else if (pay.simulated) {
+              <aside class="demo" aria-label="Chế độ giả lập thanh toán">
+                <p>
+                  <strong>Chế độ giả lập:</strong> cửa hàng chưa nối tài khoản ngân hàng thật nên
+                  không cần chuyển tiền. Bấm để giả lập ngân hàng báo tiền về.
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    class="button dark"
+                    [disabled]="simulating()"
+                    (click)="simulateServer('pay')"
+                  >
+                    Giả lập đã nhận đủ tiền
+                  </button>
+                  <button
+                    type="button"
+                    class="button"
+                    [disabled]="simulating()"
+                    (click)="simulateServer('pay-partial')"
+                  >
+                    Giả lập chuyển thiếu
+                  </button>
+                  <button
+                    type="button"
+                    class="button"
+                    [disabled]="simulating()"
+                    (click)="simulateServer('expire')"
+                  >
                     Giả lập hết hạn
                   </button>
                 </div>
@@ -513,6 +552,24 @@ export class PaymentPage {
       .paymentSession(this.orderId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((pay) => this.session.set(pay));
+  }
+
+  readonly simulating = signal(false);
+
+  /** HTTP demo mode: the server runs the same reconciliation as a real SePay webhook. */
+  simulateServer(action: SimulateAction): void {
+    if (!this.api.simulateServerPayment || this.simulating()) return;
+    this.simulating.set(true);
+    this.api
+      .simulateServerPayment(this.orderId, action)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (pay) => {
+          this.session.set(pay);
+          this.simulating.set(false);
+        },
+        error: () => this.simulating.set(false),
+      });
   }
 
   dateTime(iso: string): string {

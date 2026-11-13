@@ -38,6 +38,7 @@ const schema = z
     BANK_ACCOUNT_NUMBER: opt(z.string()),
     BANK_ACCOUNT_NAME: opt(z.string()),
     SEPAY_WEBHOOK_KEY: opt(z.string().min(16)),
+    PAYMENT_SIMULATOR: z.preprocess(emptyToUndefined, boolStr.default(false)),
     MEDIA_STORAGE: z.preprocess(emptyToUndefined, z.enum(['local', 'supabase']).default('local')),
     MEDIA_LOCAL_DIR: opt(z.string()),
     SUPABASE_URL: opt(z.string()),
@@ -88,6 +89,11 @@ export interface AppConfig {
   bank: { name: string; accountNumber: string; accountName: string } | null;
   /** API key SePay gửi kèm webhook (`Authorization: Apikey ...`). `null` -> webhook từ chối mọi yêu cầu, QR không bật. */
   sepayWebhookKey: string | null;
+  /**
+   * Chế độ giả lập chuyển khoản (đồ án, không liên kết ngân hàng thật): QR bật không cần khoá webhook, khách bấm
+   * "Giả lập đã nhận tiền" trên trang QR -> cùng luồng đối soát như webhook SePay. Thiếu BANK_* thì dùng tài khoản demo.
+   */
+  paymentSimulator: boolean;
   /** Slice 6: nơi lưu ảnh tải lên. `supabase` chỉ dùng được khi đủ url + service role key. */
   media: {
     storage: 'local' | 'supabase';
@@ -155,8 +161,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     bank:
       e.BANK_NAME && e.BANK_ACCOUNT_NUMBER && e.BANK_ACCOUNT_NAME
         ? { name: e.BANK_NAME, accountNumber: e.BANK_ACCOUNT_NUMBER, accountName: e.BANK_ACCOUNT_NAME }
-        : null,
+        : e.PAYMENT_SIMULATOR
+          ? { name: 'MBBank', accountNumber: '0000000000', accountName: 'NINE2FINE DEMO' }
+          : null,
     sepayWebhookKey: e.SEPAY_WEBHOOK_KEY ?? null,
+    paymentSimulator: e.PAYMENT_SIMULATOR,
     media: {
       storage: e.MEDIA_STORAGE,
       localDir: e.MEDIA_LOCAL_DIR,
