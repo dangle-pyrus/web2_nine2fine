@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { apiConfig } from '../../core/api-config';
 import { RouterLink } from '@angular/router';
 import { storeSettings } from '../../core/store-settings';
 import { policies } from './policy-content';
@@ -220,7 +221,7 @@ export class HelpPage {
         },
         {
           q: 'Nhận hàng sai size, sai màu thì làm sao?',
-          a: `Gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận. Gửi trả miễn phí khi nine2fine giao sai hoặc sản phẩm lỗi; khi không vừa hoặc không còn nhu cầu, phí gửi trả ${vnd(P.returnShippingFee)} được trừ vào số tiền hoàn. nine2fine hoàn tiền sau khi nhận và kiểm tra hàng.`,
+          a: `Gửi yêu cầu trả hàng trong ${P.returnDays} ngày kể từ ngày nhận${apiConfig.returnsMode === 'http' ? ': thành viên trong Lịch sử mua hàng, khách không đăng nhập qua trang Tra cứu đơn hàng' : ''}. Gửi trả miễn phí khi nine2fine giao sai hoặc sản phẩm lỗi; khi không vừa hoặc không còn nhu cầu, phí gửi trả ${vnd(P.returnShippingFee)} được trừ vào số tiền hoàn. nine2fine hoàn tiền sau khi nhận và kiểm tra hàng.`,
           link: { label: 'Chính sách trả hàng', path: '/policies/returns' },
         },
         {

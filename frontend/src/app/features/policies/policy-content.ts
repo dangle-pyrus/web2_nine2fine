@@ -1,4 +1,5 @@
 import { computed } from '@angular/core';
+import { apiConfig } from '../../core/api-config';
 import { storeSettings, StoreSettingsValue } from '../../core/store-settings';
 
 /** A paragraph, or a bulleted list when given as an array. */
@@ -76,7 +77,9 @@ function buildPolicies({ policy: P, info: S, membership: M }: StoreSettingsValue
           blocks: [
             [
               'Thành viên: vào Tài khoản → Lịch sử mua hàng → chọn đơn → "Yêu cầu trả hàng", chọn sản phẩm, lý do và tài khoản nhận tiền hoàn.',
-              `Khách mua không cần tài khoản: gọi ${S.hotline} hoặc gửi email đến ${S.email}, kèm mã đơn và số điện thoại đặt hàng.`,
+              apiConfig.returnsMode === 'http'
+                ? `Khách mua không cần tài khoản: vào Tra cứu đơn hàng, nhập mã đơn và email đặt hàng, xác minh bằng mã gửi về email rồi chọn "Yêu cầu trả hàng"; hoặc gọi ${S.hotline} / gửi email đến ${S.email}, kèm mã đơn và số điện thoại đặt hàng (đơn quá hạn hoặc gặp lỗi cũng liên hệ hotline).`
+                : `Khách mua không cần tài khoản: gọi ${S.hotline} hoặc gửi email đến ${S.email}, kèm mã đơn và số điện thoại đặt hàng.`,
               'Dự kiến nine2fine xác nhận yêu cầu trong vòng 24 giờ làm việc; sau khi duyệt, bạn nhận hướng dẫn gửi hàng trong chi tiết đơn và qua email.',
             ],
           ],

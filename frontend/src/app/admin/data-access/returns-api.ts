@@ -64,6 +64,13 @@ export interface AdminReturnHistoryEntry {
   note?: string;
 }
 
+/** Slice 10 (Should, BR-RET-65): who sent the request; the label is shown next to the order. */
+export type AdminReturnSource = 'member' | 'guest';
+export const RETURN_SOURCE_LABELS: Record<AdminReturnSource, string> = {
+  member: 'Thành viên',
+  guest: 'Khách vãng lai',
+};
+
 export interface AdminReturn {
   id: string;
   orderCode: string;
@@ -73,6 +80,8 @@ export interface AdminReturn {
   detail: string;
   conditionAck: boolean;
   requestedAt: string;
+  /** Absent when the server has not shipped the Should. */
+  source?: AdminReturnSource;
   approvedAt?: string;
   receivedAt?: string;
   refundedAt?: string;
@@ -101,6 +110,7 @@ export interface AdminReturnSummary {
   id: string;
   orderCode: string;
   requestedAt: string;
+  source?: AdminReturnSource;
   recipientName: string;
   reason: AdminReturnReason;
   fault: 'shop' | 'customer';

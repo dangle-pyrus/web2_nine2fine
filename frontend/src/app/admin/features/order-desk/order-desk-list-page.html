@@ -123,6 +123,10 @@
             <div class="cell-sub">
               @if (order.needsCall) {
               <span class="chip chip--static">Cần gọi</span>
+              } @if (order.returnPending) {
+              <span class="chip chip--static" data-testid="return-pending"
+                >Có yêu cầu trả hàng</span
+              >
               } @if (order.tab === 'returning') {
               <span class="chip chip--static">Hàng hoàn chờ xử lý</span>
               } @for (flag of order.overdue; track flag) {

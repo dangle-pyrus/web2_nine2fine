@@ -10,7 +10,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
-import { DEFAULT_QUERY, Product } from '../catalog/models/product';
+import { CatalogQuery, DEFAULT_QUERY, Product, SortOrder } from '../catalog/models/product';
 import { ProductCardComponent } from '../../shared/commerce/product-card.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { LandingShop } from './landing-content';
@@ -45,9 +45,29 @@ export class HomeShopRail implements OnInit {
   private readonly catalog = inject(CATALOG_API);
   private readonly destroyRef = inject(DestroyRef);
 
+  /** The block's own filters (`queryParams`: category, moment, sale, ...) narrow the four products. */
+  private query(): CatalogQuery {
+    const { sort, queryParams = {} } = this.content();
+    const price = Number(queryParams['maxPrice']);
+    return {
+      ...DEFAULT_QUERY,
+      gender: queryParams['gender'] ?? '',
+      category: queryParams['category'] ?? '',
+      moment: queryParams['moment'] ?? '',
+      size: queryParams['size'] ?? '',
+      color: queryParams['color'] ?? '',
+      q: queryParams['q'] ?? '',
+      maxPrice: Number.isFinite(price) && price > 0 ? price : 0,
+      available: queryParams['available'] === 'true',
+      sale: queryParams['sale'] === 'true',
+      sort: (queryParams['sort'] as SortOrder | undefined) ?? sort,
+      limit: 4,
+    };
+  }
+
   ngOnInit(): void {
     this.catalog
-      .list({ ...DEFAULT_QUERY, sort: this.content().sort, limit: 4 })
+      .list(this.query())
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((page) => this.products.set(page.items));
   }

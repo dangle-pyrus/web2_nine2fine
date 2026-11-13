@@ -3,11 +3,16 @@ import { API_CONFIG, apiConfig } from '../core/api-config';
 import * as ports from './data-access/admin-apis';
 import * as mocks from '../../mocks/admin/mock-admin-apis';
 import { MockAdminReportsApi } from '../../mocks/admin/mock-admin-reports';
-import * as storefrontMocks from '../../mocks/admin/mock-admin-storefront';
 import { AdminCategories } from './data-access/admin-categories';
 import { adminCatalogAdapterProviders } from './admin-catalog-adapters';
 import { adminOrderAdapterProviders } from './admin-order-adapters';
 import { adminUsersAdapterProviders } from './admin-users-adapters';
+import * as content from './data-access/content-api';
+import {
+  MockAdminContentApi,
+  MockAdminReviewsApi,
+  MockAdminSalesApi,
+} from '../../mocks/admin/mock-admin-content';
 import * as insights from './data-access/insights-api';
 import { ADMIN_RETURN_DESK_API, HttpAdminReturnDeskApi } from './data-access/returns-api';
 import { AdminDialogs } from './ui/dialogs';
@@ -18,7 +23,7 @@ function bind<T>(
   token: InjectionToken<T>,
   mock: Type<T>,
   http: Type<T>,
-  mode: 'mode' | 'authMode' = 'mode',
+  mode: 'mode' | 'authMode' | 'reviewsMode' | 'contentMode' | 'promotionsMode' = 'mode',
 ): Provider[] {
   return [
     http,
@@ -87,6 +92,26 @@ export function provideAdmin(): Provider[] {
     HttpAdminReturnDeskApi,
     { provide: ADMIN_RETURN_DESK_API, useExisting: HttpAdminReturnDeskApi },
     AdminCategories,
+    // Slice 10 (admin side): review moderation, home content / size charts / collections and the
+    // bulk sale follow reviewsMode, contentMode and promotionsMode.
+    ...bind(
+      content.ADMIN_REVIEWS_API,
+      MockAdminReviewsApi,
+      content.HttpAdminReviewsApi,
+      'reviewsMode',
+    ),
+    ...bind(
+      content.ADMIN_CONTENT_API,
+      MockAdminContentApi,
+      content.HttpAdminContentApi,
+      'contentMode',
+    ),
+    ...bind(
+      content.ADMIN_SALES_API,
+      MockAdminSalesApi,
+      content.HttpAdminSalesApi,
+      'promotionsMode',
+    ),
     // Auth follows `authMode` so Slice 1 can go live before the other admin modules.
     ...bind(ports.ADMIN_AUTH_API, mocks.MockAdminAuthApi, ports.HttpAdminAuthApi, 'authMode'),
     ...bind(ports.ADMIN_DASHBOARD_API, mocks.MockAdminDashboardApi, ports.HttpAdminDashboardApi),
@@ -95,11 +120,6 @@ export function provideAdmin(): Provider[] {
     ...bind(ports.ADMIN_CUSTOMERS_API, mocks.MockAdminCustomersApi, ports.HttpAdminCustomersApi),
     ...bind(ports.ADMIN_SETTINGS_API, mocks.MockAdminSettingsApi, ports.HttpAdminSettingsApi),
     ...bind(ports.ADMIN_SEARCH_API, mocks.MockAdminSearchApi, ports.HttpAdminSearchApi),
-    ...bind(
-      ports.ADMIN_STOREFRONT_API,
-      storefrontMocks.MockAdminStorefrontApi,
-      ports.HttpAdminStorefrontApi,
-    ),
     ...bind(ports.ADMIN_REPORTS_API, MockAdminReportsApi, ports.HttpAdminReportsApi),
   ];
 }

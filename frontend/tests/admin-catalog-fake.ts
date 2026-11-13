@@ -345,6 +345,7 @@ export class CatalogApi {
       categoryName: item['category'],
       price: item['price'],
       compareAtPrice: item['compareAtPrice'],
+      saleState: item['saleState'] ?? 'none',
       inventory: variants.reduce((sum, row) => sum + row.inventory, 0),
       variantCount: variants.length,
       updatedAt: item['updatedAt'],

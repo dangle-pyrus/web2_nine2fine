@@ -7,16 +7,12 @@ import { AdminSession } from '../../core/admin-session';
 import { money, percent, slugify } from '../../core/format';
 import { NumPipe, DateTimePipe } from '../../core/format.pipes';
 import { PRODUCT_STATUS_OPTIONS, productBadge } from '../../core/status';
-import {
-  ADMIN_INVENTORY_API,
-  ADMIN_PRODUCTS_API,
-  ADMIN_STOREFRONT_API,
-} from '../../data-access/admin-apis';
+import { ADMIN_INVENTORY_API, ADMIN_PRODUCTS_API } from '../../data-access/admin-apis';
+import { ADMIN_CONTENT_API, type AdminCollection } from '../../data-access/content-api';
 import { AdminCategories } from '../../data-access/admin-categories';
 import { errorMessage, missingLabels } from '../../data-access/http-support';
 import {
   AdminApiError,
-  AdminCollection,
   AdminProduct,
   AdminVariant,
   ProductImage,
@@ -49,6 +45,26 @@ const PRESET_COLORS = [
   { name: 'Đỏ', hex: '#a91e2c' },
   { name: 'Xanh navy', hex: '#1f2a44' },
 ];
+
+const SALE_MAX_DAYS = 89;
+
+/** Client checks of the sale fields (BR-PROMO-01); the server repeats them and has the last word. */
+function saleErrors(draft: ProductInput): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const { salePrice, saleStartsAt, saleEndsAt } = draft;
+  if (salePrice == null && !saleStartsAt && !saleEndsAt) return errors;
+  if (salePrice == null) errors['salePrice'] = 'Nhập giá giảm.';
+  else if (salePrice < 1000 || salePrice >= draft.price)
+    errors['salePrice'] = 'Giá giảm từ 1.000 ₫ và thấp hơn giá bán.';
+  if (!saleStartsAt) errors['saleStartsAt'] = 'Chọn ngày bắt đầu.';
+  if (!saleEndsAt) errors['saleEndsAt'] = 'Chọn ngày kết thúc.';
+  if (saleStartsAt && saleEndsAt) {
+    const days = (Date.parse(saleEndsAt) - Date.parse(saleStartsAt)) / 86_400_000;
+    if (days < 0) errors['saleEndsAt'] = 'Ngày kết thúc phải từ ngày bắt đầu trở đi.';
+    else if (days > SALE_MAX_DAYS) errors['saleEndsAt'] = 'Đợt giảm giá tối đa 90 ngày.';
+  }
+  return errors;
+}
 
 function emptyProduct(): ProductInput {
   return {
@@ -118,7 +134,7 @@ export class ProductFormPage implements HasUnsavedChanges {
   private readonly dialogs = inject(AdminDialogs);
   private readonly session = inject(AdminSession);
   private readonly inventoryApi = inject(ADMIN_INVENTORY_API);
-  private readonly storefrontApi = inject(ADMIN_STOREFRONT_API);
+  private readonly contentApi = inject(ADMIN_CONTENT_API);
   /** Collections are saved on their own, straight away (not part of the product form). */
   protected readonly collections = signal<AdminCollection[] | null>(null);
   protected readonly categoryList = inject(AdminCategories);
@@ -132,6 +148,8 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly isNew = computed(() => !this.id());
   protected readonly canEdit = this.session.can('products.edit');
   protected readonly canDelete = this.session.can('products.delete');
+  /** Slice 10: the sale fields need `promotions.edit` as well (admin only, BR-PROMO-05). */
+  protected readonly canSale = this.contract && this.session.can('promotions.edit');
   protected readonly canSeeCost = !this.contract && this.session.can('products.cost');
 
   protected readonly genders = GENDERS;
@@ -203,12 +221,25 @@ export class ProductFormPage implements HasUnsavedChanges {
       draft.compareAtPrice <= draft.price
     )
       errors['compareAtPrice'] = 'Giá gốc phải cao hơn giá bán.';
+    if (this.canSale) Object.assign(errors, saleErrors(draft), this.serverErrors());
     if (!draft.colors.length || !draft.sizes.length)
       errors['variants'] = 'Chọn ít nhất một màu và một size.';
     // On the API the server answers `publish-incomplete` with the whole list (BR-INV-14).
     if (!this.contract && draft.status === 'active' && !draft.images.length)
       errors['images'] = 'Sản phẩm đang bán cần ít nhất một ảnh.';
     return errors;
+  });
+
+  /** Sale percent as the server shows it to shoppers: floor((1 - sale / price) x 100). */
+  protected readonly saleDiscount = computed(() => {
+    const { price, salePrice } = this.draft();
+    return salePrice && price > 0 && salePrice < price
+      ? Math.floor((1 - salePrice / price) * 100)
+      : null;
+  });
+  protected readonly hasSale = computed(() => {
+    const { salePrice, saleStartsAt, saleEndsAt } = this.draft();
+    return salePrice != null || !!saleStartsAt || !!saleEndsAt;
   });
 
   protected readonly discount = computed(() => {
@@ -279,7 +310,7 @@ export class ProductFormPage implements HasUnsavedChanges {
       this.load(id);
       // Collections are not in the API (S6-Q7): the section is hidden there.
       if (!this.contract)
-        this.storefrontApi.collections().subscribe({
+        this.contentApi.collections().subscribe({
           next: (items) => this.collections.set(items),
           error: () => this.collections.set([]),
         });
@@ -292,19 +323,32 @@ export class ProductFormPage implements HasUnsavedChanges {
 
   toggleCollection(collectionId: string, on: boolean): void {
     const id = this.id();
-    const current = this.collections();
-    if (!id || !current) return;
-    const ids = current
-      .filter((item) => (item.id === collectionId ? on : item.productIds.includes(id)))
-      .map((item) => item.id);
-    this.storefrontApi.setProductCollections(id, ids).subscribe({
-      next: (items) => {
-        this.collections.set(items);
-        const name = items.find((item) => item.id === collectionId)?.name;
-        this.toast.show(on ? `Đã thêm vào ${name}` : `Đã bỏ khỏi ${name}`);
-      },
-      error: (error: unknown) => this.toast.error(errorMessage(error)),
-    });
+    const target = this.collections()?.find((item) => item.id === collectionId);
+    if (!id || !target) return;
+    const productIds = on
+      ? [...target.productIds.filter((value) => value !== id), id]
+      : target.productIds.filter((value) => value !== id);
+    this.contentApi
+      .updateCollection(
+        target.id,
+        {
+          name: target.name,
+          slug: target.slug,
+          description: target.description,
+          status: target.status,
+          productIds,
+        },
+        target.updatedAt,
+      )
+      .subscribe({
+        next: (saved) => {
+          this.collections.update((items) =>
+            (items ?? []).map((item) => (item.id === saved.id ? saved : item)),
+          );
+          this.toast.show(on ? `Đã thêm vào ${saved.name}` : `Đã bỏ khỏi ${saved.name}`);
+        },
+        error: (error: unknown) => this.toast.error(errorMessage(error)),
+      });
   }
 
   hasUnsavedChanges(): boolean {
@@ -614,6 +658,9 @@ export class ProductFormPage implements HasUnsavedChanges {
       name: true,
       price: true,
       compareAtPrice: true,
+      salePrice: true,
+      saleStartsAt: true,
+      saleEndsAt: true,
       variants: true,
       images: true,
       type: true,
@@ -673,6 +720,11 @@ export class ProductFormPage implements HasUnsavedChanges {
       if (Object.keys(fields).length) this.serverErrors.set(fields);
     }
     this.toast.error(errorMessage(error));
+  }
+
+  /** "Gỡ đợt giảm": all three fields `null` removes the sale (BR-PROMO-05). */
+  removeSale(): void {
+    this.patch({ salePrice: null, saleStartsAt: null, saleEndsAt: null });
   }
 
   protected readonly missingText = (missing: string[]): string => missingLabels(missing).join(', ');

@@ -5,7 +5,12 @@
   @if (first) {
   <nav class="audience-nav" aria-label="Khoảnh khắc">
     @for (moment of content().moments; track moment.href) {
-    <a [routerLink]="moment.href">{{ moment.label }}</a>
+    <a
+      [routerLink]="path(moment.href)"
+      [queryParams]="query(moment.href)"
+      [fragment]="fragment(moment.href)"
+      >{{ moment.label }}</a
+    >
     }
   </nav>
   }
@@ -22,7 +27,11 @@
   <ul class="category-grid">
     @for (category of content().categories; track category.mediaId) {
     <li>
-      <a [routerLink]="category.href">
+      <a
+        [routerLink]="path(category.href)"
+        [queryParams]="query(category.href)"
+        [fragment]="fragment(category.href)"
+      >
         <n2f-media-image [mediaId]="category.mediaId" sizes="64px" [decorative]="true" />
         <span>{{ category.label }}</span>
       </a>
@@ -33,5 +42,13 @@
     >Xem tất cả <n2f-icon name="reiconArrowRight" size="18px"
   /></a>
 </section>
+<n2f-home-moments [moments]="content().moments" />
 } @case ('products') { <n2f-home-product-rail [content]="block" /> } @case ('shop') {
-<n2f-home-shop-rail [content]="block" /> } } }
+<n2f-home-shop-rail [content]="block" /> } } } @if (failed()) {
+<section class="home-error" role="alert">
+  <h1>Chưa tải được trang chủ</h1>
+  <p>Kiểm tra kết nối rồi thử lại, hoặc xem thẳng các sản phẩm.</p>
+  <button type="button" class="retry" (click)="retry()">Thử lại</button>
+  <a routerLink="/shop">Xem cửa hàng</a>
+</section>
+}

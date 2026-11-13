@@ -19,18 +19,20 @@ import { CODE_PATTERN, cleanCode } from '../auth/auth-messages';
 import { orderCanCancel } from '../orders/order-status-map';
 import { Order } from '../orders/order-models';
 import { canPay, cancelLabels, formatDate } from '../orders/order-status';
-import { canRequestReturn } from '../orders/order-returns';
+import { canRequestReturn, returnDeadline } from '../orders/order-returns';
 import { storeSettings } from '../../core/store-settings';
 import { OrderCancellation } from '../account/orders/order-cancellation';
 import { OrderStatusBadge } from '../orders/order-status-badge';
 import { OrderView } from '../orders/order-view';
+import { ReturnStatusSection } from '../orders/return-status-section';
+import { GuestOrderView } from './guest-order-view';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Guest order tracking: order code + email, then an emailed code; only the code may be in the URL. */
 @Component({
   selector: 'n2f-track-order-page',
-  imports: [ReactiveFormsModule, RouterLink, OrderStatusBadge, OrderView],
+  imports: [ReactiveFormsModule, RouterLink, OrderStatusBadge, OrderView, ReturnStatusSection],
   template: `
     <div class="container tracking">
       <h1>Tra cứu đơn hàng</h1>
@@ -161,7 +163,15 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                   {{ cancelling() ? labels(current).busy : labels(current).idle }}
                 </button>
               }
-              @if (returnable(current)) {
+              @if (returnable(current) && returnsOnServer) {
+                <p class="hint">
+                  Muốn trả hàng? Hạn gửi yêu cầu: hết ngày {{ returnDeadlineOf(current) }}.
+                  <a routerLink="/policies/returns">Chính sách trả hàng</a>
+                </p>
+                <a class="pill" [routerLink]="['/track-order', current.id, 'return']"
+                  >Yêu cầu trả hàng</a
+                >
+              } @else if (returnable(current)) {
                 <p class="hint">
                   Muốn trả hàng?
                   <a routerLink="/auth/login" [queryParams]="{ returnUrl: '/account/orders' }"
@@ -174,6 +184,14 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
               }
             </div>
           </n2f-order-view>
+          @if (current.returnCase; as request) {
+            <n2f-return-status
+              [order]="current"
+              [request]="request"
+              audience="guest"
+              (changed)="reload(current.id)"
+            />
+          }
           <p class="hint help">
             Cần hỗ trợ đơn #{{ current.id }}? <a routerLink="/help">Liên hệ nine2fine</a>
           </p>
@@ -375,7 +393,10 @@ export class TrackOrderPage {
     return storeSettings().info;
   }
 
+  /** `returnsMode: http`: the guest sends the request here with the lookup grant (BR-RET-60). */
+  readonly returnsOnServer = inject(API_CONFIG).returnsMode === 'http';
   private readonly returnsEnabled = inject(API_CONFIG).checkoutMode === 'mock';
+  private readonly guestView = inject(GuestOrderView);
   private readonly api = inject(CHECKOUT_API);
   private readonly cancellation = inject(OrderCancellation);
   private readonly destroyRef = inject(DestroyRef);
@@ -398,6 +419,12 @@ export class TrackOrderPage {
   });
 
   constructor() {
+    // Back from the return form: the order the shopper just changed, no second code needed.
+    const kept = this.guestView.get();
+    if (kept && this.form.controls.orderCode.value === kept.id) {
+      this.order.set(kept);
+      this.step.set('result');
+    }
     this.destroyRef.onDestroy(() => {
       clearInterval(this.timer);
       clearInterval(this.lockTimer);
@@ -426,7 +453,25 @@ export class TrackOrderPage {
   }
 
   returnable(order: Order): boolean {
-    return this.returnsEnabled && canRequestReturn(order);
+    return (this.returnsOnServer || this.returnsEnabled) && canRequestReturn(order);
+  }
+
+  returnDeadlineOf(order: Order): string {
+    const iso = returnDeadline(order);
+    return iso ? formatDate(iso) : '';
+  }
+
+  /** The request moved on (cancelled here, approved meanwhile): read the order again with the grant. */
+  reload(orderCode: string): void {
+    this.api
+      .getOrder(orderCode)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (fresh) => this.show(fresh, false),
+        error: (error: unknown) => {
+          if (error instanceof CheckoutError && error.code === 'unauthenticated') this.expireView();
+        },
+      });
   }
 
   restart(): void {
@@ -531,11 +576,14 @@ export class TrackOrderPage {
       });
   }
 
-  private show(order: Order): void {
+  private show(order: Order, focus = true): void {
     this.order.set(order);
+    this.guestView.set(order);
     this.step.set('result');
     this.notice.set('');
-    afterNextRender(() => this.result()?.nativeElement.focus(), { injector: this.injector });
+    if (focus) {
+      afterNextRender(() => this.result()?.nativeElement.focus(), { injector: this.injector });
+    }
   }
 
   private onCancelError(error: unknown, orderCode: string): void {
@@ -559,6 +607,7 @@ export class TrackOrderPage {
   /** The 30-minute view ended: back to the first step with the data kept. */
   private expireView(): void {
     this.order.set(null);
+    this.guestView.set(null);
     this.step.set('request');
     this.form.controls.code.reset('');
     this.error.set('Phiên xem đơn đã hết hạn, vui lòng xác minh lại.');

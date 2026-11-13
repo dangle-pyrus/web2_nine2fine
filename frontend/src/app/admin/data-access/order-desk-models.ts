@@ -106,6 +106,8 @@ export interface DeskOrderSummary {
   hasCancelRequest: boolean;
   tab: DeskBucket;
   overdue: DeskOverdueFlag[];
+  /** Slice 9 / 10 (Should, BR-RET-44, 65): a return request waits for staff. */
+  returnPending?: boolean;
 }
 
 export interface DeskOrderPage {
@@ -142,6 +144,8 @@ export type DeskCancelReasonCode =
 
 export interface DeskOrder {
   id: string;
+  /** Mock only: summary flag `returnPending` (Slice 10); the HTTP list reads it from the server. */
+  returnPending?: boolean;
   placedAt: string;
   status: DeskOrderStatus;
   paymentStatus: DeskPaymentStatus;

@@ -192,6 +192,7 @@ function summary(order: DeskOrder): DeskOrderSummary {
     hasCancelRequest: order.status === 'cancel_requested',
     tab: order.tab,
     overdue,
+    ...(order.returnPending ? { returnPending: true } : {}),
   };
 }
 

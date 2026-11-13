@@ -4,6 +4,8 @@ import { MediaImageComponent } from '../../shared/ui/media-image.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { LandingEdit } from './landing-content';
 
+import { hrefFragment, hrefPath, hrefQuery } from './home-href';
+
 @Component({
   selector: 'n2f-home-product-rail',
   imports: [RouterLink, MediaImageComponent, IconComponent],
@@ -13,7 +15,12 @@ import { LandingEdit } from './landing-content';
       <div class="product-rail">
         @for (card of content().cards; track card.mediaId) {
           <article>
-            <a class="edit-link" [routerLink]="card.href">
+            <a
+              class="edit-link"
+              [routerLink]="path(card.href)"
+              [queryParams]="query(card.href)"
+              [fragment]="fragment(card.href)"
+            >
               <div class="product-image">
                 <n2f-media-image
                   [mediaId]="card.mediaId"
@@ -35,5 +42,9 @@ import { LandingEdit } from './landing-content';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HomeProductRail {
+  readonly path = hrefPath;
+  readonly query = hrefQuery;
+  readonly fragment = hrefFragment;
+
   readonly content = input.required<LandingEdit>();
 }

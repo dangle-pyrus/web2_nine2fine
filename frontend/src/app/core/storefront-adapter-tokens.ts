@@ -5,6 +5,9 @@ import { AUTH_API } from '../features/auth/data-access/auth-api';
 import { CART_API } from '../features/cart/data-access/cart-api';
 import { CATALOG_API } from '../features/catalog/data-access/catalog-api';
 import { CHECKOUT_API, PAYMENT_SIMULATOR } from '../features/checkout/checkout-api';
+import { RECOMMENDATIONS_API } from '../features/catalog/data-access/recommendations-api';
+import { REVIEWS_API } from '../features/product/data-access/reviews-api';
+import { WISHLIST_API } from '../features/wishlist/data-access/wishlist-api';
 
 /** Tokens bound by `storefront-adapters.ts` (HTTP) and its e2e twin (mocks). */
 export const STOREFRONT_TOKENS = {
@@ -15,6 +18,10 @@ export const STOREFRONT_TOKENS = {
   ORDERS_API,
   AUTH_API,
   ACCOUNT_API,
+  // Slice 10: picked by their own flags (reviewsMode, wishlistMode, recommendationsMode).
+  REVIEWS_API,
+  WISHLIST_API,
+  RECOMMENDATIONS_API,
 };
 export type StorefrontToken = keyof typeof STOREFRONT_TOKENS;
 

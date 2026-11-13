@@ -15,6 +15,7 @@ import {
   catchError,
   combineLatest,
   filter,
+  finalize,
   forkJoin,
   map,
   of,
@@ -25,7 +26,15 @@ import {
 } from 'rxjs';
 import { API_CONFIG } from '../../core/api-config';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
-import { CATEGORIES, DEFAULT_QUERY, Product, ProductReview } from '../catalog/models/product';
+import { RECOMMENDATIONS_API } from '../catalog/data-access/recommendations-api';
+import {
+  CATEGORIES,
+  Product,
+  ProductReview,
+  ProductReviewSummary,
+} from '../catalog/models/product';
+import { discountPercentOf, saleEndLabel } from '../catalog/models/product-pricing';
+import { REVIEWS_API } from './data-access/reviews-api';
 import { CartState } from '../cart/cart-state';
 import { ToastService } from '../../shared/ui/toast';
 import { WishlistState } from '../wishlist/wishlist-state';
@@ -41,6 +50,14 @@ import { ProductReviews } from './product-reviews';
 import { ReviewForm } from './review-form';
 import { StockAlert } from './stock-alert';
 import { SizeGuideData, SizeGuideDialog } from './size-guide-dialog';
+
+const REVIEW_PAGE_SIZE = 10;
+const EMPTY_SUMMARY: ProductReviewSummary = {
+  count: 0,
+  average: null,
+  distribution: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 },
+  fit: { small: 0, true: 0, large: 0 },
+};
 
 /**
  * PDP (plan section 11) informed by Baymard apparel research and a Nike PDP review: sticky info,
@@ -65,8 +82,14 @@ import { SizeGuideData, SizeGuideDialog } from './size-guide-dialog';
 })
 export class ProductPage {
   private readonly api = inject(CATALOG_API);
-  /** Reviews, ratings and back-in-stock alerts exist only on the mock catalog (BR-CAT-17). */
-  readonly reviewsEnabled = inject(API_CONFIG).catalogMode === 'mock';
+  private readonly reviewsApi = inject(REVIEWS_API);
+  private readonly recommender = inject(RECOMMENDATIONS_API);
+  private readonly config = inject(API_CONFIG);
+  /** Reviews: the mock catalog's, or the real ones once reviewsMode is http (BR-REV-08). */
+  readonly reviewsEnabled =
+    this.config.catalogMode === 'mock' || this.config.reviewsMode === 'http';
+  /** Back-in-stock alerts exist only on the mock catalog (BR-CAT-17). */
+  readonly stockAlertEnabled = this.config.catalogMode === 'mock';
   private readonly retry$ = new Subject<void>();
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -81,6 +104,13 @@ export class ProductPage {
 
   readonly product = signal<Product | undefined>(undefined);
   readonly reviews = signal<ProductReview[]>([]);
+  /** Over every visible review, whatever the star filter. */
+  readonly reviewSummary = signal<ProductReviewSummary>(EMPTY_SUMMARY);
+  /** Reviews matching the star filter, loaded or not. */
+  readonly reviewTotal = signal(0);
+  readonly ratingFilter = signal(0);
+  readonly reviewsLoadingMore = signal(false);
+  readonly reviewsFailed = signal(false);
   readonly related = signal<Product[]>([]);
   readonly loading = signal(true);
   readonly failed = signal(false);
@@ -110,7 +140,11 @@ export class ProductPage {
   });
   readonly discount = computed(() => {
     const item = this.product();
-    return item?.compareAtPrice ? Math.round((1 - item.price / item.compareAtPrice) * 100) : 0;
+    return item ? discountPercentOf(item) : 0;
+  });
+  readonly saleEnd = computed(() => {
+    const item = this.product();
+    return item ? saleEndLabel(item) : '';
   });
   readonly categoryLabel = computed(
     () => CATEGORIES.find((category) => category.value === this.product()?.category)?.label ?? '',
@@ -148,6 +182,10 @@ export class ProductPage {
           this.size.set('');
           this.error.set('');
           this.reviews.set([]);
+          this.reviewSummary.set(EMPTY_SUMMARY);
+          this.reviewTotal.set(0);
+          this.ratingFilter.set(0);
+          this.reviewsFailed.set(false);
           this.related.set([]);
         }),
         map((state) => state.product),
@@ -155,18 +193,26 @@ export class ProductPage {
         // Secondary content loads in parallel and fails soft; the purchase core never waits on it.
         switchMap((product) =>
           forkJoin({
-            reviews: this.api.reviews(product.id).pipe(catchError(() => of([]))),
-            related: this.api.list({ ...DEFAULT_QUERY, moment: product.moments[0], limit: 5 }).pipe(
-              map((page) => page.items.filter((item) => item.id !== product.id).slice(0, 4)),
-              catchError(() => of([])),
-            ),
+            reviews: this.reviewsEnabled
+              ? this.reviewsApi
+                  .list(product.id, { page: 1, limit: REVIEW_PAGE_SIZE })
+                  .pipe(catchError(() => of(null)))
+              : of(null),
+            // BR-REC-04: a failure hides the block, it never blocks the page.
+            related: this.recommender.list([product.id], 4).pipe(catchError(() => of([]))),
           }),
         ),
         takeUntilDestroyed(),
       )
       .subscribe(({ reviews, related }) => {
-        this.reviews.set(reviews);
-        this.related.set(related);
+        if (reviews) {
+          this.reviews.set(reviews.items);
+          this.reviewSummary.set(reviews.summary);
+          this.reviewTotal.set(reviews.total);
+        } else if (this.reviewsEnabled) {
+          this.reviewsFailed.set(true);
+        }
+        this.related.set(related.filter((item) => item.id !== this.product()?.id));
       });
 
     effect((onCleanup) => {
@@ -239,8 +285,53 @@ export class ProductPage {
     return null;
   }
 
+  /** The shopper's own review shows at once; the list is read again so the average is the server's. */
   addReview(review: ProductReview): void {
     this.reviews.update((reviews) => [review, ...reviews]);
+    this.reviewTotal.update((total) => total + 1);
+    this.filterReviews(0);
+  }
+
+  /** Star filter (BR-REV-09): the first page of that filter replaces the list. */
+  filterReviews(rating: number): void {
+    const item = this.product();
+    if (!item) return;
+    this.ratingFilter.set(rating);
+    this.reviewsFailed.set(false);
+    this.reviewsApi
+      .list(item.id, { page: 1, limit: REVIEW_PAGE_SIZE, rating: rating || undefined })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => {
+          this.reviews.set(page.items);
+          this.reviewSummary.set(page.summary);
+          this.reviewTotal.set(page.total);
+        },
+        error: () => this.reviewsFailed.set(true),
+      });
+  }
+
+  /** "Xem thêm đánh giá": the next page is appended (reviews already shown are not repeated). */
+  moreReviews(): void {
+    const item = this.product();
+    if (!item || this.reviewsLoadingMore()) return;
+    const page = Math.floor(this.reviews().length / REVIEW_PAGE_SIZE) + 1;
+    this.reviewsLoadingMore.set(true);
+    this.reviewsFailed.set(false);
+    this.reviewsApi
+      .list(item.id, { page, limit: REVIEW_PAGE_SIZE, rating: this.ratingFilter() || undefined })
+      .pipe(
+        finalize(() => this.reviewsLoadingMore.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (next) =>
+          this.reviews.update((current) => [
+            ...current,
+            ...next.items.filter((review) => !current.some((known) => known.id === review.id)),
+          ]),
+        error: () => this.reviewsFailed.set(true),
+      });
   }
 
   /** Buy now: checkout with only this variant, keeping the rest of the cart for later. */

@@ -2,11 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AdminSession } from '../../core/admin-session';
-import { ADMIN_STOREFRONT_API } from '../../data-access/admin-apis';
+import {
+  ADMIN_CONTENT_API,
+  type AdminSizeChart,
+  ContentConflictError,
+  type SizeChartTables as SizeChart,
+} from '../../data-access/content-api';
 import { errorMessage } from '../../data-access/http-support';
-import type { AdminSizeChart, SizeChart } from '../../data-access/models';
+import { AdminApiError } from '../../data-access/models';
+import { DateTimePipe } from '../../core/format.pipes';
 import { AdmBadge } from '../../ui/badge';
-import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
 import { AdmPageHeader } from '../../ui/page-header';
@@ -26,7 +31,16 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
  */
 @Component({
   selector: 'adm-size-chart-page',
-  imports: [FormsModule, RouterLink, AdmPageHeader, AdmBadge, AdmIcon, AdmEmptyState, AdmSaveBar],
+  imports: [
+    FormsModule,
+    RouterLink,
+    AdmPageHeader,
+    AdmBadge,
+    AdmIcon,
+    AdmEmptyState,
+    AdmSaveBar,
+    DateTimePipe,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
@@ -73,13 +87,49 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
             </p>
             @if (chart.customised) {
               <adm-badge label="Đã chỉnh sửa" tone="info" />
-              @if (canEdit) {
-                <button type="button" class="adm-btn adm-btn--sm adm-btn--ghost" (click)="reset()">
-                  <adm-icon name="reiconUndo" [size]="16" /> Về bảng mặc định
-                </button>
-              }
+            }
+            @if (chart.updatedAt) {
+              <span class="small secondary"
+                >Lưu lúc {{ chart.updatedAt | admDateTime }}
+                @if (chart.updatedBy; as by) {
+                  bởi {{ by.name }}
+                }
+              </span>
             }
           </div>
+          @if (conflict(); as other) {
+            <div class="banner" role="alert">
+              <p>
+                <strong>Người khác vừa lưu bảng size này</strong> trước bạn. Bản của bạn vẫn được
+                giữ nguyên và chưa lưu.
+              </p>
+              <div class="row">
+                <button type="button" class="adm-btn adm-btn--sm" (click)="useServerCopy()">
+                  Dùng bản mới trên máy chủ
+                </button>
+                <button
+                  type="button"
+                  class="adm-btn adm-btn--sm adm-btn--primary"
+                  (click)="keepMine()"
+                >
+                  Giữ bản của tôi
+                </button>
+              </div>
+            </div>
+          }
+          @if (errorList().length) {
+            <div class="banner banner--error" role="alert" aria-live="assertive">
+              <p><strong>Chưa lưu được, kiểm tra các mục sau:</strong></p>
+              <ul>
+                @for (item of errorList(); track item.path) {
+                  <li>
+                    <span class="mono">{{ item.path }}</span
+                    >: {{ item.message }}
+                  </li>
+                }
+              </ul>
+            </div>
+          }
           @if (draft(); as value) {
             @for (table of tables; track table.key) {
               <section class="section" [attr.aria-labelledby]="table.key + '-title'">
@@ -112,6 +162,7 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
                               <input
                                 class="input input--sm"
                                 [attr.aria-label]="'Tên cột ' + (c + 1)"
+                                maxlength="20"
                                 [disabled]="!canEdit"
                                 [ngModel]="column"
                                 (ngModelChange)="renameColumn(table.key, c, $event)"
@@ -141,6 +192,8 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
                             <input
                               class="input input--sm size"
                               [attr.aria-label]="'Size dòng ' + (r + 1)"
+                              [attr.aria-invalid]="!!errors()[table.key + '[' + r + '].size']"
+                              maxlength="10"
                               [disabled]="!canEdit"
                               [ngModel]="row.size"
                               (ngModelChange)="setSize(table.key, r, $event)"
@@ -152,6 +205,10 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
                                 class="input input--sm num"
                                 inputmode="decimal"
                                 [attr.aria-label]="column + ' size ' + row.size"
+                                [attr.aria-invalid]="
+                                  !!errors()[table.key + '[' + r + '].values.' + column]
+                                "
+                                maxlength="20"
                                 [disabled]="!canEdit"
                                 [ngModel]="row.values[column] ?? ''"
                                 (ngModelChange)="setCell(table.key, r, column, $event)"
@@ -185,6 +242,21 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
     </div>
   `,
   styles: `
+    .banner {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      border-radius: var(--adm-radius-lg);
+      background: var(--adm-muted);
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      &.banner--error {
+        color: var(--adm-danger);
+      }
+    }
     .meta {
       display: flex;
       align-items: center;
@@ -215,10 +287,9 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
   `,
 })
 export class SizeChartPage implements HasUnsavedChanges {
-  private readonly api = inject(ADMIN_STOREFRONT_API);
-  private readonly dialogs = inject(AdminDialogs);
+  private readonly api = inject(ADMIN_CONTENT_API);
   private readonly toast = inject(AdminToastService);
-  protected readonly canEdit = inject(AdminSession).can('products.edit');
+  protected readonly canEdit = inject(AdminSession).can('content.edit');
   protected readonly columns = COLUMNS;
   protected readonly tables: { key: Table; title: string; hint: string }[] = [
     { key: 'body', title: 'Số đo cơ thể', hint: 'Số đo của người mặc, đơn vị cm.' },
@@ -230,6 +301,11 @@ export class SizeChartPage implements HasUnsavedChanges {
   protected readonly active = signal('');
   protected readonly draft = signal<SizeChart | null>(null);
   protected readonly saving = signal(false);
+  protected readonly errors = signal<Record<string, string>>({});
+  protected readonly conflict = signal<AdminSizeChart | null>(null);
+  protected readonly errorList = computed(() =>
+    Object.entries(this.errors()).map(([path, message]) => ({ path, message })),
+  );
   protected readonly current = computed(
     () => this.charts()?.find((chart) => chart.category === this.active()) ?? null,
   );
@@ -269,6 +345,8 @@ export class SizeChartPage implements HasUnsavedChanges {
       return;
     }
     this.active.set(category);
+    this.errors.set({});
+    this.conflict.set(null);
     const chart = this.charts()?.find((item) => item.category === category);
     this.draft.set(chart ? structuredClone(chart.chart) : null);
   }
@@ -322,9 +400,11 @@ export class SizeChartPage implements HasUnsavedChanges {
 
   save(): void {
     const draft = this.draft();
-    if (!draft) return;
+    const current = this.current();
+    if (!draft || !current) return;
     this.saving.set(true);
-    this.api.saveSizeChart(this.active(), draft).subscribe({
+    this.errors.set({});
+    this.api.saveSizeChart(current.category, draft, current.updatedAt).subscribe({
       next: (saved) => {
         this.saving.set(false);
         this.replace(saved);
@@ -332,6 +412,12 @@ export class SizeChartPage implements HasUnsavedChanges {
       },
       error: (error: unknown) => {
         this.saving.set(false);
+        if (error instanceof ContentConflictError && error.current) {
+          this.conflict.set(error.current as AdminSizeChart);
+          return;
+        }
+        if (error instanceof AdminApiError && Object.keys(error.fields).length)
+          this.errors.set(error.fields);
         this.toast.error(errorMessage(error));
       },
     });
@@ -341,26 +427,23 @@ export class SizeChartPage implements HasUnsavedChanges {
     this.select(this.active(), true);
   }
 
-  reset(): void {
-    const chart = this.current();
-    if (!chart) return;
-    this.dialogs
-      .confirm({
-        title: `Dùng lại bảng size mặc định cho ${chart.label}?`,
-        message: 'Các số đo bạn đã sửa cho danh mục này sẽ mất.',
-        confirmLabel: 'Về bảng mặc định',
-        danger: true,
-      })
-      .subscribe((ok) => {
-        if (!ok) return;
-        this.api.resetSizeChart(chart.category).subscribe({
-          next: (saved) => {
-            this.replace(saved);
-            this.toast.show('Đã khôi phục bảng size mặc định');
-          },
-          error: (error: unknown) => this.toast.error(errorMessage(error)),
-        });
-      });
+  /** 409: take what the other admin saved. */
+  useServerCopy(): void {
+    const other = this.conflict();
+    if (other) this.replace(other);
+  }
+
+  /** 409: keep my edits; the next save is based on the newer server copy. */
+  keepMine(): void {
+    const other = this.conflict();
+    const draft = this.draft();
+    if (!other || !draft) return;
+    this.charts.update((charts) =>
+      (charts ?? []).map((item) => (item.category === other.category ? other : item)),
+    );
+    this.draft.set(draft);
+    this.conflict.set(null);
+    this.toast.show('Đã giữ bản của bạn. Bấm Lưu để ghi đè bản mới.');
   }
 
   private replace(saved: AdminSizeChart): void {

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Product } from '../../features/catalog/models/product';
+import { discountPercentOf, saleEndLabel } from '../../features/catalog/models/product-pricing';
 import { WishlistState } from '../../features/wishlist/wishlist-state';
 import { CartState } from '../../features/cart/cart-state';
 import { getMedia } from '../../../media/media-manifest';
@@ -170,9 +171,12 @@ const BADGE_LABELS: Record<string, string> = { NEW: 'Mới về', BESTSELLER: 'B
         <p class="price">
           <strong [class.sale]="!!product().compareAtPrice">{{ product().price | vnd }}</strong>
           @if (product().compareAtPrice) {
-            <del>{{ product().compareAtPrice! | vnd }}</del>
+            <del><span class="sr-only">Giá gốc </span>{{ product().compareAtPrice! | vnd }}</del>
           }
         </p>
+        @if (saleEnd()) {
+          <p class="sale-end">{{ saleEnd() }}</p>
+        }
         @if (product().rating; as rating) {
           <p class="rating">
             <span class="stars" aria-hidden="true" [style.--fill]="(rating.average / 5) * 100 + '%'"
@@ -522,6 +526,12 @@ const BADGE_LABELS: Record<string, string> = { NEW: 'Mới về', BESTSELLER: 'B
     .price strong.sale {
       color: var(--brand);
     }
+    .sale-end {
+      margin: 4px 0 0;
+      color: var(--brand);
+      font-size: 12px;
+      font-weight: 600;
+    }
     del {
       color: var(--muted);
       font-size: 13px;
@@ -626,14 +636,13 @@ export class ProductCardComponent {
     this.broken.update((set) => new Set(set).add(src));
   }
 
+  readonly saleEnd = computed(() => saleEndLabel(this.product()));
   readonly badge = computed(() => {
     const product = this.product();
     if (this.soldOutAll()) return 'Hết hàng';
     if (product.badge) return BADGE_LABELS[product.badge] ?? product.badge;
-    if (product.compareAtPrice) {
-      return `-${Math.round((1 - product.price / product.compareAtPrice) * 100)}%`;
-    }
-    return '';
+    const percent = discountPercentOf(product);
+    return percent > 0 ? `-${percent}%` : '';
   });
   readonly slides = computed(() => [
     {

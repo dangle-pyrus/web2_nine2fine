@@ -4,14 +4,16 @@ import { FormsModule } from '@angular/forms';
 import { AdminSession } from '../../core/admin-session';
 import { slugify } from '../../core/format';
 import { DateTimePipe, NumPipe } from '../../core/format.pipes';
-import { ADMIN_PRODUCTS_API, ADMIN_STOREFRONT_API } from '../../data-access/admin-apis';
-import { errorMessage } from '../../data-access/http-support';
+import { forkJoin, map, Observable, of, switchMap } from 'rxjs';
+import { ADMIN_PRODUCTS_API } from '../../data-access/admin-apis';
 import {
-  AdminApiError,
+  ADMIN_CONTENT_API,
   type AdminCollection,
-  type AdminProductSummary,
+  ContentConflictError,
   type CollectionInput,
-} from '../../data-access/models';
+} from '../../data-access/content-api';
+import { errorMessage } from '../../data-access/http-support';
+import { AdminApiError, type AdminProductSummary } from '../../data-access/models';
 import { AdmBadge } from '../../ui/badge';
 import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
@@ -19,17 +21,30 @@ import { AdmIcon } from '../../ui/icon';
 import { AdmPageHeader } from '../../ui/page-header';
 import { AdminToastService } from '../../ui/toast';
 
-/** Every product, for pickers and thumbnails (the catalogue is small enough for one page). */
-function allProducts() {
-  return inject(ADMIN_PRODUCTS_API).list({
-    view: 'all',
-    category: '',
-    page: 1,
-    pageSize: 500,
-    search: '',
-    sort: 'name',
-    dir: 'asc',
-  });
+const PRODUCT_PAGE = 100;
+
+/** Every product, for pickers and thumbnails (the list API serves at most 100 per page). */
+export function allProducts(): Observable<AdminProductSummary[]> {
+  const api = inject(ADMIN_PRODUCTS_API);
+  const load = (page: number) =>
+    api.list({
+      view: 'all',
+      category: '',
+      page,
+      pageSize: PRODUCT_PAGE,
+      search: '',
+      sort: 'name',
+      dir: 'asc',
+    });
+  return load(1).pipe(
+    switchMap((first) => {
+      const pages = Math.ceil(first.total / PRODUCT_PAGE);
+      if (pages <= 1) return of(first.items);
+      return forkJoin(Array.from({ length: pages - 1 }, (_, i) => load(i + 2))).pipe(
+        map((rest) => [first, ...rest].flatMap((page) => page.items)),
+      );
+    }),
+  );
 }
 
 /** Bộ sưu tập (Đợt 3): hand-picked product groups such as a season or a campaign. */
@@ -147,10 +162,10 @@ function allProducts() {
   `,
 })
 export class CollectionListPage {
-  private readonly api = inject(ADMIN_STOREFRONT_API);
+  private readonly api = inject(ADMIN_CONTENT_API);
   private readonly dialogs = inject(AdminDialogs);
   private readonly toast = inject(AdminToastService);
-  protected readonly canEdit = inject(AdminSession).can('products.edit');
+  protected readonly canEdit = inject(AdminSession).can('content.edit');
   protected readonly items = signal<AdminCollection[] | null>(null);
   protected readonly error = signal('');
   protected readonly products = signal<AdminProductSummary[]>([]);
@@ -160,7 +175,7 @@ export class CollectionListPage {
 
   constructor() {
     this.load();
-    allProducts().subscribe({ next: (page) => this.products.set(page.items) });
+    allProducts().subscribe({ next: (items) => this.products.set(items) });
   }
 
   load(): void {
@@ -221,6 +236,7 @@ export class CollectionListPage {
             <input
               id="c-name"
               class="input"
+              maxlength="80"
               name="name"
               [ngModel]="draft().name"
               (ngModelChange)="setName($event)"
@@ -236,15 +252,22 @@ export class CollectionListPage {
               id="c-slug"
               class="input mono"
               name="slug"
-              readonly
-              [value]="'/' + (draft().slug || 'ten-bo-suu-tap')"
+              maxlength="50"
+              placeholder="tu-dong-tu-ten"
+              [readonly]="!!data?.slugLocked"
+              [ngModel]="draft().slug"
+              (ngModelChange)="setSlug($event)"
               [attr.aria-invalid]="!!errors()['slug']"
             />
             @if (errors()['slug']; as error) {
               <p class="error">{{ error }}</p>
             } @else {
               <p class="hint">
-                {{ data ? 'Giữ cố định để liên kết cũ không hỏng.' : 'Tự tạo từ tên bộ sưu tập.' }}
+                {{
+                  data?.slugLocked
+                    ? 'Đã hiển thị trên cửa hàng nên không đổi được, để liên kết cũ không hỏng.'
+                    : 'Chỉ gồm a-z, 0-9 và dấu "-". Bỏ trống để tự tạo từ tên.'
+                }}
               </p>
             }
           </div>
@@ -255,11 +278,15 @@ export class CollectionListPage {
             id="c-desc"
             class="textarea"
             rows="2"
+            maxlength="300"
             name="description"
             [ngModel]="draft().description"
             (ngModelChange)="patch({ description: $event })"
           ></textarea>
         </div>
+        @if (errors()['description']; as error) {
+          <p class="error">{{ error }}</p>
+        }
         <label class="check">
           <input
             type="checkbox"
@@ -274,7 +301,10 @@ export class CollectionListPage {
           >
         </label>
         <fieldset class="picker">
-          <legend>Sản phẩm ({{ draft().productIds.length }})</legend>
+          <legend>Sản phẩm ({{ draft().productIds.length }}/200)</legend>
+          @if (errors()['productIds']; as error) {
+            <p class="error">{{ error }}</p>
+          }
           <input
             class="input input--sm"
             type="search"
@@ -348,7 +378,7 @@ export class CollectionListPage {
 export class CollectionDialog {
   readonly ref = inject(DialogRef);
   readonly data = inject<AdminCollection | null>(DIALOG_DATA);
-  private readonly api = inject(ADMIN_STOREFRONT_API);
+  private readonly api = inject(ADMIN_CONTENT_API);
   private readonly toast = inject(AdminToastService);
   protected readonly products = signal<AdminProductSummary[]>([]);
   protected readonly filter = signal('');
@@ -364,9 +394,14 @@ export class CollectionDialog {
           status: this.data.status,
           productIds: [...this.data.productIds],
         }
-      : { name: '', slug: '', description: '', status: 'active', productIds: [] },
+      : { name: '', slug: '', description: '', status: 'draft', productIds: [] },
   );
   slugTouched = !!this.data;
+
+  setSlug(slug: string): void {
+    this.slugTouched = true;
+    this.patch({ slug });
+  }
 
   protected readonly visible = computed(() => {
     const term = slugify(this.filter());
@@ -379,7 +414,7 @@ export class CollectionDialog {
   });
 
   constructor() {
-    allProducts().subscribe({ next: (page) => this.products.set(page.items) });
+    allProducts().subscribe({ next: (items) => this.products.set(items) });
   }
 
   setName(name: string): void {
@@ -402,11 +437,23 @@ export class CollectionDialog {
     this.tried.set(true);
     if (Object.keys(this.errors()).length) return;
     this.saving.set(true);
-    this.api.saveCollection(this.data?.id ?? null, this.draft()).subscribe({
+    const input = this.draft();
+    const request = this.data
+      ? this.api.updateCollection(this.data.id, input, this.data.updatedAt)
+      : this.api.createCollection(input);
+    request.subscribe({
       next: (saved) => this.ref.close(saved),
       error: (error: unknown) => {
         this.saving.set(false);
-        if (error instanceof AdminApiError && Object.keys(error.fields).length)
+        if (error instanceof ContentConflictError) {
+          this.toast.error(
+            'Bộ sưu tập vừa được người khác sửa. Đóng hộp này rồi mở lại để xem bản mới.',
+          );
+          return;
+        }
+        if (error instanceof AdminApiError && error.code === 'duplicate')
+          this.serverErrors.set({ slug: 'Đường dẫn này đã có bộ sưu tập khác dùng.' });
+        else if (error instanceof AdminApiError && Object.keys(error.fields).length)
           this.serverErrors.set(error.fields);
         else this.toast.error(errorMessage(error));
       },

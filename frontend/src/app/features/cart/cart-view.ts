@@ -7,7 +7,8 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { DialogRef } from '@angular/cdk/dialog';
 import { RouterLink } from '@angular/router';
 import { CartLine, CartState, limitMessage } from './cart-state';
@@ -17,7 +18,8 @@ import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
 import { PricePipe } from '../../shared/commerce/price.pipe';
 import { ProductCardComponent } from '../../shared/commerce/product-card.component';
 import { CATALOG_API } from '../catalog/data-access/catalog-api';
-import { DEFAULT_QUERY, Product, ProductVariant } from '../catalog/models/product';
+import { RECOMMENDATIONS_API } from '../catalog/data-access/recommendations-api';
+import { Product, ProductVariant } from '../catalog/models/product';
 import { getMedia } from '../../../media/media-manifest';
 
 /**
@@ -1007,6 +1009,7 @@ export class CartView {
   readonly dialog = inject(DialogRef, { optional: true });
   readonly media = getMedia;
   private readonly catalog = inject(CATALOG_API);
+  private readonly recommender = inject(RECOMMENDATIONS_API);
   private readonly destroyRef = inject(DestroyRef);
   /** Selection mode (checklist button): pick lines to remove or to buy now. */
   readonly selecting = signal(false);
@@ -1050,11 +1053,11 @@ export class CartView {
   readonly draftSize = signal('');
   /** Products loaded for the variant editor, by slug. */
   readonly products = signal<Record<string, Product>>({});
-  private readonly bestSellers = signal<Product[]>([]);
-  /** Best sellers not already in the cart. */
+  private readonly suggested = signal<Product[]>([]);
+  /** The server's suggestions for what is in the cart (best sellers when empty), never a line already there. */
   readonly recommendations = computed(() => {
     const inCart = new Set(this.cart.lines().map((line) => line.productId));
-    return this.bestSellers()
+    return this.suggested()
       .filter((product) => !inCart.has(product.id))
       .slice(0, 4);
   });
@@ -1071,10 +1074,17 @@ export class CartView {
       this.cart.mergedIds.set(null);
     });
     if (!this.dialog) {
-      this.catalog
-        .list({ ...DEFAULT_QUERY, sort: 'bestselling', limit: 12 })
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe((page) => this.bestSellers.set(page.items));
+      // BR-REC-02: one request for the products in the cart (at most 10); a failure hides the block.
+      toObservable(
+        computed(() => [...new Set(this.cart.lines().map((line) => line.productId))].slice(0, 10)),
+      )
+        .pipe(
+          debounceTime(250),
+          distinctUntilChanged((a, b) => a.join() === b.join()),
+          switchMap((ids) => this.recommender.list(ids, 4).pipe(catchError(() => of([])))),
+          takeUntilDestroyed(this.destroyRef),
+        )
+        .subscribe((items) => this.suggested.set(items));
     }
   }
 

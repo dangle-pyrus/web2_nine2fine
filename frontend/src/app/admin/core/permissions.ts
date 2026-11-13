@@ -30,6 +30,9 @@ export type Permission =
   | 'customers.contact'
   | 'promotions.view'
   | 'promotions.edit'
+  | 'reviews.moderate'
+  | 'content.view'
+  | 'content.edit'
   | 'settings.store'
   | 'settings.staff'
   | 'settings.audit';
@@ -55,6 +58,9 @@ const ALL: readonly Permission[] = [
   'customers.contact',
   'promotions.view',
   'promotions.edit',
+  'reviews.moderate',
+  'content.view',
+  'content.edit',
   'settings.store',
   'settings.staff',
   'settings.audit',
@@ -72,6 +78,8 @@ export const ROLE_PERMISSIONS: Record<StaffRole, ReadonlySet<Permission>> = {
     'inventory.adjust',
     'customers.view',
     'promotions.view',
+    'reviews.moderate',
+    'content.view',
   ]),
 };
 
@@ -127,7 +135,18 @@ export const PERMISSION_MATRIX: {
     module: 'Khuyến mãi',
     items: [
       { permission: 'promotions.view', label: 'Xem' },
-      { permission: 'promotions.edit', label: 'Tạo, sửa, tắt' },
+      {
+        permission: 'promotions.edit',
+        label: 'Tạo, sửa, tắt; đặt giá giảm có hạn, giảm giá hàng loạt',
+      },
+    ],
+  },
+  {
+    module: 'Đánh giá & nội dung',
+    items: [
+      { permission: 'reviews.moderate', label: 'Kiểm duyệt đánh giá (ẩn, hiện, trả lời)' },
+      { permission: 'content.view', label: 'Xem nội dung trang chủ, bảng size, bộ sưu tập' },
+      { permission: 'content.edit', label: 'Sửa nội dung trang chủ, bảng size, bộ sưu tập' },
     ],
   },
   {

@@ -6,6 +6,8 @@ import { AdminSession } from '../../core/admin-session';
 import { DatePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import { productBadge } from '../../core/status';
 import { ADMIN_PRODUCTS_API } from '../../data-access/admin-apis';
+import { AdminDialogs } from '../../ui/dialogs';
+import { BulkSaleDialog } from '../promotions/bulk-sale-dialog';
 import { AdminCategories } from '../../data-access/admin-categories';
 import { errorMessage } from '../../data-access/http-support';
 import type {
@@ -51,6 +53,11 @@ const VIEWS: { value: ProductView; label: string }[] = [
   template: `
     <adm-page-header heading="Sản phẩm">
       <ng-container actions>
+        @if (canBulkSale) {
+          <button type="button" class="adm-btn adm-btn--lg" (click)="bulkSale()">
+            <adm-icon name="reiconTicketSale" [size]="16" /> Giảm giá hàng loạt
+          </button>
+        }
         @if (canEdit) {
           <a class="adm-btn adm-btn--primary adm-btn--lg" routerLink="/admin/products/new"
             ><adm-icon name="reiconPlus" [size]="16" /> Thêm sản phẩm</a
@@ -267,6 +274,13 @@ const VIEWS: { value: ProductView; label: string }[] = [
                     <td class="secondary hide-sm">{{ product.updatedAt | admDate }}</td>
                     <td class="num" data-label="Giá">
                       {{ product.price | admMoney }}
+                      @if (product.saleState === 'running') {
+                        <div class="cell-sub">
+                          <adm-badge label="Đang giảm giá" tone="success" />
+                        </div>
+                      } @else if (product.saleState === 'upcoming') {
+                        <div class="cell-sub"><adm-badge label="Sắp giảm giá" tone="info" /></div>
+                      }
                       @if (product.compareAtPrice) {
                         <div class="cell-sub">
                           <s>{{ product.compareAtPrice | admMoney }}</s>
@@ -297,7 +311,13 @@ export class ProductListPage {
   private readonly api = inject(ADMIN_PRODUCTS_API);
   private readonly router = inject(Router);
   private readonly toast = inject(AdminToastService);
+  private readonly dialogs = inject(AdminDialogs);
   protected readonly canEdit = inject(AdminSession).can('products.edit');
+  /** Slice 10 (Should): bulk sale by category, admin only, on the API. */
+  protected readonly canBulkSale =
+    inject(API_CONFIG).promotionsMode === 'http' &&
+    inject(API_CONFIG).adminCatalogMode === 'http' &&
+    inject(AdminSession).can('promotions.edit');
   /** Slice 6: the list runs on the API (fixed order, no tags). */
   protected readonly contract = inject(API_CONFIG).adminCatalogMode === 'http';
   protected readonly views = VIEWS;
@@ -318,6 +338,16 @@ export class ProductListPage {
 
   constructor() {
     this.categoryList.load();
+  }
+
+  bulkSale(): void {
+    this.dialogs
+      .modal<null, number>(BulkSaleDialog, null, ['adm-modal-panel', 'adm-modal-panel--wide'])
+      .closed.subscribe((applied) => {
+        if (!applied) return;
+        this.toast.show(`Đã áp dụng giảm giá cho ${applied} sản phẩm`);
+        this.view.reload();
+      });
   }
 
   categoryLabel(value: string): string {

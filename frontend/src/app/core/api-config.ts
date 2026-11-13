@@ -58,6 +58,21 @@ export interface ApiConfig {
    * build picks `http` with `localStorage['n2f.e2e.returnsMode']`.
    */
   returnsMode: 'mock' | 'http';
+  /**
+   * Slice 10 storefront flags, each independent of `mode` (same pattern as `returnsMode`). `http`:
+   * the HTTP adapter of docs/api/openapi.yaml; `mock`: the earlier mock. The e2e build picks `http`
+   * with `localStorage['n2f.e2e.<flag>'] = 'http'` and the specs answer `/api/**` themselves.
+   * `reviewsMode`: PDP reviews list / eligibility / submit (`/products/{id}/reviews`, `/reviews*`).
+   * `wishlistMode`: wishlist kept per account (`/account/wishlist*`) with a merge on sign-in.
+   * `recommendationsMode`: PDP and cart suggestions (`/recommendations`).
+   * `contentMode`: home content and Moment cards (`/content/home`), size chart `updatedAt`.
+   * `promotionsMode`: sale price display, "đang giảm giá" filter, "Giảm giá đến dd/MM".
+   */
+  reviewsMode: 'mock' | 'http';
+  wishlistMode: 'mock' | 'http';
+  recommendationsMode: 'mock' | 'http';
+  contentMode: 'mock' | 'http';
+  promotionsMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -79,5 +94,10 @@ export const apiConfig: ApiConfig = {
   adminUsersMode: 'http',
   adminInsightsMode: 'http',
   returnsMode: 'http',
+  reviewsMode: 'http',
+  wishlistMode: 'http',
+  recommendationsMode: 'http',
+  contentMode: 'http',
+  promotionsMode: 'http',
   baseUrl: '/api',
 };

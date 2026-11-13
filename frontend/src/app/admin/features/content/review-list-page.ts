@@ -3,29 +3,36 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AdminSession } from '../../core/admin-session';
 import { DatePipe, DateTimePipe, NumPipe } from '../../core/format.pipes';
-import { ADMIN_STOREFRONT_API } from '../../data-access/admin-apis';
+import {
+  ADMIN_REVIEWS_API,
+  type AdminReview,
+  type AdminReviewCounts,
+  type AdminReviewQuery,
+  type AdminReviewView,
+} from '../../data-access/content-api';
 import { errorMessage } from '../../data-access/http-support';
-import type {
-  AdminReview,
-  ReviewQuery,
-  ReviewStats,
-  ReviewStatus,
-  ReviewView,
-} from '../../data-access/models';
+import { AdminApiError, type PageQuery } from '../../data-access/models';
 import { AdmBadge } from '../../ui/badge';
+import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
-import { loader, Selection, urlQuery } from '../../ui/list-state';
+import { loader, urlQuery } from '../../ui/list-state';
 import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
+import { ReasonDialog, ReasonDialogData } from '../../ui/reason-dialog';
 import { AdminToastService } from '../../ui/toast';
+import { mediaSrc } from './media-picker';
 
-const VIEWS: { value: ReviewView; label: string; count?: keyof ReviewStats }[] = [
-  { value: 'all', label: 'Tất cả' },
+const VIEWS: { value: AdminReviewView; label: string; count: keyof AdminReviewCounts }[] = [
+  { value: 'all', label: 'Tất cả', count: 'all' },
   { value: 'unanswered', label: 'Chưa trả lời', count: 'unanswered' },
-  { value: 'low', label: '3 sao trở xuống', count: 'low' },
+  { value: 'low', label: '2 sao trở xuống', count: 'low' },
   { value: 'hidden', label: 'Đã ẩn', count: 'hidden' },
 ];
+
+const REPLY_MIN = 5;
+const REPLY_MAX = 500;
+const PAGE_SIZES = [20, 50] as const;
 
 const FIT: Record<-1 | 0 | 1, string> = {
   [-1]: 'Chật hơn size',
@@ -33,9 +40,12 @@ const FIT: Record<-1 | 0 | 1, string> = {
   1: 'Rộng hơn size',
 };
 
+type ReviewListQuery = PageQuery & { view: AdminReviewView; rating: number };
+
 /**
- * Đánh giá sản phẩm (Đợt 3): read, answer and hide shopper reviews. Replies appear on the product
- * page as "Phản hồi từ nine2fine"; hidden reviews disappear from the shop.
+ * Kiểm duyệt đánh giá (Slice 10, BR-REV-07): read, answer, hide and show shopper reviews. Replies
+ * appear on the product page as "Phản hồi từ nine2fine"; hidden reviews leave the shop and its
+ * average. Every write carries the review's `updatedAt`; a `409` reloads the list.
  */
 @Component({
   selector: 'adm-review-list-page',
@@ -54,11 +64,13 @@ const FIT: Record<-1 | 0 | 1, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <adm-page-header heading="Đánh giá sản phẩm">
-      @if (stats(); as s) {
+      @if (page(); as data) {
         <p subtitle class="secondary small meta-list">
-          <span>{{ s.total | admNum }} đánh giá</span>
-          <span>Điểm trung bình {{ s.average }}/5</span>
-          <span>{{ s.unanswered | admNum }} chưa trả lời</span>
+          <span>{{ data.counts.all | admNum }} đánh giá</span>
+          <span>
+            Điểm trung bình {{ data.average === null ? 'chưa có' : data.average + '/5' }}
+          </span>
+          <span>{{ data.counts.unanswered | admNum }} chưa trả lời</span>
         </p>
       }
     </adm-page-header>
@@ -71,70 +83,27 @@ const FIT: Record<-1 | 0 | 1, string> = {
             (click)="list.update({ view: item.value })"
           >
             {{ item.label }}
-            @if (item.count && stats()?.[item.count]) {
-              <span class="count">{{ stats()![item.count] }}</span>
+            @if (page()?.counts?.[item.count]) {
+              <span class="count">{{ page()!.counts[item.count] }}</span>
             }
           </button>
         }
       </nav>
 
-      @if (selection.count()) {
-        <div class="bulkbar" role="region" aria-label="Thao tác hàng loạt">
-          <span>Đã chọn {{ selection.count() }} đánh giá</span>
-          <span class="spacer"></span>
-          <button
-            type="button"
-            class="adm-btn adm-btn--sm"
-            [class.is-busy]="busy()"
-            (click)="setStatus([...selection.ids()], 'hidden')"
-          >
-            <adm-icon name="reiconEyeOff" [size]="16" /> Ẩn
-          </button>
-          <button
-            type="button"
-            class="adm-btn adm-btn--sm"
-            [class.is-busy]="busy()"
-            (click)="setStatus([...selection.ids()], 'published')"
-          >
-            <adm-icon name="reiconEye" [size]="16" /> Hiện
-          </button>
-          <button
-            type="button"
-            class="adm-btn adm-btn--sm adm-btn--icon"
-            aria-label="Bỏ chọn"
-            (click)="selection.clear()"
-          >
-            <adm-icon name="reiconX" [size]="16" />
-          </button>
-        </div>
-      } @else {
-        <form class="toolbar" role="search" (ngSubmit)="list.update({ search: search().trim() })">
-          <div class="affix search">
-            <span class="prefix-icon"><adm-icon name="reiconSearch" [size]="16" /></span>
-            <input
-              class="input input--sm"
-              type="search"
-              name="search"
-              placeholder="Sản phẩm, khách hoặc nội dung"
-              aria-label="Tìm đánh giá"
-              [ngModel]="search()"
-              (ngModelChange)="search.set($event)"
-            />
-          </div>
-          <select
-            class="select select--sm"
-            name="rating"
-            aria-label="Số sao"
-            [ngModel]="query().rating"
-            (ngModelChange)="list.update({ rating: +$event })"
-          >
-            <option [ngValue]="0">Mọi số sao</option>
-            @for (star of [5, 4, 3, 2, 1]; track star) {
-              <option [ngValue]="star">{{ star }} sao</option>
-            }
-          </select>
-        </form>
-      }
+      <div class="toolbar">
+        <select
+          class="select select--sm"
+          name="rating"
+          aria-label="Số sao"
+          [ngModel]="query().rating"
+          (ngModelChange)="list.update({ rating: +$event })"
+        >
+          <option [ngValue]="0">Mọi số sao</option>
+          @for (star of [5, 4, 3, 2, 1]; track star) {
+            <option [ngValue]="star">{{ star }} sao</option>
+          }
+        </select>
+      </div>
 
       @if (view.state().error && !page()) {
         <adm-empty
@@ -150,39 +119,17 @@ const FIT: Record<-1 | 0 | 1, string> = {
             query().view === 'unanswered' ? 'Đã trả lời hết đánh giá' : 'Không có đánh giá nào'
           "
           [description]="
-            query().view === 'unanswered'
-              ? 'Đánh giá mới sẽ hiện ở đây.'
-              : 'Thử bỏ bộ lọc hoặc từ khóa.'
+            query().view === 'unanswered' ? 'Đánh giá mới sẽ hiện ở đây.' : 'Thử bỏ bộ lọc.'
           "
         >
-          @if (query().view !== 'all' || query().search || query().rating) {
-            <button type="button" class="adm-btn" (click)="search.set(''); list.reset()">
-              Xem tất cả
-            </button>
+          @if (query().view !== 'all' || query().rating) {
+            <button type="button" class="adm-btn" (click)="list.reset()">Xem tất cả</button>
           }
         </adm-empty>
       } @else if (page(); as data) {
-        <label class="check select-all">
-          <input
-            type="checkbox"
-            [checked]="selection.allOf(ids())"
-            [indeterminate]="selection.someOf(ids())"
-            [disabled]="!canEdit"
-            (change)="selection.setAll(ids(), $any($event.target).checked)"
-          />
-          <span class="small secondary">Chọn cả trang</span>
-        </label>
         <ul class="reviews" [class.is-refreshing]="view.state().refreshing">
           @for (review of data.items; track review.id) {
             <li class="review" [class.is-hidden]="review.status === 'hidden'">
-              <input
-                type="checkbox"
-                class="pick"
-                [attr.aria-label]="'Chọn đánh giá của ' + review.author"
-                [checked]="selection.has(review.id)"
-                [disabled]="!canEdit"
-                (change)="selection.toggle(review.id)"
-              />
               <div class="review-body">
                 <div class="review-head">
                   <span class="stars" [attr.aria-label]="review.rating + ' trên 5 sao'"
@@ -193,20 +140,26 @@ const FIT: Record<-1 | 0 | 1, string> = {
                   @if (review.status === 'hidden') {
                     <adm-badge label="Đã ẩn" tone="neutral" />
                   }
-                  @if (review.sample) {
-                    <adm-badge label="Dữ liệu mẫu" tone="info" />
-                  }
                 </div>
                 <p>{{ review.body }}</p>
                 <p class="small secondary meta-list">
                   <span>{{ review.author }}</span>
                   <span>Size đã mua: {{ review.sizeBought }}</span>
+                  @if (review.height) {
+                    <span>Cao {{ review.height }}</span>
+                  }
                   <span>{{ fit[review.fit] }}</span>
                   <span>{{ review.date | admDate }}</span>
                 </p>
+                @if (review.status === 'hidden' && review.hiddenReason) {
+                  <p class="small secondary">
+                    Đã ẩn{{ review.hiddenBy ? ' bởi ' + review.hiddenBy.name : '' }}:
+                    {{ review.hiddenReason }}
+                  </p>
+                }
                 <a class="product" [routerLink]="['/admin/products', review.productId]">
                   @if (review.productImage) {
-                    <img class="thumb thumb--sm" [src]="review.productImage" alt="" />
+                    <img class="thumb thumb--sm" [src]="src(review.productImage)" alt="" />
                   }
                   <span class="small">{{ review.productName }}</span>
                 </a>
@@ -217,15 +170,17 @@ const FIT: Record<-1 | 0 | 1, string> = {
                     <textarea
                       class="textarea"
                       rows="3"
-                      maxlength="1000"
                       name="reply"
+                      [maxlength]="replyMax"
                       [id]="'reply-' + review.id"
                       placeholder="Phản hồi công khai, khách và người mua khác đều thấy"
                       [ngModel]="replyText()"
                       (ngModelChange)="replyText.set($event)"
                     ></textarea>
                     <div class="row">
-                      <span class="small tertiary">{{ replyText().length }}/1000</span>
+                      <span class="small tertiary"
+                        >{{ replyText().trim().length }}/{{ replyMax }}</span
+                      >
                       <span class="spacer"></span>
                       <button type="button" class="adm-btn adm-btn--sm" (click)="editing.set(null)">
                         Hủy bỏ
@@ -234,11 +189,14 @@ const FIT: Record<-1 | 0 | 1, string> = {
                         type="submit"
                         class="adm-btn adm-btn--sm adm-btn--primary"
                         [class.is-busy]="busy()"
-                        [disabled]="!replyText().trim()"
+                        [disabled]="busy() || replyText().trim().length < replyMin"
                       >
                         Đăng phản hồi
                       </button>
                     </div>
+                    @if (replyError(); as message) {
+                      <p class="error" role="alert">{{ message }}</p>
+                    }
                   </form>
                 } @else if (review.reply; as answer) {
                   <blockquote class="answer">
@@ -268,9 +226,8 @@ const FIT: Record<-1 | 0 | 1, string> = {
                     <button
                       type="button"
                       class="adm-btn adm-btn--sm adm-btn--ghost"
-                      (click)="
-                        setStatus([review.id], review.status === 'hidden' ? 'published' : 'hidden')
-                      "
+                      [disabled]="busy()"
+                      (click)="toggleHidden(review)"
                     >
                       <adm-icon
                         [name]="review.status === 'hidden' ? 'reiconEye' : 'reiconEyeOff'"
@@ -287,7 +244,8 @@ const FIT: Record<-1 | 0 | 1, string> = {
         <adm-pager
           [total]="data.total"
           [page]="data.page"
-          [pageSize]="data.pageSize"
+          [pageSize]="data.limit"
+          [sizes]="pageSizes"
           (pageChange)="list.update({ page: $event })"
           (sizeChange)="list.update({ pageSize: $event })"
         />
@@ -299,9 +257,6 @@ const FIT: Record<-1 | 0 | 1, string> = {
   styles: `
     .select--sm {
       width: auto;
-    }
-    .select-all {
-      margin: 4px 0 8px;
     }
     .reviews {
       list-style: none;
@@ -320,12 +275,6 @@ const FIT: Record<-1 | 0 | 1, string> = {
       &.is-hidden .review-body > :not(.actions) {
         opacity: 0.55;
       }
-    }
-    .pick {
-      margin-top: 4px;
-      width: 16px;
-      height: 16px;
-      accent-color: var(--adm-primary);
     }
     .review-body {
       flex: 1;
@@ -379,90 +328,118 @@ const FIT: Record<-1 | 0 | 1, string> = {
   `,
 })
 export class ReviewListPage {
-  private readonly api = inject(ADMIN_STOREFRONT_API);
+  private readonly api = inject(ADMIN_REVIEWS_API);
+  private readonly dialogs = inject(AdminDialogs);
   private readonly toast = inject(AdminToastService);
-  protected readonly canEdit = inject(AdminSession).can('products.edit');
+  protected readonly canEdit = inject(AdminSession).can('reviews.moderate');
   protected readonly views = VIEWS;
   protected readonly fit = FIT;
-  protected readonly list = urlQuery<ReviewQuery>({ view: 'all', rating: 0, sort: 'date' });
+  protected readonly src = mediaSrc;
+  protected readonly replyMin = REPLY_MIN;
+  protected readonly replyMax = REPLY_MAX;
+  protected readonly pageSizes = PAGE_SIZES;
+  protected readonly list = urlQuery<ReviewListQuery>({ view: 'all', rating: 0, pageSize: 20 });
   protected readonly query = this.list.query;
-  protected readonly view = loader(this.query, (query) => this.api.reviews(query));
+  private readonly request = computed<AdminReviewQuery>(() => {
+    const { view, rating, page, pageSize } = this.query();
+    return { view, rating, page, limit: pageSize === 50 ? 50 : 20 };
+  });
+  protected readonly view = loader(this.request, (query) => this.api.list(query));
   protected readonly page = this.view.data;
-  protected readonly stats = signal<ReviewStats | null>(null);
-  protected readonly search = signal(this.query().search);
-  protected readonly selection = new Selection<string>();
-  protected readonly ids = computed(() => this.page()?.items.map((review) => review.id) ?? []);
-  protected readonly busy = signal(false);
   protected readonly editing = signal<string | null>(null);
   protected readonly replyText = signal('');
-
-  constructor() {
-    this.refreshStats();
-  }
+  protected readonly replyError = signal('');
+  protected readonly busy = signal(false);
 
   startReply(review: AdminReview): void {
     this.replyText.set(review.reply?.body ?? '');
+    this.replyError.set('');
     this.editing.set(review.id);
   }
 
   reply(review: AdminReview): void {
-    this.send(review, this.replyText(), review.reply ? 'Đã sửa phản hồi' : 'Đã đăng phản hồi');
+    const body = this.replyText().trim();
+    if (body.length < REPLY_MIN || body.length > REPLY_MAX) {
+      this.replyError.set(`Phản hồi từ ${REPLY_MIN} đến ${REPLY_MAX} ký tự.`);
+      return;
+    }
+    this.send(review, body, review.reply ? 'Đã sửa phản hồi' : 'Đã đăng phản hồi');
   }
 
   removeReply(review: AdminReview): void {
-    this.send(review, '', 'Đã xóa phản hồi');
+    this.dialogs
+      .confirm({
+        title: 'Xóa phản hồi này?',
+        message: 'Phản hồi sẽ biến khỏi trang sản phẩm.',
+        confirmLabel: 'Xóa phản hồi',
+        danger: true,
+      })
+      .subscribe((ok) => ok && this.send(review, null, 'Đã xóa phản hồi'));
   }
 
-  setStatus(ids: string[], status: ReviewStatus): void {
-    this.busy.set(true);
-    this.api.setReviewStatus(ids, status).subscribe({
-      next: () => {
-        this.busy.set(false);
-        this.selection.clear();
-        this.toast.show(
-          status === 'hidden'
-            ? `Đã ẩn ${ids.length} đánh giá khỏi cửa hàng`
-            : `Đã hiện lại ${ids.length} đánh giá`,
-          { action: { label: 'Hoàn tác', run: () => this.setStatus(ids, flip(status)) } },
-        );
-        this.view.reload();
-        this.refreshStats();
-      },
-      error: (error: unknown) => {
-        this.busy.set(false);
-        this.toast.error(errorMessage(error));
-      },
-    });
+  toggleHidden(review: AdminReview): void {
+    if (review.status === 'hidden') {
+      this.busy.set(true);
+      this.api.show(review.id, review.updatedAt).subscribe({
+        next: (updated) => {
+          this.busy.set(false);
+          this.replace(updated);
+          this.toast.show('Đã hiện lại đánh giá');
+        },
+        error: (error: unknown) => this.failed(error),
+      });
+      return;
+    }
+    const data: ReasonDialogData<AdminReview> = {
+      title: 'Ẩn đánh giá này khỏi cửa hàng?',
+      message: 'Đánh giá biến khỏi trang sản phẩm và điểm trung bình. Bạn có thể hiện lại sau.',
+      confirmLabel: 'Ẩn đánh giá',
+      danger: true,
+      required: true,
+      run: (reason) => this.api.hide(review.id, reason, review.updatedAt),
+    };
+    this.dialogs
+      .modal<ReasonDialogData<AdminReview>, AdminReview>(ReasonDialog, data)
+      .closed.subscribe((updated) => {
+        if (!updated) return;
+        this.replace(updated);
+        this.toast.show('Đã ẩn đánh giá khỏi cửa hàng');
+      });
   }
 
-  private send(review: AdminReview, body: string, success: string): void {
+  private send(review: AdminReview, body: string | null, success: string): void {
     this.busy.set(true);
-    this.api.replyReview(review.id, body).subscribe({
+    this.replyError.set('');
+    this.api.reply(review.id, body, review.updatedAt).subscribe({
       next: (updated) => {
         this.busy.set(false);
         this.editing.set(null);
-        this.view.patch((page) => ({
-          ...page,
-          items: page.items.map((item) => (item.id === updated.id ? updated : item)),
-        }));
-        this.refreshStats();
+        this.replace(updated);
         this.toast.show(success);
       },
-      error: (error: unknown) => {
-        this.busy.set(false);
-        this.toast.error(errorMessage(error));
-      },
+      error: (error: unknown) => this.failed(error),
     });
   }
 
-  private refreshStats(): void {
-    this.api.reviewStats().subscribe({
-      next: (stats) => this.stats.set(stats),
-      error: () => undefined,
-    });
+  /** The counts and the tabs change with every write, so the list is read again. */
+  private replace(updated: AdminReview): void {
+    this.view.patch((page) => ({
+      ...page,
+      items: page.items.map((item) => (item.id === updated.id ? updated : item)),
+    }));
+    this.view.reload();
   }
-}
 
-function flip(status: ReviewStatus): ReviewStatus {
-  return status === 'hidden' ? 'published' : 'hidden';
+  private failed(error: unknown): void {
+    this.busy.set(false);
+    if (error instanceof AdminApiError && error.code === 'version-conflict') {
+      this.editing.set(null);
+      this.toast.error('Đánh giá vừa được người khác cập nhật. Danh sách đã được tải lại.');
+      this.view.reload();
+      return;
+    }
+    if (this.editing() && error instanceof AdminApiError && error.fields['body'])
+      this.replyError.set(error.fields['body']);
+    else this.toast.error(errorMessage(error));
+  }
 }

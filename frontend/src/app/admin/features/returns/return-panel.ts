@@ -14,6 +14,7 @@ import {
   AdminReturnAction,
   AdminReturnState,
   RETURN_REASON_LABELS,
+  RETURN_SOURCE_LABELS,
   RETURN_STATE_LABELS,
 } from '../../data-access/returns-api';
 import { AdminDialogs } from '../../ui/dialogs';
@@ -80,6 +81,12 @@ const HISTORY_LABELS: Record<string, string> = {
           <dt>Gửi lúc</dt>
           <dd>{{ r.requestedAt | admDateTime }}</dd>
         </div>
+        @if (r.source) {
+          <div>
+            <dt>Nguồn</dt>
+            <dd data-testid="return-source">{{ sourceLabels[r.source] }}</dd>
+          </div>
+        }
         <div>
           <dt>Người nhận</dt>
           <dd>{{ r.recipient.name }} · {{ r.recipient.phone }} · {{ r.recipient.email }}</dd>
@@ -340,6 +347,7 @@ export class ReturnPanel {
 
   private readonly dialogs = inject(AdminDialogs);
   protected readonly labels = ACTION_LABELS;
+  protected readonly sourceLabels = RETURN_SOURCE_LABELS;
   protected readonly notice = signal('');
   protected readonly badge = computed<BadgeSpec>(() => ({
     label: RETURN_STATE_LABELS[this.ret().state],

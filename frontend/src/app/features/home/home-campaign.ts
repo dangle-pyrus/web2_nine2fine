@@ -14,6 +14,8 @@ import { getMedia } from '../../../media/media-manifest';
 import { RouterLink } from '@angular/router';
 import { LandingCampaign } from './landing-content';
 
+import { hrefFragment, hrefPath, hrefQuery } from './home-href';
+
 @Component({
   selector: 'n2f-home-campaign',
   imports: [RouterLink],
@@ -56,7 +58,12 @@ import { LandingCampaign } from './landing-content';
           (error)="videoFailed.set(true); playing.set(false); hasPlayed.set(false)"
         ></video>
       }
-      <a class="campaign-link" [routerLink]="content().href">
+      <a
+        class="campaign-link"
+        [routerLink]="path(content().href)"
+        [queryParams]="query(content().href)"
+        [fragment]="fragment(content().href)"
+      >
         <div class="campaign-copy">
           <p class="eyebrow">{{ content().eyebrow }}</p>
           @if (hero()) {
@@ -93,6 +100,10 @@ import { LandingCampaign } from './landing-content';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HomeCampaign {
+  readonly path = hrefPath;
+  readonly query = hrefQuery;
+  readonly fragment = hrefFragment;
+
   readonly content = input.required<LandingCampaign>();
   readonly hero = input(false);
   readonly media = computed(() => getMedia(this.content().mediaId));

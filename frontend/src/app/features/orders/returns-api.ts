@@ -1,15 +1,21 @@
-import { HttpClient, HttpEventType } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpEventType } from '@angular/common/http';
 import { inject, Injectable, InjectionToken } from '@angular/core';
 import { catchError, filter, map, Observable, throwError } from 'rxjs';
 import { API_CONFIG } from '../../core/api-config';
+import { GUEST_ORDER_ACCESS } from '../../core/api-interceptor';
 import { ApiErrorCode, readApiError } from '../../core/api-error';
 import { ReturnAmount, ReturnCase, ReturnCasePhoto, ReturnReason } from './order-models';
 
 /**
- * Member returns (Slice 9, tags `returns`, `return-photos`): only used with `returnsMode: http`.
- * Cookie and `X-Requested-With` come from `core/api-interceptor.ts`. The mock return flow lives in
+ * Returns (Slice 9 members under `/account`, Slice 10 guests under `/orders/{code}/return*`; tags
+ * `returns`, `return-photos`): only used with `returnsMode: http`. A guest is the shopper who
+ * passed Tra cứu đơn (OTP): the `n2f_oa` grant cookie opens only that order. Cookie and
+ * `X-Requested-With` come from `core/api-interceptor.ts`. The mock return flow lives in
  * `ACCOUNT_API` and is untouched.
  */
+/** Who is sending: a signed-in member or a guest holding an order-access grant. */
+export type ReturnAudience = 'member' | 'guest';
+
 export interface ReturnCreateBody {
   lines: { variantId: string; quantity: number }[];
   reason: ReturnReason;
@@ -67,16 +73,22 @@ function toReturnError(error: unknown): Observable<never> {
 }
 
 export interface ReturnsApi {
-  /** Raw bytes of one file; progress events, then the stored photo. */
-  uploadPhoto(file: File): Observable<ReturnPhotoProgress>;
+  /** Raw bytes of one file; progress events, then the stored photo. A guest's photo belongs to the order. */
+  uploadPhoto(file: File, guestOrderCode?: string): Observable<ReturnPhotoProgress>;
   /** `Idempotency-Key` is kept by the caller across retries of the same content. */
-  create(orderCode: string, body: ReturnCreateBody, key: string): Observable<ReturnCreated>;
+  create(
+    orderCode: string,
+    body: ReturnCreateBody,
+    key: string,
+    audience?: ReturnAudience,
+  ): Observable<ReturnCreated>;
   estimate(
     orderCode: string,
     lines: ReturnCreateBody['lines'],
     reason: ReturnReason,
+    audience?: ReturnAudience,
   ): Observable<ReturnAmount>;
-  cancel(orderCode: string): Observable<ReturnCase>;
+  cancel(orderCode: string, audience?: ReturnAudience): Observable<ReturnCase>;
 }
 
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -84,17 +96,36 @@ const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 @Injectable({ providedIn: 'root' })
 export class HttpReturnsApi implements ReturnsApi {
   private readonly http = inject(HttpClient);
-  private readonly base = `${inject(API_CONFIG).baseUrl}/account`;
+  private readonly baseUrl = inject(API_CONFIG).baseUrl;
+  private readonly base = `${this.baseUrl}/account`;
+  /** A guest's `401` means the 30-minute view ended, not that a shopper session did. */
+  private readonly guestContext = new HttpContext().set(GUEST_ORDER_ACCESS, true);
 
-  uploadPhoto(file: File): Observable<ReturnPhotoProgress> {
+  private contextFor(audience: ReturnAudience): HttpContext | undefined {
+    return audience === 'guest' ? this.guestContext : undefined;
+  }
+
+  /** Member: `/account/orders/{code}/return`; guest: `/orders/{code}/return`. */
+  private orderReturn(orderCode: string, audience: ReturnAudience): string {
+    const code = encodeURIComponent(orderCode);
+    return audience === 'guest'
+      ? `${this.baseUrl}/orders/${code}/return`
+      : `${this.base}/orders/${code}/return`;
+  }
+
+  uploadPhoto(file: File, guestOrderCode?: string): Observable<ReturnPhotoProgress> {
+    const url = guestOrderCode
+      ? `${this.orderReturn(guestOrderCode, 'guest')}/photos`
+      : `${this.base}/return-photos`;
     return this.http
-      .post<ReturnCasePhoto>(`${this.base}/return-photos`, file, {
+      .post<ReturnCasePhoto>(url, file, {
         // The server reads the format from the bytes; an unknown type goes as raw octets.
         headers: {
           'Content-Type': PHOTO_TYPES.includes(file.type) ? file.type : 'application/octet-stream',
         },
         reportProgress: true,
         observe: 'events',
+        context: guestOrderCode ? this.guestContext : undefined,
       })
       .pipe(
         filter(
@@ -114,11 +145,17 @@ export class HttpReturnsApi implements ReturnsApi {
       );
   }
 
-  create(orderCode: string, body: ReturnCreateBody, key: string): Observable<ReturnCreated> {
+  create(
+    orderCode: string,
+    body: ReturnCreateBody,
+    key: string,
+    audience: ReturnAudience = 'member',
+  ): Observable<ReturnCreated> {
     return this.http
-      .post<ReturnCase>(`${this.base}/orders/${encodeURIComponent(orderCode)}/return`, body, {
+      .post<ReturnCase>(this.orderReturn(orderCode, audience), body, {
         headers: { 'Idempotency-Key': key },
         observe: 'response',
+        context: this.contextFor(audience),
       })
       .pipe(
         map((response) => ({
@@ -129,18 +166,28 @@ export class HttpReturnsApi implements ReturnsApi {
       );
   }
 
-  estimate(orderCode: string, lines: ReturnCreateBody['lines'], reason: ReturnReason) {
+  estimate(
+    orderCode: string,
+    lines: ReturnCreateBody['lines'],
+    reason: ReturnReason,
+    audience: ReturnAudience = 'member',
+  ) {
     return this.http
-      .post<ReturnAmount>(`${this.base}/orders/${encodeURIComponent(orderCode)}/return/estimate`, {
-        lines,
-        reason,
-      })
+      .post<ReturnAmount>(
+        `${this.orderReturn(orderCode, audience)}/estimate`,
+        { lines, reason },
+        { context: this.contextFor(audience) },
+      )
       .pipe(catchError(toReturnError));
   }
 
-  cancel(orderCode: string): Observable<ReturnCase> {
+  cancel(orderCode: string, audience: ReturnAudience = 'member'): Observable<ReturnCase> {
     return this.http
-      .post<ReturnCase>(`${this.base}/orders/${encodeURIComponent(orderCode)}/return/cancel`, {})
+      .post<ReturnCase>(
+        `${this.orderReturn(orderCode, audience)}/cancel`,
+        {},
+        { context: this.contextFor(audience) },
+      )
       .pipe(catchError(toReturnError));
   }
 }
@@ -149,6 +196,10 @@ export const RETURNS_API = new InjectionToken<ReturnsApi>('RETURNS_API', {
   providedIn: 'root',
   factory: () => inject(HttpReturnsApi),
 });
+
+/** The 30-minute view of a guest ended (or never started): look the order up again. */
+const GUEST_SESSION_ENDED =
+  'Phiên xem đơn đã hết hạn. Vui lòng tra cứu lại đơn hàng bằng mã xác minh để tiếp tục.';
 
 const HOTLINE_TAIL = 'Cần hỗ trợ, vui lòng liên hệ nine2fine.';
 
@@ -166,7 +217,7 @@ const MESSAGES: Partial<Record<ApiErrorCode | 'file-too-large', string>> = {
 };
 
 /** What a failed upload says on the photo itself. */
-export function returnPhotoError(error: unknown): string {
+export function returnPhotoError(error: unknown, audience: ReturnAudience = 'member'): string {
   if (!(error instanceof ReturnApiError)) return 'Không tải được ảnh. Thử lại.';
   if (error.code === 'invalid-image') {
     switch (error.reason) {
@@ -181,7 +232,9 @@ export function returnPhotoError(error: unknown): string {
     }
   }
   if (error.code === 'rate-limited') return waitText(error);
-  if (error.code === 'unauthenticated') return MESSAGES.unauthenticated!;
+  if (error.code === 'unauthenticated') {
+    return audience === 'guest' ? GUEST_SESSION_ENDED : MESSAGES.unauthenticated!;
+  }
   return 'Không tải được ảnh. Thử lại hoặc chọn ảnh khác.';
 }
 
@@ -192,11 +245,12 @@ function waitText(error: ReturnApiError): string {
 }
 
 /** One sentence for a failed submit / cancel; field errors are shown on their fields. */
-export function returnErrorMessage(error: unknown): string {
+export function returnErrorMessage(error: unknown, audience: ReturnAudience = 'member'): string {
   if (!(error instanceof ReturnApiError))
     return 'Chưa gửi được. Kiểm tra kết nối rồi thử lại; thông tin bạn nhập vẫn được giữ.';
   if (error.code === 'rate-limited') return waitText(error);
   if (error.code === 'validation') return 'Vui lòng kiểm tra các thông tin được đánh dấu.';
+  if (error.code === 'unauthenticated' && audience === 'guest') return GUEST_SESSION_ENDED;
   return (
     MESSAGES[error.code] ??
     'Chưa gửi được. Kiểm tra kết nối rồi thử lại; thông tin bạn nhập vẫn được giữ.'

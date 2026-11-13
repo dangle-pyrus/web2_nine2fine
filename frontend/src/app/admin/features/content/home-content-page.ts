@@ -10,9 +10,16 @@ import { CdkMenu, CdkMenuItem, CdkMenuTrigger } from '@angular/cdk/menu';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AdminSession } from '../../core/admin-session';
-import { ADMIN_STOREFRONT_API } from '../../data-access/admin-apis';
+import {
+  ADMIN_CONTENT_API,
+  AdminHomeContent,
+  ContentConflictError,
+  type HomeBlock,
+  type HomeContentInput,
+} from '../../data-access/content-api';
 import { errorMessage } from '../../data-access/http-support';
-import type { LandingBlock, LandingContent } from '../../data-access/models';
+import { AdminApiError } from '../../data-access/models';
+import { DateTimePipe } from '../../core/format.pipes';
 import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
@@ -23,11 +30,15 @@ import { HasUnsavedChanges } from '../../ui/unsaved-changes';
 import { AdmLinkSelect } from './link-select';
 import { MediaPicker, mediaSrc } from './media-picker';
 
-type Campaign = Extract<LandingBlock, { kind: 'campaign' }>;
-type Edit = Extract<LandingBlock, { kind: 'products' }>;
-type Shop = Extract<LandingBlock, { kind: 'shop' }>;
+type Campaign = Extract<HomeBlock, { kind: 'campaign' }>;
+const MAX_BLOCKS = 16;
 
-const KIND_LABELS: Record<LandingBlock['kind'], string> = {
+/** The part of the home content the form edits. */
+type Draft = Pick<HomeContentInput, 'categories' | 'moments' | 'blocks'>;
+type Edit = Extract<HomeBlock, { kind: 'products' }>;
+type Shop = Extract<HomeBlock, { kind: 'shop' }>;
+
+const KIND_LABELS: Record<HomeBlock['kind'], string> = {
   campaign: 'Banner',
   products: 'Gợi ý phối đồ',
   shop: 'Dải sản phẩm',
@@ -62,18 +73,35 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
     AdmIcon,
     AdmEmptyState,
     AdmSaveBar,
+    DateTimePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
     <adm-page-header heading="Nội dung trang chủ">
-      <p subtitle class="secondary small">Thứ tự và nội dung các khối trên trang chủ cửa hàng.</p>
+      <p subtitle class="secondary small">
+        Thứ tự và nội dung các khối trên trang chủ cửa hàng. Lưu là đăng ngay.
+        @if (server()?.updatedAt; as at) {
+          Lưu lần cuối {{ at | admDateTime }}
+          @if (server()?.updatedBy; as by) {
+            bởi {{ by.name }}
+          }
+          .
+        } @else if (server()) {
+          Đang dùng nội dung mặc định.
+        }
+      </p>
       <ng-container actions>
         <a class="adm-btn adm-btn--lg" href="/" target="_blank" rel="noopener">
           <adm-icon name="reiconEye" [size]="16" /> Xem trang chủ
         </a>
         @if (canEdit) {
-          <button type="button" class="adm-btn adm-btn--lg" [cdkMenuTriggerFor]="addMenu">
+          <button
+            type="button"
+            class="adm-btn adm-btn--lg"
+            [disabled]="(draft()?.blocks?.length ?? 0) >= maxBlocks"
+            [cdkMenuTriggerFor]="addMenu"
+          >
             <adm-icon name="reiconPlus" [size]="16" /> Thêm khối
           </button>
           <button
@@ -95,6 +123,52 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
       (save)="save()"
       (discard)="discard()"
     />
+
+    @if (conflict(); as other) {
+      <div class="page-body banner" role="alert">
+        <p>
+          <strong>Người khác vừa lưu trang chủ</strong>
+          @if (other.updatedBy) {
+            ({{ other.updatedBy.name }}, {{ other.updatedAt | admDateTime }})
+          }
+          trước bạn. Bản của bạn vẫn được giữ nguyên và chưa lưu.
+        </p>
+        <div class="row">
+          <button type="button" class="adm-btn adm-btn--sm" (click)="useServerCopy()">
+            Dùng bản mới trên máy chủ
+          </button>
+          <button type="button" class="adm-btn adm-btn--sm adm-btn--primary" (click)="keepMine()">
+            Giữ bản của tôi
+          </button>
+        </div>
+      </div>
+    }
+    @if (errorList().length) {
+      <div class="page-body banner banner--error" role="alert" aria-live="assertive">
+        <p><strong>Chưa lưu được, kiểm tra các mục sau:</strong></p>
+        <ul>
+          @for (item of errorList(); track item.path) {
+            <li>
+              <span class="mono">{{ item.path }}</span
+              >: {{ item.message }}
+            </li>
+          }
+        </ul>
+      </div>
+    }
+    @if (server()?.warnings?.length) {
+      <div class="page-body banner" role="status">
+        <p><strong>Lưu ý (không chặn việc lưu):</strong></p>
+        <ul>
+          @for (item of server()!.warnings; track item.path) {
+            <li>
+              <span class="mono">{{ item.path }}</span
+              >: {{ item.message }}
+            </li>
+          }
+        </ul>
+      </div>
+    }
 
     <ng-template #addMenu>
       <div class="adm">
@@ -208,6 +282,7 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
                               <input
                                 class="input"
                                 [id]="block.id + '-eyebrow'"
+                                maxlength="40"
                                 [ngModel]="asCampaign(block).eyebrow"
                                 (ngModelChange)="patch(i, { eyebrow: $event })"
                               />
@@ -217,12 +292,15 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
                               <input
                                 class="input"
                                 [id]="block.id + '-title'"
+                                maxlength="80"
                                 [ngModel]="asCampaign(block).title"
                                 (ngModelChange)="patch(i, { title: $event })"
                                 [attr.aria-invalid]="!asCampaign(block).title.trim()"
                               />
                               @if (!asCampaign(block).title.trim()) {
                                 <p class="error">Nhập tiêu đề.</p>
+                              } @else if (errors()['blocks[' + i + '].title']; as message) {
+                                <p class="error">{{ message }}</p>
                               }
                             </div>
                           </div>
@@ -232,10 +310,15 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
                               class="textarea"
                               rows="2"
                               [id]="block.id + '-desc'"
+                              maxlength="200"
                               [ngModel]="asCampaign(block).description"
                               (ngModelChange)="patch(i, { description: $event })"
                             ></textarea>
-                            <p class="hint">Xuống dòng sẽ giữ nguyên trên trang chủ.</p>
+                            @if (errors()['blocks[' + i + '].description']; as message) {
+                              <p class="error">{{ message }}</p>
+                            } @else {
+                              <p class="hint">Xuống dòng sẽ giữ nguyên trên trang chủ.</p>
+                            }
                           </div>
                           <div class="field">
                             <label [for]="block.id + '-href'">Khi bấm, mở trang</label>
@@ -277,9 +360,13 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
                               <input
                                 class="input"
                                 [id]="block.id + '-label'"
+                                maxlength="80"
                                 [ngModel]="asShop(block).label"
                                 (ngModelChange)="patch(i, { label: $event })"
                               />
+                              @if (errors()['blocks[' + i + '].label']; as message) {
+                                <p class="error">{{ message }}</p>
+                              }
                             </div>
                             <div class="field">
                               <label [for]="block.id + '-sort'">Sản phẩm hiển thị</label>
@@ -310,9 +397,13 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
                             <input
                               class="input"
                               [id]="block.id + '-label'"
+                              maxlength="80"
                               [ngModel]="asEdit(block).label"
                               (ngModelChange)="patch(i, { label: $event })"
                             />
+                            @if (errors()['blocks[' + i + '].label']; as message) {
+                              <p class="error">{{ message }}</p>
+                            }
                           </div>
                           <div class="cards">
                             @for (card of asEdit(block).cards; track $index; let j = $index) {
@@ -398,6 +489,9 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
                       [ngModel]="cat.label"
                       (ngModelChange)="patchCategory(j, { label: $event })"
                     />
+                    @if (errors()['categories[' + j + '].label']; as message) {
+                      <p class="error">{{ message }}</p>
+                    }
                     <label class="mini-label" [for]="'cat-href-' + j">Mở trang</label>
                     <adm-link-select
                       [small]="true"
@@ -411,12 +505,64 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
               }
             </fieldset>
           </section>
-          <section class="section">
-            <header><h2>Lưu ý</h2></header>
-            <p class="secondary small">
-              Đây là chức năng chỉ có ở giao diện, chạy trên dữ liệu mẫu. Thay đổi hiển thị ngay
-              trên trang chủ ở cùng trình duyệt, chưa lưu lên máy chủ.
+          <section class="section" aria-labelledby="moments-title">
+            <header><h2 id="moments-title">Mua theo dịp (Moment)</h2></header>
+            <p class="small secondary">
+              Chữ và ảnh của 4 thẻ cố định. Số sản phẩm và đường dẫn do hệ thống tự tính; thẻ chưa
+              có sản phẩm sẽ tự ẩn.
             </p>
+            <fieldset class="cats" [disabled]="!canEdit">
+              @for (item of content.moments; track item.moment; let m = $index) {
+                <div class="cat">
+                  <button
+                    type="button"
+                    class="image-pick image-pick--square"
+                    [attr.aria-label]="'Đổi ảnh thẻ ' + item.label"
+                    (click)="pickMoment(m, item.mediaId)"
+                  >
+                    <img [src]="src(item.mediaId)" alt="" />
+                  </button>
+                  <div class="cat-fields">
+                    <label class="mini-label" [for]="'moment-label-' + m">Tên thẻ</label>
+                    <input
+                      class="input input--sm"
+                      maxlength="40"
+                      [id]="'moment-label-' + m"
+                      [ngModel]="item.label"
+                      (ngModelChange)="patchMoment(m, { label: $event })"
+                    />
+                    @if (errors()['moments[' + m + '].label']; as message) {
+                      <p class="error">{{ message }}</p>
+                    }
+                    <label class="mini-label" [for]="'moment-line-' + m + '-0'">Dòng chữ 1</label>
+                    <input
+                      class="input input--sm"
+                      maxlength="60"
+                      [id]="'moment-line-' + m + '-0'"
+                      [ngModel]="item.lines[0] ?? ''"
+                      (ngModelChange)="patchLine(m, 0, $event)"
+                    />
+                    <label class="mini-label" [for]="'moment-line-' + m + '-1'"
+                      >Dòng chữ 2 (không bắt buộc)</label
+                    >
+                    <input
+                      class="input input--sm"
+                      maxlength="60"
+                      [id]="'moment-line-' + m + '-1'"
+                      [ngModel]="item.lines[1] ?? ''"
+                      (ngModelChange)="patchLine(m, 1, $event)"
+                    />
+                    @if (
+                      errors()['moments[' + m + '].lines[0]'] ??
+                        errors()['moments[' + m + '].lines'];
+                      as message
+                    ) {
+                      <p class="error">{{ message }}</p>
+                    }
+                  </div>
+                </div>
+              }
+            </fieldset>
           </section>
         </aside>
       </div>
@@ -425,6 +571,21 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
     }
   `,
   styles: `
+    .banner {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding: 12px 16px;
+      border-radius: var(--adm-radius-lg);
+      background: var(--adm-muted);
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      &.banner--error {
+        color: var(--adm-danger);
+      }
+    }
     .blocks {
       list-style: none;
       margin: 0;
@@ -620,15 +781,23 @@ const SORTS: { value: Shop['sort']; label: string }[] = [
   `,
 })
 export class HomeContentPage implements HasUnsavedChanges {
-  private readonly api = inject(ADMIN_STOREFRONT_API);
+  private readonly api = inject(ADMIN_CONTENT_API);
   private readonly dialogs = inject(AdminDialogs);
   private readonly toast = inject(AdminToastService);
-  protected readonly canEdit = inject(AdminSession).can('products.edit');
+  protected readonly canEdit = inject(AdminSession).can('content.edit');
   protected readonly kinds = KIND_LABELS;
   protected readonly sorts = SORTS;
   protected readonly src = mediaSrc;
 
-  protected readonly draft = signal<LandingContent | null>(null);
+  protected readonly maxBlocks = MAX_BLOCKS;
+  /** The server's copy: its updatedAt is the lock key of the next save. */
+  protected readonly server = signal<AdminHomeContent | null>(null);
+  protected readonly conflict = signal<AdminHomeContent | null>(null);
+  protected readonly errors = signal<Record<string, string>>({});
+  protected readonly errorList = computed(() =>
+    Object.entries(this.errors()).map(([path, message]) => ({ path, message })),
+  );
+  protected readonly draft = signal<Draft | null>(null);
   private readonly original = signal('');
   protected readonly loadError = signal('');
   protected readonly saving = signal(false);
@@ -661,7 +830,7 @@ export class HomeContentPage implements HasUnsavedChanges {
     });
   }
 
-  title(block: LandingBlock): string {
+  title(block: HomeBlock): string {
     switch (block.kind) {
       case 'campaign':
         return block.title || '(Chưa có tiêu đề)';
@@ -672,23 +841,23 @@ export class HomeContentPage implements HasUnsavedChanges {
     }
   }
 
-  preview(block: LandingBlock): string {
+  preview(block: HomeBlock): string {
     if (block.kind === 'campaign') return mediaSrc(block.mediaId);
     if (block.kind === 'products') return mediaSrc(block.cards[0]?.mediaId);
     return '';
   }
 
-  icon(block: LandingBlock): string {
+  icon(block: HomeBlock): string {
     return block.kind === 'shop' ? 'reiconTshirt' : 'reiconWidget';
   }
 
-  asCampaign(block: LandingBlock): Campaign {
+  asCampaign(block: HomeBlock): Campaign {
     return block as Campaign;
   }
-  asShop(block: LandingBlock): Shop {
+  asShop(block: HomeBlock): Shop {
     return block as Shop;
   }
-  asEdit(block: LandingBlock): Edit {
+  asEdit(block: HomeBlock): Edit {
     return block as Edit;
   }
 
@@ -698,7 +867,7 @@ export class HomeContentPage implements HasUnsavedChanges {
 
   patch(index: number, changes: Partial<Campaign> | Partial<Shop> | Partial<Edit>): void {
     this.update((content) => {
-      content.blocks[index] = { ...content.blocks[index], ...changes } as LandingBlock;
+      content.blocks[index] = { ...content.blocks[index], ...changes } as HomeBlock;
     });
   }
 
@@ -709,7 +878,26 @@ export class HomeContentPage implements HasUnsavedChanges {
     });
   }
 
-  patchCategory(index: number, changes: Partial<LandingContent['categories'][number]>): void {
+  patchMoment(index: number, changes: Partial<Draft['moments'][number]>): void {
+    this.update((content) => {
+      content.moments[index] = { ...content.moments[index], ...changes };
+    });
+  }
+
+  /** Line 2 is optional: an empty second line is dropped, line 1 stays so the error shows. */
+  patchLine(index: number, line: 0 | 1, value: string): void {
+    this.update((content) => {
+      const lines = [...content.moments[index].lines];
+      lines[line] = value;
+      content.moments[index].lines = lines[1] === '' ? lines.slice(0, 1) : lines;
+    });
+  }
+
+  pickMoment(index: number, current: string): void {
+    this.choose(current, (mediaId) => this.patchMoment(index, { mediaId }));
+  }
+
+  patchCategory(index: number, changes: Partial<Draft['categories'][number]>): void {
     this.update((content) => {
       content.categories[index] = { ...content.categories[index], ...changes };
     });
@@ -734,7 +922,7 @@ export class HomeContentPage implements HasUnsavedChanges {
 
   add(kind: 'campaign' | 'shop' | 'products'): void {
     const id = `${kind}-${Date.now().toString(36)}`;
-    const block: LandingBlock =
+    const block: HomeBlock =
       kind === 'campaign'
         ? {
             kind,
@@ -791,9 +979,12 @@ export class HomeContentPage implements HasUnsavedChanges {
 
   save(): void {
     const draft = this.draft();
-    if (!draft) return;
+    const server = this.server();
+    if (!draft || !server) return;
     this.saving.set(true);
-    this.api.saveHome(draft).subscribe({
+    this.errors.set({});
+    this.conflict.set(null);
+    this.api.saveHome({ ...structuredClone(draft), updatedAt: server.updatedAt }).subscribe({
       next: (content) => {
         this.saving.set(false);
         this.apply(content);
@@ -803,33 +994,74 @@ export class HomeContentPage implements HasUnsavedChanges {
       },
       error: (error: unknown) => {
         this.saving.set(false);
-        this.toast.error(errorMessage(error));
+        this.fail(error);
       },
     });
   }
 
   discard(): void {
-    this.draft.set(JSON.parse(this.original()) as LandingContent);
+    this.errors.set({});
+    this.conflict.set(null);
+    this.draft.set(JSON.parse(this.original()) as Draft);
+  }
+
+  /** 409: drop my edits and take what the other admin saved. */
+  useServerCopy(): void {
+    const other = this.conflict();
+    if (other) this.apply(other);
+  }
+
+  /** 409: keep my edits, but base the next save on the newer server copy. */
+  keepMine(): void {
+    const other = this.conflict();
+    if (!other) return;
+    this.server.set(other);
+    this.conflict.set(null);
+    this.toast.show('Đã giữ bản của bạn. Bấm Lưu và đăng để ghi đè bản mới.');
   }
 
   reset(): void {
     this.dialogs
       .confirm({
         title: 'Khôi phục nội dung mặc định?',
-        message: 'Mọi thay đổi trên trang chủ sẽ mất, kể cả các khối bạn đã thêm.',
+        message:
+          'Mọi thay đổi trên trang chủ sẽ mất, kể cả các khối bạn đã thêm. Trang chủ cửa hàng đổi ngay.',
         confirmLabel: 'Khôi phục',
         danger: true,
       })
       .subscribe((ok) => {
-        if (!ok) return;
-        this.api.resetHome().subscribe({
+        const server = this.server();
+        if (!ok || !server) return;
+        this.api.resetHome(server.updatedAt).subscribe({
           next: (content) => {
+            this.errors.set({});
+            this.conflict.set(null);
             this.apply(content);
             this.toast.show('Đã khôi phục trang chủ mặc định');
           },
-          error: (error: unknown) => this.toast.error(errorMessage(error)),
+          error: (error: unknown) => this.fail(error),
         });
       });
+  }
+
+  private fail(error: unknown): void {
+    if (error instanceof ContentConflictError && error.current) {
+      this.conflict.set(error.current as AdminHomeContent);
+      return;
+    }
+    if (error instanceof AdminApiError && Object.keys(error.fields).length) {
+      this.errors.set(error.fields);
+      this.openFirstError(error.fields);
+    }
+    this.toast.error(errorMessage(error));
+  }
+
+  /** Opens the block whose field failed so the message is next to its input. */
+  private openFirstError(fields: Record<string, string>): void {
+    const path = Object.keys(fields).find((key) => key.startsWith('blocks['));
+    const index = path ? Number(/^blocks\[(\d+)\]/.exec(path)?.[1]) : NaN;
+    const block = this.draft()?.blocks[index];
+    if (block) this.open.set(block.id);
   }
 
   private choose(current: string, done: (mediaId: string) => void): void {
@@ -838,7 +1070,7 @@ export class HomeContentPage implements HasUnsavedChanges {
       .closed.subscribe((mediaId) => mediaId && done(mediaId));
   }
 
-  private update(change: (content: LandingContent) => void): void {
+  private update(change: (content: Draft) => void): void {
     const draft = this.draft();
     if (!draft) return;
     const next = structuredClone(draft);
@@ -846,8 +1078,15 @@ export class HomeContentPage implements HasUnsavedChanges {
     this.draft.set(next);
   }
 
-  private apply(content: LandingContent): void {
-    this.original.set(JSON.stringify(content));
-    this.draft.set(content);
+  private apply(content: AdminHomeContent): void {
+    const draft: Draft = {
+      categories: content.categories,
+      moments: content.moments,
+      blocks: content.blocks,
+    };
+    this.server.set(content);
+    this.conflict.set(null);
+    this.original.set(JSON.stringify(draft));
+    this.draft.set(structuredClone(draft));
   }
 }

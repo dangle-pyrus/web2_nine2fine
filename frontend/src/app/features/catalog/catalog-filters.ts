@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { API_CONFIG } from '../../core/api-config';
 import { CatalogQuery, GENDERS, MOMENTS, PRODUCT_COLORS } from './models/product';
 import { IconComponent } from '../../shared/ui/icon.component';
 
@@ -156,8 +157,10 @@ const PRICES = [
     <details open>
       <summary>
         Tình trạng
-        @if (query().available) {
-          <span class="selected-count">(1)</span>
+        @if (query().available || query().sale) {
+          <span class="selected-count"
+            >({{ (query().available ? 1 : 0) + (query().sale ? 1 : 0) }})</span
+          >
         }
         <n2f-icon name="reiconChevronDown" size="18px" />
       </summary>
@@ -171,6 +174,16 @@ const PRICES = [
           />
           Chỉ hiện còn hàng</label
         >
+        @if (saleFilter) {
+          <label class="choice"
+            ><input
+              type="checkbox"
+              [checked]="!!query().sale"
+              (change)="filtersChanged.emit({ key: 'sale', value: !query().sale })"
+            />
+            Đang giảm giá</label
+          >
+        }
       </fieldset>
     </details>
   `,
@@ -302,13 +315,16 @@ export class CatalogFilters {
   readonly query = input.required<CatalogQuery>();
   readonly filtersChanged = output<{ key: string; value: string | number | boolean }>();
   readonly filtersCleared = output<void>();
+  /** "Đang giảm giá" exists once `promotionsMode` is http (`sale=true`, BR-PROMO-07). */
+  readonly saleFilter = inject(API_CONFIG).promotionsMode === 'http';
   readonly genders = GENDERS;
   readonly moments = MOMENTS;
   readonly colors = COLORS;
   readonly prices = PRICES;
   readonly activeCount = computed(() => {
     const q = this.query();
-    return [q.gender, q.moment, q.size, q.color, q.maxPrice, q.available].filter(Boolean).length;
+    return [q.gender, q.moment, q.size, q.color, q.maxPrice, q.available, q.sale].filter(Boolean)
+      .length;
   });
 
   /** Single-select toggles: choosing the active value again clears it. */

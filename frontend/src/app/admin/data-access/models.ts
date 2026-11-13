@@ -10,11 +10,6 @@ import type {
   PaymentMethod,
   ReturnReason,
 } from '../../features/orders/order-models';
-import type { SizeChart } from '../../features/catalog/models/product';
-import type { LandingContent } from '../../features/home/landing-content';
-
-export type { LandingBlock } from '../../features/home/landing-content';
-export type { LandingContent, SizeChart };
 
 export type { OrderStatus, PaymentMethod, ReturnReason };
 
@@ -349,6 +344,15 @@ export interface AdminProduct {
   tags: string[];
   price: number;
   compareAtPrice: number | null;
+  /**
+   * Slice 10 (BR-PROMO-01): limited-time sale price with its first and last day (`YYYY-MM-DD`,
+   * Vietnam time). All three set or all three `null`. API only; absent in the mock back office.
+   */
+  salePrice?: number | null;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  /** Computed by the server at read time (BR-PROMO-06). */
+  saleState?: SaleState;
   /** Cost per item; only roles with `products.cost` see it. */
   cost: number | null;
   material: string;
@@ -375,6 +379,8 @@ export interface AdminCategory {
   label: string;
 }
 
+export type SaleState = 'none' | 'upcoming' | 'running' | 'ended';
+
 export interface AdminProductSummary {
   id: string;
   slug?: string;
@@ -384,6 +390,8 @@ export interface AdminProductSummary {
   category: string;
   price: number;
   compareAtPrice: number | null;
+  /** Slice 10; API only. */
+  saleState?: SaleState;
   inventory: number;
   variantCount: number;
   updatedAt: string;
@@ -610,72 +618,6 @@ export interface SearchResults {
 
 export const DEFAULT_PAGE_SIZE = 50;
 export const PAGE_SIZES = [20, 50, 100] as const;
-
-// ---------- Storefront content (Đợt 3, frontend-only: runs on the mock data) ----------
-
-export type ReviewStatus = 'published' | 'hidden';
-
-export interface AdminReview {
-  id: string;
-  /** Admin product id (`p01`). */
-  productId: string;
-  productName: string;
-  productImage: string;
-  author: string;
-  rating: number;
-  /** -1 = runs small, 0 = true to size, 1 = runs large. */
-  fit: -1 | 0 | 1;
-  sizeBought: string;
-  title: string;
-  body: string;
-  /** ISO date. */
-  date: string;
-  verified: boolean;
-  /** Demo fixture shipped with the storefront mock. */
-  sample: boolean;
-  status: ReviewStatus;
-  reply?: { body: string; at: string; author: string };
-}
-
-export type ReviewView = 'all' | 'unanswered' | 'low' | 'hidden';
-
-export interface ReviewQuery extends PageQuery {
-  view: ReviewView;
-  /** 0 = any rating. */
-  rating: number;
-}
-
-export interface ReviewStats {
-  total: number;
-  average: number;
-  unanswered: number;
-  low: number;
-  hidden: number;
-}
-
-export type CollectionStatus = 'active' | 'draft';
-
-export interface AdminCollection {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  status: CollectionStatus;
-  productIds: string[];
-  updatedAt: string;
-}
-
-export type CollectionInput = Omit<AdminCollection, 'id' | 'updatedAt'>;
-
-export interface AdminSizeChart {
-  /** Product category the chart applies to (the storefront shows charts per category). */
-  category: string;
-  label: string;
-  chart: SizeChart;
-  productCount: number;
-  /** Edited in the admin; false = the built-in chart. */
-  customised: boolean;
-}
 
 export type ReportRange = '7d' | '30d' | '90d' | '365d';
 

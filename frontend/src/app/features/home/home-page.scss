@@ -127,3 +127,34 @@ h2 {
     font-size: 12px;
   }
 }
+.home-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 160px var(--page-gutter) 96px;
+  text-align: center;
+}
+.home-error h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+}
+.home-error p {
+  margin: 0;
+  color: var(--muted);
+}
+.home-error .retry {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.home-error a {
+  text-decoration: underline;
+}

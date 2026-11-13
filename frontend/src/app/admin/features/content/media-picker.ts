@@ -1,7 +1,7 @@
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MEDIA } from '../../../../media/media-manifest';
+import { getMedia, MEDIA } from '../../../../media/media-manifest';
 
 type MediaGroup = 'campaign' | 'editorial' | 'category' | 'product';
 
@@ -112,5 +112,5 @@ export class MediaPicker {
 
 /** Image URL for a media id, for previews in the admin. */
 export function mediaSrc(id: string | undefined): string {
-  return (id && MEDIA[id]?.src) || '';
+  return id ? getMedia(id).src : '';
 }

@@ -5,6 +5,9 @@ import { HttpAuthApi } from '../features/auth/data-access/auth-api';
 import { HttpCartApi } from '../features/cart/data-access/cart-api';
 import { HttpCatalogApi } from '../features/catalog/data-access/catalog-api';
 import { HttpCheckoutApi } from '../features/checkout/checkout-api';
+import { HttpRecommendationsApi } from '../features/catalog/data-access/recommendations-api';
+import { HttpReviewsApi } from '../features/product/data-access/reviews-api';
+import { HttpWishlistApi } from '../features/wishlist/data-access/wishlist-api';
 import { StorefrontBindings, toStorefrontProviders } from './storefront-adapter-tokens';
 
 /** Code the mock sign-in accepts, shown as a hint. `null` in the normal build (real emails). */
@@ -18,6 +21,9 @@ const bindings: StorefrontBindings = {
   ORDERS_API: { useExisting: HttpOrdersApi },
   AUTH_API: { useExisting: HttpAuthApi },
   ACCOUNT_API: { useExisting: HttpAccountApi },
+  REVIEWS_API: { useExisting: HttpReviewsApi },
+  WISHLIST_API: { useExisting: HttpWishlistApi },
+  RECOMMENDATIONS_API: { useExisting: HttpRecommendationsApi },
 };
 
 /**

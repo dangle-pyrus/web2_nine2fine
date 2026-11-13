@@ -409,5 +409,9 @@ export function buildDeskOrders(): DeskOrder[] {
       rich: true,
     },
   ];
-  return [...specials, ...fillers].map(build);
+  const orders = [...specials, ...fillers].map(build);
+  // One delivered order has a return request waiting (Slice 10, `returnPending`).
+  const waiting = orders.find((order) => order.tab === 'completed');
+  if (waiting) waiting.returnPending = true;
+  return orders;
 }

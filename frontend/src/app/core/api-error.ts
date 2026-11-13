@@ -46,6 +46,10 @@ export const API_ERROR_CODES = [
   'not-returnable',
   'return-window-closed',
   'return-exists',
+  // Slice 10 (reviews, wishlist).
+  'not-eligible',
+  'already-reviewed',
+  'wishlist-full',
 ] as const;
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 

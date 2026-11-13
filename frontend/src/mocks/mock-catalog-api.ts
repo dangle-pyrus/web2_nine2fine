@@ -107,6 +107,8 @@ export class MockCatalogApi implements CatalogApi {
               .every((word) => normalize(`${product.name} ${product.type}`).includes(word))) &&
           (!query.ids || query.ids.includes(product.id)) &&
           (!query.maxPrice || product.price <= query.maxPrice) &&
+          // The mock has no timed sales: "đang giảm" is a struck-through price.
+          (!query.sale || !!product.compareAtPrice) &&
           product.variants.some(
             (variant) =>
               (!query.size || variant.size === query.size) &&

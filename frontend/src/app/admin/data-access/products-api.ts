@@ -14,7 +14,16 @@ import type {
   ProductInput,
   ProductQuery,
   ProductStatus,
+  SaleState,
 } from './models';
+
+/** Vietnam is UTC+7 all year; the API sends instants, the form edits calendar days. */
+const VN_OFFSET_MS = 7 * 3_600_000;
+export function vnDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? null : new Date(time + VN_OFFSET_MS).toISOString().slice(0, 10);
+}
 
 // ---------- Wire shapes (docs/api/openapi.yaml, tag admin-products / admin-media) ----------
 
@@ -32,6 +41,7 @@ interface WireProductSummary {
   category: string;
   price: number;
   compareAtPrice: number | null;
+  saleState?: SaleState;
   inventory: number;
   variantCount: number;
   updatedAt: string;
@@ -57,6 +67,10 @@ interface WireProduct {
   moments: string[];
   price: number;
   compareAtPrice: number | null;
+  salePrice?: number | null;
+  saleStartsAt?: string | null;
+  saleEndsAt?: string | null;
+  saleState?: SaleState;
   material: string;
   care: string[];
   fitSummary: string;
@@ -108,6 +122,10 @@ export function toProduct(wire: WireProduct): AdminProduct {
     seoDescription: '',
     price: wire.price,
     compareAtPrice: wire.compareAtPrice,
+    salePrice: wire.salePrice ?? null,
+    saleStartsAt: vnDate(wire.saleStartsAt),
+    saleEndsAt: vnDate(wire.saleEndsAt),
+    saleState: wire.saleState ?? 'none',
     material: wire.material,
     care: wire.care,
     fitSummary: wire.fitSummary,
@@ -149,6 +167,14 @@ export function toWireProduct(input: ProductInput): Record<string, unknown> {
     moments: input.moments,
     price: input.price,
     compareAtPrice: input.compareAtPrice,
+    // Absent key = keep the sale as it is (and no `promotions.write` needed); all `null` = remove it.
+    ...(input.salePrice === undefined
+      ? {}
+      : {
+          salePrice: input.salePrice,
+          saleStartsAt: input.saleStartsAt ?? null,
+          saleEndsAt: input.saleEndsAt ?? null,
+        }),
     material: input.material,
     care: input.care,
     fitSummary: input.fitSummary,
@@ -194,6 +220,7 @@ export class HttpAdminProductsApi implements AdminProductsApi {
           category: item.category,
           price: item.price,
           compareAtPrice: item.compareAtPrice,
+          saleState: item.saleState,
           inventory: item.inventory,
           variantCount: item.variantCount,
           updatedAt: item.updatedAt,

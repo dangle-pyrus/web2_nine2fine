@@ -57,6 +57,13 @@ export interface Product {
   looks: StylingLook[];
   createdAt: string;
   salesRank: number;
+  /**
+   * Slice 10 (BR-PROMO-06): only while a sale runs; the server's floor((1 - sale / original) x 100),
+   * so the label never disagrees with the price. 0 hides the label.
+   */
+  discountPercent?: number;
+  /** Slice 10 (BR-PROMO-07): while a sale runs, 23:59:59 Vietnam time of its last day (ISO UTC). */
+  saleEndsAt?: string;
 }
 
 export interface ProductReview {
@@ -84,6 +91,32 @@ export type ReviewInput = Pick<
   'rating' | 'fit' | 'sizeBought' | 'height' | 'title' | 'body'
 >;
 
+/** Summary of a product's reviews: every visible review, whatever the star filter (BR-REV-06). */
+export interface ProductReviewSummary {
+  count: number;
+  /** One decimal, half-up; null when there are no reviews. */
+  average: number | null;
+  distribution: Record<'1' | '2' | '3' | '4' | '5', number>;
+  /** Reviews by fit: small = -1, true = 0, large = 1. */
+  fit: { small: number; true: number; large: number };
+}
+
+/** One page of public reviews (Slice 10, `GET /products/{id}/reviews`). */
+export interface ProductReviewPage {
+  items: ProductReview[];
+  total: number;
+  page: number;
+  limit: number;
+  summary: ProductReviewSummary;
+}
+
+export interface ReviewListQuery {
+  page: number;
+  limit: number;
+  /** 1..5 filter (BR-REV-09, Should). */
+  rating?: number;
+}
+
 /** Only shoppers who received the product may review it (once). */
 export interface ReviewEligibility {
   status: 'sign-in' | 'not-purchased' | 'reviewed' | 'eligible';
@@ -102,6 +135,8 @@ export interface SizeChart {
   garment: SizeChartRow[];
   bodyColumns: string[];
   garmentColumns: string[];
+  /** Slice 10: when an admin last saved the chart; absent for the seeded one. */
+  updatedAt?: string;
 }
 
 export interface CatalogQuery {
@@ -121,6 +156,8 @@ export interface CatalogQuery {
   limit?: number;
   /** Fetch these product IDs only (wishlist), at most 48. */
   ids?: string[];
+  /** Slice 10 (BR-PROMO-07, Should): only products whose sale is running now. */
+  sale?: boolean;
 }
 
 export interface ProductPage {

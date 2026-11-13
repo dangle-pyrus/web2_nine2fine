@@ -3,12 +3,14 @@ import {
   Component,
   computed,
   DestroyRef,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, combineLatest, map, of, startWith, Subject, switchMap } from 'rxjs';
+import { catchError, combineLatest, forkJoin, map, of, startWith, Subject, switchMap } from 'rxjs';
 import { readApiError } from '../../core/api-error';
 import { FormsModule } from '@angular/forms';
 import { CATALOG_API } from './data-access/catalog-api';
@@ -42,6 +44,11 @@ type CatalogResult = {
 
 const PAGE_SIZE = 24;
 const WISHLIST_LIMIT = 48;
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 const EMPTY_PAGE: ProductPage = { items: [], total: 0, page: 1, limit: PAGE_SIZE };
 
 @Component({
@@ -89,7 +96,15 @@ export class CatalogPage {
   readonly hasFilters = computed(() => {
     const q = this.query();
     return Boolean(
-      q.gender || q.category || q.moment || q.size || q.color || q.maxPrice || q.available || q.q,
+      q.gender ||
+      q.category ||
+      q.moment ||
+      q.size ||
+      q.color ||
+      q.maxPrice ||
+      q.available ||
+      q.sale ||
+      q.q,
     );
   });
   /** Count in the title: products matching the filters, not those loaded so far. */
@@ -98,12 +113,31 @@ export class CatalogPage {
   );
   readonly filterCount = computed(() => {
     const q = this.query();
-    return [q.gender, q.category, q.moment, q.size, q.color, q.maxPrice, q.available].filter(
-      Boolean,
-    ).length;
+    return [
+      q.gender,
+      q.category,
+      q.moment,
+      q.size,
+      q.color,
+      q.maxPrice,
+      q.available,
+      q.sale,
+    ].filter(Boolean).length;
   });
 
+  /** Saved ids the wishlist list was fetched for (a sign-in sync can bring in others). */
+  private requestedWishlist = new Set<string>();
+
   constructor() {
+    // The server's list can differ from the cached one a moment after sign-in: fetch what is new.
+    effect(() => {
+      const saved = this.wishlist.savedIds();
+      const status = this.result().status;
+      untracked(() => {
+        if (!this.isWishlist() || status !== 'success') return;
+        if (saved.some((id) => !this.requestedWishlist.has(id))) this.retry$.next();
+      });
+    });
     combineLatest([
       this.route.queryParamMap,
       this.route.paramMap,
@@ -137,6 +171,7 @@ export class CatalogPage {
             size: params.get('size') ?? '',
             color: params.get('color') ?? '',
             available: params.get('available') === 'true',
+            sale: params.get('sale') === 'true',
             q: (params.get('q') ?? '').slice(0, SEARCH_MAX_LENGTH).trim(),
             maxPrice: Number.isFinite(price) && price > 0 ? price : 0,
             sort: SORT_OPTIONS.some((option) => option.value === sort)
@@ -150,15 +185,30 @@ export class CatalogPage {
         }),
         switchMap((query) => {
           const wishlist = this.isWishlist();
-          // The wishlist is fetched by id (at most 48) and filtered live against the saved ids.
-          const ids = wishlist ? this.wishlist.savedIds().slice(0, WISHLIST_LIMIT) : undefined;
+          // The wishlist is fetched by id, at most 48 per request (BR-WISH-06), and filtered live
+          // against the saved ids; a request each for the 49th..100th products.
+          const ids = wishlist ? this.wishlist.savedIds() : undefined;
+          this.requestedWishlist = new Set(ids);
           if (wishlist && !ids?.length) {
             return of<CatalogResult>({ status: 'success', page: EMPTY_PAGE });
           }
-          const request: CatalogQuery = wishlist
-            ? { ...query, ids, limit: WISHLIST_LIMIT }
-            : { ...query, page: 1, limit: PAGE_SIZE };
-          return this.api.list(request).pipe(
+          const request$ = wishlist
+            ? forkJoin(
+                chunks(ids ?? [], WISHLIST_LIMIT).map((chunk) =>
+                  this.api.list({ ...query, ids: chunk, limit: WISHLIST_LIMIT }),
+                ),
+              ).pipe(
+                map((pages): ProductPage => {
+                  // Saved order (newest first), not the order the server answered in.
+                  const order = new Map((ids ?? []).map((id, index) => [id, index]));
+                  const items = pages
+                    .flatMap((page) => page.items)
+                    .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+                  return { items, total: items.length, page: 1, limit: WISHLIST_LIMIT };
+                }),
+              )
+            : this.api.list({ ...query, page: 1, limit: PAGE_SIZE });
+          return request$.pipe(
             map((page): CatalogResult => ({ status: 'success', page })),
             startWith<CatalogResult>({ status: 'loading', page: EMPTY_PAGE }),
             catchError((error: unknown) =>

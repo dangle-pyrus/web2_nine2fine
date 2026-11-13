@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { getMedia } from '../../../media/media-manifest';
 
 /**
@@ -12,6 +12,7 @@ import { getMedia } from '../../../media/media-manifest';
       [src]="media().src"
       [attr.srcset]="media().srcset ?? null"
       [attr.sizes]="media().srcset ? sizes() : null"
+      (error)="failedId.set(mediaId())"
       [alt]="decorative() ? '' : media().alt"
       [width]="media().width"
       [height]="media().height"
@@ -39,5 +40,9 @@ export class MediaImageComponent {
   readonly sizes = input('100vw');
   readonly priority = input(false);
   readonly decorative = input(false);
-  readonly media = computed(() => getMedia(this.mediaId()));
+  /** The file is gone (an uploaded image removed from the library): the placeholder shows instead. */
+  readonly failedId = signal('');
+  readonly media = computed(() =>
+    getMedia(this.failedId() === this.mediaId() ? 'catalog-placeholder' : this.mediaId()),
+  );
 }

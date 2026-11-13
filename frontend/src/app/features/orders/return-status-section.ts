@@ -4,7 +4,7 @@ import { PricePipe } from '../../shared/commerce/price.pipe';
 import { Order, ReturnCase } from './order-models';
 import { RETURN_REASONS, RETURN_STATE_LABEL } from './order-returns';
 import { formatDate, formatDateTime } from './order-status';
-import { RETURNS_API, returnErrorMessage } from './returns-api';
+import { RETURNS_API, ReturnAudience, returnErrorMessage } from './returns-api';
 
 /**
  * "Yêu cầu trả hàng" block of an API order (Slice 9, BR-RET-20, 23): state, lines, refund amount,
@@ -226,6 +226,8 @@ import { RETURNS_API, returnErrorMessage } from './returns-api';
 export class ReturnStatusSection {
   readonly order = input.required<Order>();
   readonly request = input.required<ReturnCase>();
+  /** A guest cancels through `/orders/{code}/return/cancel` with the lookup grant. */
+  readonly audience = input<ReturnAudience>('member');
   /** The order moved on (cancelled request, lost race): the page reloads it. */
   readonly changed = output<void>();
 
@@ -253,7 +255,7 @@ export class ReturnStatusSection {
     this.busy.set(true);
     this.error.set('');
     this.api
-      .cancel(this.order().id)
+      .cancel(this.order().id, this.audience())
       .pipe(finalize(() => this.busy.set(false)))
       .subscribe({
         next: () => {
@@ -261,7 +263,7 @@ export class ReturnStatusSection {
           this.changed.emit();
         },
         error: (error: unknown) => {
-          this.error.set(returnErrorMessage(error));
+          this.error.set(returnErrorMessage(error, this.audience()));
           this.confirming.set(false);
           // The request moved on (approved by the shop meanwhile): show where it is now.
           this.changed.emit();

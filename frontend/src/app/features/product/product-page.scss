@@ -409,3 +409,23 @@ section > h2 {
 }
 @media (prefers-reduced-motion: reduce) {
 }
+.sale-end {
+  margin: 4px 0 0;
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: 600;
+}
+.reviews-error {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+.reviews-error button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}

@@ -49,6 +49,7 @@ const COLLAPSE_KEY = 'n2f.admin.sidebar';
 /** Sidebar counts refresh this often while the tab is visible. */
 const COUNTS_REFRESH_MS = 60_000;
 const DESK_CATALOG_LINKS = ['/admin/products', '/admin/inventory', '/admin/promotions'];
+const DESK_CONTENT_LINKS = ['/admin/content', '/admin/collections', '/admin/size-charts'];
 const DESK_CUSTOMER_LINK = '/admin/customers';
 const DESK_RETURNS_LINK = '/admin/returns';
 /** Second key of a "G then O" jump must follow within this time. */
@@ -87,6 +88,8 @@ export class AdminShell {
   private readonly insightsHttp = inject(API_CONFIG).adminInsightsMode === 'http';
   /** Slice 9: Trả hàng joins the desk menu. */
   private readonly returnsHttp = inject(API_CONFIG).returnsMode === 'http';
+  private readonly reviewsHttp = inject(API_CONFIG).reviewsMode === 'http';
+  private readonly contentHttp = inject(API_CONFIG).contentMode === 'http';
   private readonly ordersApi = this.deskMode ? null : inject(ADMIN_ORDERS_API);
   private readonly returnsApi = this.deskMode ? null : inject(ADMIN_RETURNS_API);
   private readonly deskApi = this.deskMode ? inject(ADMIN_ORDER_DESK_API) : null;
@@ -169,7 +172,28 @@ export class AdminShell {
       label: 'Nội dung trang chủ',
       icon: 'reiconWidget',
       link: '/admin/content',
-      permission: 'products.view',
+      permission: 'content.view',
+    },
+    {
+      label: 'Bộ sưu tập',
+      icon: 'reiconGalleryAdd',
+      link: '/admin/collections',
+      permission: 'content.view',
+      deskOnly: true,
+    },
+    {
+      label: 'Bảng size',
+      icon: 'reiconRuler',
+      link: '/admin/size-charts',
+      permission: 'content.view',
+      deskOnly: true,
+    },
+    {
+      label: 'Đánh giá',
+      icon: 'reiconStar',
+      link: '/admin/reviews',
+      permission: 'reviews.moderate',
+      deskOnly: true,
     },
     {
       label: 'Báo cáo',
@@ -188,6 +212,8 @@ export class AdminShell {
       ...(this.usersHttp ? [DESK_CUSTOMER_LINK] : []),
       ...(this.insightsHttp ? ['/admin/reports'] : []),
       ...(this.returnsHttp ? [DESK_RETURNS_LINK] : []),
+      ...(this.contentHttp ? DESK_CONTENT_LINKS : []),
+      ...(this.reviewsHttp ? ['/admin/reviews'] : []),
     ];
     const visible = this.deskMode
       ? this.nav

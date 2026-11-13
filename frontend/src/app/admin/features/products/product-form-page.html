@@ -285,6 +285,86 @@
         </div>
         }
       </div>
+      @if (contract && (canSale || hasSale())) {
+      <div class="sale" role="group" aria-labelledby="sale-title">
+        <h3 id="sale-title">
+          Giá giảm có hạn @if (draft().saleState === 'running') {
+          <adm-badge label="Đang giảm giá" tone="success" />
+          } @else if (draft().saleState === 'upcoming') {
+          <adm-badge label="Sắp diễn ra" tone="info" />
+          } @else if (draft().saleState === 'ended') {
+          <adm-badge label="Đã kết thúc" tone="neutral" />
+          }
+        </h3>
+        <p class="hint">
+          Trong đợt, khách thấy giá giảm và giá gốc gạch ngang. Hết hạn tự quay về giá bán, không
+          cần làm gì thêm.
+        </p>
+        <div class="form-grid">
+          <div class="field">
+            <label for="p-sale-price">Giá giảm</label>
+            <div class="affix">
+              <input
+                id="p-sale-price"
+                class="input num-input"
+                type="number"
+                min="0"
+                step="1000"
+                inputmode="numeric"
+                [disabled]="!canSale"
+                [value]="draft().salePrice ?? ''"
+                (input)="patch({ salePrice: numberOrNull($any($event.target).value) })"
+                (blur)="touch('salePrice')"
+                [attr.aria-invalid]="!!showError('salePrice')"
+              />
+              <span class="suffix">₫</span>
+            </div>
+            @if (showError('salePrice'); as error) {
+            <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+            } @else if (saleDiscount() !== null) {
+            <p class="hint">Giảm {{ saleDiscount() }}% so với giá bán.</p>
+            }
+          </div>
+          <div class="field">
+            <label for="p-sale-start">Từ ngày</label>
+            <input
+              id="p-sale-start"
+              class="input"
+              type="date"
+              [disabled]="!canSale"
+              [value]="draft().saleStartsAt ?? ''"
+              (input)="patch({ saleStartsAt: $any($event.target).value || null })"
+              (blur)="touch('saleStartsAt')"
+              [attr.aria-invalid]="!!showError('saleStartsAt')"
+            />
+            @if (showError('saleStartsAt'); as error) {
+            <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+            }
+          </div>
+          <div class="field">
+            <label for="p-sale-end">Đến hết ngày</label>
+            <input
+              id="p-sale-end"
+              class="input"
+              type="date"
+              [disabled]="!canSale"
+              [value]="draft().saleEndsAt ?? ''"
+              (input)="patch({ saleEndsAt: $any($event.target).value || null })"
+              (blur)="touch('saleEndsAt')"
+              [attr.aria-invalid]="!!showError('saleEndsAt')"
+            />
+            @if (showError('saleEndsAt'); as error) {
+            <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+            }
+          </div>
+        </div>
+        @if (canSale && hasSale()) {
+        <button type="button" class="adm-btn adm-btn--sm adm-btn--ghost" (click)="removeSale()">
+          Gỡ đợt giảm giá
+        </button>
+        }
+      </div>
+      }
     </section>
 
     <!-- Options and variants -->

@@ -47,6 +47,18 @@ export type LandingBlock = (LandingCampaign | LandingEdit | LandingShop | Landin
 
 export interface LandingContent {
   categories: { label: string; href: string; mediaId: string }[];
-  moments: { label: string; href: string }[];
+  /**
+   * Shop-by-Moment cards. The mock fixture carries just `label` and `href`; `GET /content/home`
+   * (Slice 10, BR-MOM-02) adds the picture, the lines and the live product count; a card with
+   * `count` 0 never arrives.
+   */
+  moments: {
+    label: string;
+    href: string;
+    moment?: string;
+    lines?: string[];
+    mediaId?: string;
+    count?: number;
+  }[];
   blocks: LandingBlock[];
 }

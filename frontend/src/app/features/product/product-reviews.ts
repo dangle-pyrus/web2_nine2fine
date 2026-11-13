@@ -1,12 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { ProductReview } from '../catalog/models/product';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ProductReview, ProductReviewSummary } from '../catalog/models/product';
 import { formatDate } from '../orders/order-status';
 
 /** Reviews as a fitting room (Baymard): aggregate fit scale, size bought and height per review. */
 @Component({
   selector: 'n2f-product-reviews',
   template: `
-    @if (!reviews().length) {
+    @if (!summary().count) {
       <p class="empty">Chưa có đánh giá cho sản phẩm này.</p>
     } @else {
       <div class="overview">
@@ -17,7 +17,7 @@ import { formatDate } from '../orders/order-status';
               <span [class.on]="star <= roundedAverage()" aria-hidden="true">★</span>
             }
           </span>
-          <span class="count">{{ reviews().length }} đánh giá</span>
+          <span class="count">{{ summary().count }} đánh giá</span>
         </div>
         <div class="fit-scale">
           <p id="fit-scale-label">Độ vừa theo người mua</p>
@@ -34,6 +34,21 @@ import { formatDate } from '../orders/order-status';
           </div>
           <p class="fit-label">{{ fitLabel() }}</p>
         </div>
+      </div>
+      <div class="filters" role="group" aria-label="Lọc theo số sao">
+        <button type="button" [attr.aria-pressed]="!ratingFilter()" (click)="ratingChange.emit(0)">
+          Tất cả
+        </button>
+        @for (star of [5, 4, 3, 2, 1]; track star) {
+          <button
+            type="button"
+            [attr.aria-pressed]="ratingFilter() === star"
+            [disabled]="!starCount(star)"
+            (click)="ratingChange.emit(star)"
+          >
+            {{ star }} sao ({{ starCount(star) }})
+          </button>
+        }
       </div>
       <div class="filters" role="group" aria-label="Lọc theo size đã mua">
         <button type="button" [attr.aria-pressed]="!sizeFilter()" (click)="sizeFilter.set('')">
@@ -85,10 +100,26 @@ import { formatDate } from '../orders/order-status';
           </li>
         }
       </ul>
+      @if (!reviews().length) {
+        <p class="empty">Không có đánh giá nào ở mức sao này.</p>
+      }
       @if (visible().length > shown().length) {
         <button type="button" class="show-all" (click)="showAll.set(true)">
-          Xem tất cả {{ visible().length }} đánh giá
+          Xem tất cả {{ total() }} đánh giá
         </button>
+      } @else if (showAll() && reviews().length < total()) {
+        <button
+          type="button"
+          class="show-all"
+          [disabled]="loadingMore()"
+          [attr.aria-busy]="loadingMore()"
+          (click)="more.emit()"
+        >
+          {{ loadingMore() ? 'Đang tải…' : 'Xem thêm đánh giá' }}
+        </button>
+      }
+      @if (moreFailed()) {
+        <p class="empty" role="alert">Chưa tải thêm được đánh giá. Vui lòng thử lại.</p>
       }
     }
     @if (hasSamples()) {
@@ -257,7 +288,17 @@ import { formatDate } from '../orders/order-status';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductReviews {
+  /** The pages loaded so far (newest first), for the chosen star filter. */
   readonly reviews = input.required<ProductReview[]>();
+  /** Over every visible review, whatever the star filter (BR-REV-06). */
+  readonly summary = input.required<ProductReviewSummary>();
+  /** Reviews matching the star filter, loaded or not. */
+  readonly total = input.required<number>();
+  readonly ratingFilter = input(0);
+  readonly loadingMore = input(false);
+  readonly moreFailed = input(false);
+  readonly more = output<void>();
+  readonly ratingChange = output<number>();
   readonly sizeFilter = signal('');
   /** The page shows two reviews until the shopper asks for the rest. */
   readonly showAll = signal(false);
@@ -266,16 +307,17 @@ export class ProductReviews {
     0: 'Vừa size',
     1: 'Hơi rộng',
   };
-  readonly average = computed(() => {
-    const list = this.reviews();
-    return list.length ? list.reduce((sum, review) => sum + review.rating, 0) / list.length : 0;
-  });
+  /** Reviews with exactly this many stars (over every visible review). */
+  starCount(star: number): number {
+    return this.summary().distribution[String(star) as '1' | '2' | '3' | '4' | '5'];
+  }
+  readonly average = computed(() => this.summary().average ?? 0);
   readonly roundedAverage = computed(() => Math.round(this.average()));
   readonly hasSamples = computed(() => this.reviews().some((review) => review.sample));
   /** -1..1 mapped onto 0..100% of the scale. */
   readonly fitScore = computed(() => {
-    const list = this.reviews();
-    return list.length ? list.reduce((sum, review) => sum + review.fit, 0) / list.length : 0;
+    const { count, fit } = this.summary();
+    return count ? (fit.large - fit.small) / count : 0;
   });
   readonly fitPosition = computed(() => (this.fitScore() + 1) * 50);
   readonly fitLabel = computed(() => {

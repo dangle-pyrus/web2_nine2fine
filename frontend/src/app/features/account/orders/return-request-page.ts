@@ -27,8 +27,11 @@ import { getMedia } from '../../../../media/media-manifest';
 import { storeSettings } from '../../../core/store-settings';
 import { API_CONFIG } from '../../../core/api-config';
 import { ORDERS_API, orderErrorMessage } from '../data-access/orders-api';
+import { CHECKOUT_API, CheckoutError } from '../../checkout/checkout-api';
+import { GuestOrderView } from '../../tracking/guest-order-view';
 import {
   ReturnApiError,
+  ReturnAudience,
   ReturnCreateBody,
   returnErrorBlocksOrder,
   returnErrorMessage,
@@ -62,23 +65,33 @@ interface Photo {
   error?: string;
 }
 
-/** `/account/orders/:orderId/return`: pick items, reason, photos and where the refund goes. */
+/**
+ * `/account/orders/:orderId/return` (member) and `/track-order/:orderId/return` (guest after the OTP
+ * lookup, BR-RET-60): pick items, reason, photos and where the refund goes. One form for both; the
+ * guest's calls go to `/orders/{code}/return*` and are opened by the `n2f_oa` grant cookie.
+ */
 @Component({
   selector: 'n2f-return-request-page',
   imports: [ReactiveFormsModule, RouterLink, IconComponent, PricePipe],
   template: `
-    <a class="back" [routerLink]="['/account/orders', orderId]"
-      ><n2f-icon name="reiconArrowLeft" size="16px" /> Đơn #{{ orderId }}</a
+    <a class="back" [routerLink]="orderLink"
+      ><n2f-icon name="reiconArrowLeft" size="16px" /> {{ guest ? 'Tra cứu đơn hàng · ' : '' }}Đơn
+      #{{ orderId }}</a
     >
     <h1>Yêu cầu trả hàng</h1>
     @if (error() && !order()) {
-      <p class="form-error" role="alert">{{ error() }}</p>
+      <p class="form-error" role="alert">
+        {{ error() }}
+        @if (guest) {
+          <a routerLink="/track-order" [queryParams]="{ orderCode: orderId }">Tra cứu đơn hàng</a>
+        }
+      </p>
     } @else if (order(); as current) {
       @if (!eligible(current)) {
         <p class="lead">
           Đơn này không còn trong thời hạn trả hàng {{ policy.returnDays }} ngày hoặc đã có yêu cầu
           trả hàng. <a routerLink="/help">Liên hệ nine2fine</a> nếu bạn cần hỗ trợ.
-          <a [routerLink]="['/account/orders', orderId]">Xem chi tiết đơn</a>
+          <a [routerLink]="orderLink">Xem chi tiết đơn</a>
         </p>
       } @else {
         <p class="lead">
@@ -331,7 +344,7 @@ interface Photo {
             <p class="form-error" role="alert">
               {{ error() }}
               @if (blocked()) {
-                <a [routerLink]="['/account/orders', orderId]">Xem chi tiết đơn</a>
+                <a [routerLink]="orderLink">Xem chi tiết đơn</a>
               }
             </p>
           }
@@ -339,7 +352,7 @@ interface Photo {
             <button class="pill" type="submit" [disabled]="busy() || uploading()">
               {{ busy() ? 'Đang gửi…' : uploading() ? 'Đang tải ảnh…' : 'Gửi yêu cầu trả hàng' }}
             </button>
-            <a class="pill outline" [routerLink]="['/account/orders', orderId]">Hủy</a>
+            <a class="pill outline" [routerLink]="orderLink">Hủy</a>
           </div>
         </form>
       }
@@ -591,10 +604,16 @@ interface Photo {
 export class ReturnRequestPage {
   private readonly api = inject(ACCOUNT_API);
   private readonly ordersApi = inject(ORDERS_API);
+  private readonly checkout = inject(CHECKOUT_API);
   private readonly returns = inject(RETURNS_API);
   /** `returnsMode: http`: server-computed eligibility and amount, raw-byte photos, idempotent send. */
-  readonly httpMode = inject(API_CONFIG).returnsMode === 'http';
+  readonly httpMode = this.isGuest() || inject(API_CONFIG).returnsMode === 'http';
   private readonly router = inject(Router);
+  /** Read before the fields that depend on it. */
+  private isGuest(): boolean {
+    return inject(ActivatedRoute).snapshot.data['guest'] === true;
+  }
+  private readonly guestView = inject(GuestOrderView);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   get policy() {
@@ -604,6 +623,11 @@ export class ReturnRequestPage {
   readonly maxPhotos = MAX_PHOTOS;
   readonly media = getMedia;
   readonly orderId = inject(ActivatedRoute).snapshot.paramMap.get('orderId') ?? '';
+  /** A guest who passed the OTP lookup (BR-RET-60); needs the real API (`returnsMode: http`). */
+  readonly guest = inject(ActivatedRoute).snapshot.data['guest'] === true;
+  private readonly audience: ReturnAudience = this.guest ? 'guest' : 'member';
+  /** Where "back" and "Xem chi tiết đơn" go. */
+  readonly orderLink = this.guest ? ['/track-order'] : ['/account/orders', this.orderId];
 
   readonly order = signal<Order | null>(null);
   readonly error = signal('');
@@ -655,7 +679,13 @@ export class ReturnRequestPage {
     inject(ActivatedRoute)
       .paramMap.pipe(
         map((params) => params.get('orderId') ?? ''),
-        switchMap((id) => (this.httpMode ? this.ordersApi.get(id) : this.api.getOrder(id))),
+        switchMap((id) =>
+          this.guest
+            ? this.checkout.getOrder(id)
+            : this.httpMode
+              ? this.ordersApi.get(id)
+              : this.api.getOrder(id),
+        ),
         takeUntilDestroyed(),
       )
       .subscribe({
@@ -666,7 +696,13 @@ export class ReturnRequestPage {
           this.setAccountValidators(this.needsAccount(order));
         },
         error: (error: unknown) =>
-          this.error.set(this.httpMode ? orderErrorMessage(error) : accountErrorMessage(error)),
+          this.error.set(
+            this.guest
+              ? this.guestLoadError(error)
+              : this.httpMode
+                ? orderErrorMessage(error)
+                : accountErrorMessage(error),
+          ),
       });
     if (this.httpMode) this.watchEstimate();
     // Any edit clears the server's complaint about that field.
@@ -718,7 +754,7 @@ export class ReturnRequestPage {
         switchMap((value) =>
           value
             ? this.returns
-                .estimate(value.id, value.lines, value.reason)
+                .estimate(value.id, value.lines, value.reason, this.audience)
                 .pipe(catchError(() => of(null)))
             : of(null),
         ),
@@ -801,7 +837,9 @@ export class ReturnRequestPage {
     ]);
     const source$: Observable<
       { kind: 'progress'; percent: number } | { kind: 'done'; photo: { id: string } }
-    > = this.httpMode ? this.returns.uploadPhoto(file) : this.api.uploadReturnPhoto(file);
+    > = this.httpMode
+      ? this.returns.uploadPhoto(file, this.guest ? this.orderId : undefined)
+      : this.api.uploadReturnPhoto(file);
     const upload = source$.subscribe({
       next: (event) =>
         event.kind === 'progress'
@@ -810,7 +848,9 @@ export class ReturnRequestPage {
       error: (error: unknown) => {
         patch({
           status: 'error',
-          error: this.httpMode ? returnPhotoError(error) : accountErrorMessage(error),
+          error: this.httpMode
+            ? returnPhotoError(error, this.audience)
+            : accountErrorMessage(error),
         });
         this.uploads.delete(key);
       },
@@ -903,7 +943,7 @@ export class ReturnRequestPage {
       this.sendKey = { fingerprint, key: crypto.randomUUID() };
     }
     this.returns
-      .create(order.id, body, this.sendKey.key)
+      .create(order.id, body, this.sendKey.key, this.audience)
       .pipe(
         finalize(() => this.busy.set(false)),
         takeUntilDestroyed(this.destroyRef),
@@ -913,9 +953,12 @@ export class ReturnRequestPage {
           this.sendKey = null;
           this.toast.show({
             title: 'Đã gửi yêu cầu trả hàng',
-            detail: 'nine2fine sẽ xem và phản hồi qua email. Theo dõi trạng thái ở chi tiết đơn.',
+            detail: this.guest
+              ? 'nine2fine sẽ xem và phản hồi qua email của đơn. Theo dõi trạng thái ở Tra cứu đơn hàng.'
+              : 'nine2fine sẽ xem và phản hồi qua email. Theo dõi trạng thái ở chi tiết đơn.',
           });
-          void this.router.navigate(['/account/orders', order.id]);
+          if (this.guest) this.backToLookup(order.id);
+          else void this.router.navigate(['/account/orders', order.id]);
         },
         error: (error: unknown) => {
           if (error instanceof ReturnApiError) {
@@ -923,9 +966,28 @@ export class ReturnRequestPage {
             if (error.code === 'idempotency-conflict') this.sendKey = null;
           }
           this.blocked.set(returnErrorBlocksOrder(error));
-          this.error.set(returnErrorMessage(error));
+          this.error.set(returnErrorMessage(error, this.audience));
         },
       });
+  }
+
+  /** The order, read again with the grant, is what Tra cứu đơn shows next (the request included). */
+  private backToLookup(orderCode: string): void {
+    this.checkout
+      .getOrder(orderCode)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (fresh) => this.guestView.set(fresh),
+        error: () => this.guestView.set(null),
+        complete: () => void this.router.navigate(['/track-order'], { queryParams: { orderCode } }),
+      });
+  }
+
+  private guestLoadError(error: unknown): string {
+    const code = error instanceof CheckoutError ? error.code : 'unavailable';
+    return code === 'unauthenticated' || code === 'not-found'
+      ? 'Phiên xem đơn đã hết hạn hoặc không tìm thấy đơn. Vui lòng tra cứu lại đơn hàng bằng mã xác minh.'
+      : orderErrorMessage(error);
   }
 
   private lines(): ReturnLine[] {

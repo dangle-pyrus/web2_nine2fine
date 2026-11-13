@@ -93,6 +93,13 @@ export const routes: Routes = [
         data: { kind: 'wishlist' },
       },
       {
+        // Collections (Slice 10, Should): reached from home blocks and links; no menu entry yet.
+        path: 'collections/:slug',
+        title: 'Bộ sưu tập | nine2fine',
+        loadComponent: () =>
+          import('./features/catalog/collection-page').then((m) => m.CollectionPage),
+      },
+      {
         path: 'product/:slug',
         title: 'Sản phẩm | nine2fine',
         loadComponent: () => import('./features/product/product-page').then((m) => m.ProductPage),
@@ -124,6 +131,14 @@ export const routes: Routes = [
         title: 'Tra cứu đơn hàng | nine2fine',
         loadComponent: () =>
           import('./features/tracking/track-order-page').then((m) => m.TrackOrderPage),
+      },
+      {
+        // Guest return (Slice 10): the same form as a member's, opened from Tra cứu đơn.
+        path: 'track-order/:orderId/return',
+        title: 'Yêu cầu trả hàng | nine2fine',
+        data: { guest: true },
+        loadComponent: () =>
+          import('./features/account/orders/return-request-page').then((m) => m.ReturnRequestPage),
       },
       { path: 'policies', pathMatch: 'full', redirectTo: 'policies/returns' },
       {

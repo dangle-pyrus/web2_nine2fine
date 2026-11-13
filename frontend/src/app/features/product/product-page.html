@@ -17,10 +17,10 @@
     <n2f-product-gallery [images]="gallery()" [productName]="item.name" />
 
     <section class="product-info" aria-labelledby="product-title">
-      @if (item.badge || discount()) {
+      @if (item.badge || discount() > 0) {
       <p class="highlight">
         {{ item.badge === 'NEW' ? 'Mới về' : item.badge === 'BESTSELLER' ? 'Bán chạy' : '' }} @if
-        (discount()) { Giảm {{ discount() }}% }
+        (discount() > 0) { Giảm {{ discount() }}% }
       </p>
       }
       <div class="title-row">
@@ -44,6 +44,9 @@
         <del><span class="sr-only">Giá gốc </span>{{ item.compareAtPrice | vnd }}</del>
         }
       </p>
+      @if (saleEnd()) {
+      <p class="sale-end">{{ saleEnd() }}</p>
+      }
       <p class="tax-note">Giá đã bao gồm VAT</p>
 
       <fieldset class="colors-field">
@@ -93,7 +96,7 @@
       </fieldset>
       @if (error()) {
       <p class="field-error" id="size-error" role="alert">{{ error() }}</p>
-      } @if (reviewsEnabled && soldOut().length) {
+      } @if (stockAlertEnabled && soldOut().length) {
       <n2f-stock-alert [soldOut]="soldOut()" />
       }
 
@@ -143,9 +146,24 @@
 
   @if (reviewsEnabled) {
   <section class="reviews" id="reviews" aria-labelledby="reviews-title" tabindex="-1">
-    <h2 id="reviews-title">Đánh giá ({{ reviews().length }})</h2>
+    <h2 id="reviews-title">Đánh giá ({{ reviewSummary().count }})</h2>
     <n2f-review-form [productId]="item.id" (reviewed)="addReview($event)" />
-    <n2f-product-reviews [reviews]="reviews()" />
+    <n2f-product-reviews
+      [reviews]="reviews()"
+      [summary]="reviewSummary()"
+      [total]="reviewTotal()"
+      [ratingFilter]="ratingFilter()"
+      [loadingMore]="reviewsLoadingMore()"
+      [moreFailed]="reviewsFailed() && reviews().length > 0"
+      (more)="moreReviews()"
+      (ratingChange)="filterReviews($event)"
+    />
+    @if (reviewsFailed() && !reviews().length && !reviewSummary().count) {
+    <p class="reviews-error" role="alert">
+      Chưa tải được đánh giá.
+      <button type="button" (click)="filterReviews(ratingFilter())">Thử lại</button>
+    </p>
+    }
   </section>
   } @if (related().length) {
   <section class="related" aria-labelledby="related-title">

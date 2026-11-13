@@ -13,17 +13,8 @@ import { adminBase, adminErrors, defaultMessage, toParams } from './http-support
 import {
   AdminApiError,
   AdminCategory,
-  AdminCollection,
-  AdminReview,
-  AdminSizeChart,
-  CollectionInput,
-  LandingContent,
   ReportRange,
-  ReviewQuery,
-  ReviewStats,
-  ReviewStatus,
   SalesReport,
-  SizeChart,
   AdminCustomer,
   AdminCustomerSummary,
   AdminOrder,
@@ -158,30 +149,6 @@ export interface AdminSearchApi {
   search(term: string): Observable<SearchResults>;
 }
 
-/**
- * Storefront content managed from the admin (Đợt 3): home page blocks, review moderation,
- * collections and size charts. Frontend-only for now: no backend endpoint exists yet.
- */
-export interface AdminStorefrontApi {
-  getHome(): Observable<LandingContent>;
-  saveHome(content: LandingContent): Observable<LandingContent>;
-  /** Back to the built-in home page content. */
-  resetHome(): Observable<LandingContent>;
-  reviews(query: ReviewQuery): Observable<Page<AdminReview>>;
-  reviewStats(): Observable<ReviewStats>;
-  setReviewStatus(ids: string[], status: ReviewStatus): Observable<void>;
-  /** Empty body removes the reply. */
-  replyReview(id: string, body: string): Observable<AdminReview>;
-  collections(): Observable<AdminCollection[]>;
-  saveCollection(id: string | null, input: CollectionInput): Observable<AdminCollection>;
-  removeCollection(id: string): Observable<void>;
-  /** Adds or removes one product in the given collections, leaving the others as they are. */
-  setProductCollections(productId: string, collectionIds: string[]): Observable<AdminCollection[]>;
-  sizeCharts(): Observable<AdminSizeChart[]>;
-  saveSizeChart(category: string, chart: SizeChart): Observable<AdminSizeChart>;
-  resetSizeChart(category: string): Observable<AdminSizeChart>;
-}
-
 export interface AdminReportsApi {
   sales(range: ReportRange): Observable<SalesReport>;
 }
@@ -196,7 +163,6 @@ export const ADMIN_CUSTOMERS_API = new InjectionToken<AdminCustomersApi>('ADMIN_
 export const ADMIN_PROMOTIONS_API = new InjectionToken<AdminPromotionsApi>('ADMIN_PROMOTIONS_API');
 export const ADMIN_SETTINGS_API = new InjectionToken<AdminSettingsApi>('ADMIN_SETTINGS_API');
 export const ADMIN_SEARCH_API = new InjectionToken<AdminSearchApi>('ADMIN_SEARCH_API');
-export const ADMIN_STOREFRONT_API = new InjectionToken<AdminStorefrontApi>('ADMIN_STOREFRONT_API');
 export const ADMIN_REPORTS_API = new InjectionToken<AdminReportsApi>('ADMIN_REPORTS_API');
 
 // ---------- HTTP adapters ----------
@@ -384,25 +350,6 @@ export class HttpAdminSearchApi implements AdminSearchApi {
       .get<SearchResults>(`${this.base}/search`, { params: toParams({ q: term }) })
       .pipe(adminErrors());
   }
-}
-
-/** No endpoints yet: every call reports that the feature runs on the mock data only. */
-@Injectable()
-export class HttpAdminStorefrontApi implements AdminStorefrontApi {
-  getHome = () => frontendOnly<LandingContent>();
-  saveHome = () => frontendOnly<LandingContent>();
-  resetHome = () => frontendOnly<LandingContent>();
-  reviews = () => frontendOnly<Page<AdminReview>>();
-  reviewStats = () => frontendOnly<ReviewStats>();
-  setReviewStatus = () => frontendOnly<void>();
-  replyReview = () => frontendOnly<AdminReview>();
-  collections = () => frontendOnly<AdminCollection[]>();
-  saveCollection = () => frontendOnly<AdminCollection>();
-  removeCollection = () => frontendOnly<void>();
-  setProductCollections = () => frontendOnly<AdminCollection[]>();
-  sizeCharts = () => frontendOnly<AdminSizeChart[]>();
-  saveSizeChart = () => frontendOnly<AdminSizeChart>();
-  resetSizeChart = () => frontendOnly<AdminSizeChart>();
 }
 
 @Injectable()

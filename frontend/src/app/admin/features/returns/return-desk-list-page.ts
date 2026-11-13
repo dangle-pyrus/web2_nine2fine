@@ -14,6 +14,7 @@ import {
   RETURN_LIMITS,
   RETURN_MAX_SEARCH,
   RETURN_REASON_LABELS,
+  RETURN_SOURCE_LABELS,
   RETURN_STATE_LABELS,
   RETURN_TABS,
   returnDeskErrorMessage,
@@ -167,7 +168,14 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
                     <td data-label="Gửi lúc" class="secondary">
                       {{ row.requestedAt | admDateTime }}
                     </td>
-                    <td data-label="Người nhận">{{ row.recipientName }}</td>
+                    <td data-label="Người nhận">
+                      {{ row.recipientName }}
+                      @if (row.source) {
+                        <div class="cell-sub" data-testid="return-source">
+                          {{ sourceLabels[row.source] }}
+                        </div>
+                      }
+                    </td>
                     <td data-label="Lý do">
                       {{ reasons[row.reason] }}
                       <div class="cell-sub">
@@ -206,6 +214,7 @@ export class ReturnDeskListPage {
   protected readonly limits = RETURN_LIMITS;
   protected readonly maxSearch = RETURN_MAX_SEARCH;
   protected readonly reasons = RETURN_REASON_LABELS;
+  protected readonly sourceLabels = RETURN_SOURCE_LABELS;
 
   protected readonly query = toSignal(
     this.route.queryParamMap.pipe(

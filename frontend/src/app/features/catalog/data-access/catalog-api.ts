@@ -8,20 +8,15 @@ import {
   CatalogQuery,
   Product,
   ProductPage,
-  ProductReview,
-  ReviewEligibility,
-  ReviewInput,
   SEARCH_MAX_LENGTH,
   SizeChart,
 } from '../models/product';
 
+/** Reviews moved to `REVIEWS_API` (Slice 10, `features/product/data-access/reviews-api.ts`). */
 export interface CatalogApi {
   list(query: CatalogQuery): Observable<ProductPage>;
   get(slug: string): Observable<Product | undefined>;
-  reviews(productId: string): Observable<ProductReview[]>;
   sizeChart(category: Category): Observable<SizeChart>;
-  reviewEligibility(productId: string): Observable<ReviewEligibility>;
-  submitReview(productId: string, input: ReviewInput): Observable<ProductReview>;
   /** Emails the shopper once this variant is back in stock. */
   notifyBackInStock(variantId: string, email: string): Observable<void>;
 }
@@ -49,25 +44,8 @@ export class HttpCatalogApi implements CatalogApi {
       );
   }
 
-  /** The backend has no reviews yet (BR-CAT-17): nothing to fetch. */
-  reviews(): Observable<ProductReview[]> {
-    return of([]);
-  }
-
   sizeChart(category: Category): Observable<SizeChart> {
     return this.http.get<SizeChart>(`${this.baseUrl}/size-charts/${category}`);
-  }
-
-  reviewEligibility(): Observable<ReviewEligibility> {
-    return throwError(
-      () => new Error('Reviews are not available on the HTTP catalog (BR-CAT-17).'),
-    );
-  }
-
-  submitReview(): Observable<ProductReview> {
-    return throwError(
-      () => new Error('Reviews are not available on the HTTP catalog (BR-CAT-17).'),
-    );
   }
 
   notifyBackInStock(): Observable<void> {
@@ -92,6 +70,7 @@ export function toParams(query: CatalogQuery): HttpParams {
     ['page', query.page],
     ['limit', query.limit],
     ['ids', query.ids?.join(',')],
+    ['sale', query.sale],
   ];
   const fromObject: Record<string, string> = {};
   for (const [key, value] of entries) {

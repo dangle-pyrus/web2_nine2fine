@@ -12,7 +12,7 @@ export interface HomeContentApi {
 
 export const HOME_CONTENT_API = new InjectionToken<HomeContentApi>('HOME_CONTENT_API');
 
-/** Proposed contract only: `GET /api/content/home`. */
+/** `GET /api/content/home` (Slice 10, locked): public, `max-age=60`, only the enabled blocks. */
 @Injectable({ providedIn: 'root' })
 export class HttpHomeContentApi implements HomeContentApi {
   private readonly http = inject(HttpClient);
@@ -25,12 +25,14 @@ export class HttpHomeContentApi implements HomeContentApi {
 
 /**
  * Provided by the lazy home page (not `app.config.ts`) so the content and its mock stay out of the
- * initial bundle; same `apiConfig.mode` switch as the other adapters.
+ * initial bundle; switched by `contentMode`.
  */
 export const HOME_CONTENT_PROVIDERS: Provider[] = [
   {
     provide: HOME_CONTENT_API,
     useFactory: () =>
-      inject(API_CONFIG).mode === 'mock' ? inject(MockHomeContentApi) : inject(HttpHomeContentApi),
+      inject(API_CONFIG).contentMode === 'mock'
+        ? inject(MockHomeContentApi)
+        : inject(HttpHomeContentApi),
   },
 ];

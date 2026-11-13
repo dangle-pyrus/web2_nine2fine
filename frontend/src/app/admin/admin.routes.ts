@@ -44,6 +44,13 @@ const settingsHttp: CanMatchFn = () => {
  */
 const returnsHttp: CanMatchFn = () => inject(API_CONFIG).returnsMode === 'http';
 
+/**
+ * Slice 10 (admin side): Đánh giá follows reviewsMode; Nội dung trang chủ, Bảng size and Bộ sưu
+ * tập follow contentMode. On the order desk they join the menu only when it is http.
+ */
+const reviewsHttp: CanMatchFn = () => inject(API_CONFIG).reviewsMode === 'http';
+const contentHttp: CanMatchFn = () => inject(API_CONFIG).contentMode === 'http';
+
 const T = (title: string) => `${title} | nine2fine Admin`;
 
 /**
@@ -301,6 +308,40 @@ export const ADMIN_ROUTES: Routes = [
                 ],
               },
               {
+                path: 'reviews',
+                canMatch: [reviewsHttp],
+                title: T('Đánh giá sản phẩm'),
+                canActivate: [requirePermission('reviews.moderate')],
+                loadComponent: () =>
+                  import('./features/content/review-list-page').then((m) => m.ReviewListPage),
+              },
+              {
+                path: 'content',
+                canMatch: [contentHttp],
+                title: T('Nội dung trang chủ'),
+                canActivate: [requirePermission('content.view')],
+                canDeactivate: [unsavedChangesGuard],
+                loadComponent: () =>
+                  import('./features/content/home-content-page').then((m) => m.HomeContentPage),
+              },
+              {
+                path: 'size-charts',
+                canMatch: [contentHttp],
+                title: T('Bảng size'),
+                canActivate: [requirePermission('content.view')],
+                canDeactivate: [unsavedChangesGuard],
+                loadComponent: () =>
+                  import('./features/content/size-chart-page').then((m) => m.SizeChartPage),
+              },
+              {
+                path: 'collections',
+                canMatch: [contentHttp],
+                title: T('Bộ sưu tập'),
+                canActivate: [requirePermission('content.view')],
+                loadComponent: () =>
+                  import('./features/content/collection-pages').then((m) => m.CollectionListPage),
+              },
+              {
                 path: '**',
                 title: T('Chưa khả dụng'),
                 loadComponent: () =>
@@ -380,14 +421,14 @@ export const ADMIN_ROUTES: Routes = [
               {
                 path: 'collections',
                 title: T('Bộ sưu tập'),
-                canActivate: [requirePermission('products.view')],
+                canActivate: [requirePermission('content.view')],
                 loadComponent: () =>
                   import('./features/content/collection-pages').then((m) => m.CollectionListPage),
               },
               {
                 path: 'size-charts',
                 title: T('Bảng size'),
-                canActivate: [requirePermission('products.view')],
+                canActivate: [requirePermission('content.view')],
                 canDeactivate: [unsavedChangesGuard],
                 loadComponent: () =>
                   import('./features/content/size-chart-page').then((m) => m.SizeChartPage),
@@ -395,14 +436,14 @@ export const ADMIN_ROUTES: Routes = [
               {
                 path: 'reviews',
                 title: T('Đánh giá sản phẩm'),
-                canActivate: [requirePermission('products.view')],
+                canActivate: [requirePermission('reviews.moderate')],
                 loadComponent: () =>
                   import('./features/content/review-list-page').then((m) => m.ReviewListPage),
               },
               {
                 path: 'content',
                 title: T('Nội dung trang chủ'),
-                canActivate: [requirePermission('products.view')],
+                canActivate: [requirePermission('content.view')],
                 canDeactivate: [unsavedChangesGuard],
                 loadComponent: () =>
                   import('./features/content/home-content-page').then((m) => m.HomeContentPage),

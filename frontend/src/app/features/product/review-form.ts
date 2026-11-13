@@ -5,14 +5,20 @@ import {
   effect,
   inject,
   input,
+  untracked,
   output,
   signal,
 } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, finalize, of } from 'rxjs';
-import { CATALOG_API } from '../catalog/data-access/catalog-api';
+import { finalize } from 'rxjs';
+import {
+  REVIEWS_API,
+  ReviewApiError,
+  reviewErrorMessage,
+  reviewErrorSettles,
+} from './data-access/reviews-api';
 import { ProductReview, ReviewEligibility } from '../catalog/models/product';
 import { AuthSession } from '../auth/auth-session';
 
@@ -23,6 +29,11 @@ import { AuthSession } from '../auth/auth-session';
   template: `
     @if (done()) {
       <p class="note" role="status">Cảm ơn bạn đã đánh giá. Đánh giá của bạn đã được đăng.</p>
+    } @else if (checkFailed()) {
+      <p class="note" role="status">
+        Chưa kiểm tra được điều kiện viết đánh giá.
+        <button type="button" class="link" (click)="check()">Thử lại</button>
+      </p>
     } @else if (eligibility(); as state) {
       @switch (state.status) {
         @case ('sign-in') {
@@ -62,6 +73,9 @@ import { AuthSession } from '../auth/auth-session';
                 @if (invalid('rating')) {
                   <p class="field-error">Chọn số sao.</p>
                 }
+                @if (serverError('rating'); as text) {
+                  <p class="field-error" role="alert">{{ text }}</p>
+                }
               </fieldset>
               <fieldset>
                 <legend>Độ vừa</legend>
@@ -77,11 +91,26 @@ import { AuthSession } from '../auth/auth-session';
               <div class="row">
                 <div class="field">
                   <label for="review-size">Size đã mua</label>
-                  <input id="review-size" formControlName="sizeBought" />
+                  <input
+                    id="review-size"
+                    formControlName="sizeBought"
+                    readonly
+                    aria-describedby="review-size-hint"
+                  />
+                  <p class="hint" id="review-size-hint">Lấy từ đơn hàng của bạn.</p>
                 </div>
                 <div class="field">
                   <label for="review-height">Chiều cao (không bắt buộc)</label>
-                  <input id="review-height" formControlName="height" placeholder="VD: 165 cm" />
+                  <input
+                    id="review-height"
+                    formControlName="height"
+                    maxlength="20"
+                    placeholder="VD: 165 cm"
+                    [attr.aria-invalid]="!!serverError('height')"
+                  />
+                  @if (serverError('height'); as text) {
+                    <p class="field-error" role="alert">{{ text }}</p>
+                  }
                 </div>
               </div>
               <div class="field">
@@ -92,10 +121,13 @@ import { AuthSession } from '../auth/auth-session';
                   id="review-title"
                   formControlName="title"
                   maxlength="80"
-                  [attr.aria-invalid]="invalid('title')"
+                  [attr.aria-invalid]="invalid('title') || !!serverError('title')"
                 />
                 @if (invalid('title')) {
-                  <p class="field-error">Nhập tiêu đề ngắn.</p>
+                  <p class="field-error">Nhập tiêu đề từ 2 đến 80 ký tự.</p>
+                }
+                @if (serverError('title'); as text) {
+                  <p class="field-error" role="alert">{{ text }}</p>
                 }
               </div>
               <div class="field">
@@ -108,10 +140,13 @@ import { AuthSession } from '../auth/auth-session';
                   rows="4"
                   maxlength="1000"
                   placeholder="Chất liệu, phom dáng, bạn mặc vào dịp nào…"
-                  [attr.aria-invalid]="invalid('body')"
+                  [attr.aria-invalid]="invalid('body') || !!serverError('body')"
                 ></textarea>
                 @if (invalid('body')) {
-                  <p class="field-error">Nhận xét cần ít nhất 20 ký tự.</p>
+                  <p class="field-error">Nhận xét cần từ 20 đến 1.000 ký tự.</p>
+                }
+                @if (serverError('body'); as text) {
+                  <p class="field-error" role="alert">{{ text }}</p>
                 }
               </div>
               <p class="hint">
@@ -249,6 +284,16 @@ import { AuthSession } from '../auth/auth-session';
       gap: 10px;
       margin-top: 16px;
     }
+    .link {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 600;
+      text-decoration: underline;
+      cursor: pointer;
+    }
     .pill {
       min-height: 44px;
       padding: 0 22px;
@@ -274,7 +319,7 @@ import { AuthSession } from '../auth/auth-session';
 export class ReviewForm {
   readonly productId = input.required<string>();
   readonly reviewed = output<ProductReview>();
-  private readonly api = inject(CATALOG_API);
+  private readonly api = inject(REVIEWS_API);
   private readonly router = inject(Router);
   private readonly session = inject(AuthSession);
   private readonly destroyRef = inject(DestroyRef);
@@ -283,18 +328,23 @@ export class ReviewForm {
   readonly busy = signal(false);
   readonly done = signal(false);
   readonly error = signal('');
+  /** The eligibility check itself failed (offline / 5xx), so no state is known. */
+  readonly checkFailed = signal(false);
+  /** Server field errors (422), keyed by contract field name. */
+  private readonly serverErrors = signal<Record<string, string>>({});
   readonly fitOptions = [
     { value: -1, label: 'Hơi chật' },
     { value: 0, label: 'Vừa size' },
     { value: 1, label: 'Hơi rộng' },
   ] as const;
+  private checking?: { unsubscribe(): void };
   readonly form = inject(FormBuilder).nonNullable.group({
     rating: [0, Validators.min(1)],
     fit: [0 as -1 | 0 | 1],
     sizeBought: [''],
     height: [''],
-    title: ['', [Validators.required, Validators.pattern(/\S.{1,}/)]],
-    body: ['', [Validators.required, Validators.minLength(20)]],
+    title: ['', [Validators.required, Validators.pattern(/\S.{1,}/), trimmedLength(2, 80)]],
+    body: ['', [Validators.required, trimmedLength(20, 1000)]],
   });
 
   constructor() {
@@ -304,14 +354,31 @@ export class ReviewForm {
       this.session.user();
       this.done.set(false);
       this.open.set(false);
-      const sub = this.api
-        .reviewEligibility(id)
-        .pipe(catchError(() => of(null)))
-        .subscribe((state) => {
-          this.eligibility.set(state);
-          if (state?.sizeBought) this.form.controls.sizeBought.setValue(state.sizeBought);
-        });
-      onCleanup(() => sub.unsubscribe());
+      untracked(() => this.check(id));
+      onCleanup(() => this.checking?.unsubscribe());
+    });
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      if (Object.keys(this.serverErrors()).length) this.serverErrors.set({});
+    });
+  }
+
+  serverError(field: string): string {
+    return this.serverErrors()[field] ?? '';
+  }
+
+  /** Reads who may review this product (BR-REV-02); a failure is shown, not guessed. */
+  check(id = this.productId()): void {
+    this.checking?.unsubscribe();
+    this.checkFailed.set(false);
+    this.checking = this.api.eligibility(id).subscribe({
+      next: (state) => {
+        this.eligibility.set(state);
+        if (state.sizeBought) this.form.controls.sizeBought.setValue(state.sizeBought);
+      },
+      error: () => {
+        this.eligibility.set(null);
+        this.checkFailed.set(true);
+      },
     });
   }
 
@@ -330,7 +397,7 @@ export class ReviewForm {
     this.busy.set(true);
     this.error.set('');
     this.api
-      .submitReview(this.productId(), this.form.getRawValue())
+      .submit(this.productId(), this.form.getRawValue())
       .pipe(
         finalize(() => this.busy.set(false)),
         takeUntilDestroyed(this.destroyRef),
@@ -341,7 +408,22 @@ export class ReviewForm {
           this.eligibility.set({ status: 'reviewed' });
           this.reviewed.emit(review);
         },
-        error: () => this.error.set('Chưa gửi được đánh giá. Vui lòng thử lại.'),
+        error: (error: unknown) => {
+          if (error instanceof ReviewApiError && error.code === 'validation') {
+            this.serverErrors.set(error.fieldErrors);
+          }
+          this.error.set(reviewErrorMessage(error));
+          // Already reviewed / never eligible: the form is moot, show the real state instead.
+          if (reviewErrorSettles(error)) this.check();
+        },
       });
   }
+}
+
+/** Length after trimming, like the server (it cuts the spaces at both ends before counting). */
+function trimmedLength(min: number, max: number) {
+  return (control: AbstractControl) => {
+    const length = String(control.value ?? '').trim().length;
+    return length < min || length > max ? { trimmedLength: true } : null;
+  };
 }

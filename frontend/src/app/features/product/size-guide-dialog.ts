@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { ProductFit, SizeChart } from '../catalog/models/product';
+import { formatDate } from '../orders/order-status';
 
 export interface SizeGuideData {
   productName: string;
@@ -153,7 +154,12 @@ function range(value: string): [number, number] {
           </tbody>
         </table>
       </div>
-      <p class="how">Số đo sản phẩm được đo khi trải phẳng, có thể chênh lệch ±1–2 cm.</p>
+      <p class="how">
+        Số đo sản phẩm được đo khi trải phẳng, có thể chênh lệch ±1–2 cm.
+        @if (data.chart.updatedAt; as updated) {
+          Bảng size cập nhật ngày {{ updatedOn(updated) }}.
+        }
+      </p>
     </section>
   `,
   styles: `
@@ -373,6 +379,10 @@ export class SizeGuideDialog {
   readonly howTo = HOW_TO;
   readonly focused = signal('');
   readonly inputs = signal<Record<string, number | undefined>>({});
+  /** Day of the last admin edit, in Vietnam time. */
+  updatedOn(iso: string): string {
+    return formatDate(iso);
+  }
   readonly measures = computed(() => this.data.chart.bodyColumns);
 
   /**

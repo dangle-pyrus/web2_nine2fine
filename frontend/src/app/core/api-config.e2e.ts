@@ -45,6 +45,12 @@ export interface ApiConfig {
   adminInsightsMode: 'mock' | 'http';
   /** Returns and refunds (Slice 9); see `api-config.ts`. The e2e build picks `http` with `localStorage['n2f.e2e.returnsMode']`. */
   returnsMode: 'mock' | 'http';
+  /** Slice 10 storefront flags; see `api-config.ts`. Each is `http` with `localStorage['n2f.e2e.<flag>'] = 'http'`. */
+  reviewsMode: 'mock' | 'http';
+  wishlistMode: 'mock' | 'http';
+  recommendationsMode: 'mock' | 'http';
+  contentMode: 'mock' | 'http';
+  promotionsMode: 'mock' | 'http';
   baseUrl: string;
 }
 /**
@@ -88,6 +94,13 @@ function readReturnsMode(): ApiConfig['returnsMode'] {
     return 'mock';
   }
 }
+function readE2eMode(flag: string): 'mock' | 'http' {
+  try {
+    return localStorage.getItem(`n2f.e2e.${flag}`) === 'http' ? 'http' : 'mock';
+  } catch {
+    return 'mock';
+  }
+}
 export const API_CONFIG = new InjectionToken<ApiConfig>('API_CONFIG');
 export const apiConfig: ApiConfig = {
   mode: 'mock',
@@ -100,5 +113,10 @@ export const apiConfig: ApiConfig = {
   adminUsersMode: readAdminUsersMode(),
   adminInsightsMode: readAdminInsightsMode(),
   returnsMode: readReturnsMode(),
+  reviewsMode: readE2eMode('reviewsMode'),
+  wishlistMode: readE2eMode('wishlistMode'),
+  recommendationsMode: readE2eMode('recommendationsMode'),
+  contentMode: readE2eMode('contentMode'),
+  promotionsMode: readE2eMode('promotionsMode'),
   baseUrl: '/api',
 };
