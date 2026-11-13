@@ -10,7 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
 import {
@@ -321,6 +321,7 @@ export class ReviewForm {
   readonly reviewed = output<ProductReview>();
   private readonly api = inject(REVIEWS_API);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly session = inject(AuthSession);
   private readonly destroyRef = inject(DestroyRef);
   readonly eligibility = signal<ReviewEligibility | null>(null);
@@ -373,6 +374,9 @@ export class ReviewForm {
     this.checking = this.api.eligibility(id).subscribe({
       next: (state) => {
         this.eligibility.set(state);
+        // "Viết đánh giá" from the order page arrives with ?review=1: the form opens at once (BR-REV-09).
+        if (state.status === 'eligible' && this.route.snapshot.queryParamMap.get('review') === '1')
+          this.open.set(true);
         if (state.sizeBought) this.form.controls.sizeBought.setValue(state.sizeBought);
       },
       error: () => {

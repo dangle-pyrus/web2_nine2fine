@@ -1,10 +1,18 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, InjectionToken, Provider } from '@angular/core';
-import { catchError, Observable, of, throwError } from 'rxjs';
+import { catchError, map, Observable, of, throwError } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
 import { readApiError } from '../../../core/api-error';
 import { MockCollectionsApi } from '../../../../mocks/mock-collections-api';
 import { Product } from '../models/product';
+
+export interface CollectionSummary {
+  slug: string;
+  name: string;
+  description: string;
+  /** Active products in it; 0 still arrives. */
+  productCount: number;
+}
 
 export interface CollectionDetail {
   slug: string;
@@ -16,6 +24,8 @@ export interface CollectionDetail {
 
 /** Collections of products (Slice 10 lát 10.8, Should): public, active ones only. */
 export interface CollectionsApi {
+  /** `GET /collections`: active collections, newest first. */
+  list(): Observable<CollectionSummary[]>;
   /** `undefined` when there is no active collection with that slug. */
   get(slug: string): Observable<CollectionDetail | undefined>;
 }
@@ -26,6 +36,12 @@ export const COLLECTIONS_API = new InjectionToken<CollectionsApi>('COLLECTIONS_A
 export class HttpCollectionsApi implements CollectionsApi {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = inject(API_CONFIG).baseUrl;
+
+  list(): Observable<CollectionSummary[]> {
+    return this.http
+      .get<{ items: CollectionSummary[] }>(`${this.baseUrl}/collections`)
+      .pipe(map((body) => body.items));
+  }
 
   get(slug: string): Observable<CollectionDetail | undefined> {
     return this.http

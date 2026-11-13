@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   DOCUMENT,
   DestroyRef,
   ElementRef,
@@ -14,6 +15,7 @@ import { RouterLink } from '@angular/router';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { MediaImageComponent } from '../../shared/ui/media-image.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { NavLive } from './nav-live';
 import { NavMenu, STORE_NAVIGATION } from './store-navigation';
 import { UTILITY_LINKS } from './top-navigation';
 
@@ -55,7 +57,7 @@ import { UTILITY_LINKS } from './top-navigation';
       <div class="panels" [class.sub-open]="!!panel()">
         <div class="panel" [inert]="!!panel()">
           <ul class="top-list">
-            @for (menu of menus; track menu.id) {
+            @for (menu of menus(); track menu.id) {
               <li>
                 <button type="button" [attr.data-menu]="menu.id" (click)="open(menu)">
                   {{ menu.label }} <n2f-icon name="reiconChevronRight" size="22px" />
@@ -157,7 +159,8 @@ export class MobileDrawer {
   readonly closed = output<void>();
   readonly cart = output<void>();
 
-  readonly menus = STORE_NAVIGATION;
+  private readonly live = inject(NavLive);
+  readonly menus = computed(() => this.live.apply()(STORE_NAVIGATION));
   readonly utilityLinks = UTILITY_LINKS;
   readonly panel = signal<NavMenu | null>(null);
   /** Keeps the sub-panel content during its slide-out after "Tất cả". */

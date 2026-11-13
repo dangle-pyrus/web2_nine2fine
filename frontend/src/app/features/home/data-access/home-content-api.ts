@@ -1,6 +1,6 @@
 import { inject, Injectable, InjectionToken, Provider } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { catchError, Observable, shareReplay, throwError } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
 import { LandingContent } from '../landing-content';
 import { MockHomeContentApi } from '../../../../mocks/mock-home-content-api';
@@ -18,8 +18,26 @@ export class HttpHomeContentApi implements HomeContentApi {
   private readonly http = inject(HttpClient);
   private readonly base = `${inject(API_CONFIG).baseUrl}/content/home`;
 
+  /** One shared read per minute (the server's `max-age`): the home page and the menus ask the same thing. */
+  private cached?: { at: number; request: Observable<LandingContent> };
+
   getHomeContent(): Observable<LandingContent> {
-    return this.http.get<LandingContent>(this.base);
+    const now = Date.now();
+    if (!this.cached || now - this.cached.at > 60_000) {
+      const entry = {
+        at: now,
+        request: this.http.get<LandingContent>(this.base).pipe(
+          // A failure is never kept: the next ask (retry) goes to the server again.
+          catchError((error: unknown) => {
+            if (this.cached === entry) this.cached = undefined;
+            return throwError(() => error);
+          }),
+          shareReplay({ bufferSize: 1, refCount: false }),
+        ),
+      };
+      this.cached = entry;
+    }
+    return this.cached.request;
   }
 }
 

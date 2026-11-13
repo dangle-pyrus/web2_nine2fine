@@ -55,6 +55,28 @@ const submit = (cookie: string | undefined, body: Json, ip = freshIp()) => post(
 const good = (pid: string, over: Json = {}): Json => ({ productId: pid, rating: 5, fit: 0, title: 'Rất đẹp', body: 'Áo mặc vừa vặn, chất vải mát và đường may chắc chắn.', ...over });
 const publicList = (pid: string, qs = '') => get(`/api/products/${pid}/reviews${qs}`, { ip: freshIp() });
 
+describe('BR-REV-09 Order.items[].productId / canReview', () => {
+  it('chủ đơn completed: canReview true, sau khi đánh giá false; quá 365 ngày / chưa nhận / vãng lai: false', async () => {
+    const m = await member('m-canreview@example.com');
+    const o = await delivered(m, P[0], 3);
+    const old = await delivered(m, P[1], 400);
+    const open = await delivered(m, P[2], 0, 1, 'to_receive');
+    const line = async (code: string) => (await get(`/api/orders/${code}`, { cookie: m.cookie, ip: freshIp() })).body.items[0];
+    expect(await line(o.code)).toMatchObject({ productId: P[0].id, canReview: true });
+    expect(await line(old.code)).toMatchObject({ productId: P[1].id, canReview: false });
+    expect(await line(open.code)).toMatchObject({ productId: P[2].id, canReview: false });
+    const list = await get('/api/orders', { cookie: m.cookie, ip: freshIp() });
+    expect(list.status).toBe(200);
+    expect((list.body.items as Json[]).find((x) => x.id === o.code)!.items[0].canReview).toBe(true);
+    expect((await submit(m.cookie, good(P[0].id))).status).toBe(201);
+    expect((await line(o.code)).canReview).toBe(false);
+    const guest = await makeOrder({ status: 'completed', items: [{ variantId: P[3].variantId, quantity: 1 }], data: { deliveredAt: new Date() } });
+    const row = await prisma.order.findUnique({ where: { code: guest.code }, include: { items: true, events: true } });
+    const { toOrderDto } = await import('../src/modules/order/order.mapper');
+    expect(toOrderDto(row!).items[0]).toMatchObject({ productId: P[3].id, canReview: false });
+  });
+});
+
 describe('T-REV-01 điều kiện đánh giá (AC-REV-01)', () => {
   it('không phiên -> 200 sign-in, no-store, không Set-Cookie; cookie hỏng cũng vậy', async () => {
     for (const cookie of [undefined, 'n2f_sid=gia-mao']) {

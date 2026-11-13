@@ -11,7 +11,7 @@ import { OrderItem } from './order-models';
   template: `
     <ul>
       @for (line of shown(); track line.productSlug + line.color + line.size) {
-        <li [class.has-review]="reviewable()">
+        <li [class.has-review]="line.canReview">
           <img
             [src]="media(line.mediaId).src"
             [alt]="media(line.mediaId).alt"
@@ -33,8 +33,12 @@ import { OrderItem } from './order-models';
             }
             <strong>{{ line.unitPrice * line.quantity | vnd }}</strong>
           </div>
-          @if (reviewable()) {
-            <a class="review" [routerLink]="['/product', line.productSlug]" fragment="reviews"
+          @if (line.canReview) {
+            <a
+              class="review"
+              [routerLink]="['/product', line.productSlug]"
+              [queryParams]="{ review: 1 }"
+              fragment="reviews"
               >Viết đánh giá<span class="sr-only"> cho {{ line.name }}</span></a
             >
           }
@@ -156,8 +160,6 @@ export class OrderItems {
   readonly limit = input<number | null>(null);
   /** Where "và N sản phẩm khác" leads, usually the order detail page. */
   readonly moreLink = input<readonly string[] | null>(null);
-  /** Completed orders link each line to its product's review section. */
-  readonly reviewable = input(false);
   readonly media = getMedia;
 
   readonly shown = computed(() => {

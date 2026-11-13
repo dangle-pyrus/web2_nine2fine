@@ -31,6 +31,8 @@ export interface OrderDto {
     compareAtPrice?: number;
     mediaId: string;
     lineDiscount?: number;
+    productId?: string | null;
+    canReview?: boolean;
   }[];
   pricing: OrderPricing;
   vouchers?: { code: string; kind: string; amount: number }[];
@@ -101,6 +103,7 @@ export function toOrder(dto: OrderDto): Order {
     compareAtPrice: line.compareAtPrice,
     mediaId: line.mediaId,
     lineDiscount: line.lineDiscount || undefined,
+    canReview: line.canReview === true,
   }));
   const timeline: OrderEvent[] | undefined = dto.timeline?.map((entry) => ({
     at: entry.at,

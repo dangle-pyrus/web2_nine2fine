@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, type payment_status } from '@prisma/client';
 import type { Request } from 'express';
 import { getConfig } from '../../config/env';
 import prisma from '../../config/prisma';
@@ -113,7 +113,7 @@ interface LockedOrder {
   order_id: string;
   code: string;
   status: 'to_pay' | 'to_ship' | 'to_receive' | 'completed' | 'cancel_requested' | 'cancelled';
-  payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'partially_refunded';
+  payment_status: payment_status; // kiểu enum Prisma: SePay không đặt giá trị hoàn (chỉ returns ghi, BR-RET-50)
   payment_method: 'cod' | 'bank_transfer';
   total: number;
 }

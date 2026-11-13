@@ -164,7 +164,6 @@ import { OrderItems } from './order-items';
           id="order-lines"
           [items]="order().items"
           [limit]="expanded() ? null : itemLimit"
-          [reviewable]="order().status === 'completed'"
         />
         @if (order().items.length > itemLimit) {
           <button

@@ -15,6 +15,10 @@ export interface OrderDto {
   paidAt?: string;
   items: Array<{
     variantId: string;
+    /** BR-REV-09: `null` nếu sản phẩm đã xoá. */
+    productId: string | null;
+    /** BR-REV-09: chỉ đơn của chủ đơn thành viên (`toOrderDtosWithReturn`) mới có thể `true`. */
+    canReview: boolean;
     productSlug: string;
     name: string;
     color: string;
@@ -121,6 +125,8 @@ export function toOrderDto(o: OrderRow): OrderDto {
     paymentMethod: o.paymentMethod === 'bank_transfer' ? 'bank-transfer' : 'cod',
     items: items.map((i) => ({
       variantId: i.variantId,
+      productId: i.productId ?? null,
+      canReview: false,
       productSlug: i.productSlug,
       name: i.name,
       color: i.colorName,

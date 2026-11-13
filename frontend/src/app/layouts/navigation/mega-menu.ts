@@ -1,7 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, input, linkedSignal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  linkedSignal,
+} from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MediaImageComponent } from '../../shared/ui/media-image.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { NavLive } from './nav-live';
 import { NavMenu, STORE_NAVIGATION } from './store-navigation';
 import { NavLink, TopNavItem } from './top-navigation';
 
@@ -66,8 +74,12 @@ import { NavLink, TopNavItem } from './top-navigation';
 })
 export class MegaMenu {
   readonly item = input.required<TopNavItem>();
+  private readonly live = inject(NavLive);
   readonly menu = computed(
-    () => STORE_NAVIGATION.find((menu) => menu.id === this.item().id) as NavMenu,
+    () =>
+      this.live
+        .apply()(STORE_NAVIGATION)
+        .find((menu) => menu.id === this.item().id) as NavMenu,
   );
   /** Last link with a photo the shopper pointed at; resets whenever another menu opens. */
   readonly preview = linkedSignal<NavMenu, NavLink | null>({

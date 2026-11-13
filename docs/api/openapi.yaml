@@ -5208,11 +5208,13 @@ components:
       enum: [customer, shop, system]
     OrderLine:
       type: object
-      required: [variantId, productSlug, name, color, size, sku, quantity, unitPrice, mediaId, lineDiscount]
+      required: [variantId, productId, canReview, productSlug, name, color, size, sku, quantity, unitPrice, mediaId, lineDiscount]
       additionalProperties: false
       description: Bản chụp tại lúc đặt; đổi giá / tên sau đó không ảnh hưởng (BR-CHK-18).
       properties:
         variantId: { type: string, format: uuid }
+        productId: { type: [string, 'null'], format: uuid, description: 'BR-REV-09 (cộng thêm 2026-11-13). `null` nếu sản phẩm đã xoá.' }
+        canReview: { type: boolean, description: 'BR-REV-09 (cộng thêm). `true` chỉ khi chủ đơn thành viên xem đơn `completed` trong 365 ngày (cùng hàm với `GET /reviews/eligibility`) và chưa đánh giá sản phẩm này; đơn vãng lai / người khác xem luôn `false`.' }
         productSlug: { type: string }
         name: { type: string }
         color: { type: string }

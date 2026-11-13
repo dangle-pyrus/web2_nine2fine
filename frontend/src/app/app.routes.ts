@@ -93,7 +93,13 @@ export const routes: Routes = [
         data: { kind: 'wishlist' },
       },
       {
-        // Collections (Slice 10, Should): reached from home blocks and links; no menu entry yet.
+        path: 'collections',
+        title: 'Bộ sưu tập | nine2fine',
+        loadComponent: () =>
+          import('./features/catalog/collections-page').then((m) => m.CollectionsPage),
+      },
+      {
+        // Collections (Slice 10, Should): the list above, a menu link and home blocks lead here.
         path: 'collections/:slug',
         title: 'Bộ sưu tập | nine2fine',
         loadComponent: () =>

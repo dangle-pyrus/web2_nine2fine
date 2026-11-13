@@ -1,4 +1,6 @@
 import prisma from '../../config/prisma';
+import { purchaseEligibility } from '../reviews/eligibility';
+import { now as clockNow } from '../../lib/clock';
 import { toReturnRequest } from '../returns/return.mapper';
 import { loadReturnsForOrders } from '../returns/return.query';
 import { isLive, type ReturnState } from '../returns/return-rules';
@@ -21,9 +23,12 @@ export const viewerOf = (order: Pick<OrderRow, 'userId'>, isOwner: boolean): Ord
 export async function toOrderDtosWithReturn(rows: OrderRow[], viewer: OrderViewer): Promise<OrderDto[]> {
   if (viewer === 'other') return rows.map((r) => ({ ...toOrderDto(r), canReturn: false }));
   const returns = await loadReturnsForOrders(prisma, rows.map((r) => r.order_id));
+  const reviewable = viewer === 'owner' ? await reviewableProducts(rows) : new Map<string, Set<string>>();
   return Promise.all(
     rows.map(async (r) => {
       const dto = toOrderDto(r);
+      const ok = reviewable.get(r.order_id);
+      if (ok) for (const it of dto.items) it.canReview = it.productId !== null && ok.has(it.productId);
       const ret = returns.get(r.order_id);
       if (!ret) return dto;
       if (isLive(ret.state as ReturnState)) dto.canReturn = false;
@@ -31,4 +36,32 @@ export async function toOrderDtosWithReturn(rows: OrderRow[], viewer: OrderViewe
       return dto;
     }),
   );
+}
+
+/**
+ * BR-REV-09: theo đơn, tập `productId` còn đánh giá được = đúng hàm `purchaseEligibility` (completed, 365 ngày, chưa trả hết) và chưa có đánh giá.
+ * Chỉ đơn `completed` của thành viên; đơn khác không có khoá.
+ */
+async function reviewableProducts(rows: OrderRow[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  const owned = rows.filter((r) => r.userId !== null && r.status === 'completed');
+  if (owned.length === 0) return out;
+  const at = clockNow();
+  const cache = new Map<string, boolean>(); // `${userId}:${productId}`
+  for (const r of owned) {
+    const userId = r.userId as string;
+    const ok = new Set<string>();
+    for (const productId of new Set(r.items.map((i) => i.productId))) {
+      const key = `${userId}:${productId}`;
+      let v = cache.get(key);
+      if (v === undefined) {
+        const reviewed = await prisma.productReview.findUnique({ where: { userId_productId: { userId, productId } }, select: { review_id: true } });
+        v = !reviewed && (await purchaseEligibility(prisma, userId, productId, at)).status === 'eligible';
+        cache.set(key, v);
+      }
+      if (v) ok.add(productId);
+    }
+    out.set(r.order_id, ok);
+  }
+  return out;
 }

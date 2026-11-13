@@ -33,6 +33,8 @@ export interface OrderItem {
   variantId?: string;
   /** Voucher discount already shared out to this line (API orders). */
   lineDiscount?: number;
+  /** Member orders: this line's product can be reviewed now (BR-REV-09). */
+  canReview?: boolean;
 }
 
 export interface OrderPricing {

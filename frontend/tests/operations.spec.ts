@@ -22,10 +22,13 @@ async function addToCart(page: Page, slug: string, size = 'M'): Promise<void> {
   await expect(page.getByRole('status').filter({ hasText: 'Đã thêm vào giỏ hàng' })).toBeVisible();
 }
 
-async function confirmDialog(page: Page, button: string): Promise<void> {
-  const dialog = page.getByRole('dialog', { name: 'Hủy đơn hàng?' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: button }).click();
+/** `to_ship` orders are cancelled by request: open the dialog and send it. */
+async function requestCancel(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Gửi yêu cầu huỷ' }).click();
+  await page
+    .getByRole('dialog', { name: 'Gửi yêu cầu huỷ đơn' })
+    .getByRole('button', { name: 'Gửi yêu cầu huỷ' })
+    .click();
 }
 
 test('policies, help page and seller identity are published', async ({ page }) => {
@@ -93,11 +96,13 @@ test('guest checkout keeps note and VAT invoice, then cancels after email verifi
   await expect(page.getByText('Công ty TNHH Hoa Lê')).toBeVisible();
   await expect(page.getByText('MST 0101234567')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Hủy đơn' }).click();
-  await confirmDialog(page, 'Hủy đơn');
-  await expect(page.getByRole('status').filter({ hasText: /Đã hủy đơn #N2F/ })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Đơn hàng đã hủy' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Hủy đơn' })).toHaveCount(0);
+  // A COD order is at to_ship from the start (Slice 4): the shopper sends a request, not a cancel.
+  await requestCancel(page);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Đã gửi yêu cầu huỷ đơn' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Gửi yêu cầu huỷ' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
 });
 
 test('member session and new orders survive a reload; COD order can be cancelled', async ({
@@ -118,11 +123,13 @@ test('member session and new orders survive a reload; COD order can be cancelled
   await expect(page).toHaveURL(new RegExp(`/account/orders/${orderId}$`));
   await expect(page.getByRole('heading', { name: `Đơn #${orderId}` })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Hủy đơn' }).click();
-  await confirmDialog(page, 'Hủy đơn');
-  await expect(page.getByText(`Đã hủy đơn #${orderId}.`)).toBeVisible();
+  await requestCancel(page);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Đã gửi yêu cầu huỷ đơn' }),
+  ).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Đơn hàng đã hủy' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Gửi yêu cầu huỷ' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Đang chờ duyệt huỷ' })).toBeVisible();
 });
 
 test('return request: seller-fault reason needs a photo, then the order awaits pickup', async ({
