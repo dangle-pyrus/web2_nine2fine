@@ -35,7 +35,10 @@ export type ErrorCode =
   | 'last-admin'
   | 'not-returnable'
   | 'return-window-closed'
-  | 'return-exists';
+  | 'return-exists'
+  | 'not-eligible'
+  | 'already-reviewed'
+  | 'wishlist-full';
 
 const STATUS: Record<ErrorCode, number> = {
   validation: 422,
@@ -75,6 +78,9 @@ const STATUS: Record<ErrorCode, number> = {
   'not-returnable': 409,
   'return-window-closed': 409,
   'return-exists': 409,
+  'not-eligible': 409,
+  'already-reviewed': 409,
+  'wishlist-full': 409,
 };
 
 export interface AppErrorExtras {
@@ -100,6 +106,8 @@ export interface AppErrorExtras {
   sku?: string;
   available?: number;
   reserved?: number;
+  /** Slice 10: bản hiện tại kèm `version-conflict` của nội dung trang chủ / bảng size (kiểu theo contract). */
+  current?: unknown;
 }
 
 export class AppError extends Error {
@@ -223,4 +231,14 @@ export const Errors = {
   returnExists: () => new AppError('return-exists', 'Đơn hàng này đã có yêu cầu trả hàng.'),
   invalidReturnTransition: (currentReturnState: string) =>
     new AppError('invalid-transition', 'Thao tác này không hợp lệ với trạng thái hiện tại của yêu cầu trả hàng.', { currentReturnState }),
+  /** Slice 10 (gói P1). */
+  notEligible: () => new AppError('not-eligible', 'Chỉ người đã nhận hàng mới đánh giá được sản phẩm này.'),
+  alreadyReviewed: () => new AppError('already-reviewed', 'Bạn đã đánh giá sản phẩm này rồi.'),
+  wishlistFull: (max: number) => new AppError('wishlist-full', `Danh sách yêu thích đã đủ ${max} sản phẩm.`),
+  versionConflictWith: (current: unknown) =>
+    new AppError(
+      'version-conflict',
+      'Dữ liệu vừa được người khác cập nhật. Tải lại để xem bản mới; thay đổi của bạn chưa được lưu.',
+      { current },
+    ),
 };

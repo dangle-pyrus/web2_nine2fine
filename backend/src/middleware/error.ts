@@ -28,6 +28,7 @@ function body(e: AppError) {
       ...(e.extras.sku ? { sku: e.extras.sku } : {}),
       ...(e.extras.available !== undefined ? { available: e.extras.available } : {}),
       ...(e.extras.reserved !== undefined ? { reserved: e.extras.reserved } : {}),
+      ...(e.extras.current !== undefined ? { current: e.extras.current } : {}),
     },
   };
 }

@@ -12,6 +12,7 @@
     "seed": "prisma db seed",
     "seed:catalog": "tsx prisma/seed-catalog.ts",
     "seed:checkout": "tsx prisma/seed-checkout.ts",
+    "seed:home": "tsx prisma/seed-home-content.ts",
     "prisma:generate": "prisma generate"
   },
   "keywords": [],

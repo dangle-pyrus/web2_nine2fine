@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { Errors } from '../lib/errors';
-import { RETURNS_ASSUMPTIONS } from '../config/assumptions';
+import { P1_ASSUMPTIONS, RETURNS_ASSUMPTIONS } from '../config/assumptions';
 import { now } from '../lib/clock';
 
 /**
@@ -78,6 +78,10 @@ const byUser = (req: Request): string => req.auth?.user.user_id ?? req.ip ?? 'un
 /** Trả hàng (S9, BR-RET-18, 15): tạo 10 / giờ / tài khoản, tải ảnh 30 / giờ / tài khoản (đếm mọi lần gọi tới được thân). */
 export const returnCreateLimit = createRateLimit({ name: 'return-create', ...RETURNS_ASSUMPTIONS.createRateLimit, key: byUser });
 export const returnPhotoLimit = createRateLimit({ name: 'return-photo', ...RETURNS_ASSUMPTIONS.photoRateLimit, key: byUser });
+
+/** Slice 10 (BR-P1-05): gửi đánh giá 5 / giờ / tài khoản; ghi wishlist 60 / phút / tài khoản (đếm mọi lần gọi tới được thân). */
+export const reviewCreateLimit = createRateLimit({ name: 'review-create', ...P1_ASSUMPTIONS.reviews.createRateLimit, key: byUser });
+export const wishlistWriteLimit = createRateLimit({ name: 'wishlist-write', ...P1_ASSUMPTIONS.wishlist.writeRateLimit, key: byUser });
 
 /** Chỉ cho test. */
 export function resetCheckoutRateLimits(): void {

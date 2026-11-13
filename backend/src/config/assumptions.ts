@@ -245,3 +245,87 @@ export const RETURN_PERMISSIONS: Record<'staff' | 'admin', readonly ReturnPermis
   staff: ['returns.process'],
   admin: ['returns.process', 'returns.refund'],
 };
+/**
+ * GIẢ ĐỊNH Slice 10 (S10-Q1..Q12, mặc định PO 2026-11-13; contract `docs/api/openapi.yaml` locked).
+ * Đổi một câu trả lời = sửa đúng một chỗ ở đây + BR/contract theo quy trình. Mỗi nhóm do một lát sở hữu; lát khác chỉ đọc.
+ */
+export const P1_ASSUMPTIONS = {
+  /** 10.5 BR-REV-01..07. */
+  reviews: {
+    eligibleDays: 365,
+    title: { min: 2, max: 80 },
+    body: { min: 20, max: 1000 },
+    heightMax: 20,
+    hideReason: { min: 5, max: 250 },
+    reply: { min: 5, max: 500 },
+    listLimit: { default: 10, max: 20 },
+    adminLimit: { default: 20, max: 50 },
+    lowRatingMax: 2,
+    createRateLimit: { max: 5, windowMs: HOUR },
+    publicMaxAge: 10,
+  },
+  /** 10.4 BR-WISH-02, 04, BR-P1-05. */
+  wishlist: {
+    max: 100,
+    mergeMax: 100,
+    writeRateLimit: { max: 60, windowMs: MINUTE },
+  },
+  /** 10.6 BR-REC-01..03, 05 (Should). */
+  recommendations: {
+    limit: { default: 4, max: 8 },
+    maxInputs: 10,
+    maxAge: 30,
+    coPurchaseMinOrders: 3,
+    coPurchaseDays: 365,
+  },
+  /** 10.3 + 10.8 BR-MOM, BR-CMS. */
+  content: {
+    homeMaxAge: 60,
+    sizeChartMaxAge: 60,
+    maxBlocks: 12,
+    maxCategories: 8,
+    eyebrowMax: 40,
+    titleMax: 80,
+    descriptionMax: 200,
+    labelMax: 40,
+    captionMax: 40,
+    productCardsMax: 6,
+    momentLineMax: 60,
+    momentLinesMax: 2,
+    hrefMax: 200,
+    moments: ['work', 'dinner', 'event', 'weekend'] as const,
+    sizeChart: { maxRows: 12, maxCols: 8, sizeLabel: { min: 1, max: 10 }, cellMax: 20, columnMax: 20 },
+  },
+  /** 10.7 BR-PROMO-01, 07. */
+  promo: {
+    maxDays: 90,
+    minSalePrice: 1000,
+    bulkPercent: { min: 5, max: 70 },
+    bulkRoundStep: 1000,
+  },
+  /** 10.8 BR-CMS-07 (Should). */
+  collections: {
+    maxProducts: 200,
+    nameMax: 80,
+    slug: { min: 2, max: 50 },
+    descriptionMax: 300,
+  },
+  /** 10.2 BR-RET-62, 63 (S10-Q11): giới hạn trả hàng vãng lai; key = băm grant (`n2f_oa`) hoặc IP. */
+  guestReturn: {
+    createPerGrant: { max: 5, windowMs: HOUR },
+    createPerIp: { max: 10, windowMs: HOUR },
+    photoPerGrant: { max: 30, windowMs: HOUR },
+    photoPerIp: { max: 60, windowMs: HOUR },
+  },
+} as const;
+
+export type ContentPermission = 'reviews.moderate' | 'content.view' | 'content.edit';
+
+/**
+ * BR-P1-03 / S10-Q10: staff kiểm duyệt đánh giá + xem nội dung; chỉ admin sửa nội dung / bảng size / bộ sưu tập.
+ * Giá khuyến mãi dùng `promotions.write` (= `promotions.edit` ở PRD) + `products.write`, cả hai chỉ admin. Cùng tên với `frontend/.../permissions.ts`.
+ */
+export const CONTENT_PERMISSIONS: Record<'staff' | 'admin', readonly ContentPermission[]> = {
+  staff: ['reviews.moderate', 'content.view'],
+  admin: ['reviews.moderate', 'content.view', 'content.edit'],
+};

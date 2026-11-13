@@ -59,6 +59,13 @@ model User {
   returnsReceived       OrderReturn[]         @relation("ReturnReceiver")
   returnsRefunded       OrderReturn[]         @relation("ReturnRefunder")
   returnPhotos          ReturnPhoto[]
+  productReviews        ProductReview[]       @relation("ReviewAuthor")
+  reviewsHidden         ProductReview[]       @relation("ReviewHider")
+  reviewsReplied        ProductReview[]       @relation("ReviewReplier")
+  wishlistItems         WishlistItem[]
+  homeContentUpdated    HomeContent[]         @relation("HomeContentUpdatedBy")
+  collectionsUpdated    Collection[]          @relation("CollectionUpdatedBy")
+  sizeChartsUpdated     SizeChart[]           @relation("SizeChartUpdatedBy")
 
   @@map("users")
 }
@@ -235,15 +242,22 @@ model Product {
   publishedAt     DateTime?        @map("published_at") @db.Timestamp(6)
   updatedById     String?          @map("updated_by") @db.Uuid
   imageMeta       Json             @default("{}") @map("image_meta")
+  salePrice       Decimal?         @map("sale_price") @db.Decimal(12, 2)
+  saleStartsAt    DateTime?        @map("sale_starts_at") @db.Timestamp(6)
+  saleEndsAt      DateTime?        @map("sale_ends_at") @db.Timestamp(6)
   category        Category         @relation(fields: [categoryId], references: [category_id], onDelete: Restrict)
   updatedBy       User?            @relation("ProductUpdatedBy", fields: [updatedById], references: [user_id], onDelete: SetNull)
   variants        ProductVariant[]
+  reviews         ProductReview[]
+  wishlistItems   WishlistItem[]
+  collectionItems CollectionProduct[]
 
   @@index([updatedAt(sort: Desc), product_id(sort: Desc)], map: "idx_products_updated")
   @@index([categoryId], map: "idx_products_category")
   @@index([status, displayOrder, slug], map: "idx_products_status_order")
   @@index([moments], map: "idx_products_moments", type: Gin)
   @@index([genders], map: "idx_products_genders", type: Gin)
+  @@index([saleEndsAt, saleStartsAt], map: "idx_products_sale")
   @@map("products")
 }
 
@@ -269,10 +283,13 @@ model ProductVariant {
 }
 
 model SizeChart {
-  categoryId String   @id @map("category_id") @db.Uuid
-  data       Json
-  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
-  category   Category @relation(fields: [categoryId], references: [category_id], onDelete: Cascade)
+  categoryId    String   @id @map("category_id") @db.Uuid
+  data          Json
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(6)
+  updatedById   String?  @map("updated_by") @db.Uuid
+  updatedByName String   @default("") @map("updated_by_name") @db.VarChar(100)
+  category      Category @relation(fields: [categoryId], references: [category_id], onDelete: Cascade)
+  updatedBy     User?    @relation("SizeChartUpdatedBy", fields: [updatedById], references: [user_id], onDelete: SetNull)
 
   @@map("size_charts")
 }
@@ -572,6 +589,7 @@ model Order {
   returns                   OrderReturn[]
   returnPhotos              ReturnPhoto[]
   paymentTransactions       PaymentTransaction[]
+  productReviews            ProductReview[]
 
   @@index([userId, createdAt(sort: Desc), order_id], map: "idx_orders_user_created")
   @@index([status, paymentDueAt], map: "idx_orders_status_due")
@@ -802,6 +820,7 @@ model ReturnPhoto {
   returnId       String?      @map("return_id") @db.Uuid
   orderId        String?      @map("order_id") @db.Uuid
   uploaderUserId String?      @map("uploader_user_id") @db.Uuid
+  grantHash      String?      @map("grant_hash") @db.Char(64)
   storageKey     String       @unique(map: "uq_return_photos_key") @map("storage_key") @db.VarChar(40)
   storage        String       @db.VarChar(10)
   contentType    String       @map("content_type") @db.VarChar(20)
@@ -814,6 +833,7 @@ model ReturnPhoto {
   uploader       User?        @relation(fields: [uploaderUserId], references: [user_id], onDelete: SetNull)
 
   @@index([returnId], map: "idx_return_photos_return")
+  @@index([grantHash], map: "idx_return_photos_grant")
   @@map("return_photos")
 }
 
@@ -836,4 +856,104 @@ model PaymentTransaction {
   @@index([orderId, receivedAt], map: "idx_payment_transactions_order")
   @@index([matched, createdAt(sort: Desc)], map: "idx_payment_transactions_unmatched")
   @@map("payment_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Slice 10: gói P1 (chỉ cộng thêm). CHECK + RLS thêm tay trong migration 20261113000100_p1_bundle.
+// ---------------------------------------------------------------------------
+
+/// Đánh giá sản phẩm (BR-REV). Duy nhất (tài khoản, sản phẩm) ở DB. `status` visible | hidden (CHECK). `authorDisplay` = "Họ + chữ cái đầu của tên" chụp lúc gửi.
+/// `updatedAt` là khoá chống ghi chồng của kiểm duyệt (tăng ngặt mỗi lần ẩn / hiện / trả lời).
+model ProductReview {
+  review_id     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  userId        String?   @map("user_id") @db.Uuid
+  orderId       String?   @map("order_id") @db.Uuid
+  authorDisplay String    @map("author_display") @db.VarChar(60)
+  rating        Int       @db.SmallInt
+  fit           Int       @db.SmallInt
+  sizeBought    String    @map("size_bought") @db.VarChar(10)
+  height        String    @default("") @db.VarChar(20)
+  title         String    @db.VarChar(80)
+  body          String    @db.VarChar(1000)
+  status        String    @default("visible") @db.VarChar(7)
+  createdAt     DateTime  @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime  @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("updated_at") @db.Timestamp(6)
+  hiddenAt      DateTime? @map("hidden_at") @db.Timestamp(6)
+  hiddenBy      String?   @map("hidden_by") @db.Uuid
+  hiddenByName  String?   @map("hidden_by_name") @db.VarChar(100)
+  hiddenReason  String?   @map("hidden_reason") @db.VarChar(250)
+  replyBody     String?   @map("reply_body") @db.VarChar(500)
+  replyAt       DateTime? @map("reply_at") @db.Timestamp(6)
+  replyBy       String?   @map("reply_by") @db.Uuid
+  replyByName   String?   @map("reply_by_name") @db.VarChar(100)
+  product       Product   @relation(fields: [productId], references: [product_id], onDelete: Cascade)
+  author        User?     @relation("ReviewAuthor", fields: [userId], references: [user_id], onDelete: SetNull)
+  order         Order?    @relation(fields: [orderId], references: [order_id], onDelete: SetNull)
+  hider         User?     @relation("ReviewHider", fields: [hiddenBy], references: [user_id], onDelete: SetNull)
+  replier       User?     @relation("ReviewReplier", fields: [replyBy], references: [user_id], onDelete: SetNull)
+
+  @@unique([userId, productId], map: "uq_product_reviews_user_product")
+  @@index([productId, status, createdAt(sort: Desc), review_id(sort: Desc)], map: "idx_product_reviews_public")
+  @@index([createdAt(sort: Desc), review_id(sort: Desc)], map: "idx_product_reviews_created")
+  @@map("product_reviews")
+}
+
+/// Mục yêu thích (BR-WISH). Khoá chính (tài khoản, sản phẩm). Tối đa 100 mục ACTIVE / tài khoản do service giữ (khoá dòng `users` rồi đếm).
+model WishlistItem {
+  userId    String   @map("user_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  addedAt   DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("added_at") @db.Timestamp(6)
+  user      User     @relation(fields: [userId], references: [user_id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [product_id], onDelete: Cascade)
+
+  @@id([userId, productId], map: "wishlist_items_pkey")
+  @@index([userId, addedAt(sort: Desc), productId], map: "idx_wishlist_user_added")
+  @@index([productId], map: "idx_wishlist_product")
+  @@map("wishlist_items")
+}
+
+/// Nội dung trang chủ: MỘT dòng (`content_id = 1`, CHECK). `data` = { categories, moments, blocks } (BR-CMS-01, 02). Không có dòng = bản mặc định trong mã.
+model HomeContent {
+  contentId     Int      @id @default(1) @map("content_id") @db.SmallInt
+  data          Json
+  isDefault     Boolean  @default(true) @map("is_default")
+  updatedAt     DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("updated_at") @db.Timestamp(6)
+  updatedById   String?  @map("updated_by") @db.Uuid
+  updatedByName String   @default("") @map("updated_by_name") @db.VarChar(100)
+  updatedBy     User?    @relation("HomeContentUpdatedBy", fields: [updatedById], references: [user_id], onDelete: SetNull)
+
+  @@map("home_content")
+}
+
+/// Bộ sưu tập (BR-CMS-07, Should). `publishedAt` có giá trị sau lần `active` đầu: khoá slug (như `products.published_at`).
+model Collection {
+  collection_id String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug          String              @unique(map: "uq_collections_slug") @db.VarChar(50)
+  name          String              @db.VarChar(80)
+  description   String              @default("") @db.VarChar(300)
+  status        String              @default("draft") @db.VarChar(6)
+  publishedAt   DateTime?           @map("published_at") @db.Timestamp(6)
+  createdAt     DateTime            @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(6)
+  updatedAt     DateTime            @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("updated_at") @db.Timestamp(6)
+  updatedById   String?             @map("updated_by") @db.Uuid
+  updatedByName String              @default("") @map("updated_by_name") @db.VarChar(100)
+  updatedBy     User?               @relation("CollectionUpdatedBy", fields: [updatedById], references: [user_id], onDelete: SetNull)
+  items         CollectionProduct[]
+
+  @@index([status, updatedAt(sort: Desc)], map: "idx_collections_status")
+  @@map("collections")
+}
+
+model CollectionProduct {
+  collectionId String     @map("collection_id") @db.Uuid
+  productId    String     @map("product_id") @db.Uuid
+  position     Int        @db.SmallInt
+  collection   Collection @relation(fields: [collectionId], references: [collection_id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [product_id], onDelete: Cascade)
+
+  @@id([collectionId, productId], map: "collection_products_pkey")
+  @@index([collectionId, position], map: "idx_collection_products_pos")
+  @@index([productId], map: "idx_collection_products_product")
+  @@map("collection_products")
 }

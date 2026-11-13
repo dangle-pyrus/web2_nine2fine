@@ -20,6 +20,11 @@ import { adminAccountsRouter, adminCustomersRouter, adminStaffRouter } from './m
 import { mediaRouter } from './modules/media/media.routes';
 import { accountReturnPhotosRouter, accountReturnsRouter, adminReturnPhotosRouter, adminReturnsRouter } from './modules/returns/returns.routes';
 import { storeRouter } from './modules/store/store.routes';
+import { reviewsRouter, adminReviewsRouter } from './modules/reviews/reviews.routes';
+import { wishlistRouter } from './modules/wishlist/wishlist.routes';
+import { recommendationsRouter } from './modules/recommendations/recommendations.routes';
+import { adminCollectionsRouter, adminContentRouter, adminSizeChartsRouter, contentPublicRouter } from './modules/content/content.routes';
+import { adminSalesRouter } from './modules/sales-admin/sales-admin.routes';
 import { sepayWebhookRouter } from './modules/payment/sepay.routes';
 import {
   adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
@@ -69,6 +74,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use(mediaRouter);
   // Slice 8: thông tin người bán công khai (GET), như catalog: phương thức ghi -> 404.
   api.use(storeRouter);
+  // Slice 10: gợi ý + nội dung trang chủ / bộ sưu tập công khai, chỉ đọc như catalog (router tự chặn phương thức ghi -> 404).
+  api.use(recommendationsRouter);
+  api.use(contentPublicRouter);
   // Webhook SePay: máy chủ gọi máy chủ (không Origin, không cookie) nên đứng TRƯỚC originGuard; tự xác thực bằng API key.
   api.use('/payments/sepay', sepayWebhookRouter);
   api.use(originGuard);
@@ -117,12 +125,23 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const adminReturns = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
   api.use('/admin/returns', ...adminReturns, adminReturnsRouter);
   api.use('/admin/return-photos', ...adminReturns, adminReturnPhotosRouter);
+  // Slice 10: cùng khuôn; quyền theo hành động (`requirePermission`) ở router, trước Zod và trước DB.
+  const adminP1 = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
+  api.use('/admin/reviews', ...adminP1, adminReviewsRouter);
+  api.use('/admin/content', ...adminP1, adminContentRouter);
+  api.use('/admin/size-charts', ...adminP1, adminSizeChartsRouter);
+  api.use('/admin/collections', ...adminP1, adminCollectionsRouter);
+  api.use('/admin/sales', ...adminP1, adminSalesRouter);
+  // Slice 10: đánh giá của thành viên (eligibility dùng optionalAuth, ghi dùng requireAuth); khung ở reviews.routes.ts.
+  api.use('/reviews', reviewsRouter);
   api.use('/checkout', checkoutRouter);
   api.use('/vouchers', voucherRouter);
   api.use('/cart', cartRouter);
   api.use('/orders', orderRouter);
   // Slice 5: noStore TRƯỚC requireAuth để cả 401 có Cache-Control: no-store (BR-ACC-01).
   // Slice 9: chỉ `/:orderCode/return*`; đứng TRƯỚC accountRouter (path khác rơi xuống tiếp).
+  // Slice 10: wishlist theo tài khoản; đứng TRƯỚC accountRouter (path khác rơi xuống tiếp).
+  api.use('/account/wishlist', noStore, requireAuth('storefront'), wishlistRouter);
   api.use('/account/orders', noStore, requireAuth('storefront'), accountReturnsRouter);
   api.use('/account', noStore, requireAuth('storefront'), accountRouter);
   options.extraApiRoutes?.(api);

@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10) + Admin khách hàng & nhân viên (Slice 7, locked 2026-11-11) + Admin tổng quan & cài đặt cửa hàng (Slice 8, locked 2026-11-12) + Trả hàng / hoàn tiền (Slice 9, locked 2026-11-12; khách vãng lai draft, hoãn)
+  title: nine2fine API - Auth (Slice 1) + Catalog (Slice 2) + Cart & Checkout (Slice 3) + Admin đơn hàng (Slice 4, locked 2026-11-08) + Account (Slice 5, locked 2026-11-08) + Admin kho & sản phẩm (Slice 6, locked 2026-11-10) + Admin khách hàng & nhân viên (Slice 7, locked 2026-11-11) + Admin tổng quan & cài đặt cửa hàng (Slice 8, locked 2026-11-12) + Trả hàng / hoàn tiền (Slice 9, locked 2026-11-12) + Gói P1 (trả hàng vãng lai, đánh giá, wishlist, gợi ý, nội dung, khuyến mãi; Slice 10, locked 2026-11-13)
   version: 0.1.0
   description: |
     status: locked (2026-11-07, Orchestrator)
@@ -44,9 +44,9 @@ info:
     - **Tham số lọc:** `gender`, `category`, `moment`, `size`, `color`, `maxPrice`, `available`, `q`, `sort`, `page`, `limit`, `ids`. Tên trùng `CatalogQuery` của FE trừ hai chỗ FE phải ánh xạ ở `HttpCatalogApi.list`: `search` -> `q`, và thêm `limit`/`page`/`ids`.
     - **Dung sai (BR-CAT-06, C3):** tham số rỗng / vắng = không lọc; `maxPrice=0` và `available=false` = không lọc. Giá trị lạ của `gender`, `category`, `moment`, `size`, `color` -> `200` danh sách rỗng (không lỗi). `sort`, `maxPrice`, `available`, `page`, `limit`, `q`, `ids` sai dạng / ngoài khoảng, hoặc tham số lặp -> `422 validation` kèm `field` là tên tham số. Tham số không khai báo bị bỏ qua.
     - **Sắp xếp ổn định (BR-CAT-07):** mọi `sort` đều hoà bằng `slug` tăng dần.
-    - **Cache:** `GET /products` và `GET /products/{slug}`: `Cache-Control: public, max-age=10` + `ETag`, để giá / tồn kho phản ánh DB sau <= 30 giây (BR-CAT-11). `GET /size-charts/{category}`: `public, max-age=3600`. Phản hồi lỗi: `Cache-Control: no-store`.
+    - **Cache:** `GET /products` và `GET /products/{slug}`: `Cache-Control: public, max-age=10` + `ETag`, để giá / tồn kho phản ánh DB sau <= 30 giây (BR-CAT-11). `GET /size-charts/{category}`: `public, max-age=60` (Slice 10; trước đó 3600). Phản hồi lỗi: `Cache-Control: no-store`.
     - **Giới hạn (BR-CAT-19):** 120 yêu cầu catalog / 60 giây / IP, bộ đếm riêng khỏi auth; vượt -> `429 rate-limited`, `Retry-After` và `retryAfterSeconds` trong 1..60. `limit` mặc định 24, tối đa 48. `ids` tối đa 48. `q` tối đa 100 ký tự sau chuẩn hoá.
-    - **Đánh giá (BR-CAT-17):** `GET /products/{productId}/reviews` luôn `200 []`. Không có `rating` trong sản phẩm. Các đường dẫn đánh giá khác (`eligibility`, tạo đánh giá) và `/stock-alerts` không tồn tại ở slice này (`404 not-found`); FE chế độ HTTP không gọi chúng. Wishlist lưu ở FE; BE chỉ cung cấp `ids`.
+    - **Đánh giá (BR-CAT-17; ĐÃ THAY ở Slice 10, xem mục "Slice 10 - Gói P1"):** `GET /products/{productId}/reviews` luôn `200 []`. Không có `rating` trong sản phẩm. Các đường dẫn đánh giá khác (`eligibility`, tạo đánh giá) và `/stock-alerts` không tồn tại ở slice này (`404 not-found`); FE chế độ HTTP không gọi chúng. Wishlist lưu ở FE; BE chỉ cung cấp `ids`.
 
     ---
     # Cart & Checkout (Slice 3)
@@ -138,7 +138,7 @@ info:
     - **Lỗi `validation` nhiều trường:** thân `PUT /admin/settings/store` sai ở nhiều trường thì `error.field` là trường đầu tiên và `error.fieldErrors` (mới, tuỳ chọn) liệt kê MỌI lỗi `{field, message}` (AC-SET-02). Các endpoint khác vẫn báo lỗi đầu tiên.
     - **Mã lỗi mới:** không có. Dùng lại `unauthenticated`, `forbidden`, `origin-not-allowed`, `validation` (+`field`: `range`, `from`, `to`, `sort`, `targetType`, `page`, `limit`, đường dẫn trường cài đặt như `info.hotline`, `operations.shippingFee`, `updatedAt`), `version-conflict`, `rate-limited`, `not-found`, `unavailable`.
     - **Không có** API sửa / xoá nhật ký (`PUT` / `PATCH` / `DELETE` -> `404 not-found`), không xuất nhật ký, không lãi gộp / giá vốn / trả hàng / ABC / vùng / heatmap / size-màu / khách / voucher (Won't; máy chủ không gửi các trường `returnRate`, `deliveryFailed`, `returnRequests`).
-    ## Slice 9 - Trả hàng / hoàn tiền (status: locked 2026-11-12 cho thành viên + admin; 5 operation khách vãng lai `/orders/{orderCode}/return*` giữ draft, lát 9.6 hoãn)
+    ## Slice 9 - Trả hàng / hoàn tiền (status: locked 2026-11-12 cho thành viên + admin; 5 operation khách vãng lai `/orders/{orderCode}/return*` chuyển draft -> locked ở Slice 10, lát 10.2)
     Tag `returns`, `return-photos`, `admin-returns`; 17 operation (5 khách thành viên `/account/**`, 5 khách vãng lai `/orders/{orderCode}/return*` [Should, lát 9.6, CÓ THỂ CẮT: bỏ cả 5 thì phần còn lại không đổi], 7 admin `/admin/returns*` + `/admin/return-photos/{photoId}`); BR/AC `docs/product/PRD.md` Slice 9 (BR-RET-01..55, AC-RET-01..55; S9-Q1..Q14 theo mặc định PO); kế hoạch `docs/api/returns-implementation-plan.md`. Đổi thêm (chỉ CỘNG THÊM trường, không bỏ / đổi nghĩa) các schema của Slice 3, 4, 8: `Order` (+`canReturn`, `returnDeadline`, `return`), `AdminOrder` (+`return`), `AdminOrderSummary` (+`returnPending`, Should), `AdminEventKind` (+6 loại), `AdminDashboardTodo` (+3 số), `AdminSalesReport.kpis` (+3 chỉ số, +`returnRate` Should); đổi hành vi (không đổi hình dạng): định nghĩa doanh thu (BR-RET-51) và hạng thành viên (BR-RET-53).
     - **Đơn giữ `completed`:** KHÔNG thêm giá trị `OrderStatus`. Yêu cầu trả hàng là thực thể riêng với 6 trạng thái `requested` -> `approved` -> `received` -> `refunded`; `requested` | `approved` -> `rejected`; `requested` -> `cancelled` (khách). Mỗi chuyển là so-sánh-rồi-đổi nguyên tử; ngoài bảng / lặp lại / thua cuộc đua -> `409 invalid-transition` (+`currentReturnState`). Tối đa 1 yêu cầu không-`cancelled` mỗi đơn (ràng buộc ở DB).
     - **Phiên và quyền:** khách thành viên cookie `n2f_sid` (chỉ đơn của chính mình; đơn người khác hoặc không có -> `404`, không lộ); khách vãng lai cookie `n2f_oa` gắn đúng đơn [Should]; admin cookie `n2f_asid`. Quyền mới: `returns.process` (staff + admin: xem, duyệt, từ chối / đóng, nhận hàng) và `returns.refund` (CHỈ admin: xác nhận hoàn tiền + xem số tài khoản đầy đủ khi `received`). Thiếu quyền -> `403` trước khi đọc thân. Mọi phản hồi (kể cả 401 / 403 / 404 của nhóm này) `Cache-Control: no-store`; ảnh `private, no-store`.
@@ -149,6 +149,18 @@ info:
     - **Giới hạn tần suất:** tạo yêu cầu 10 / giờ / tài khoản (khách vãng lai: / IP); tải ảnh 30 / giờ / tài khoản (vãng lai: / đơn); khách đọc / huỷ / dự kiến dùng bộ đếm đơn hiện có (120 / 60 giây); admin chung bộ đếm admin (đọc 120, ghi 60 / 60 giây).
     - **Giờ:** hạn trả = 23:59:59 giờ VN của ngày thứ 30 kể từ ngày giao (ngày giao VN = ngày 0), máy chủ tính (`Order.canReturn`, `Order.returnDeadline`); thời điểm ISO UTC; tiền số nguyên đồng.
     - **Không có (Won't):** đổi hàng, cổng hoàn tiền, nhân viên tạo hộ yêu cầu, sửa tay số tiền, hoàn nhiều đợt, tạo lại sau khi bị từ chối / đã hoàn, hoàn lượt voucher, lý do "khác" / "không như mô tả", tự xoá ảnh theo lịch, sửa số ngày / phí gửi trả ở Cài đặt.
+    ## Slice 10 - Gói P1: trả hàng vãng lai, đánh giá, wishlist, gợi ý, nội dung, khuyến mãi (status: locked 2026-11-13, Orchestrator; mặc định PO S10-Q1..Q12, Thắng vắng)
+    Tag `reviews`, `admin-reviews`, `wishlist`, `recommendations`, `content`, `admin-content`, `admin-sales`, `collections`, `admin-collections` (mới) + `returns`, `return-photos` (5 operation vãng lai chuyển từ draft sang locked) + thay đổi cộng thêm ở `catalog`, `admin-products`, `admin-returns`, `order`. BR/AC `docs/product/PRD.md` Slice 10 (BR-P1, BR-RET-60..66, BR-REV, BR-WISH, BR-REC, BR-MOM, BR-PROMO, BR-CMS; AC cùng tiền tố); kế hoạch + bảng + thứ tự lát + file theo lát: `docs/api/p1-bundle-implementation-plan.md`. **Mỗi khu có cờ FE riêng** (`reviewsMode`, `wishlistMode`, `recommendationsMode`, `contentMode`, `promotionsMode`; trả hàng vãng lai dùng `returnsMode`); phát hành / hoàn tác độc lập, migration chỉ cộng thêm (`20261113000100_p1_bundle`). Lát 10.8 (bộ sưu tập, "Khôi phục mặc định") và mọi operation đánh `x-priority: should` CÓ THỂ CẮT: bỏ chúng thì phần còn lại không đổi.
+    - **Operation theo lát:** 10.2 trả hàng vãng lai (5, `/orders/{orderCode}/return*`); 10.3 nội dung (`GET /content/home`, `GET /admin/content/home`, `PUT /admin/content/home`, `GET /admin/size-charts`, `PUT /admin/size-charts/{category}`; đổi `GET /size-charts/{category}`); 10.4 wishlist (4, `/account/wishlist*`); 10.5 đánh giá (`GET /products/{productId}/reviews` ĐỔI, `GET /reviews/eligibility`, `POST /reviews`, `GET /admin/reviews`, `POST .../hide`, `POST .../show`, `PUT .../reply`); 10.6 gợi ý (`GET /recommendations`); 10.7 khuyến mãi (trường `salePrice` / `saleStartsAt` / `saleEndsAt` ở `PUT /admin/products/{id}`, `discountPercent` ở `Product`, `sale=true` ở `GET /products`; Should: `POST /admin/sales/bulk/preview`, `POST /admin/sales/bulk`); 10.8 (Should) bộ sưu tập (`GET /collections`, `GET /collections/{slug}`, `GET|POST /admin/collections`, `GET|PUT|DELETE /admin/collections/{collectionId}`) + `POST /admin/content/home/reset`.
+    - **Đường dẫn đánh giá của thành viên nằm NGOÀI `/products/**`** (`/reviews/**`): `/products/**` là vùng công khai chỉ đọc, phản hồi không phụ thuộc người dùng (Slice 2, AC-CAT-44..46); eligibility và gửi đánh giá phụ thuộc phiên nên không thể ở đó. Chỉ danh sách đánh giá công khai ở lại `/products/{productId}/reviews`.
+    - **Phiên và quyền:** wishlist, eligibility, gửi đánh giá: cookie `n2f_sid` (member). Wishlist luôn `Cache-Control: no-store` (kể cả 401). Mọi `/admin/**` mới: cookie `n2f_asid`; vai trò và `is_active` đọc từ DB mỗi yêu cầu; mọi phản hồi (kể cả 401 / 403) `no-store`. Quyền mới (BR-P1-03): `reviews.moderate` (staff + admin: danh sách, ẩn, hiện, trả lời), `content.view` (staff + admin: đọc nội dung trang chủ / bảng size / bộ sưu tập), `content.edit` (chỉ admin: lưu trang chủ, lưu bảng size, bộ sưu tập, "Khôi phục mặc định"). Đợt giảm giá ở `PUT /admin/products/{id}` cần `products.write`, và khi thân có bất kỳ trường `sale*` thì còn cần `promotions.write` (= `promotions.edit` ở PRD; cả hai chỉ admin); hàng loạt: `promotions.write`. Thiếu quyền -> `403 forbidden` kiểm TRƯỚC khi đọc thân, không đổi dữ liệu.
+    - **Mã lỗi mới (3, đều 409):** `not-eligible` (chưa đủ điều kiện đánh giá), `already-reviewed` (đã đánh giá sản phẩm này), `wishlist-full` (đủ 100 mục). Dùng lại: `unauthenticated`, `forbidden`, `origin-not-allowed`, `not-found`, `validation` (+`field`, +`fieldErrors` ở thân nhiều trường), `version-conflict` (+ `error.current` mới ở nội dung trang chủ / bảng size), `duplicate`, `rate-limited`, `idempotency-conflict`, `not-returnable`, `return-window-closed`, `return-exists`, `invalid-transition`, `invalid-image`, `unavailable`.
+    - **Giới hạn tần suất (`429 rate-limited` + `Retry-After` + `retryAfterSeconds`):** gửi đánh giá 5 / giờ / tài khoản; ghi wishlist (`PUT`, `DELETE`, `merge`) 60 / phút / tài khoản (riêng, không chung bộ 30 / 60 giây của `/account/**` khác); trả hàng vãng lai: tạo 5 / giờ / grant (`n2f_oa`) và 10 / giờ / IP, ảnh 30 / giờ / grant và 60 / giờ / IP, dự kiến / huỷ / xem ảnh dùng bộ đếm đơn hiện có (120 / 60 giây); đọc công khai (`reviews`, `recommendations`, `content`, `collections`, `size-charts`) 120 / 60 giây / IP (bộ đếm catalog); eligibility 120 / 60 giây / tài khoản (khách: IP); admin dùng bộ đếm sẵn có (đọc 120, ghi 60 / 60 giây / tài khoản).
+    - **Cache công khai:** `GET /products/{productId}/reviews` `public, max-age=10`; `GET /recommendations` `public, max-age=30`; `GET /content/home` `public, max-age=60`; `GET /size-charts/{category}` `public, max-age=60` (ĐỔI từ 3600 để khách thấy bản mới <= 60 giây, BR-CMS-03); `GET /collections*` `public, max-age=60`; `GET /products*` giữ `public, max-age=10`. Không `Set-Cookie`, không `401`, cookie gửi kèm bị bỏ qua. `GET /reviews/eligibility`, mọi `/account/**`, mọi `/admin/**`: `no-store`.
+    - **Giá hiệu lực (BR-PROMO-02, 03, 04; MỘT hàm `effectivePrice(product, T)` dùng ở mọi nơi):** đợt giảm của sản phẩm = (`salePrice`, `saleStartsAt`, `saleEndsAt`); "đang chạy" khi `saleStartsAt <= T <= saleEndsAt` với T = giờ máy chủ lúc xử lý (không tác vụ nền, không cache giá). Đang chạy: `price` trả về = `salePrice`, `compareAtPrice` = `price` gốc (đè giá gạch nhập tay), `discountPercent` = floor((1 - salePrice / price gốc) x 100), `saleEndsAt` hiển thị. Ngoài đợt: `price` gốc, `compareAtPrice` nhập tay như cũ, không có `discountPercent` / `saleEndsAt`. Áp dụng thống nhất cho: `GET /products` (lọc `maxPrice`, sắp `price-asc` / `price-desc`, `sale=true`), `GET /products/{slug}`, `GET /recommendations`, giỏ (`unitPrice` / `compareAtPrice` của dòng), `POST /checkout/quote`, `POST /orders` (`unit_price` = giá hiệu lực LÚC ĐẶT, `compare_at_price` của dòng = giá gốc khi trong đợt; đơn đã đặt KHÔNG đổi khi hết đợt, trả hàng / doanh thu dùng `unit_price` đã lưu), "đang giảm" của `excludeSaleItems` (= trong đợt HOẶC `compareAtPrice` > `price`). Giá đổi giữa báo giá và đặt đơn: cơ chế `price-changed` sẵn có (Slice 3), không đặt ngầm.
+    - **Đợt giảm (BR-PROMO-01, 05):** `salePrice` nguyên, `1.000 <= salePrice < price`; ngày bắt đầu = 00:00:00 giờ VN, ngày kết thúc = 23:59:59 giờ VN (gồm cả ngày đó), tối đa 90 ngày (ngày kết thúc <= bắt đầu + 89), `saleEndsAt >= saleStartsAt`. Ở `PUT /admin/products/{id}`: khoá vắng = giữ nguyên đợt; cả ba = `null` = gỡ đợt; cả ba có giá trị = đặt (ghi đè đợt cũ); thiếu một hoặc sai khoảng -> `422` theo trường. Sửa `price` làm `salePrice >= price` mới -> `422`, `field: salePrice`. Cột có CHECK ở DB làm lưới an toàn.
+    - **Đã đổi ở contract cũ (đều cộng thêm trừ mục 1, 2, 3):** (1) `GET /products/{productId}/reviews`: từ "luôn `200 []`" sang trang dữ liệu thật; sản phẩm không `ACTIVE` / không có -> `404`. (2) BR-CAT-17 thôi áp cho đánh giá ở FE khi `reviewsMode = http` ("Báo khi có hàng" vẫn ẩn). (3) `GET /size-charts/{category}` `max-age` 3600 -> 60. (4) `Product` thêm `rating`, `discountPercent`, `saleEndsAt`; `price` / `compareAtPrice` là giá hiệu lực; `GET /products` thêm `sale`. (5) `AdminProduct*` thêm `salePrice`, `saleStartsAt`, `saleEndsAt`, `saleState`. (6) `AdminReturn` / `AdminReturnSummary` thêm `source`; `AdminOrderSummary.returnPending` (Should) chốt. (7) `Order.canReturn` / `returnDeadline` / `return` có cả cho đơn khách vãng lai xem bằng `n2f_oa`. (8) 5 operation `/orders/{orderCode}/return*` từ draft thành locked, quyền CHỈ `n2f_oa` (bỏ nhánh `n2f_sid`: chủ đơn thành viên dùng `/account/**`; đơn thuộc tài khoản thành viên qua grant -> `404`). (9) `ErrorCode` thêm 3 mã, `ErrorResponse.error` thêm `current`. (10) `SizeChart` thêm `updatedAt`.
+    - **Không có (Won't):** sửa / xoá đánh giá của khách, ảnh / video / "hữu ích" cho đánh giá, đánh giá của khách vãng lai, thư mời đánh giá; thống kê / chia sẻ wishlist; ML / cá nhân hoá / "xem gần đây"; thêm / xoá / đổi mã Moment; nháp / xem trước / lịch đăng nội dung; mua X tặng Y, bậc số lượng, flash sale, mã tự áp, nhiều đợt / sản phẩm, giá theo biến thể. `PUT` / `DELETE` ngoài danh sách -> `404 not-found`.
   license:
     name: Proprietary
 servers:
@@ -198,11 +210,29 @@ tags:
   - name: store-settings
     description: 'Slice 8, status: locked. Công khai: thông tin người bán + chính sách hiển thị (whitelist), cache 60 giây.'
   - name: returns
-    description: 'Slice 9, status: locked (khách vãng lai: draft, hoãn). Khách gửi / huỷ yêu cầu trả hàng, tính dự kiến hoàn. Thành viên (`n2f_sid`, `/account/orders/{orderCode}/return*`); khách vãng lai (`n2f_oa`, `/orders/{orderCode}/return*`) là Should, có thể cắt. Chi tiết yêu cầu nằm trong `Order.return`.'
+    description: 'Slice 9, status: locked (khách vãng lai: locked từ Slice 10, 2026-11-13). Khách gửi / huỷ yêu cầu trả hàng, tính dự kiến hoàn. Thành viên (`n2f_sid`, `/account/orders/{orderCode}/return*`); khách vãng lai (`n2f_oa`, `/orders/{orderCode}/return*`) là Should, có thể cắt. Chi tiết yêu cầu nằm trong `Order.return`.'
   - name: return-photos
-    description: 'Slice 9, status: locked (khách vãng lai: draft, hoãn). Ảnh minh chứng trả hàng: tải bằng thân byte thô vào kho riêng tư, xem qua endpoint có kiểm quyền (khách / khách vãng lai / admin). Không công khai.'
+    description: 'Slice 9, status: locked (khách vãng lai: locked từ Slice 10, 2026-11-13). Ảnh minh chứng trả hàng: tải bằng thân byte thô vào kho riêng tư, xem qua endpoint có kiểm quyền (khách / khách vãng lai / admin). Không công khai.'
   - name: admin-returns
-    description: 'Slice 9, status: locked (khách vãng lai: draft, hoãn). Staff / admin: danh sách + tab đếm, chi tiết, duyệt, từ chối / đóng, nhận hàng + kiểm từng dòng + nhập kho (`returns.process`); xác nhận hoàn tiền + xem số tài khoản đầy đủ khi `received` (`returns.refund`, chỉ admin).'
+    description: 'Slice 9, status: locked (khách vãng lai: locked từ Slice 10, 2026-11-13). Staff / admin: danh sách + tab đếm, chi tiết, duyệt, từ chối / đóng, nhận hàng + kiểm từng dòng + nhập kho (`returns.process`); xác nhận hoàn tiền + xem số tài khoản đầy đủ khi `received` (`returns.refund`, chỉ admin).'
+  - name: reviews
+    description: 'Slice 10, status: locked. Đánh giá sản phẩm: danh sách công khai + điểm trung bình (công khai), đủ điều kiện và gửi đánh giá (member, cookie `n2f_sid`, đường dẫn `/reviews/**`).'
+  - name: admin-reviews
+    description: 'Slice 10, status: locked. Kiểm duyệt đánh giá (`reviews.moderate`, staff + admin): danh sách + tab đếm, ẩn (có lý do), hiện lại, trả lời công khai. Chống ghi chồng bằng `updatedAt`.'
+  - name: wishlist
+    description: 'Slice 10, status: locked. Yêu thích theo tài khoản (member, cookie `n2f_sid`, `no-store`): đọc, thêm, xoá, gộp mục chưa đồng bộ; tối đa 100 mục `ACTIVE`; máy chủ là nguồn sự thật.'
+  - name: recommendations
+    description: 'Slice 10, status: locked. Gợi ý sản phẩm bằng MỘT hàm xác định (không ML) cho PDP và giỏ. Công khai, chỉ đọc, `public, max-age=30`.'
+  - name: content
+    description: 'Slice 10, status: locked. Nội dung trang chủ công khai (`GET /content/home`, gồm thẻ Moment + số sản phẩm thật). Bộ sưu tập công khai (`/collections*`) là Should (lát 10.8).'
+  - name: admin-content
+    description: 'Slice 10, status: locked. Quản lý nội dung (đọc: staff + admin `content.view`; ghi: chỉ admin `content.edit`): trang chủ (một lần ghi nguyên văn bản + `updatedAt`) và bảng size theo danh mục. "Khôi phục mặc định" là Should.'
+  - name: admin-sales
+    description: 'Slice 10, status: locked (Should). Giảm giá hàng loạt theo danh mục có bước xem trước (chỉ admin, `promotions.write`). Đợt giảm theo từng sản phẩm nằm ở `admin-products` (`PUT /admin/products/{id}`).'
+  - name: collections
+    description: 'Slice 10, status: locked (Should, lát 10.8, có thể cắt). Bộ sưu tập công khai: chỉ `active`, kèm sản phẩm `ACTIVE`.'
+  - name: admin-collections
+    description: 'Slice 10, status: locked (Should, lát 10.8, có thể cắt). CRUD bộ sưu tập (đọc `content.view`; ghi chỉ admin `content.edit`). Xoá bộ sưu tập không xoá sản phẩm.'
 security: []
 paths:
   /auth/lookup:
@@ -614,9 +644,9 @@ paths:
       description: |
         Phục vụ `/new-in`, `/shop`, `/shop/nam|nu`, `/shop/{category}`, `/shop-by-moment/{moment}`, `/search?q=`, trang Yêu thích (`ids`), panel gợi ý (`q` + `limit=5`) và dải sản phẩm ở Home / giỏ (`limit` <= 12). BR-CAT-06, 07, 08, 13, 14, 15, 16.
 
-        **Lọc (AND):** `gender` -> `genders` chứa giá trị; `category` -> trùng `slug` danh mục; `moment` -> `moments` chứa giá trị; `maxPrice` -> `price <= maxPrice` (bằng là đạt, so với giá bán, không phải `compareAtPrice`); `q` -> sau khi trim, gộp khoảng trắng, bỏ dấu, `đ` = `d`, không phân biệt hoa thường, **mọi** từ phải là chuỗi con của "tên + loại" (`name` + `type`); `%`, `_`, dấu gạch ngược, `'`, `"` là ký tự thường; `ids` -> `id` thuộc danh sách (id sai định dạng UUID hoặc không tồn tại bị bỏ qua; mọi id đều bị bỏ -> `items: []`).
+        **Lọc (AND):** `gender` -> `genders` chứa giá trị; `category` -> trùng `slug` danh mục; `moment` -> `moments` chứa giá trị; `maxPrice` -> `price <= maxPrice` (bằng là đạt, so với GIÁ HIỆU LỰC (Slice 10: giá giảm khi đang trong đợt, không phải `compareAtPrice`); `q` -> sau khi trim, gộp khoảng trắng, bỏ dấu, `đ` = `d`, không phân biệt hoa thường, **mọi** từ phải là chuỗi con của "tên + loại" (`name` + `type`); `%`, `_`, dấu gạch ngược, `'`, `"` là ký tự thường; `ids` -> `id` thuộc danh sách (id sai định dạng UUID hoặc không tồn tại bị bỏ qua; mọi id đều bị bỏ -> `items: []`).
         **Lọc theo biến thể (C4):** `size` (không phân biệt hoa thường), `color` (tên màu, ví dụ `Đỏ`), `available=true` áp lên **cùng một biến thể**: sản phẩm khớp nếu tồn tại ít nhất 1 biến thể thoả đồng thời mọi điều kiện đã cho (`size`, `color.name`, `inventory > 0` nếu `available=true`). Không có tham số biến thể -> không xét biến thể.
-        **Sắp xếp:** `featured` (mặc định) = `displayOrder` tăng; `newest` = `createdAt` giảm; `price-asc`; `price-desc`; `bestselling` = `salesRank` tăng; luôn hoà bằng `slug` tăng.
+        **Sắp xếp:** `featured` (mặc định) = `displayOrder` tăng; `newest` = `createdAt` giảm; `price-asc`; `price-desc` (cả hai theo GIÁ HIỆU LỰC, Slice 10); `bestselling` = `salesRank` tăng; luôn hoà bằng `slug` tăng.
         **Phân trang:** `total` = số sản phẩm khớp toàn bộ bộ lọc, không phụ thuộc trang. `page` vượt trang cuối -> `200`, `items: []`. Mỗi sản phẩm trong `items` có đủ `variants` (mọi biến thể, kể cả biến thể không khớp bộ lọc) để thẻ hiện đúng màu / tồn kho.
       parameters:
         - { name: gender, in: query, schema: { type: string, maxLength: 20 }, description: '`nam` hoặc `nu`. Giá trị lạ -> danh sách rỗng.' }
@@ -631,6 +661,7 @@ paths:
         - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 10000, default: 1 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 48, default: 24 } }
         - { name: ids, in: query, schema: { type: string, maxLength: 2000 }, description: 'Danh sách `id` sản phẩm cách nhau dấu phẩy, tối đa 48 phần tử (quá -> 422 field `ids`).' }
+        - { name: sale, in: query, schema: { type: boolean }, description: 'Slice 10, Should (BR-PROMO-07). `true` = chỉ sản phẩm đang CHẠY đợt giảm (xem `Product.discountPercent`). `false` / vắng = không lọc. Giá trị khác -> 422 field `sale`.' }
       responses:
         '200':
           description: Trang kết quả (có thể rỗng).
@@ -664,36 +695,46 @@ paths:
         '500': { $ref: '#/components/responses/Unavailable' }
   /products/{productId}/reviews:
     get:
-      tags: [catalog]
+      tags: [reviews]
       operationId: listProductReviews
-      summary: Đánh giá sản phẩm - luôn rỗng ở Slice 2 (status draft)
+      x-status: locked
+      summary: Đánh giá công khai của một sản phẩm, mới nhất trước, phân trang (BR-REV-05, 06, 09)
       description: |
-        BR-CAT-17 (Thắng chốt 2026-11-07). Luôn `200 []`, không truy vấn DB, không kiểm `productId` có tồn tại. Giữ endpoint để adapter HTTP hiện có (`reviews(productId)`) không gặp lỗi; FE ở chế độ HTTP không hiện khối đánh giá. Đánh giá thật làm sau Slice 3.
+        Slice 10 (lát 10.5), status: locked. THAY hành vi "luôn `200 []`" của Slice 2 (BR-CAT-17 thôi áp cho đánh giá khi FE `reviewsMode = http`; "Báo khi có hàng" vẫn ẩn). Công khai, chỉ đọc như catalog: không cookie, không `401`, cookie gửi kèm bị bỏ qua, phản hồi không phụ thuộc người dùng, không `Set-Cookie`. Giới hạn catalog 120 / 60 giây / IP.
+
+        `productId` là UUID sản phẩm. Sai dạng, không có, hoặc sản phẩm không `ACTIVE` -> `404 not-found` (không lộ sản phẩm nháp / lưu trữ; đánh giá của sản phẩm bị ẩn được giữ trong DB và trở lại khi sản phẩm công khai lại). Chỉ đánh giá `visible`; sắp `createdAt` giảm dần, hoà `id` giảm dần. `limit` mặc định 10, 1..20 (ngoài khoảng -> `422`, `field: limit`); `page` >= 1; `rating` 1..5 (Should, BR-REV-09; ngoài khoảng -> `422`, `field: rating`) lọc danh sách; `total` = số đánh giá khớp bộ lọc. `summary` LUÔN tính trên mọi đánh giá `visible` của sản phẩm (không theo `rating`), cùng số với `Product.rating` ở PDP / thẻ PLP (BR-REV-06: `average` = Σ sao / `count`, làm tròn 1 chữ số thập phân half-up; `count = 0` thì `average = null`). Mỗi đánh giá: `author` dạng "Nguyễn V." (Họ + chữ cái đầu của tên, không email / SĐT / id người dùng), `verified = true` (luôn, vì chỉ người đã nhận hàng gửi được), `date` là ngày giờ VN `YYYY-MM-DD`, `sizeBought` do máy chủ lấy từ đơn; `reply` có khi shop đã trả lời. Không có `sample`.
+        Phản ánh ẩn / hiện / gửi mới trong <= 30 giây (cache `max-age=10`).
       parameters:
         - { name: productId, in: path, required: true, schema: { type: string, maxLength: 64 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 20, default: 10 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 10000, default: 1 } }
+        - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: 'Should (BR-REV-09). Vắng = mọi sao.' }
       responses:
         '200':
-          description: Mảng rỗng.
+          description: Trang đánh giá (có thể rỗng).
           headers:
             Cache-Control: { schema: { type: string, const: 'public, max-age=10' } }
           content:
             application/json:
-              schema: { type: array, maxItems: 0, items: {} }
+              schema: { $ref: '#/components/schemas/ProductReviewPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
   /size-charts/{category}:
     get:
       tags: [catalog]
       operationId: getSizeChart
-      summary: Bảng size theo danh mục (status draft)
-      description: BR-CAT-12. Danh mục không thuộc `Category` (ví dụ `shoes`) -> `404 not-found`. Mỗi bảng có đủ hàng S, M, L, XL ở `body` và `garment`.
+      summary: Bảng size theo danh mục (status locked; Slice 10 đổi cache 3600 -> 60 giây và thêm `updatedAt`)
+      description: |
+        BR-CAT-12. Danh mục không thuộc `Category` (ví dụ `shoes`) -> `404 not-found`. Slice 10 (BR-CMS-03): bảng do admin sửa được (`PUT /admin/size-charts/{category}`), nên `Cache-Control` đổi từ `public, max-age=3600` xuống `public, max-age=60` để khách thấy bản mới <= 60 giây; thêm `updatedAt` (ISO UTC, vắng khi bảng chưa từng được admin sửa / lưu). Quy tắc dữ liệu: mỗi bảng 1..12 hàng, 1..8 cột (không còn bắt buộc đủ hàng S, M, L, XL; bảng seed vẫn có đủ).
       parameters:
         - { name: category, in: path, required: true, schema: { type: string, maxLength: 50 } }
       responses:
         '200':
           description: Bảng size (cm).
           headers:
-            Cache-Control: { schema: { type: string, const: 'public, max-age=3600' } }
+            Cache-Control: { schema: { type: string, const: 'public, max-age=60' } }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SizeChart' }
@@ -1269,7 +1310,7 @@ paths:
                 transferType: { type: string, enum: [in, out] }
                 transferAmount: { type: integer, minimum: 0 }
                 referenceCode: { type: [string, 'null'] }
-                description: '{ type: [string, ''null''] }'
+                description: { type: [string, 'null'] }
       responses:
         '200':
           description: Đã ghi nhận.
@@ -2894,7 +2935,7 @@ paths:
       x-status: locked
       summary: Thành viên gửi yêu cầu trả hàng cho đơn của mình (BR-RET-09..18, 21, 30)
       description: |
-        Slice 9, status: locked (khách vãng lai: draft, hoãn). Chỉ phiên `n2f_sid` của CHỦ đơn; đơn không có hoặc của người khác -> `404 not-found` (không phân biệt). Bắt buộc `Idempotency-Key`: cùng khoá + cùng nội dung -> `200` kèm `Idempotency-Replayed: true`, không tạo thêm; cùng khoá khác nội dung -> `409 idempotency-conflict`; thiếu / sai dạng -> `422`, `field: Idempotency-Key`. Giới hạn 10 yêu cầu / giờ / tài khoản (đếm mọi lần gọi tới được thân), vượt -> `429 rate-limited`.
+        Slice 9, status: locked (khách vãng lai: locked từ Slice 10, 2026-11-13). Chỉ phiên `n2f_sid` của CHỦ đơn; đơn không có hoặc của người khác -> `404 not-found` (không phân biệt). Bắt buộc `Idempotency-Key`: cùng khoá + cùng nội dung -> `200` kèm `Idempotency-Replayed: true`, không tạo thêm; cùng khoá khác nội dung -> `409 idempotency-conflict`; thiếu / sai dạng -> `422`, `field: Idempotency-Key`. Giới hạn 10 yêu cầu / giờ / tài khoản (đếm mọi lần gọi tới được thân), vượt -> `429 rate-limited`.
 
         **Thứ tự kiểm:** phiên 401 -> `X-Requested-With` 403 -> giới hạn 429 -> `Idempotency-Key` 422 -> thân (MỌI lỗi theo trường một lần, `error.fieldErrors`, `field` phẳng như dưới) 422 -> đơn 404 -> giao dịch (khoá dòng đơn): điều kiện đơn `409 not-returnable` (chưa `completed`, thiếu `deliveredAt`, `paymentStatus` khác `paid`, kể cả `refunded` / `partially_refunded`), quá hạn `409 return-window-closed` (hạn = 23:59:59 giờ VN của ngày thứ 30 kể từ ngày giao, ngày giao = ngày 0, máy chủ tính), đã có yêu cầu không-`cancelled` `409 return-exists` (ràng buộc duy nhất ở DB; 20 yêu cầu đồng thời: đúng 1 thành công) -> kiểm theo dữ liệu (`lines`, `photos`, tiền) 422.
 
@@ -3002,7 +3043,7 @@ paths:
       x-status: locked
       summary: Thành viên tải 1 ảnh minh chứng trả hàng (BR-RET-14, 15)
       description: |
-        Slice 9, status: locked (khách vãng lai: draft, hoãn). **Thân yêu cầu là byte thô của đúng 1 tệp** (như `POST /admin/uploads/product-images`; không multipart), `Content-Type` bất kỳ trong `image/jpeg`, `image/png`, `image/webp`, `application/octet-stream`. Định dạng xác định theo NỘI DUNG (magic bytes). Giới hạn: <= 5 MB, cạnh ngắn >= 200 px, cạnh dài <= 8.000 px; sai -> `422 invalid-image` `reason` = `format` | `size` | `dimensions` (thứ tự kiểm: size, format, dimensions). Gỡ metadata (EXIF / GPS / XMP / COM) trước khi lưu; khoá lưu do máy chủ sinh (`rp-<32 hex>.<ext>`). Ảnh lưu ở **kho RIÊNG TƯ** (không phải bucket công khai `product-images`; không bao giờ qua `GET /media/{id}`). Giới hạn 30 tệp / giờ / tài khoản (`429 rate-limited`; đếm mọi lần gọi tới được thân). Ảnh chưa gắn vào yêu cầu chỉ gắn được trong 24 giờ, bởi chính người tải; không tự xoá theo lịch.
+        Slice 9, status: locked (khách vãng lai: locked từ Slice 10, 2026-11-13). **Thân yêu cầu là byte thô của đúng 1 tệp** (như `POST /admin/uploads/product-images`; không multipart), `Content-Type` bất kỳ trong `image/jpeg`, `image/png`, `image/webp`, `application/octet-stream`. Định dạng xác định theo NỘI DUNG (magic bytes). Giới hạn: <= 5 MB, cạnh ngắn >= 200 px, cạnh dài <= 8.000 px; sai -> `422 invalid-image` `reason` = `format` | `size` | `dimensions` (thứ tự kiểm: size, format, dimensions). Gỡ metadata (EXIF / GPS / XMP / COM) trước khi lưu; khoá lưu do máy chủ sinh (`rp-<32 hex>.<ext>`). Ảnh lưu ở **kho RIÊNG TƯ** (không phải bucket công khai `product-images`; không bao giờ qua `GET /media/{id}`). Giới hạn 30 tệp / giờ / tài khoản (`429 rate-limited`; đếm mọi lần gọi tới được thân). Ảnh chưa gắn vào yêu cầu chỉ gắn được trong 24 giờ, bởi chính người tải; không tự xoá theo lịch.
       security:
         - storefrontSession: []
       parameters:
@@ -3056,14 +3097,20 @@ paths:
     post:
       tags: [returns]
       operationId: createGuestReturnRequest
-      x-status: draft
-      x-priority: should
-      summary: Khách vãng lai gửi yêu cầu trả hàng (BR-RET-22) [Should, lát 9.6, có thể cắt]
+      x-status: locked
+      summary: Khách vãng lai gửi yêu cầu trả hàng qua grant OTP (BR-RET-60..63)
       description: |
-        Cùng hành vi, thân, thứ tự kiểm, mã lỗi và phản hồi như `createReturnRequest`, nhưng quyền là cookie `n2f_oa` GẮN ĐÚNG đơn này (đã qua `POST /orders/lookup/verify`, còn hạn 30 phút); chủ đơn có phiên `n2f_sid` cũng gọi được (cùng hành vi). Không có cả hai -> `401`; grant của đơn khác / đơn không có -> `404`. Ảnh gắn theo đơn của grant (do `POST /orders/{orderCode}/return/photos` tải); giới hạn 10 yêu cầu / giờ / IP. Nếu lát 9.6 bị cắt, 4 operation `/orders/{orderCode}/return*` không có và chính sách giữ "gọi hotline / gửi email".
+        Slice 10 (lát 10.2), status: locked. Cùng hành vi, thân (`ReturnCreateInput`), công thức tiền, mã lỗi và phản hồi (`ReturnRequest`, cũng xuất hiện ở `Order.return`) như `createReturnRequest` (BR-RET-61: áp BR-RET-09..21 và 30), khác ở quyền, giới hạn và định danh.
+
+        **Quyền (BR-RET-60):** CHỈ cookie `n2f_oa` (sau `POST /orders/lookup/verify`, hiệu lực 30 phút, thời hạn giữ nguyên Slice 3) gắn đúng đơn `{orderCode}`. Không có cookie hoặc grant hết hạn -> `401 unauthenticated`; grant của đơn khác, đơn không có, hoặc đơn thuộc TÀI KHOẢN THÀNH VIÊN (`orders.user_id` có giá trị: dùng `/account/orders/{orderCode}/return`) -> `404 not-found` (cùng phản hồi với đơn không tồn tại). Phiên `n2f_sid` KHÔNG mở được endpoint này.
+
+        **Giới hạn (BR-RET-63, S10-Q11):** 5 yêu cầu / giờ / grant và 10 yêu cầu / giờ / IP (đếm mọi lần gọi tới được thân; vượt -> `429 rate-limited`). Bắt buộc `Idempotency-Key` như thành viên (cùng khoá + cùng nội dung -> `200` + `Idempotency-Replayed: true`).
+
+        **Ảnh (BR-RET-62):** `photos` phải do CHÍNH grant này tải (`POST /orders/{orderCode}/return/photos`) trong 24 giờ qua và chưa gắn yêu cầu nào; ảnh của grant / đơn khác -> `422`, `field: photos`. Tài khoản nhận hoàn COD: như BR-RET-16, 17 (che 4 số cuối, xoá ở trạng thái cuối, chỉ admin xem đủ ở `received`, không có đường nào trả số đầy đủ cho khách vãng lai, thông điệp lỗi không lặp lại giá trị).
+
+        **Hệ quả:** yêu cầu lưu `requested_via = guest`, không có `requested_by`; sự kiện đơn `return_requested` ghi người = `customer` (không tên); email "Đã nhận yêu cầu trả hàng" gửi tới email của đơn, KHÔNG chứa mã tra cứu, OTP hay số tài khoản đầy đủ. Thứ tự kiểm như `createReturnRequest` (cookie 401 -> `X-Requested-With` 403 -> giới hạn 429 -> `Idempotency-Key` 422 -> thân 422 -> đơn 404 -> giao dịch: 409 `not-returnable` / `return-window-closed` / `return-exists` -> kiểm theo dữ liệu 422). `GET /orders/{orderCode}` và `POST /orders/lookup/verify` của khách vãng lai trả `canReturn`, `returnDeadline`, `return` (thay `canReturn = false` của Slice 9).
       security:
         - orderAccess: []
-        - storefrontSession: []
       parameters:
         - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
         - $ref: '#/components/parameters/CsrfHeader'
@@ -3075,7 +3122,7 @@ paths:
             schema: { $ref: '#/components/schemas/ReturnCreateInput' }
       responses:
         '200':
-          description: Phát lại kết quả lần đầu.
+          description: Phát lại kết quả lần đầu (cùng `Idempotency-Key` + cùng nội dung).
           headers:
             Cache-Control: { schema: { type: string, const: no-store } }
             Idempotency-Replayed: { schema: { type: string, const: 'true' } }
@@ -3083,7 +3130,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ReturnRequest' }
         '201':
-          description: Đã tạo yêu cầu.
+          description: Đã tạo yêu cầu (`state = requested`).
           headers:
             Cache-Control: { schema: { type: string, const: no-store } }
           content:
@@ -3100,13 +3147,12 @@ paths:
     post:
       tags: [returns]
       operationId: cancelGuestReturnRequest
-      x-status: draft
-      x-priority: should
-      summary: Khách vãng lai huỷ yêu cầu trả hàng [Should, có thể cắt]
-      description: Như `cancelReturnRequest`; quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn).
+      x-status: locked
+      summary: Khách vãng lai huỷ yêu cầu trả hàng khi chưa được duyệt (BR-RET-60, 61)
+      description: |
+        Slice 10 (lát 10.2), status: locked. Như `cancelReturnRequest` (`requested` -> `cancelled` nguyên tử, xoá số tài khoản đầy đủ, mở lại quyền tạo mới nếu còn hạn, sự kiện `return_cancelled`, không email); quyền, `404` / `401` như `createGuestReturnRequest`. Dùng bộ đếm đơn hiện có (120 / 60 giây).
       security:
         - orderAccess: []
-        - storefrontSession: []
       parameters:
         - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
         - $ref: '#/components/parameters/CsrfHeader'
@@ -3128,13 +3174,12 @@ paths:
     post:
       tags: [returns]
       operationId: estimateGuestReturnAmount
-      x-status: draft
+      x-status: locked
       x-priority: should
-      summary: Dự kiến hoàn cho khách vãng lai [Should, có thể cắt]
-      description: Như `estimateReturnAmount`; quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn).
+      summary: Dự kiến hoàn cho khách vãng lai (BR-RET-61) [Should, có thể cắt]
+      description: 'Slice 10 (lát 10.2), status: locked. Như `estimateReturnAmount` (một công thức `modules/returns/return-amount.ts`, không ghi gì); quyền `n2f_oa` đúng đơn, `401` / `404` như `createGuestReturnRequest`. Nếu cắt, FE tính cục bộ từ `lineDiscount` của đơn.'
       security:
         - orderAccess: []
-        - storefrontSession: []
       parameters:
         - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
         - $ref: '#/components/parameters/CsrfHeader'
@@ -3161,13 +3206,15 @@ paths:
     post:
       tags: [return-photos]
       operationId: uploadGuestReturnPhoto
-      x-status: draft
-      x-priority: should
-      summary: Khách vãng lai tải ảnh trả hàng [Should, có thể cắt]
-      description: Như `uploadReturnPhoto` (thân byte thô, cùng giới hạn, kho riêng tư); quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn). Ảnh gắn với ĐƠN (không với tài khoản) và chỉ gắn được vào yêu cầu của đơn này. 30 tệp / giờ / đơn (+ giới hạn IP hiện có).
+      x-status: locked
+      summary: Khách vãng lai tải 1 ảnh minh chứng trả hàng (BR-RET-62)
+      description: |
+        Slice 10 (lát 10.2), status: locked. Như `uploadReturnPhoto` (thân byte thô của đúng 1 tệp, magic bytes, <= 5 MB, cạnh ngắn >= 200 px, cạnh dài <= 8.000 px, gỡ EXIF / GPS / XMP / COM, kho RIÊNG TƯ, khoá `rp-<32 hex>.<ext>`, `422 invalid-image` + `reason`), khác ở quyền và định danh:
+        - Quyền: CHỈ `n2f_oa` gắn đúng `{orderCode}` (như `createGuestReturnRequest`: 401 / 404).
+        - Ảnh lưu kèm `order_id` của đơn và `grant_hash` = SHA-256 của grant đã tải. Chỉ gắn được vào yêu cầu của CHÍNH đơn này và bởi CHÍNH grant đó, trong 24 giờ kể từ lúc tải và khi chưa gắn.
+        - Giới hạn: 30 tệp / giờ / grant và 60 tệp / giờ / IP (đếm mọi lần gọi tới được thân); vượt -> `429 rate-limited`.
       security:
         - orderAccess: []
-        - storefrontSession: []
       parameters:
         - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
         - $ref: '#/components/parameters/CsrfHeader'
@@ -3180,7 +3227,7 @@ paths:
           application/octet-stream: { schema: { type: string, format: binary } }
       responses:
         '201':
-          description: Ảnh đã lưu.
+          description: Ảnh đã lưu (chưa gắn yêu cầu).
           headers:
             Cache-Control: { schema: { type: string, const: no-store } }
           content:
@@ -3196,13 +3243,12 @@ paths:
     get:
       tags: [return-photos]
       operationId: getGuestReturnPhoto
-      x-status: draft
-      x-priority: should
-      summary: Xem ảnh trả hàng của đơn mình tra cứu [Should, có thể cắt]
-      description: Như `getMyReturnPhoto`; quyền `n2f_oa` đúng đơn (hoặc phiên chủ đơn); ảnh phải thuộc đơn này, nếu không -> `404`.
+      x-status: locked
+      summary: Khách vãng lai xem ảnh trả hàng của đơn mình (BR-RET-62)
+      description: |
+        Slice 10 (lát 10.2), status: locked. Như `getMyReturnPhoto` (máy chủ ĐỌC byte từ kho riêng tư và TRẢ TRỰC TIẾP, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`, không `302`, không URL ký; kiểm quyền Ở MỖI lần gọi). Quyền: `n2f_oa` còn hạn gắn đúng `{orderCode}` VÀ ảnh thuộc đơn này (ảnh chưa gắn: do chính grant này tải; ảnh đã gắn: thuộc yêu cầu của đơn này). Không có grant -> `401`; ảnh của đơn khác / không có / id sai dạng -> `404 not-found` (không phân biệt). Staff / admin xem qua `GET /admin/return-photos/{photoId}`. Mọi `ReturnPhoto.url` trả cho khách vãng lai trỏ về endpoint này.
       security:
         - orderAccess: []
-        - storefrontSession: []
       parameters:
         - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
         - $ref: '#/components/parameters/ReturnPhotoId'
@@ -3226,7 +3272,7 @@ paths:
       x-status: locked
       summary: Danh sách yêu cầu trả hàng, tab đếm, tìm, sắp, phân trang (BR-RET-31)
       description: |
-        Slice 9, status: locked (khách vãng lai: draft, hoãn). Quyền: staff, admin (`returns.process`). `state`: `requested` | `approved` | `received` | `refunded` | `closed` (= `rejected` + `cancelled`); vắng = tất cả; giá trị lạ -> `422`, `field: state`. `q` (cắt khoảng trắng, <= 100 ký tự, dài hơn -> `field: q`): mã đơn (chữ thường / `#` được chấp nhận), tên người nhận (không dấu, không phân biệt hoa thường), SĐT (>= 4 chữ số liên tiếp). `sort`: `requestedAt` (mặc định, mới trước) | `amount` (giảm, hoà `requestedAt` giảm); giá trị lạ -> `field: sort`. `page` >= 1, `limit` 20 (mặc định) | 50, khác -> `422` (`field: page` / `limit`). Hoà thời điểm: `returnId` giảm (thứ tự ổn định qua các trang). `counts` (số đếm mọi tab) tính theo cùng `q`, KHÔNG theo `state`; trang quá cuối -> `items` rỗng, `total` đúng. Bằng đúng số `todo.returnRequested|returnApproved|returnReceived` của Tổng quan khi không có `q`.
+        Slice 9, status: locked (khách vãng lai: locked từ Slice 10, 2026-11-13). Quyền: staff, admin (`returns.process`). `state`: `requested` | `approved` | `received` | `refunded` | `closed` (= `rejected` + `cancelled`); vắng = tất cả; giá trị lạ -> `422`, `field: state`. `q` (cắt khoảng trắng, <= 100 ký tự, dài hơn -> `field: q`): mã đơn (chữ thường / `#` được chấp nhận), tên người nhận (không dấu, không phân biệt hoa thường), SĐT (>= 4 chữ số liên tiếp). `sort`: `requestedAt` (mặc định, mới trước) | `amount` (giảm, hoà `requestedAt` giảm); giá trị lạ -> `field: sort`. `page` >= 1, `limit` 20 (mặc định) | 50, khác -> `422` (`field: page` / `limit`). Hoà thời điểm: `returnId` giảm (thứ tự ổn định qua các trang). `counts` (số đếm mọi tab) tính theo cùng `q`, KHÔNG theo `state`; trang quá cuối -> `items` rỗng, `total` đúng. Bằng đúng số `todo.returnRequested|returnApproved|returnReceived` của Tổng quan khi không có `q`.
       security:
         - adminSession: []
       parameters:
@@ -3407,6 +3453,724 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /reviews/eligibility:
+    get:
+      tags: [reviews]
+      operationId: getReviewEligibility
+      x-status: locked
+      summary: Trạng thái đủ điều kiện đánh giá một sản phẩm (BR-REV-01, 02)
+      description: |
+        Slice 10 (lát 10.5), status: locked. Phụ thuộc người dùng nên KHÔNG nằm dưới `/products/**`. Cookie `n2f_sid` TUỲ CHỌN: không phiên / phiên sai / hết hạn -> vẫn `200` với `status = sign-in` (không `401`, không `Set-Cookie`). Phản hồi `Cache-Control: no-store`. Giới hạn 120 / 60 giây / tài khoản (khách: IP).
+
+        Thứ tự: `429` -> `422` (`productId` thiếu / sai dạng UUID, `field: productId`) -> `404 not-found` (sản phẩm không có hoặc không `ACTIVE`) -> trạng thái. `status`: `sign-in` (không phiên / phiên không hợp lệ; staff / admin đăng nhập storefront được coi như tài khoản thường, không có đơn nên ra `not-purchased`); `reviewed` (đã có đánh giá của tài khoản cho sản phẩm này, kể cả đang bị ẩn); `eligible` (có >= 1 đơn `completed` có `deliveredAt` trong 365 ngày qua chứa sản phẩm, VÀ không phải trường hợp mọi số lượng sản phẩm đó của các đơn ấy đã hoàn: yêu cầu trả hàng `refunded` hết dòng); `not-purchased` (còn lại: chưa mua, mua chưa nhận `to_receive`, đơn huỷ, quá 365 ngày, đã trả hết). `sizeBought` chỉ có khi `eligible`: size của dòng thuộc đơn đủ điều kiện GIAO MỚI NHẤT; FE không quyết định.
+      security:
+        - {}
+        - storefrontSession: []
+      parameters:
+        - { name: productId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Trạng thái.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewEligibility' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /reviews:
+    post:
+      tags: [reviews]
+      operationId: createReview
+      x-status: locked
+      summary: Thành viên đã nhận hàng gửi đánh giá, hiện ngay (BR-REV-03, 04)
+      description: |
+        Slice 10 (lát 10.5), status: locked. Cookie `n2f_sid` bắt buộc (khách vãng lai không đánh giá; staff / admin đăng nhập storefront không có đơn nên nhận `409 not-eligible`). KHÔNG có `Idempotency-Key`: ràng buộc DUY NHẤT (tài khoản, sản phẩm) là cơ chế chống trùng; gửi lại sau khi mất mạng mà lần đầu đã thành công -> `409 already-reviewed` (FE tải lại eligibility / danh sách). Giới hạn 5 / giờ / tài khoản (đếm mọi lần gọi tới được thân), vượt -> `429 rate-limited`.
+
+        **Thứ tự kiểm:** `403 origin-not-allowed` -> `401` -> `429` -> `422` (thân, MỌI lỗi theo trường một lần ở `error.fieldErrors`, `field` = trường đầu) -> `404` (sản phẩm không có / không `ACTIVE`) -> giao dịch: `409 already-reviewed` (đã có đánh giá của tài khoản cho sản phẩm; kể cả ẩn) -> `409 not-eligible` (BR-REV-01, cùng định nghĩa với eligibility; không tạo bản ghi) -> `201`. 10 yêu cầu đồng thời cho cùng (tài khoản, sản phẩm): đúng 1 × `201`, 9 × `409 already-reviewed`, DB đúng 1 hàng.
+
+        **Thân (NFC, cắt khoảng trắng hai đầu, không ký tự điều khiển ngoài xuống dòng):** `productId` UUID; `rating` nguyên 1..5; `fit` ∈ {-1, 0, 1}; `height` tuỳ chọn <= 20 ký tự (vắng = rỗng); `title` 2..80 ký tự và có >= 1 ký tự không phải khoảng trắng; `body` 20..1000 ký tự (sau cắt). `sizeBought`, `author`, `date`, `verified`, `status` nếu FE gửi đều BỊ BỎ QUA: máy chủ đặt `sizeBought` từ đơn đủ điều kiện mới nhất, `author` = "Họ + chữ cái đầu của tên" chụp lúc gửi, `verified = true`. Đánh giá hiện công khai NGAY (hậu kiểm); khách không sửa / xoá được.
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewCreateInput' }
+      responses:
+        '201':
+          description: Đánh giá đã tạo (dạng công khai, để FE hiện đánh giá của mình ngay).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReview' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ReviewConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /recommendations:
+    get:
+      tags: [recommendations]
+      operationId: listRecommendations
+      x-status: locked
+      summary: Gợi ý sản phẩm cho PDP (1 sản phẩm) và giỏ (nhiều sản phẩm) bằng một hàm xác định (BR-REC-01..03)
+      description: |
+        Slice 10 (lát 10.6), status: locked. Công khai chỉ đọc như catalog: không cookie, không `401`, không `Set-Cookie`, KHÔNG dùng dữ liệu người dùng (khách và thành viên nhận cùng kết quả), `Cache-Control: public, max-age=30` (thay đổi tồn kho / `sales_rank` phản ánh <= 30 giây). `POST` / `PUT` / `PATCH` / `DELETE` -> `404 not-found`. Giới hạn catalog 120 / 60 giây / IP.
+
+        **Đầu vào:** `ids` = danh sách id (UUID) HOẶC slug sản phẩm cách nhau dấu phẩy, 0..10 phần tử sau khi bỏ phần rỗng (> 10 -> `422`, `field: ids`); id / slug lạ, sản phẩm không `ACTIVE` bị BỎ QUA. Không còn id hợp lệ (vắng, rỗng, hoặc toàn id lạ) = như giỏ rỗng -> danh sách bán chạy. `limit` nguyên 1..8, mặc định 4 (0, 9, không phải số -> `422`, `field: limit`).
+
+        **MỘT hàm (cùng dữ liệu + cùng tham số -> cùng kết quả và thứ tự, kể cả giữa các tiến trình):** (A) cho một sản phẩm X: loại X, loại sản phẩm không `ACTIVE`, loại sản phẩm hết hàng ở MỌI biến thể; lấy lần lượt đến đủ `limit`, không trùng: (1) cùng danh mục VÀ >= 1 Moment chung, xếp số Moment chung giảm; (2) cùng danh mục còn lại; (3) cùng Moment khác danh mục; (4) bán chạy toàn shop. Trong mỗi bước xếp `salesRank` tăng rồi `slug` tăng. (B) cho nhiều sản phẩm (giỏ): mỗi sản phẩm sinh danh sách (A) 8 mục; điểm = số danh sách chứa sản phẩm đó; xếp điểm giảm, rồi `salesRank` tăng, rồi `slug` tăng; loại mọi sản phẩm đang trong `ids`; cắt `limit`. (C) rỗng: bán chạy (`salesRank` tăng, `slug`). Kết quả ít hơn `limit` thì trả ít hơn (KHÔNG bù sản phẩm sai điều kiện), có thể `items: []` (FE ẩn cả khối). Should (BR-REC-05): bước 0 "mua cùng" (>= 3 đơn `completed` chung trong 365 ngày) và "cùng bộ sưu tập" trước bước (1); nếu chưa làm thì bỏ qua, thứ tự còn lại không đổi.
+        Phần tử dùng cùng `Product` của catalog (giá hiệu lực, `discountPercent`, `rating`, nhãn).
+      parameters:
+        - { name: ids, in: query, schema: { type: string, maxLength: 800 }, description: 'UUID hoặc slug, cách nhau dấu phẩy, tối đa 10 phần tử. Vắng = bán chạy.' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 8, default: 4 } }
+      responses:
+        '200':
+          description: Danh sách gợi ý (có thể rỗng).
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=30' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecommendationList' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /content/home:
+    get:
+      tags: [content]
+      operationId: getHomeContent
+      x-status: locked
+      summary: 'Nội dung trang chủ công khai: danh mục, thẻ Moment (có số sản phẩm thật), khối (BR-MOM-02, BR-CMS-01)'
+      description: |
+        Slice 10 (lát 10.3), status: locked. Công khai chỉ đọc như catalog (không cookie, không `401`, không `Set-Cookie`; ghi -> `404`), `Cache-Control: public, max-age=60`. Giới hạn catalog 120 / 60 giây / IP. Cấu trúc khớp FE `LandingContent` (`categories`, `moments`, `blocks` với `kind` ∈ `campaign`, `products`, `shop`, `categories`); `moments[]` là tập mở rộng của `{label, href}` hiện có.
+
+        Chỉ khối `enabled` (khối tắt không xuất hiện); thứ tự mảng = thứ tự trang. Chưa có bản lưu (chưa seed, chưa ai sửa) -> bản MẶC ĐỊNH nằm trong mã (cùng nội dung seed, seed idempotent và không đè bản admin đã sửa). `moments[]`: tối đa 4 thẻ theo thứ tự cố định `work`, `dinner`, `event`, `weekend`; `count` = số sản phẩm `ACTIVE` thuộc Moment tính KHI ĐỌC; thẻ có `count = 0` KHÔNG được trả (không liên kết tới danh sách rỗng); `href` = `/shop?moment=<mã>`; `lines` <= 2 dòng, mỗi dòng <= 60 ký tự. `mediaId` của khối / thẻ: nếu ảnh không còn (đã xoá khỏi thư viện) thì vẫn trả nguyên `mediaId`; FE dùng ảnh thay thế, không lỗi trang (BR-CMS-05).
+      responses:
+        '200':
+          description: Nội dung trang chủ.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=60' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HomeContentPublic' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /collections:
+    get:
+      tags: [collections]
+      operationId: listCollections
+      x-status: locked
+      x-priority: should
+      summary: Danh sách bộ sưu tập đang `active` (BR-CMS-07) [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Công khai chỉ đọc, `public, max-age=60`. Chỉ `active` (`draft` không xuất hiện), sắp `publishedAt` giảm dần rồi `slug` tăng. `productCount` = số sản phẩm `ACTIVE` trong bộ sưu tập. Bộ sưu tập không còn sản phẩm `ACTIVE` vẫn trả (`productCount = 0`).'
+      responses:
+        '200':
+          description: Danh sách.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=60' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionList' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /collections/{slug}:
+    get:
+      tags: [collections]
+      operationId: getCollection
+      x-status: locked
+      x-priority: should
+      summary: Một bộ sưu tập kèm sản phẩm `ACTIVE` theo thứ tự (BR-CMS-07) [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Công khai chỉ đọc, `public, max-age=60`. `slug` trim + chữ thường; không có, `draft`, hoặc sai dạng -> `404 not-found`. `products` dùng DTO `Product` của catalog (giá hiệu lực), chỉ `ACTIVE`, theo `position`.'
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string, maxLength: 80 } }
+      responses:
+        '200':
+          description: Bộ sưu tập.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'public, max-age=60' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CollectionDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/wishlist:
+    get:
+      tags: [wishlist]
+      operationId: getWishlist
+      x-status: locked
+      summary: Đọc danh sách yêu thích của chính mình (BR-WISH-01, 03)
+      description: |
+        Slice 10 (lát 10.4), status: locked. Cookie `n2f_sid`; không phiên -> `401 unauthenticated`, mọi phản hồi `Cache-Control: no-store`. Dữ liệu riêng tư theo tài khoản (không có tham số người dùng, admin không xem). Trả mọi mục của sản phẩm `ACTIVE`, MỚI THÊM TRƯỚC (`addedAt` giảm dần, hoà `productId` giảm dần), tối đa 100. Mục của sản phẩm đã ẩn / lưu trữ giữ trong DB nhưng KHÔNG trả và KHÔNG tính vào 100; trở lại khi sản phẩm công khai lại. FE lấy thẻ bằng `GET /products?ids=` (<= 48 mỗi lượt, BR-CAT-16). Đọc 120 / 60 giây / tài khoản.
+      security:
+        - storefrontSession: []
+      responses:
+        '200':
+          description: Danh sách (có thể rỗng).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Wishlist' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/wishlist/merge:
+    post:
+      tags: [wishlist]
+      operationId: mergeWishlist
+      x-status: locked
+      summary: Gộp các mục CHƯA ĐỒNG BỘ của thiết bị vào danh sách máy chủ (BR-WISH-04, 05)
+      description: |
+        Slice 10 (lát 10.4), status: locked. Gọi khi đăng nhập / đăng ký (và lần mở trang sau nếu lần trước mất mạng). FE gửi CHỈ các id thêm khi chưa đồng bộ (khách / offline), KHÔNG gửi bản local đã đồng bộ: máy chủ là nguồn sự thật nên mục xoá ở thiết bị khác không bị hồi sinh. `productIds` <= 100 phần tử (> 100 -> `422`, `field: productIds`; phần tử không phải chuỗi -> `422`). Máy chủ: bỏ trùng, hợp với mục đã có, bỏ id không hợp lệ (không phải UUID, không có, không `ACTIVE`), thêm theo THỨ TỰ GỬI TỚI khi đủ 100 mục `ACTIVE` (mục đã có của máy chủ không bao giờ bị bỏ), trả danh sách cuối + `skipped` = số id bị bỏ vì không hợp lệ hoặc vượt 100 (id đã có sẵn trên máy chủ không tính). Idempotent (gọi lại không nhân đôi). Chạy trong một giao dịch có khoá dòng tài khoản nên đồng thời với `PUT` không vượt 100. Giới hạn ghi 60 / phút / tài khoản. `Idempotency-Key` không cần.
+      security:
+        - storefrontSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productIds]
+              additionalProperties: false
+              properties:
+                productIds: { type: array, maxItems: 100, items: { type: string, maxLength: 64 } }
+      responses:
+        '200':
+          description: Danh sách sau gộp.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WishlistMergeResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '422': { $ref: '#/components/responses/Validation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /account/wishlist/{productId}:
+    put:
+      tags: [wishlist]
+      operationId: addWishlistItem
+      x-status: locked
+      summary: Thêm một sản phẩm vào yêu thích (BR-WISH-02)
+      description: |
+        Slice 10 (lát 10.4), status: locked. Không thân. Thêm mục đã có -> `200` không đổi (`addedAt` giữ nguyên, 1 hàng); thêm mới -> `200`. `productId` sai dạng, không có, hoặc không `ACTIVE` -> `404 not-found`. Đã đủ 100 mục `ACTIVE` (mục của sản phẩm đã ẩn không tính) -> `409 wishlist-full`, DB không đổi. Máy chủ khoá dòng tài khoản rồi đếm rồi chèn trong MỘT giao dịch: 20 yêu cầu đồng thời khi còn k chỗ -> đúng k × `200` (mới), phần còn lại `409`/`200` (đã có), tổng không vượt 100. Giới hạn ghi 60 / phút / tài khoản.
+      security:
+        - storefrontSession: []
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '200':
+          description: Mục yêu thích.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WishlistEntry' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/WishlistFull' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [wishlist]
+      operationId: removeWishlistItem
+      x-status: locked
+      summary: Xoá một sản phẩm khỏi yêu thích (BR-WISH-02)
+      description: 'Slice 10 (lát 10.4), status: locked. Idempotent: xoá mục không có -> `204`; xoá mục của sản phẩm vừa bị ẩn / lưu trữ -> `204` (xoá được); `productId` sai dạng hoặc sản phẩm không tồn tại -> `204` (không lộ thông tin). Giới hạn ghi 60 / phút / tài khoản.'
+      security:
+        - storefrontSession: []
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '204':
+          description: Đã xoá (hoặc vốn không có).
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/reviews:
+    get:
+      tags: [admin-reviews]
+      operationId: adminListReviews
+      x-status: locked
+      summary: Danh sách đánh giá cho kiểm duyệt, tab đếm, lọc sao, phân trang (BR-REV-07)
+      description: |
+        Slice 10 (lát 10.5), status: locked. Quyền `reviews.moderate` (staff + admin). Mọi phản hồi `no-store`. Đọc 120 / 60 giây / tài khoản.
+        `view`: `all` (mặc định; mọi đánh giá kể cả ẩn) | `unanswered` (đang `visible` và chưa có trả lời) | `low` (`rating` <= 2, mọi trạng thái) | `hidden` (đã ẩn); giá trị lạ -> `422`, `field: view`. `rating` 1..5 lọc thêm (AND với `view`); `productId` (UUID) lọc theo sản phẩm; `limit` 20 (mặc định) | 50, `page` >= 1, khác -> `422` (`field: limit` / `page` / `rating` / `productId`). Sắp `createdAt` giảm dần, hoà `id` giảm dần (ổn định qua các trang); trang quá cuối -> `items` rỗng, `total` đúng. `counts` = số đếm của MỌI tab, KHÔNG theo `view` / `rating` / `productId` (cố định cho thanh tab); `average` = điểm trung bình các đánh giá `visible` toàn shop (1 chữ số thập phân half-up), `null` khi chưa có.
+      security:
+        - adminSession: []
+      parameters:
+        - { name: view, in: query, schema: { $ref: '#/components/schemas/AdminReviewView' } }
+        - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 } }
+        - { name: productId, in: query, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, maximum: 10000, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, enum: [20, 50], default: 20 } }
+      responses:
+        '200':
+          description: Trang đánh giá.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminReviewPage' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/reviews/{reviewId}/hide:
+    post:
+      tags: [admin-reviews]
+      operationId: adminHideReview
+      x-status: locked
+      summary: Ẩn một đánh giá (lý do bắt buộc) (BR-REV-07)
+      description: |
+        Slice 10 (lát 10.5), status: locked. Quyền `reviews.moderate`. Thân `{reason, updatedAt}`: `reason` 5..250 ký tự sau chuẩn hoá (NFC, cắt hai đầu, không ký tự điều khiển; ngoài khoảng -> `422`, `field: reason`); `updatedAt` = giá trị `AdminReview.updatedAt` FE đang thấy. Lệch -> `409 version-conflict` (không đổi gì); hai nhân viên ẩn / hiện đồng thời cùng một đánh giá: đúng 1 × `200`, còn lại `409`. Khớp -> ghi `status = hidden`, `hiddenAt`, người ẩn (id + tên chụp lúc ẩn), `hiddenReason`, `updatedAt` mới (tăng ngặt) trong một giao dịch; đánh giá ẩn biến khỏi danh sách công khai, `rating` / `count` trung bình và (khi cả sản phẩm ẩn) vẫn giữ trong DB. Ẩn đánh giá đã ẩn với `updatedAt` khớp -> `200` không đổi (không ghi đè lý do). `reviewId` sai dạng / không có -> `404`. Thứ tự: 401 -> 403 origin -> 429 -> 403 quyền -> 422 -> 404 -> 409 -> 200. Ghi 60 / 60 giây / tài khoản.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, updatedAt]
+              additionalProperties: false
+              properties:
+                reason: { type: string, minLength: 5, maxLength: 250 }
+                updatedAt: { type: string, format: date-time }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReviewUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/reviews/{reviewId}/show:
+    post:
+      tags: [admin-reviews]
+      operationId: adminShowReview
+      x-status: locked
+      summary: Hiện lại một đánh giá đã ẩn (BR-REV-07)
+      description: 'Slice 10 (lát 10.5), status: locked. Quyền `reviews.moderate`. Thân `{updatedAt}`; `status = visible`, xoá `hiddenAt` / người ẩn / `hiddenReason`, `updatedAt` mới; đánh giá trở lại danh sách công khai và điểm trung bình. Hiện đánh giá đang `visible` với `updatedAt` khớp -> `200` không đổi. `updatedAt` lệch -> `409 version-conflict`. Thứ tự, giới hạn như `adminHideReview`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updatedAt]
+              additionalProperties: false
+              properties:
+                updatedAt: { type: string, format: date-time }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReviewUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/reviews/{reviewId}/reply:
+    put:
+      tags: [admin-reviews]
+      operationId: adminReplyReview
+      x-status: locked
+      summary: Trả lời công khai một đánh giá, sửa hoặc xoá câu trả lời (BR-REV-07)
+      description: 'Slice 10 (lát 10.5), status: locked. Quyền `reviews.moderate`. Thân `{body, updatedAt}`: `body` 5..500 ký tự sau chuẩn hoá (đặt hoặc sửa; ngoài khoảng -> `422`, `field: body`) hoặc `null` (xoá câu trả lời). Ghi `replyBody`, `replyAt`, người trả lời (id + tên chụp lúc trả lời), `updatedAt` mới. Công khai hiện "Phản hồi từ nine2fine" (`reply.body`, `reply.at`; tên nhân viên KHÔNG lộ ra công khai). Được trả lời đánh giá đang ẩn (không hiện công khai). `updatedAt` lệch -> `409 version-conflict`. Thứ tự, giới hạn như `adminHideReview`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/ReviewId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body, updatedAt]
+              additionalProperties: false
+              properties:
+                body: { type: [string, 'null'], minLength: 5, maxLength: 500 }
+                updatedAt: { type: string, format: date-time }
+      responses:
+        '200': { $ref: '#/components/responses/AdminReviewUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/content/home:
+    get:
+      tags: [admin-content]
+      operationId: adminGetHomeContent
+      x-status: locked
+      summary: Đọc nội dung trang chủ để sửa, gồm cả khối tắt (BR-CMS-01, 02)
+      description: |
+        Slice 10 (lát 10.3), status: locked. Quyền `content.view` (staff + admin; staff chỉ đọc). `no-store`. Trả MỌI khối (kể cả `enabled: false`), `moments` không có `count` / `href` (chỉ chữ + ảnh). `updatedAt` là khoá chống ghi chồng: `null` khi chưa có dòng lưu (đang dùng bản mặc định trong mã, `isDefault = true`). `warnings` (Should, BR-CMS-06): cảnh báo KHÔNG chặn khi `href` dạng `/product/<slug>` trỏ sản phẩm không còn `ACTIVE`; vắng nếu chưa làm Should.
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Bản hiện tại.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminHomeContent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [admin-content]
+      operationId: adminSaveHomeContent
+      x-status: locked
+      summary: Lưu nguyên văn bản trang chủ, chống ghi chồng (BR-CMS-02)
+      description: |
+        Slice 10 (lát 10.3), status: locked. Quyền `content.edit` (CHỈ admin; staff -> `403 forbidden` kiểm trước khi đọc thân, DB không đổi). MỘT lần ghi nguyên văn bản `{categories, moments, blocks, updatedAt}`; bản lưu = bản công khai ngay (không nháp / xem trước / lịch; khách thấy trong <= 60 giây theo `max-age`). `updatedAt` = giá trị lần đọc gần nhất (`null` chỉ hợp lệ khi chưa có dòng lưu). Lệch -> `409 version-conflict` kèm `error.current` = `AdminHomeContent` hiện tại, KHÔNG ghi; hai admin lưu đồng thời: đúng 1 × `200`, còn lại `409`. Thành công: ghi `updatedBy` (id + tên) + `updatedAt` mới (tăng ngặt) trong một giao dịch, trả bản mới.
+
+        **Kiểm giá trị (MỌI lỗi một lần ở `error.fieldErrors`, `field` = đường dẫn đầy đủ như `blocks[2].title`, `moments[1].lines[0]`, `categories[0].href`; chuỗi NFC, cắt hai đầu, không ký tự điều khiển ngoài xuống dòng ở `description` / `lines`):** `blocks` <= 12 (kể cả khối tắt); `blocks[i].id` `^[a-z0-9][a-z0-9-]{0,39}$` và duy nhất; `kind` ∈ `campaign`, `products`, `shop`, `categories`; `eyebrow` <= 40, `title` <= 80, `description` <= 200 ký tự, `label` <= 40 (khối `products`, `shop` <= 80); khối `products` <= 6 thẻ (`title` <= 80, `caption` <= 40); `categories` 1..8 phần tử (`label` <= 40); `moments` ĐÚNG 4 phần tử theo thứ tự `work`, `dinner`, `event`, `weekend` (không thêm / xoá / đổi mã), `label` 1..40, `lines` 1..2 dòng mỗi dòng 1..60 ký tự; `href` (mọi nơi) CHỈ là đường dẫn nội bộ: bắt đầu `/`, không `//`, không `\`, không khoảng trắng / ký tự điều khiển, <= 200 ký tự (loại `javascript:`, `http:`, `//evil.com`); `mediaId` (mọi nơi): id trong thư viện ảnh đã tải lên (`up-...` phải tồn tại ở `media_assets`) hoặc id ảnh seed hợp lệ (`prisma/seed-data/media-ids.json`), lạ -> `422`; thứ tự mảng = thứ tự hiển thị. Thân > 64 KB -> `422`.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HomeContentInput' }
+      responses:
+        '200':
+          description: Bản vừa lưu.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminHomeContent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/content/home/reset:
+    post:
+      tags: [admin-content]
+      operationId: adminResetHomeContent
+      x-status: locked
+      x-priority: should
+      summary: Khôi phục trang chủ về bản mặc định (BR-CMS-06) [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Quyền `content.edit` (chỉ admin). Thân `{updatedAt}`; ghi đè bằng bản mặc định trong mã (`isDefault = true`, `updatedBy` = người gọi). Khoá ghi chồng và `409 version-conflict` (+ `error.current`) như `adminSaveHomeContent`. FE hiện hộp xác nhận trước khi gọi.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updatedAt]
+              additionalProperties: false
+              properties:
+                updatedAt: { type: [string, 'null'], format: date-time }
+      responses:
+        '200':
+          description: Bản mặc định vừa khôi phục.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminHomeContent' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/size-charts:
+    get:
+      tags: [admin-content]
+      operationId: adminListSizeCharts
+      x-status: locked
+      summary: Bảng size của mọi danh mục để sửa (BR-CMS-03)
+      description: 'Slice 10 (lát 10.3), status: locked. Quyền `content.view` (staff + admin; staff chỉ đọc). `no-store`. Một phần tử mỗi danh mục (`categories`, hiện 4, theo `sortOrder`); danh mục chưa có bảng vẫn có phần tử với bảng rỗng không hợp lệ để lưu lần đầu (`updatedAt = null`). `productCount` = số sản phẩm (mọi trạng thái) thuộc danh mục. `customised = true` khi đã có admin sửa qua API này.'
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Danh sách bảng size.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSizeChartList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/size-charts/{category}:
+    put:
+      tags: [admin-content]
+      operationId: adminSaveSizeChart
+      x-status: locked
+      summary: Lưu nguyên bảng size của một danh mục, chống ghi chồng (BR-CMS-03)
+      description: |
+        Slice 10 (lát 10.3), status: locked. Quyền `content.edit` (CHỈ admin; staff -> `403 forbidden` trước khi đọc thân, DB không đổi). `category` là slug danh mục (`tops`, `bottoms`, `dresses`, `outerwear`); không có -> `404 not-found`. MỘT lần ghi nguyên bảng `{body, garment, bodyColumns, garmentColumns, updatedAt}`; `updatedAt` = giá trị lần đọc gần nhất (`null` chỉ khi chưa có dòng). Lệch -> `409 version-conflict` kèm `error.current` = `AdminSizeChart` hiện tại, KHÔNG ghi; đồng thời: 1 × `200`, còn lại `409`. Thành công: `updatedAt` mới, người sửa; `GET /size-charts/{category}` trả bản mới trong <= 60 giây (`max-age=60`).
+
+        **Kiểm giá trị (MỌI lỗi một lần ở `error.fieldErrors`, đường dẫn như `body[2].size`, `body[0].values.Ngực`, `garmentColumns[1]`):** `body` và `garment` mỗi bảng 1..12 hàng; `bodyColumns` / `garmentColumns` 1..8 cột, tên cột 1..20 ký tự và duy nhất trong bảng; nhãn size (`size`) 1..10 ký tự và duy nhất trong bảng; mỗi hàng phải có ĐÚNG các khoá `values` bằng tập cột tương ứng (thiếu / thừa cột -> `422` theo đường dẫn); mỗi ô `values[cột]` không rỗng (sau cắt) và <= 20 ký tự. Chuỗi NFC, cắt hai đầu, không ký tự điều khiển.
+      security:
+        - adminSession: []
+      parameters:
+        - { name: category, in: path, required: true, schema: { type: string, maxLength: 50 } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SizeChartInput' }
+      responses:
+        '200':
+          description: Bảng size vừa lưu.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSizeChart' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/sales/bulk/preview:
+    post:
+      tags: [admin-sales]
+      operationId: adminPreviewBulkSale
+      x-status: locked
+      x-priority: should
+      summary: Xem trước giảm giá hàng loạt theo danh mục (BR-PROMO-07) [Should, có thể cắt]
+      description: |
+        Slice 10 (lát 10.7), status: locked. Quyền `promotions.write` (chỉ admin; staff -> `403`). KHÔNG ghi gì. Thân `{category, percent, startsOn, endsOn}`: `category` slug danh mục (không có -> `422`, `field: category`); `percent` nguyên 5..70 (ngoài -> `422`, `field: percent`); `startsOn`, `endsOn` ngày `YYYY-MM-DD` giờ VN, `endsOn >= startsOn`, `endsOn <= startsOn + 89 ngày` (sai -> `422`, `field: startsOn` / `endsOn`).
+        Với mỗi sản phẩm `ACTIVE` của danh mục (mọi tồn kho, kể cả hết hàng): `salePrice = floor(price x (100 - percent) / 100 xuống bội số 1.000)`. Sản phẩm vào `applicable` khi không đang có đợt CHẠY (đợt sắp tới / đã kết thúc bị ghi đè theo BR-PROMO-01) và `1.000 <= salePrice < price`; ngược lại vào `skipped` kèm `reason`: `sale-running` (đang có đợt chạy), `below-minimum` (`salePrice` < 1.000), `not-reduced` (`salePrice` >= `price`). Sắp theo `slug`. Tối đa 200 phần tử mỗi danh sách.
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkSaleInput' }
+      responses:
+        '200':
+          description: Kết quả xem trước.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkSaleResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/sales/bulk:
+    post:
+      tags: [admin-sales]
+      operationId: adminApplyBulkSale
+      x-status: locked
+      x-priority: should
+      summary: Áp giảm giá hàng loạt theo danh mục, tất cả hoặc không (BR-PROMO-07) [Should, có thể cắt]
+      description: 'Slice 10 (lát 10.7), status: locked. Quyền `promotions.write` (chỉ admin). Cùng thân, cùng cách tính và kiểm giá trị như `adminPreviewBulkSale`, nhưng TÍNH LẠI trong một giao dịch (khoá các dòng sản phẩm) rồi ghi `salePrice` / `saleStartsAt` / `saleEndsAt` cho mọi sản phẩm `applicable`: có lỗi giữa chừng thì KHÔNG sản phẩm nào đổi (tất cả hoặc không); sản phẩm bị `skipped` không đổi. Mỗi sản phẩm được ghi tăng `updatedAt` và `updatedBy`. Kết quả có `applied` = số sản phẩm đã ghi; FE nên xem trước ngay trước khi áp vì giá có thể đổi giữa hai lần gọi. Ghi 60 / 60 giây / tài khoản.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkSaleInput' }
+      responses:
+        '200':
+          description: Đã áp.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BulkSaleResult' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/collections:
+    get:
+      tags: [admin-collections]
+      operationId: adminListCollections
+      x-status: locked
+      x-priority: should
+      summary: Danh sách bộ sưu tập (mọi trạng thái) [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Quyền `content.view` (staff + admin; staff chỉ đọc). `no-store`. Sắp `updatedAt` giảm dần, hoà `id`. Không phân trang (số bộ sưu tập nhỏ; <= 200 sản phẩm mỗi bộ).'
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Danh sách.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollectionList' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [admin-collections]
+      operationId: adminCreateCollection
+      x-status: locked
+      x-priority: should
+      summary: Tạo bộ sưu tập [Should, lát 10.8, có thể cắt]
+      description: |
+        Slice 10 (lát 10.8). Quyền `content.edit` (chỉ admin). Thân `CollectionInput`: `name` 1..80; `slug` 2..50 ký tự `[a-z0-9-]` (`Hè 2027` -> `422`), vắng = sinh từ `name`; `description` <= 300; `status` `active` | `draft` (mặc định `draft`); `productIds` <= 200 id sản phẩm tồn tại (không trùng, mọi trạng thái; id lạ -> `422`, `field: productIds`), thứ tự mảng = thứ tự hiển thị. `slug` trùng -> `409 duplicate` (`field: slug`; PRD ghi "422 `duplicate`", contract giữ 409 như `duplicate` của Slice 6, 7). Lần `active` đầu ghi `publishedAt` (khoá slug).
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionInput' }
+      responses:
+        '201':
+          description: Đã tạo.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollection' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+  /admin/collections/{collectionId}:
+    get:
+      tags: [admin-collections]
+      operationId: adminGetCollection
+      x-status: locked
+      x-priority: should
+      summary: Chi tiết một bộ sưu tập [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Quyền `content.view`. `no-store`. `collectionId` sai dạng / không có -> `404`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+      responses:
+        '200':
+          description: Bộ sưu tập.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollection' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [admin-collections]
+      operationId: adminUpdateCollection
+      x-status: locked
+      x-priority: should
+      summary: Sửa bộ sưu tập, chống ghi chồng [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Quyền `content.edit`. Thân `CollectionInput` + `updatedAt` (lệch -> `409 version-conflict`, kèm `error.current`). Quy tắc như `adminCreateCollection`; ngoài ra slug của bộ sưu tập đã từng `active` (`publishedAt` có giá trị) KHÔNG đổi (`422`, `field: slug`). Danh sách `productIds` thay nguyên (thứ tự mảng = thứ tự). Mỗi lần sửa tăng ngặt `updatedAt`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionUpdate' }
+      responses:
+        '200':
+          description: Bộ sưu tập vừa sửa.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminCollection' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ContentConflict' }
+        '422': { $ref: '#/components/responses/FieldValidation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [admin-collections]
+      operationId: adminDeleteCollection
+      x-status: locked
+      x-priority: should
+      summary: Xoá bộ sưu tập (không xoá sản phẩm) [Should, lát 10.8, có thể cắt]
+      description: 'Slice 10 (lát 10.8). Quyền `content.edit`. Xoá bộ sưu tập và các dòng liên kết (`collection_products`), KHÔNG xoá sản phẩm. Không có -> `404`. Khối trang chủ trỏ `/collections/<slug>` đã xoá chỉ sinh cảnh báo (BR-CMS-06), không chặn.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/CollectionId'
+        - $ref: '#/components/parameters/CsrfHeader'
+      responses:
+        '204':
+          description: Đã xoá.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     storefrontSession:
@@ -3514,6 +4278,18 @@ components:
       in: path
       required: true
       description: 'Slice 9. UUID ảnh trả hàng; sai dạng, không có, hoặc không có quyền xem -> `404 not-found` (không phân biệt).'
+      schema: { type: string }
+    ReviewId:
+      name: reviewId
+      in: path
+      required: true
+      description: 'Slice 10. UUID đánh giá; sai dạng hoặc không có -> `404 not-found`.'
+      schema: { type: string }
+    CollectionId:
+      name: collectionId
+      in: path
+      required: true
+      description: 'Slice 10 (Should). UUID bộ sưu tập; sai dạng hoặc không có -> `404 not-found`.'
       schema: { type: string }
   headers:
     RetryAfter:
@@ -3726,6 +4502,38 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/AdminReturn' }
+    FieldValidation:
+      description: |
+        Slice 10. `validation` (+ `field` = trường đầu tiên; `fieldErrors` liệt kê MỌI lỗi theo trường một lần ở thân nhiều trường: gửi đánh giá, lưu trang chủ, lưu bảng size, bộ sưu tập, giảm hàng loạt). `field` là tên tham số / trường (`productId`, `rating`, `fit`, `height`, `title`, `body`, `reason`, `view`, `limit`, `page`, `updatedAt`, `category`, `percent`, `startsOn`, `endsOn`, `slug`, `name`, `productIds`...) hoặc đường dẫn đầy đủ có chỉ số (`blocks[2].title`, `moments[1].lines[0]`, `body[2].values.Ngực`). Thông điệp KHÔNG lặp lại giá trị đã nhập. Không đổi dữ liệu.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ReviewConflict:
+      description: |
+        Slice 10. `already-reviewed` (tài khoản đã có đánh giá cho sản phẩm này, kể cả đang bị ẩn; kiểm TRƯỚC) hoặc `not-eligible` (chưa nhận hàng / quá 365 ngày / đã trả hết). Không tạo bản ghi. FE có câu riêng cho từng mã (BR-REV-08).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    WishlistFull:
+      description: '`wishlist-full`: đã đủ 100 mục `ACTIVE` (mục của sản phẩm ẩn không tính). DB không đổi. FE: "Danh sách yêu thích đã đủ 100 sản phẩm".'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ContentConflict:
+      description: |
+        Slice 10. Mọi trường hợp: không đổi dữ liệu.
+        - `version-conflict`: `updatedAt` gửi lên khác bản hiện tại. Ở nội dung trang chủ / bảng size / bộ sưu tập kèm `error.current` (bản hiện tại, cùng kiểu với phản hồi `200` của chính thao tác) để FE hiện giá trị máy chủ và giữ bản đang nhập; ở kiểm duyệt đánh giá chỉ báo lỗi, FE tải lại danh sách.
+        - `duplicate` (`field: slug`): slug bộ sưu tập đã có (Should).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    AdminReviewUpdated:
+      description: 'Slice 10. Đánh giá sau thao tác (dạng admin, `updatedAt` mới).'
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AdminReview' }
   schemas:
     Email:
       type: string
@@ -3815,6 +4623,10 @@ components:
         | return-exists | 409 | AC-RET-09 (Slice 9, draft; đơn đã có yêu cầu không-`cancelled`) |
         | invalid-transition (dùng lại) | 409 | AC-RET-08, 19, 33..39 (Slice 9, draft; kèm `currentReturnState`, không có `currentStatus`) |
         | validation / invalid-image / idempotency-conflict (dùng lại) | 422 / 422 / 409 | AC-RET-11..14, 16, 18, 21, 31, 33..37 (Slice 9, draft; `field` phẳng: `lines`, `reason`, `detail`, `conditionAck`, `photos`, `bank`, `accountNumber`, `accountName`, `note`, `amount`, `refundReference`) |
+        | not-eligible | 409 | AC-REV-01 (Slice 10, locked; `POST /reviews`) |
+        | already-reviewed | 409 | AC-REV-03 (Slice 10, locked; `POST /reviews`) |
+        | wishlist-full | 409 | AC-WISH-03 (Slice 10, locked; `PUT /account/wishlist/{productId}`) |
+        | version-conflict (dùng lại) | 409 | AC-REV-06, AC-PROMO-05, AC-CMS-02, 04 (Slice 10, locked; kèm `current` ở nội dung / bảng size) |
         | unavailable | 500 | AC-AUTH-93, 94 |
       enum:
         - validation
@@ -3853,6 +4665,9 @@ components:
         - not-returnable
         - return-window-closed
         - return-exists
+        - not-eligible
+        - already-reviewed
+        - wishlist-full
         - unavailable
     ErrorResponse:
       type: object
@@ -3878,7 +4693,7 @@ components:
             fieldErrors:
               type: array
               minItems: 1
-              description: 'Slice 8, `PUT /admin/settings/store` (`validation`): MỌI lỗi theo trường (AC-SET-02); phần tử đầu trùng `field` / `message` ở trên. Slice 9 (draft): thêm ở `createReturnRequest`, `estimateReturnAmount`, `adminReceiveReturn`. `message` không bao giờ lặp lại giá trị đã nhập.'
+              description: 'Slice 8, `PUT /admin/settings/store` (`validation`): MỌI lỗi theo trường (AC-SET-02); phần tử đầu trùng `field` / `message` ở trên. Slice 9: thêm ở `createReturnRequest`, `estimateReturnAmount`, `adminReceiveReturn`. Slice 10: thêm ở `createReview`, `adminSaveHomeContent`, `adminSaveSizeChart`, bộ sưu tập, giảm hàng loạt (đường dẫn đầy đủ có chỉ số). `message` không bao giờ lặp lại giá trị đã nhập.'
               items:
                 type: object
                 required: [field, message]
@@ -3937,6 +4752,10 @@ components:
               type: integer
               minimum: 0
               description: 'Slice 6, `stock-changed` của điều chỉnh tồn: Đang giữ hiện tại.'
+            current:
+              description: 'Slice 10, `version-conflict` của `PUT /admin/content/home`, `PUT /admin/size-charts/{category}`, `PUT /admin/collections/{id}`, `POST /admin/content/home/reset`: bản hiện tại của máy chủ (cùng kiểu với phản hồi `200` của chính thao tác: `AdminHomeContent`, `AdminSizeChart` hoặc `AdminCollection`) để FE hiện giá trị máy chủ và giữ bản đang nhập.'
+              type: object
+              additionalProperties: true
     Category:
       type: string
       enum: [tops, bottoms, dresses, outerwear]
@@ -3991,7 +4810,7 @@ components:
         tip: { type: string }
     Product:
       type: object
-      description: 'Khớp interface `Product` của FE (`frontend/src/app/features/catalog/models/product.ts`) trừ `id`, `variants[].id` (UUID) và `variants[].stockStatus` (mới). Không có `rating` (FE vốn để tuỳ chọn). Chuỗi / mảng nội dung thiếu là `""` / `[]`, không bao giờ `null` (BR-CAT-10); trường tuỳ chọn (`compareAtPrice`, `badge`, `colorMedia`) bị bỏ khi không có.'
+      description: 'Khớp interface `Product` của FE (`frontend/src/app/features/catalog/models/product.ts`) trừ `id`, `variants[].id` (UUID) và `variants[].stockStatus` (mới). Slice 10: `rating` có khi sản phẩm có đánh giá `visible`; `price` / `compareAtPrice` là giá hiệu lực. Chuỗi / mảng nội dung thiếu là `""` / `[]`, không bao giờ `null` (BR-CAT-10); trường tuỳ chọn (`compareAtPrice`, `badge`, `colorMedia`) bị bỏ khi không có.'
       required: [id, slug, name, type, category, moments, genders, price, mediaId, gallery, variants, description, material, care, fit, looks, createdAt, salesRank]
       additionalProperties: false
       properties:
@@ -4002,8 +4821,8 @@ components:
         category: { $ref: '#/components/schemas/Category' }
         moments: { type: array, items: { $ref: '#/components/schemas/Moment' }, minItems: 1 }
         genders: { type: array, items: { $ref: '#/components/schemas/Gender' }, minItems: 1 }
-        price: { type: integer, minimum: 10000, maximum: 50000000, description: VND }
-        compareAtPrice: { type: integer, description: 'Chỉ có khi > `price`.' }
+        price: { type: integer, minimum: 1000, maximum: 100000000, description: 'VND. Slice 10: GIÁ HIỆU LỰC (giá giảm khi đang trong đợt, ngược lại giá gốc).' }
+        compareAtPrice: { type: integer, description: 'Chỉ có khi > `price`. Slice 10: đang trong đợt giảm = `price` GỐC (đè giá gạch nhập tay); ngoài đợt = giá gạch nhập tay như cũ.' }
         mediaId: { type: string, maxLength: 100, description: Ảnh bìa (khoá media manifest). }
         gallery: { type: array, items: { type: string }, minItems: 1 }
         colorMedia:
@@ -4019,6 +4838,9 @@ components:
         looks: { type: array, items: { $ref: '#/components/schemas/StylingLook' } }
         createdAt: { type: string, format: date, description: 'Ngày ISO `YYYY-MM-DD`, giữ như FE hiện có (C13).' }
         salesRank: { type: integer, minimum: 1, description: '1 = bán chạy nhất. Số lưu sẵn ở Slice 2.' }
+        rating: { type: object, required: [average, count], additionalProperties: false, description: 'Slice 10 (BR-REV-06). Chỉ có khi có >= 1 đánh giá `visible`; `average` 1 chữ số thập phân half-up. Cùng số ở PLP, PDP và `ProductReviewPage.summary`.', properties: { average: { type: number, minimum: 1, maximum: 5 }, count: { type: integer, minimum: 1 } } }
+        discountPercent: { type: integer, minimum: 0, maximum: 99, description: 'Slice 10 (BR-PROMO-06). Chỉ có khi đang CHẠY đợt giảm: floor((1 - giá giảm / giá gốc) x 100) do máy chủ tính (499.000 / 500.000 -> 0; FE ẩn nhãn khi 0).' }
+        saleEndsAt: { type: string, format: date-time, description: 'Slice 10 (Should, BR-PROMO-07). Chỉ có khi đang chạy đợt giảm: 23:59:59 giờ VN của ngày kết thúc (ISO UTC) cho nhãn "Giảm giá đến dd/MM".' }
     ProductPage:
       type: object
       required: [items, total, page, limit]
@@ -4044,6 +4866,7 @@ components:
         garment: { type: array, items: { $ref: '#/components/schemas/SizeChartRow' } }
         bodyColumns: { type: array, items: { type: string } }
         garmentColumns: { type: array, items: { type: string } }
+        updatedAt: { type: string, format: date-time, description: 'Slice 10. Thời điểm admin lưu bảng lần cuối; vắng khi chưa từng sửa qua API admin.' }
     Location:
       type: object
       required: [code, name]
@@ -4454,7 +5277,7 @@ components:
             trackingNumber: { type: string }
             handedOverAt: { type: string, format: date-time }
         deliveredAt: { type: string, format: date-time, description: 'Slice 4. Thời điểm giao xong / thu tiền; chỉ khi `completed`.' }
-        canReturn: { type: boolean, description: 'Slice 9 (draft, BR-RET-10). Máy chủ tính: `status = completed`, có `deliveredAt`, `paymentStatus = paid`, chưa quá `returnDeadline`, và chưa có yêu cầu không-`cancelled`. FE bám cờ này (không tính hạn bằng đồng hồ máy khách).' }
+        canReturn: { type: boolean, description: 'Slice 9 (BR-RET-10); Slice 10 (BR-RET-61): có cả cho đơn của khách vãng lai xem bằng `n2f_oa` (đơn của thành viên xem bằng `n2f_oa` vẫn `false`: dùng `/account/**`). Máy chủ tính: `status = completed`, có `deliveredAt`, `paymentStatus = paid`, chưa quá `returnDeadline`, và chưa có yêu cầu không-`cancelled`. FE bám cờ này (không tính hạn bằng đồng hồ máy khách).' }
         returnDeadline: { type: string, format: date-time, description: 'Slice 9 (draft). 23:59:59 giờ VN của ngày thứ 30 kể từ ngày giao (ISO UTC). Chỉ khi có `deliveredAt`.' }
         return: { allOf: [{ $ref: '#/components/schemas/ReturnRequest' }], description: 'Slice 9 (draft, BR-RET-20). Yêu cầu không-`cancelled` mới nhất của đơn; nếu chỉ có yêu cầu đã huỷ thì yêu cầu huỷ mới nhất; không có yêu cầu thì vắng. Chỉ ở các API đơn của khách (chi tiết, danh sách, huỷ); không có ở thư / phản hồi đặt đơn.' }
         willCallToConfirm: { type: boolean, description: 'COD cần CSKH gọi xác nhận trong 2 giờ làm việc (BR-CHK-20): false với thành viên đã có đơn `completed` và đơn < 1.000.000 ₫. Chỉ có ở đơn COD `to_ship`.' }
@@ -4600,7 +5423,7 @@ components:
         hasCancelRequest: { type: boolean, description: 'Cờ "có yêu cầu huỷ": `status = cancel_requested`.' }
         tab: { $ref: '#/components/schemas/AdminOrderBucket' }
         overdue: { type: array, items: { $ref: '#/components/schemas/AdminOverdueFlag' }, description: 'Should (BR-ADM-40). Rỗng nếu trong hạn.' }
-        returnPending: { type: boolean, description: 'Slice 9 (draft, Should, BR-RET-44): đơn có yêu cầu trả hàng `requested`. Có thể vắng nếu chưa làm Should.' }
+        returnPending: { type: boolean, description: 'Slice 9 / Slice 10 (Should, BR-RET-44, 65): đơn có yêu cầu trả hàng `requested` (cả thành viên lẫn vãng lai). Có thể vắng nếu chưa làm Should.' }
     AdminOrderPage:
       type: object
       required: [items, total, page, limit]
@@ -4930,7 +5753,7 @@ components:
     AdminProductInput:
       type: object
       required: [name, type, category, price, variants]
-      description: 'Phần sửa được của sản phẩm. Quy tắc BR-INV-11: chuỗi NFC, cắt hai đầu, gộp khoảng trắng; `name` 1-120; `type` 1-120; `description` <= 5.000; `material` <= 500; `care` <= 10 dòng, mỗi dòng 1-200; `fitSummary` <= 500; `price` nguyên 1.000..100.000.000; `compareAtPrice` null hoặc nguyên > `price` và <= 100.000.000. Sai -> `422 validation` + `field`.'
+      description: 'Phần sửa được của sản phẩm. Quy tắc BR-INV-11: chuỗi NFC, cắt hai đầu, gộp khoảng trắng; `name` 1-120; `type` 1-120; `description` <= 5.000; `material` <= 500; `care` <= 10 dòng, mỗi dòng 1-200; `fitSummary` <= 500; `price` nguyên 1.000..100.000.000; `compareAtPrice` null hoặc nguyên > `price` và <= 100.000.000. Slice 10 (BR-PROMO-01, 05): `salePrice` / `saleStartsAt` / `saleEndsAt` — khoá VẮNG = giữ nguyên đợt; cả ba `null` = gỡ đợt; cả ba có giá trị = đặt (ghi đè); thiếu một hoặc sai khoảng (`salePrice` ngoài [1.000, `price`), kết thúc < bắt đầu, dài > 90 ngày) -> `422` theo trường; `price` mới <= `salePrice` hiện có -> `422`, `field: salePrice`; có trường `sale*` cần thêm quyền `promotions.write`. Sai -> `422 validation` + `field`.'
       properties:
         slug: { type: string, minLength: 3, maxLength: 80, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', description: 'Trống / vắng = tự sinh (tạo) hoặc giữ nguyên (sửa).' }
         name: { type: string }
@@ -4942,6 +5765,9 @@ components:
         moments: { type: array, items: { $ref: '#/components/schemas/Moment' }, uniqueItems: true }
         price: { type: integer }
         compareAtPrice: { type: [integer, 'null'] }
+        salePrice: { type: [integer, 'null'], description: 'Slice 10 (BR-PROMO-01). Giá giảm có hạn, nguyên, 1.000 <= salePrice < price. Cả ba trường `sale*` cùng có hoặc cùng `null`.' }
+        saleStartsAt: { type: [string, 'null'], description: 'Slice 10. Đầu đợt: nhận ngày `YYYY-MM-DD` (giờ VN, = 00:00:00) hoặc ISO UTC đúng 00:00:00 giờ VN; trả về ISO UTC.' }
+        saleEndsAt: { type: [string, 'null'], description: 'Slice 10. Cuối đợt: nhận ngày `YYYY-MM-DD` (giờ VN, = 23:59:59, gồm cả ngày đó) hoặc ISO UTC đúng 23:59:59 giờ VN; <= bắt đầu + 89 ngày; trả về ISO UTC.' }
         material: { type: string, default: '' }
         care: { type: array, maxItems: 10, items: { type: string } }
         fitSummary: { type: string, default: '' }
@@ -4971,7 +5797,7 @@ components:
             updatedAt: { type: string, format: date-time, description: '`updatedAt` của lần đọc gần nhất (so ở mức mili-giây). Khác bản hiện tại -> `409 version-conflict`.' }
     AdminProduct:
       type: object
-      required: [id, slug, name, type, description, status, category, genders, moments, price, compareAtPrice, material, care, fitSummary, images, colors, sizes, variants, published, slugLocked, publishedAt, createdAt, updatedAt, updatedBy]
+      required: [id, slug, name, type, description, status, category, genders, moments, price, compareAtPrice, salePrice, saleStartsAt, saleEndsAt, saleState, material, care, fitSummary, images, colors, sizes, variants, published, slugLocked, publishedAt, createdAt, updatedAt, updatedBy]
       additionalProperties: false
       properties:
         id: { type: string, format: uuid }
@@ -4985,6 +5811,10 @@ components:
         moments: { type: array, items: { $ref: '#/components/schemas/Moment' } }
         price: { type: integer }
         compareAtPrice: { type: [integer, 'null'] }
+        salePrice: { type: [integer, 'null'] }
+        saleStartsAt: { type: [string, 'null'], format: date-time }
+        saleEndsAt: { type: [string, 'null'], format: date-time }
+        saleState: { $ref: '#/components/schemas/SaleState' }
         material: { type: string }
         care: { type: array, items: { type: string } }
         fitSummary: { type: string }
@@ -5023,6 +5853,7 @@ components:
         categoryName: { type: string }
         price: { type: integer }
         compareAtPrice: { type: [integer, 'null'] }
+        saleState: { $ref: '#/components/schemas/SaleState' }
         inventory: { type: integer, minimum: 0, description: 'Tổng có thể bán của mọi biến thể.' }
         variantCount: { type: integer, minimum: 0 }
         updatedAt: { type: string, format: date-time }
@@ -5990,6 +6821,7 @@ components:
         trackingNumber: { type: string }
         refundReference: { type: string, description: 'Mã giao dịch / nội dung chuyển khoản admin nhập (chỉ khi `refunded`).' }
         refundTo: { $ref: '#/components/schemas/AdminReturnRefundTo' }
+        source: { type: string, enum: [member, guest], description: 'Slice 10 (Should, BR-RET-65). `guest` = khách vãng lai gửi qua Tra cứu đơn (nhãn "Khách vãng lai"), `member` = thành viên (nhãn "Thành viên").' }
         history: { type: array, items: { $ref: '#/components/schemas/AdminReturnHistoryEntry' }, description: 'Cũ nhất trước.' }
         allowedActions: { type: array, items: { $ref: '#/components/schemas/AdminReturnAction' } }
         overdue: { type: boolean, description: 'Should (BR-RET-44): `requested` quá 24 giờ kể từ `requestedAt`, tính khi đọc (không tác vụ nền). Luôn false nếu chưa làm Should.' }
@@ -6007,6 +6839,7 @@ components:
         fault: { $ref: '#/components/schemas/ReturnFault' }
         state: { $ref: '#/components/schemas/ReturnState' }
         itemCount: { type: integer, minimum: 1, description: 'Σ số lượng yêu cầu.' }
+        source: { type: string, enum: [member, guest], description: 'Slice 10 (Should, BR-RET-65). Nhãn nguồn.' }
         amount: { type: integer, minimum: 0 }
         handledBy: { $ref: '#/components/schemas/StaffRef' }
         handledAt: { type: string, format: date-time }
@@ -6070,3 +6903,476 @@ components:
       properties:
         amount: { type: integer, minimum: 0, description: 'PHẢI bằng đúng `ReturnAmount.amount` đã chốt.' }
         refundReference: { type: string, minLength: 4, maxLength: 60 }
+    SaleState:
+      type: string
+      enum: [none, upcoming, running, ended]
+      description: 'Slice 10 (BR-PROMO-06). Tính từ giờ máy chủ lúc đọc: `none` = không có đợt; `upcoming` = `saleStartsAt` > T; `running` = `saleStartsAt` <= T <= `saleEndsAt`; `ended` = T > `saleEndsAt`.'
+    ProductReview:
+      type: object
+      required: [id, author, rating, fit, sizeBought, height, title, body, date, verified]
+      additionalProperties: false
+      description: 'Slice 10 (BR-REV-05). Dạng công khai, khớp FE `ProductReview` trừ `sample` (không có). KHÔNG có email, SĐT, id người dùng.'
+      properties:
+        id: { type: string, format: uuid }
+        author: { type: string, maxLength: 60, examples: ['Nguyễn V.'], description: 'Họ + chữ cái đầu của tên (D3), chụp lúc gửi.' }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        fit: { type: integer, enum: [-1, 0, 1], description: '-1 chật, 0 vừa, 1 rộng.' }
+        sizeBought: { type: string, maxLength: 10, description: 'Do máy chủ lấy từ đơn.' }
+        height: { type: string, maxLength: 20, description: 'Rỗng khi không nhập.' }
+        title: { type: string, minLength: 2, maxLength: 80 }
+        body: { type: string, minLength: 20, maxLength: 1000 }
+        date: { type: string, format: date, description: 'Ngày gửi theo giờ VN.' }
+        verified: { type: boolean, const: true }
+        reply:
+          type: object
+          required: [body, at]
+          additionalProperties: false
+          description: 'Có khi shop đã trả lời (hiện "Phản hồi từ nine2fine"); không có tên nhân viên.'
+          properties:
+            body: { type: string, minLength: 5, maxLength: 500 }
+            at: { type: string, format: date-time }
+    ProductReviewSummary:
+      type: object
+      required: [count, average, distribution, fit]
+      additionalProperties: false
+      description: 'Slice 10 (BR-REV-06). Trên MỌI đánh giá `visible` của sản phẩm (không theo bộ lọc `rating`); cùng số với `Product.rating`.'
+      properties:
+        count: { type: integer, minimum: 0 }
+        average: { type: [number, 'null'], minimum: 1, maximum: 5, description: 'Σ sao / count, 1 chữ số thập phân half-up; null khi count = 0.' }
+        distribution:
+          type: object
+          required: ['1', '2', '3', '4', '5']
+          additionalProperties: false
+          properties:
+            '1': { type: integer, minimum: 0 }
+            '2': { type: integer, minimum: 0 }
+            '3': { type: integer, minimum: 0 }
+            '4': { type: integer, minimum: 0 }
+            '5': { type: integer, minimum: 0 }
+        fit:
+          type: object
+          required: [small, 'true', large]
+          additionalProperties: false
+          description: 'Số đánh giá theo độ vừa: `small` (fit = -1), `true` (0), `large` (1).'
+          properties:
+            small: { type: integer, minimum: 0 }
+            'true': { type: integer, minimum: 0 }
+            large: { type: integer, minimum: 0 }
+    ProductReviewPage:
+      type: object
+      required: [items, total, page, limit, summary]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProductReview' }, maxItems: 20 }
+        total: { type: integer, minimum: 0, description: 'Số đánh giá khớp bộ lọc `rating` (mọi trang).' }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 20 }
+        summary: { $ref: '#/components/schemas/ProductReviewSummary' }
+    ReviewEligibility:
+      type: object
+      required: [status]
+      additionalProperties: false
+      description: 'Slice 10 (BR-REV-02). Khớp FE `ReviewEligibility`.'
+      properties:
+        status: { type: string, enum: [sign-in, not-purchased, reviewed, eligible] }
+        sizeBought: { type: string, description: 'Chỉ khi `eligible`: size của dòng thuộc đơn đủ điều kiện giao mới nhất; FE điền sẵn.' }
+    ReviewCreateInput:
+      type: object
+      required: [productId, rating, fit, title, body]
+      additionalProperties: true
+      description: 'Slice 10 (BR-REV-03). Trường lạ (kể cả `sizeBought`, `author`, `date`, `verified`, `status`) bị BỎ QUA. Quy tắc từng trường xem `createReview`.'
+      properties:
+        productId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        fit: { type: integer, enum: [-1, 0, 1] }
+        height: { type: string, maxLength: 20 }
+        title: { type: string, minLength: 2, maxLength: 80 }
+        body: { type: string, minLength: 20, maxLength: 1000 }
+    AdminReviewView:
+      type: string
+      enum: [all, unanswered, low, hidden]
+      default: all
+      description: '`unanswered` = đang `visible` và chưa trả lời; `low` = `rating` <= 2 (mọi trạng thái); `hidden` = đã ẩn.'
+    AdminReview:
+      type: object
+      required: [id, productId, productName, productSlug, productImage, author, rating, fit, sizeBought, height, title, body, date, verified, status, createdAt, updatedAt]
+      additionalProperties: false
+      description: 'Slice 10 (BR-REV-07). Dạng staff / admin của đánh giá, khớp FE `AdminReview` trừ `sample` (không có) và `status`: `visible` tương ứng `published` của mock (adapter đổi tên).'
+      properties:
+        id: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        productName: { type: string }
+        productSlug: { type: string }
+        productImage: { type: string, description: 'mediaId ảnh bìa.' }
+        author: { type: string, description: 'Như công khai ("Nguyễn V.").' }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        fit: { type: integer, enum: [-1, 0, 1] }
+        sizeBought: { type: string }
+        height: { type: string }
+        title: { type: string }
+        body: { type: string }
+        date: { type: string, format: date, description: 'Ngày gửi giờ VN.' }
+        createdAt: { type: string, format: date-time }
+        verified: { type: boolean, const: true }
+        status: { type: string, enum: [visible, hidden] }
+        hiddenReason: { type: string, description: 'Chỉ khi `hidden`.' }
+        hiddenAt: { type: string, format: date-time }
+        hiddenBy: { $ref: '#/components/schemas/StaffRef' }
+        reply:
+          type: object
+          required: [body, at, author]
+          additionalProperties: false
+          properties:
+            body: { type: string }
+            at: { type: string, format: date-time }
+            author: { type: string, description: 'Tên nhân viên đã trả lời (chỉ ở dạng admin).' }
+        updatedAt: { type: string, format: date-time, description: 'Khoá chống ghi chồng của ẩn / hiện / trả lời; tăng ngặt mỗi lần đổi.' }
+    AdminReviewPage:
+      type: object
+      required: [items, total, page, limit, counts, average]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminReview' }, maxItems: 50 }
+        total: { type: integer, minimum: 0, description: 'Số đánh giá khớp bộ lọc (mọi trang).' }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, enum: [20, 50] }
+        counts:
+          type: object
+          required: [all, unanswered, low, hidden]
+          additionalProperties: false
+          properties:
+            all: { type: integer, minimum: 0 }
+            unanswered: { type: integer, minimum: 0 }
+            low: { type: integer, minimum: 0 }
+            hidden: { type: integer, minimum: 0 }
+        average: { type: [number, 'null'], description: 'Trung bình sao các đánh giá `visible` toàn shop, 1 chữ số thập phân half-up; null khi chưa có.' }
+    RecommendationList:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items: { type: array, maxItems: 8, items: { $ref: '#/components/schemas/Product' }, description: 'Ít hơn `limit` hoặc rỗng khi không đủ sản phẩm hợp điều kiện (FE ẩn cả khối).' }
+    WishlistEntry:
+      type: object
+      required: [productId, addedAt]
+      additionalProperties: false
+      properties:
+        productId: { type: string, format: uuid }
+        addedAt: { type: string, format: date-time }
+    Wishlist:
+      type: object
+      required: [items, total]
+      additionalProperties: false
+      properties:
+        items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WishlistEntry' }, description: 'Chỉ sản phẩm `ACTIVE`, mới thêm trước.' }
+        total: { type: integer, minimum: 0, maximum: 100 }
+    WishlistMergeResult:
+      type: object
+      required: [items, total, skipped]
+      additionalProperties: false
+      properties:
+        items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/WishlistEntry' } }
+        total: { type: integer, minimum: 0, maximum: 100 }
+        skipped: { type: integer, minimum: 0, description: 'Số id bị bỏ vì không hợp lệ hoặc vượt 100.' }
+    HomeHref:
+      type: string
+      minLength: 1
+      maxLength: 200
+      pattern: '^/[^/\\\s][^\\\s]*$|^/$'
+      description: 'Chỉ đường dẫn nội bộ: bắt đầu `/`, không `//`, không `\`, không khoảng trắng. Loại `javascript:`, `http:`, `//evil.com`.'
+    HomeMediaId:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: 'Id ảnh: `up-<32 hex>.<ext>` phải tồn tại ở thư viện ảnh admin; id khác phải thuộc ảnh seed của storefront (`media-ids.json`). Chỉ lưu id, không URL.'
+    HomeCategoryItem:
+      type: object
+      required: [label, href, mediaId]
+      additionalProperties: false
+      properties:
+        label: { type: string, minLength: 1, maxLength: 40 }
+        href: { $ref: '#/components/schemas/HomeHref' }
+        mediaId: { $ref: '#/components/schemas/HomeMediaId' }
+    HomeMomentInput:
+      type: object
+      required: [moment, label, lines, mediaId]
+      additionalProperties: false
+      description: 'Chữ + ảnh của một thẻ Moment (BR-MOM-02). Mã `moment` cố định, không thêm / xoá / đổi.'
+      properties:
+        moment: { $ref: '#/components/schemas/Moment' }
+        label: { type: string, minLength: 1, maxLength: 40 }
+        lines: { type: array, minItems: 1, maxItems: 2, items: { type: string, minLength: 1, maxLength: 60 } }
+        mediaId: { $ref: '#/components/schemas/HomeMediaId' }
+    HomeMomentCard:
+      allOf:
+        - $ref: '#/components/schemas/HomeMomentInput'
+        - type: object
+          required: [href, count]
+          properties:
+            href: { type: string, pattern: '^/shop\?moment=(work|dinner|event|weekend)$' }
+            count: { type: integer, minimum: 1, description: 'Số sản phẩm `ACTIVE` thuộc Moment, tính khi đọc. Thẻ `count = 0` KHÔNG được trả.' }
+    HomeCampaignBlock:
+      type: object
+      required: [kind, id, eyebrow, title, description, href, mediaId, mobileMediaId]
+      additionalProperties: false
+      description: 'Khối chiến dịch (FE `LandingCampaign`).'
+      properties:
+        kind: { type: string, const: campaign }
+        id: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,39}$' }
+        enabled: { type: boolean, default: true }
+        eyebrow: { type: string, maxLength: 40 }
+        title: { type: string, maxLength: 80 }
+        description: { type: string, maxLength: 200, description: 'Cho phép xuống dòng.' }
+        href: { $ref: '#/components/schemas/HomeHref' }
+        mediaId: { $ref: '#/components/schemas/HomeMediaId' }
+        mobileMediaId: { $ref: '#/components/schemas/HomeMediaId' }
+        titleLang: { type: string, const: en }
+        member:
+          type: object
+          required: [description, href]
+          additionalProperties: false
+          description: 'Nội dung thay khi đã đăng nhập; máy chủ trả nguyên, FE chọn theo phiên.'
+          properties:
+            description: { type: string, maxLength: 200 }
+            href: { $ref: '#/components/schemas/HomeHref' }
+    HomeProductsBlock:
+      type: object
+      required: [kind, id, label, cards]
+      additionalProperties: false
+      description: 'Khối biên tập (FE `LandingEdit`): tối đa 6 thẻ.'
+      properties:
+        kind: { type: string, const: products }
+        id: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,39}$' }
+        enabled: { type: boolean, default: true }
+        label: { type: string, maxLength: 80 }
+        cards:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            required: [title, caption, href, mediaId]
+            additionalProperties: false
+            properties:
+              title: { type: string, maxLength: 80 }
+              caption: { type: string, maxLength: 40 }
+              href: { $ref: '#/components/schemas/HomeHref' }
+              mediaId: { $ref: '#/components/schemas/HomeMediaId' }
+    HomeShopBlock:
+      type: object
+      required: [kind, id, label, sort, href]
+      additionalProperties: false
+      description: 'Khối sản phẩm thật từ catalog (FE `LandingShop`).'
+      properties:
+        kind: { type: string, const: shop }
+        id: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,39}$' }
+        enabled: { type: boolean, default: true }
+        label: { type: string, maxLength: 80 }
+        sort: { $ref: '#/components/schemas/SortOrder' }
+        href: { $ref: '#/components/schemas/HomeHref' }
+        queryParams:
+          type: object
+          maxProperties: 8
+          description: 'Khoá thuộc `sort`, `gender`, `category`, `moment`, `size`, `color`, `maxPrice`, `available`, `sale`, `q`; giá trị chuỗi <= 60 ký tự.'
+          additionalProperties: { type: string, maxLength: 60 }
+    HomeCategoriesBlock:
+      type: object
+      required: [kind, id]
+      additionalProperties: false
+      description: 'Khối lưới danh mục (dùng `categories[]`).'
+      properties:
+        kind: { type: string, const: categories }
+        id: { type: string, pattern: '^[a-z0-9][a-z0-9-]{0,39}$' }
+        enabled: { type: boolean, default: true }
+    HomeBlock:
+      oneOf:
+        - $ref: '#/components/schemas/HomeCampaignBlock'
+        - $ref: '#/components/schemas/HomeProductsBlock'
+        - $ref: '#/components/schemas/HomeShopBlock'
+        - $ref: '#/components/schemas/HomeCategoriesBlock'
+      discriminator:
+        propertyName: kind
+        mapping:
+          campaign: '#/components/schemas/HomeCampaignBlock'
+          products: '#/components/schemas/HomeProductsBlock'
+          shop: '#/components/schemas/HomeShopBlock'
+          categories: '#/components/schemas/HomeCategoriesBlock'
+    HomeContentPublic:
+      type: object
+      required: [categories, moments, blocks]
+      additionalProperties: false
+      description: 'Slice 10 (BR-CMS-01, BR-MOM-02). Khớp FE `LandingContent`; chỉ khối `enabled`; `moments` chỉ thẻ `count` >= 1 (có thể rỗng).'
+      properties:
+        categories: { type: array, minItems: 1, maxItems: 8, items: { $ref: '#/components/schemas/HomeCategoryItem' } }
+        moments: { type: array, maxItems: 4, items: { $ref: '#/components/schemas/HomeMomentCard' } }
+        blocks: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/HomeBlock' } }
+    HomeContentInput:
+      type: object
+      required: [categories, moments, blocks, updatedAt]
+      additionalProperties: false
+      description: 'Slice 10 (BR-CMS-02). Nguyên văn bản; không có ghi từng phần. Giới hạn xem `adminSaveHomeContent`.'
+      properties:
+        categories: { type: array, minItems: 1, maxItems: 8, items: { $ref: '#/components/schemas/HomeCategoryItem' } }
+        moments: { type: array, minItems: 4, maxItems: 4, items: { $ref: '#/components/schemas/HomeMomentInput' }, description: 'Đúng 4 phần tử, thứ tự work, dinner, event, weekend.' }
+        blocks: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/HomeBlock' } }
+        updatedAt: { type: [string, 'null'], format: date-time, description: 'Giá trị lần đọc gần nhất; null chỉ khi chưa có dòng lưu.' }
+    HomeContentWarning:
+      type: object
+      required: [path, message]
+      additionalProperties: false
+      properties:
+        path: { type: string, examples: ['blocks[3].href'] }
+        message: { type: string }
+    AdminHomeContent:
+      type: object
+      required: [categories, moments, blocks, isDefault, updatedAt, updatedBy]
+      additionalProperties: false
+      properties:
+        categories: { type: array, items: { $ref: '#/components/schemas/HomeCategoryItem' } }
+        moments: { type: array, items: { $ref: '#/components/schemas/HomeMomentInput' } }
+        blocks: { type: array, items: { $ref: '#/components/schemas/HomeBlock' }, description: 'Gồm cả khối `enabled: false`.' }
+        isDefault: { type: boolean, description: 'true khi chưa ai lưu (hoặc vừa khôi phục mặc định).' }
+        updatedAt: { type: [string, 'null'], format: date-time }
+        updatedBy:
+          oneOf:
+            - type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string }
+            - type: 'null'
+        warnings: { type: array, items: { $ref: '#/components/schemas/HomeContentWarning' }, description: 'Should (BR-CMS-06).' }
+    SizeChartInput:
+      type: object
+      required: [body, garment, bodyColumns, garmentColumns, updatedAt]
+      additionalProperties: false
+      description: 'Slice 10 (BR-CMS-03). Giới hạn xem `adminSaveSizeChart`.'
+      properties:
+        body: { type: array, minItems: 1, maxItems: 12, items: { $ref: '#/components/schemas/SizeChartRow' } }
+        garment: { type: array, minItems: 1, maxItems: 12, items: { $ref: '#/components/schemas/SizeChartRow' } }
+        bodyColumns: { type: array, minItems: 1, maxItems: 8, items: { type: string, minLength: 1, maxLength: 20 } }
+        garmentColumns: { type: array, minItems: 1, maxItems: 8, items: { type: string, minLength: 1, maxLength: 20 } }
+        updatedAt: { type: [string, 'null'], format: date-time }
+    AdminSizeChart:
+      type: object
+      required: [category, label, productCount, customised, updatedAt, updatedBy, chart]
+      additionalProperties: false
+      description: 'Khớp FE `AdminSizeChart` (+ `updatedAt`, `updatedBy`).'
+      properties:
+        category: { $ref: '#/components/schemas/Category' }
+        label: { type: string, description: 'Tên danh mục.' }
+        productCount: { type: integer, minimum: 0 }
+        customised: { type: boolean }
+        updatedAt: { type: [string, 'null'], format: date-time }
+        updatedBy:
+          oneOf:
+            - type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string }
+            - type: 'null'
+        chart: { $ref: '#/components/schemas/SizeChart' }
+    AdminSizeChartList:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminSizeChart' } }
+    BulkSaleInput:
+      type: object
+      required: [category, percent, startsOn, endsOn]
+      additionalProperties: false
+      properties:
+        category: { $ref: '#/components/schemas/Category' }
+        percent: { type: integer, minimum: 5, maximum: 70 }
+        startsOn: { type: string, format: date, description: 'Ngày VN; đợt bắt đầu 00:00:00 giờ VN.' }
+        endsOn: { type: string, format: date, description: 'Ngày VN; đợt kết thúc 23:59:59 giờ VN; <= startsOn + 89 ngày.' }
+    BulkSaleItem:
+      type: object
+      required: [productId, name, slug, price, salePrice]
+      additionalProperties: false
+      properties:
+        productId: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        price: { type: integer }
+        salePrice: { type: [integer, 'null'], description: 'Giá giảm tính ra; null khi không tính được hợp lệ.' }
+        reason: { type: string, enum: [sale-running, below-minimum, not-reduced], description: 'Chỉ ở `skipped`.' }
+    BulkSaleResult:
+      type: object
+      required: [applicable, skipped, applied]
+      additionalProperties: false
+      properties:
+        applicable: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/BulkSaleItem' } }
+        skipped: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/BulkSaleItem' } }
+        applied: { type: integer, minimum: 0, description: '0 ở xem trước; số sản phẩm đã ghi ở `adminApplyBulkSale`.' }
+    CollectionInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        slug: { type: string, minLength: 2, maxLength: 50, pattern: '^[a-z0-9-]+$' }
+        description: { type: string, maxLength: 300, default: '' }
+        status: { type: string, enum: [active, draft], default: draft }
+        productIds: { type: array, maxItems: 200, uniqueItems: true, items: { type: string, format: uuid }, default: [] }
+    CollectionUpdate:
+      allOf:
+        - $ref: '#/components/schemas/CollectionInput'
+        - type: object
+          required: [updatedAt]
+          properties:
+            updatedAt: { type: string, format: date-time }
+    AdminCollection:
+      type: object
+      required: [id, name, slug, description, status, productIds, slugLocked, createdAt, updatedAt, updatedBy]
+      additionalProperties: false
+      description: 'Khớp FE `AdminCollection` với `productIds` là id sản phẩm thật (UUID).'
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, draft] }
+        productIds: { type: array, items: { type: string, format: uuid } }
+        slugLocked: { type: boolean, description: 'true sau lần `active` đầu.' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        updatedBy:
+          oneOf:
+            - type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string }
+            - type: 'null'
+    AdminCollectionList:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminCollection' } }
+    CollectionSummary:
+      type: object
+      required: [slug, name, description, productCount]
+      additionalProperties: false
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        productCount: { type: integer, minimum: 0 }
+    CollectionList:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
+    CollectionDetail:
+      type: object
+      required: [slug, name, description, products]
+      additionalProperties: false
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        description: { type: string }
+        products: { type: array, maxItems: 200, items: { $ref: '#/components/schemas/Product' } }

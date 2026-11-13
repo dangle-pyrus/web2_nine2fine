@@ -1,0 +1,274 @@
+{
+  "categories": [
+    {
+      "label": "Áo",
+      "href": "/shop/tops",
+      "mediaId": "uniqlo-category-05"
+    },
+    {
+      "label": "Quần & chân váy",
+      "href": "/shop/bottoms",
+      "mediaId": "uniqlo-category-02"
+    },
+    {
+      "label": "Đầm",
+      "href": "/shop/dresses",
+      "mediaId": "uniqlo-category-07"
+    },
+    {
+      "label": "Áo khoác",
+      "href": "/shop/outerwear",
+      "mediaId": "uniqlo-category-01"
+    }
+  ],
+  "moments": [
+    {
+      "moment": "work",
+      "label": "Work",
+      "lines": [
+        "Sharp enough for 9AM.",
+        "Easy enough for 9PM."
+      ],
+      "mediaId": "editorial-moment-work"
+    },
+    {
+      "moment": "dinner",
+      "label": "Dinner",
+      "lines": [
+        "Đường nét gọn gàng",
+        "cho những bữa tối của riêng bạn."
+      ],
+      "mediaId": "editorial-moment-dinner"
+    },
+    {
+      "moment": "event",
+      "label": "Event",
+      "lines": [
+        "Tự tin ở mọi buổi tiệc,",
+        "không cần cầu kỳ."
+      ],
+      "mediaId": "editorial-moment-event"
+    },
+    {
+      "moment": "weekend",
+      "label": "Weekend",
+      "lines": [
+        "Thư thái, nhưng vẫn",
+        "đúng chất của bạn."
+      ],
+      "mediaId": "editorial-moment-weekend"
+    }
+  ],
+  "blocks": [
+    {
+      "kind": "campaign",
+      "id": "from-nine-to-fine",
+      "eyebrow": "nine2fine · Đi làm tới đi chơi",
+      "title": "From Nine to Fine.",
+      "description": "Chín giờ vào làm, tám giờ ra phố.\nVẫn bộ đồ ấy, vẫn là bạn.",
+      "href": "/shop",
+      "mediaId": "uniqlo-campaign-01",
+      "mobileMediaId": "uniqlo-campaign-01",
+      "titleLang": "en"
+    },
+    {
+      "kind": "categories",
+      "id": "categories"
+    },
+    {
+      "kind": "shop",
+      "id": "bestsellers",
+      "label": "Bán chạy",
+      "sort": "bestselling",
+      "href": "/shop",
+      "queryParams": {
+        "sort": "bestselling"
+      }
+    },
+    {
+      "kind": "campaign",
+      "id": "the-first-layer",
+      "eyebrow": "09:00 · Sáng đi làm",
+      "title": "Khoác vội, vẫn ra dáng.",
+      "description": "Lỡ báo thức? Sơ mi, quần suông, áo khoác.\nVào làm như đã chọn đồ từ tối.",
+      "href": "/shop/outerwear",
+      "mediaId": "uniqlo-campaign-02",
+      "mobileMediaId": "uniqlo-campaign-02-mobile"
+    },
+    {
+      "kind": "products",
+      "id": "work-edit",
+      "label": "Mặc gì sáng mai?",
+      "cards": [
+        {
+          "title": "Khoác vào là đi",
+          "caption": "Xem áo khoác",
+          "href": "/shop/outerwear",
+          "mediaId": "uniqlo-product-1-1-09"
+        },
+        {
+          "title": "Quần mặc cả tuần",
+          "caption": "Xem quần & chân váy",
+          "href": "/shop/bottoms",
+          "mediaId": "uniqlo-product-1-2-65"
+        },
+        {
+          "title": "Sơ mi cho họp sáng",
+          "caption": "Xem áo sơ mi",
+          "href": "/shop/tops",
+          "mediaId": "uniqlo-product-1-3-00"
+        },
+        {
+          "title": "Thêm chút màu cho tuần làm",
+          "caption": "Mặc đi làm",
+          "href": "/shop-by-moment/work",
+          "mediaId": "uniqlo-product-1-4-55"
+        }
+      ]
+    },
+    {
+      "kind": "campaign",
+      "id": "everyday-foundations",
+      "eyebrow": "Tủ đồ mỗi ngày",
+      "title": "Mở tủ là có đồ để mặc.",
+      "description": "Vài món nền trung tính,\nphối kiểu nào cũng đẹp.",
+      "href": "/shop/bottoms",
+      "mediaId": "uniqlo-campaign-03",
+      "mobileMediaId": "uniqlo-campaign-03-mobile"
+    },
+    {
+      "kind": "products",
+      "id": "colour-edit",
+      "label": "Hôm nay màu gì?",
+      "cards": [
+        {
+          "title": "Áo sáng màu cho ngày xám",
+          "caption": "Xem áo sáng màu",
+          "href": "/shop/tops",
+          "mediaId": "uniqlo-product-2-1-41"
+        },
+        {
+          "title": "Hồng nhẹ cho hẹn tối",
+          "caption": "Mặc hẹn tối",
+          "href": "/shop-by-moment/dinner",
+          "mediaId": "uniqlo-product-2-2-10"
+        },
+        {
+          "title": "Be, xám, khó sai",
+          "caption": "Xem áo khoác",
+          "href": "/shop/outerwear",
+          "mediaId": "uniqlo-product-2-3-37"
+        },
+        {
+          "title": "Sơ mi xanh cho sáng thứ Hai",
+          "caption": "Xem áo sơ mi",
+          "href": "/shop/tops",
+          "mediaId": "uniqlo-product-2-4-57"
+        }
+      ]
+    },
+    {
+      "kind": "campaign",
+      "id": "off-the-clock",
+      "eyebrow": "17:30 · Tan làm",
+      "title": "Tắt máy. Chưa vội về.",
+      "description": "Không kịp về thay đồ? Xắn tay áo, mở cúc cổ.\nRồi đi luôn.",
+      "href": "/shop-by-moment/dinner",
+      "mediaId": "editorial-story-1730",
+      "mobileMediaId": "editorial-story-1730"
+    },
+    {
+      "kind": "campaign",
+      "id": "after-hours",
+      "eyebrow": "20:00 · Hẹn tối",
+      "title": "Giờ này là của bạn.",
+      "description": "“Tối nay rảnh không?” lúc 17:00.\nMột chiếc đầm, đi được ngay.",
+      "href": "/shop/dresses",
+      "mediaId": "editorial-story-2000",
+      "mobileMediaId": "editorial-story-2000"
+    },
+    {
+      "kind": "campaign",
+      "id": "make-an-entrance",
+      "eyebrow": "Dự tiệc",
+      "title": "Tiệc công ty? Có đồ rồi.",
+      "description": "Nổi bật vừa đủ để được nhớ,\nkhông quá đà để phải ngại.",
+      "href": "/shop-by-moment/event",
+      "mediaId": "editorial-moment-event",
+      "mobileMediaId": "editorial-moment-event"
+    },
+    {
+      "kind": "campaign",
+      "id": "weekend-mode",
+      "eyebrow": "Cuối tuần",
+      "title": "Tắt chuông. Ngủ nướng.",
+      "description": "Dậy muộn, cà phê chậm, không ai giục.\nMặc gì thoải mái mà vẫn đẹp.",
+      "href": "/shop-by-moment/weekend",
+      "mediaId": "uniqlo-campaign-07",
+      "mobileMediaId": "uniqlo-campaign-07-mobile"
+    },
+    {
+      "kind": "products",
+      "id": "weekend-edit",
+      "label": "Ngày không báo thức",
+      "cards": [
+        {
+          "title": "Áo màu tươi cho ngày nghỉ",
+          "caption": "Xem áo",
+          "href": "/shop/tops",
+          "mediaId": "uniqlo-product-3-1-19"
+        },
+        {
+          "title": "Áo thun ra quán quen",
+          "caption": "Mặc cuối tuần",
+          "href": "/shop-by-moment/weekend",
+          "mediaId": "uniqlo-product-3-2-30"
+        },
+        {
+          "title": "Gam xám, vẫn có điểm nhấn",
+          "caption": "Xem quần",
+          "href": "/shop/bottoms",
+          "mediaId": "uniqlo-product-3-3-03"
+        },
+        {
+          "title": "Suông, trầm, dễ chịu",
+          "caption": "Xem quần suông",
+          "href": "/shop/bottoms",
+          "mediaId": "uniqlo-product-3-4-39"
+        }
+      ]
+    },
+    {
+      "kind": "campaign",
+      "id": "new-perspective",
+      "eyebrow": "Mới về",
+      "title": "Tủ đồ quen, thêm món mới.",
+      "description": "Muốn đổi gió cho tuần sau?\nThử một phom dáng mới.",
+      "href": "/new-in",
+      "mediaId": "uniqlo-campaign-08",
+      "mobileMediaId": "uniqlo-campaign-08-mobile"
+    },
+    {
+      "kind": "shop",
+      "id": "new-in-products",
+      "label": "Hàng mới về",
+      "sort": "newest",
+      "href": "/new-in"
+    },
+    {
+      "kind": "campaign",
+      "id": "after-five-club",
+      "eyebrow": "Thành viên nine2fine",
+      "title": "After Five Club",
+      "description": "Ưu đãi đơn đầu, quà tháng sinh nhật.\nLưu món ưng ý, theo dõi đơn ở một chỗ.",
+      "href": "/auth/register",
+      "mediaId": "editorial-campaign",
+      "mobileMediaId": "editorial-campaign",
+      "titleLang": "en",
+      "member": {
+        "description": "Chào mừng bạn trở lại.\nMón đã lưu và đơn hàng đang chờ bạn.",
+        "href": "/account"
+      }
+    }
+  ]
+}
