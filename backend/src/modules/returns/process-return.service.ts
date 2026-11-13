@@ -14,6 +14,7 @@ import type { EventActorUser } from '../order/order-event';
 import { UUID_RE } from '../../lib/validate';
 import { computeReturnAmount } from './return-amount';
 import { emitReturnEvent } from './return-events';
+import { audienceFor, type ReturnPrincipal } from './create-return.service';
 import { buildAdminReturn, toReturnRequest, type AdminReturnDto, type ReturnRequestDto } from './return.mapper';
 import { loadReturn } from './return.query';
 
@@ -43,10 +44,12 @@ export async function conflictOf(tx: Db, returnId: string): Promise<AppError> {
  * Khách huỷ (plan mục 6.2): `requested -> cancelled` + xoá số tài khoản + mở lại quyền tạo (`active_order_id = NULL`).
  * Không có yêu cầu nào của đơn -> 404; có nhưng không còn `requested` (đã duyệt / đã cancelled / ...) -> 409 `invalid-transition`.
  */
-export async function cancelByCustomer(userId: string, rawCode: string): Promise<ReturnRequestDto> {
+export async function cancelByCustomer(p: ReturnPrincipal | string, rawCode: string): Promise<ReturnRequestDto> {
+  const who: ReturnPrincipal = typeof p === 'string' ? { kind: 'member', userId: p } : p;
   const code = normalizeOrderCode(rawCode);
   const order = code ? await prisma.order.findUnique({ where: { code }, select: { order_id: true, userId: true } }) : null;
-  if (!order || order.userId !== userId) throw Errors.notFound();
+  const mine = !!order && (who.kind === 'member' ? order.userId === who.userId : order.userId === null && order.order_id === who.orderId);
+  if (!order || !mine) throw Errors.notFound();
 
   const result = await runTx(async (tx) => {
     const at = clockNow();
@@ -66,9 +69,9 @@ export async function cancelByCustomer(userId: string, rawCode: string): Promise
       orderId: order.order_id, returnId: cur.return_id, orderStatus: o.status as order_status, paymentStatus: o.payment_status as payment_status, kind: 'return_cancelled', actor: 'customer', at,
     });
     const row = await loadReturn(tx, cur.return_id);
-    return toReturnRequest(tx, row!, o.payment_method as 'cod' | 'bank_transfer');
+    return toReturnRequest(tx, row!, o.payment_method as 'cod' | 'bank_transfer', audienceFor(who, code!));
   });
-  logger.info('return-cancelled', { returnId: result.id, orderCode: code!, userId, action: 'cancel' });
+  logger.info('return-cancelled', { returnId: result.id, orderCode: code!, via: who.kind, action: 'cancel' });
   return result;
 }
 

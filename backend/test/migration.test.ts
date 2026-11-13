@@ -23,7 +23,7 @@ describe('migration cart_checkout_schema', () => {
 
   it('mọi bảng mới bật RLS', async () => {
     const rows = await prisma.$queryRaw<Array<{ relname: string; relrowsecurity: boolean }>>`
-      SELECT relname, relrowsecurity FROM pg_class WHERE relname = ANY(${NEW_TABLES}) AND relkind = 'r'`;
+      SELECT relname, relrowsecurity FROM pg_class WHERE relname = ANY(${NEW_TABLES}) AND relkind = 'r' AND relnamespace = current_schema()::regnamespace`;
     expect(rows.map((r) => r.relname).sort()).toEqual([...NEW_TABLES].sort());
     expect(rows.filter((r) => !r.relrowsecurity)).toEqual([]);
   });

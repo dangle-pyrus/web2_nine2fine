@@ -1,5 +1,7 @@
 import type { Prisma, product_status } from '@prisma/client';
 import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
+import { now as clockNow } from '../../lib/clock';
+import { moneyOrNull, saleState } from '../pricing/effective-price';
 import { staffDisplayName } from '../order/order-event';
 import { mediaUrlOf } from './media.service';
 
@@ -37,7 +39,7 @@ export function imagesOf(p: { coverMediaId: string; galleryMediaIds: string[]; c
   return ids.map((id) => ({ id, url: mediaUrlOf(id), alt: meta[id]?.alt ?? '', color: meta[id]?.color ?? reverse.get(id) ?? '' }));
 }
 
-export function toAdminProduct(p: ProductFull, orderedVariantIds: ReadonlySet<string>, updatedAtMs: number) {
+export function toAdminProduct(p: ProductFull, orderedVariantIds: ReadonlySet<string>, updatedAtMs: number, at: Date = clockNow()) {
   const colors: Array<{ name: string; hex: string }> = [];
   for (const v of p.variants) if (!colors.some((c) => c.name === v.colorName)) colors.push({ name: v.colorName, hex: v.colorHex.toUpperCase() });
   const present = new Set(p.variants.map((v) => v.size));
@@ -55,6 +57,13 @@ export function toAdminProduct(p: ProductFull, orderedVariantIds: ReadonlySet<st
     moments: p.moments as string[],
     price: Number(p.price),
     compareAtPrice: p.compareAtPrice === null ? null : Number(p.compareAtPrice),
+    salePrice: moneyOrNull(p.salePrice),
+    saleStartsAt: p.saleStartsAt ? p.saleStartsAt.toISOString() : null,
+    saleEndsAt: p.saleEndsAt ? p.saleEndsAt.toISOString() : null,
+    saleState: saleState(
+      { price: Number(p.price), compareAtPrice: null, salePrice: moneyOrNull(p.salePrice), saleStartsAt: p.saleStartsAt, saleEndsAt: p.saleEndsAt },
+      at,
+    ),
     material: p.material,
     care: p.care,
     fitSummary: p.fitSummary,
@@ -89,12 +98,15 @@ export interface SummaryRow {
   category_name: string;
   price: Prisma.Decimal | number | string;
   compare_at_price: Prisma.Decimal | number | string | null;
+  sale_price: Prisma.Decimal | number | string | null;
+  sale_starts_at: Date | null;
+  sale_ends_at: Date | null;
   inventory: number;
   variant_count: number;
   updated_ms: number;
 }
 
-export function toAdminSummary(r: SummaryRow) {
+export function toAdminSummary(r: SummaryRow, at: Date = clockNow()) {
   return {
     id: r.product_id,
     slug: r.slug,
@@ -105,6 +117,10 @@ export function toAdminSummary(r: SummaryRow) {
     categoryName: r.category_name,
     price: Number(r.price),
     compareAtPrice: r.compare_at_price === null ? null : Number(r.compare_at_price),
+    saleState: saleState(
+      { price: Number(r.price), compareAtPrice: null, salePrice: moneyOrNull(r.sale_price), saleStartsAt: r.sale_starts_at, saleEndsAt: r.sale_ends_at },
+      at,
+    ),
     inventory: Number(r.inventory),
     variantCount: Number(r.variant_count),
     updatedAt: new Date(Number(r.updated_ms)).toISOString(),

@@ -52,7 +52,7 @@ async function lockCart(tx: Db, userId: string, settings: Settings, at: Date): P
 const touch = (tx: Db, cartId: string, at: Date) =>
   tx.$executeRaw(Prisma.sql`UPDATE "carts" SET "updated_at" = ${ts(at)} WHERE "cart_id" = ${cartId}::uuid`);
 
-async function buildView(db: Db, cartId: string | null, settings: Settings): Promise<CartViewDto> {
+async function buildView(db: Db, cartId: string | null, settings: Settings, at: Date): Promise<CartViewDto> {
   const lines = cartId
     ? await db.cartLine.findMany({ where: { cartId }, orderBy: [{ updatedAt: 'desc' }, { variantId: 'asc' }] })
     : [];
@@ -65,6 +65,7 @@ async function buildView(db: Db, cartId: string | null, settings: Settings): Pro
     lines.map((l) => ({ variantId: l.variantId, quantity: l.quantity })),
     rows,
     settings,
+    at,
   );
   const dto: CartLineDto[] = refreshed.map((l: LineCtx, i) => ({ ...toRefreshedDto(l), updatedAt: lines[i].updatedAt.toISOString() }));
   return {
@@ -78,12 +79,12 @@ async function buildView(db: Db, cartId: string | null, settings: Settings): Pro
 export async function getCart(userId: string, at: Date = clockNow()): Promise<CartViewDto> {
   const settings = await getSettings(prisma);
   const cart = await prisma.cart.findUnique({ where: { userId } });
-  if (!cart) return buildView(prisma, null, settings);
+  if (!cart) return buildView(prisma, null, settings, at);
   if (cart.updatedAt.getTime() < at.getTime() - settings.cartRetentionDays * DAY) {
     await prisma.cartLine.deleteMany({ where: { cartId: cart.cart_id } });
-    return buildView(prisma, null, settings);
+    return buildView(prisma, null, settings, at);
   }
-  return buildView(prisma, cart.cart_id, settings);
+  return buildView(prisma, cart.cart_id, settings, at);
 }
 
 const upsertLine = (tx: Db, cartId: string, variantId: string, quantity: number, at: Date) =>
@@ -115,7 +116,7 @@ export async function addLine(
     await touch(tx, cartId, at);
     const notice: CartNoticeDto | null =
       qty < wanted ? { code: limitCode(row, wanted, settings), variantId, adjustedTo: qty } : null;
-    return { cart: await buildView(tx, cartId, settings), notice };
+    return { cart: await buildView(tx, cartId, settings, at), notice };
   });
 }
 
@@ -137,7 +138,7 @@ export async function setLineQuantity(
     await touch(tx, cartId, at);
     const notice: CartNoticeDto | null =
       qty < quantity ? { code: limitCode(row, quantity, settings), variantId, adjustedTo: qty } : null;
-    return { cart: await buildView(tx, cartId, settings), notice };
+    return { cart: await buildView(tx, cartId, settings, at), notice };
   });
 }
 
@@ -151,7 +152,7 @@ export async function removeLine(
     const cartId = await lockCart(tx, userId, settings, at);
     await tx.cartLine.deleteMany({ where: { cartId, variantId } });
     await touch(tx, cartId, at);
-    return { cart: await buildView(tx, cartId, settings), notice: null };
+    return { cart: await buildView(tx, cartId, settings, at), notice: null };
   });
 }
 
@@ -190,7 +191,7 @@ export async function changeVariant(
     } else if (qty < wanted) {
       notice = { code: limitCode(to, wanted, settings), variantId: toVariantId, adjustedTo: qty };
     }
-    return { cart: await buildView(tx, cartId, settings), notice };
+    return { cart: await buildView(tx, cartId, settings, at), notice };
   });
 }
 
@@ -211,7 +212,7 @@ export async function mergeGuestCart(
     if (acquired.kind === 'replay') {
       const snap = acquired.snapshot as Omit<MergeResultDto, 'cart'>;
       const cart = await tx.cart.findUnique({ where: { userId } });
-      return { result: { ...snap, cart: await buildView(tx, cart?.cart_id ?? null, settings) }, replayed: true };
+      return { result: { ...snap, cart: await buildView(tx, cart?.cart_id ?? null, settings, at) }, replayed: true };
     }
 
     const cartId = await lockCart(tx, userId, settings, at);
@@ -252,6 +253,6 @@ export async function mergeGuestCart(
 
     const snapshot = { mergedVariantIds: merged, skippedVariantIds: skipped, addedCount: merged.length, evicted };
     await completeIdempotency(tx, 'cart-merge', key, { snapshot });
-    return { result: { cart: await buildView(tx, cartId, settings), ...snapshot }, replayed: false };
+    return { result: { cart: await buildView(tx, cartId, settings, at), ...snapshot }, replayed: false };
   });
 }

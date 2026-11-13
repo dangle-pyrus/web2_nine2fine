@@ -112,6 +112,7 @@ adminReturnsRouter.get('/', requirePermission('returns.process'), async (req: Re
       fault: r.fault,
       state: r.state,
       itemCount: r.item_count,
+      source: r.source === 'guest' ? 'guest' : 'member',
       amount: r.amount,
       ...(r.handled_by ? { handledBy: { name: r.handled_by, role: r.handled_role === 'admin' ? 'admin' : 'staff' }, handledAt: r.handled_at!.toISOString() } : {}),
       overdue: isOverdue(r.state, r.requested_at, at),

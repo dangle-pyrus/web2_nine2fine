@@ -15,6 +15,7 @@ import { uploadProductImage } from './media.service';
 import { listPromotions, loadPromotion } from './promotion.query';
 import { createPromotion, deletePromotion, setPromotionEnabled, updatePromotion } from './promotion.service';
 import { listCategories, listProducts, loadAdminProduct } from './product.query';
+import { hasSaleKey } from './sale-input';
 import { Actor, createProduct, deleteProduct, setStatusBulk, updateProduct } from './product.write';
 
 /**
@@ -33,6 +34,13 @@ adminCategoriesRouter.get('/', requirePermission('catalog.read'), async (_req, r
   res.json(await listCategories());
 });
 
+/** Slice 10 (BR-PROMO-01): đặt / gỡ đợt giảm giá cần thêm `promotions.write`; kiểm TRƯỚC Zod. */
+function requireSalePermission(req: Request): void {
+  requirePermission('promotions.write')(req, undefined as never, (err?: unknown) => {
+    if (err) throw err;
+  });
+}
+
 /* ---------------- /admin/products ---------------- */
 export const adminProductsRouter = Router();
 // 64 KB cho POST / PUT (mô tả 5.000 ký tự tiếng Việt + 32 biến thể + 12 ảnh); app.ts bỏ qua parser 16 KB cho các route này.
@@ -43,6 +51,7 @@ adminProductsRouter.get('/', requirePermission('catalog.read'), async (req, res)
 });
 
 adminProductsRouter.post('/', requirePermission('products.write'), productJson, async (req, res) => {
+  if (hasSaleKey(req.body)) requireSalePermission(req);
   const input = parseStrict(productCreateSchema, req.body);
   res.status(201).json(await createProduct(actorOf(req), input));
 });
@@ -57,6 +66,7 @@ adminProductsRouter.get('/:productId', requirePermission('catalog.read'), async 
 });
 
 adminProductsRouter.put('/:productId', requirePermission('products.write'), productJson, async (req, res) => {
+  if (hasSaleKey(req.body)) requireSalePermission(req);
   const input = parseStrict(productUpdateSchema, req.body);
   res.json(await updateProduct(actorOf(req), String(req.params.productId), input));
 });

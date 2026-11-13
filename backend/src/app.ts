@@ -21,6 +21,7 @@ import { mediaRouter } from './modules/media/media.routes';
 import { accountReturnPhotosRouter, accountReturnsRouter, adminReturnPhotosRouter, adminReturnsRouter } from './modules/returns/returns.routes';
 import { storeRouter } from './modules/store/store.routes';
 import { reviewsRouter, adminReviewsRouter } from './modules/reviews/reviews.routes';
+import { guestReturnPhotosRouter } from './modules/returns/guest-returns.routes';
 import { wishlistRouter } from './modules/wishlist/wishlist.routes';
 import { recommendationsRouter } from './modules/recommendations/recommendations.routes';
 import { adminCollectionsRouter, adminContentRouter, adminSizeChartsRouter, contentPublicRouter } from './modules/content/content.routes';
@@ -93,11 +94,15 @@ export function createApp(options: CreateAppOptions = {}): Express {
   );
   // Slice 9: ảnh trả hàng (thành viên) cũng là byte thô nên đứng TRƯỚC requireJsonBody; kho riêng tư, kiểm quyền mỗi lần đọc.
   api.use('/account/return-photos', cookieParser(), noStore, requireAuth('storefront'), accountReturnPhotosRouter);
+  // Slice 10.2: ảnh trả hàng của khách vãng lai (byte thô, quyền = grant n2f_oa); cũng TRƯỚC requireJsonBody.
+  api.use('/orders/:orderCode/return/photos', cookieParser(), guestReturnPhotosRouter);
   api.use(requireJsonBody);
   // 16 KB toàn cục; POST / PUT /admin/products dùng parser 64 KB riêng trong router của nó (mô tả dài + 32 biến thể).
   const json16 = express.json({ limit: '16kb' });
   api.use((req, res, next) => {
     if (req.path.startsWith('/admin/products') && (req.method === 'POST' || req.method === 'PUT')) return next();
+    // Slice 10: nội dung trang chủ (<= 16 khối) và bảng size dùng parser 64 KB riêng trong router (sau `requirePermission`).
+    if ((req.path.startsWith('/admin/content') || req.path.startsWith('/admin/size-charts')) && (req.method === 'POST' || req.method === 'PUT')) return next();
     json16(req, res, next);
   });
   api.use(cookieParser());

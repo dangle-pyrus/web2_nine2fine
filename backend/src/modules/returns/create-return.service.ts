@@ -15,7 +15,7 @@ import { normalizeOrderCode } from '../order/order-code';
 import { encryptAccountNumber, hmacForHash, last4Of } from './account-secret';
 import { computeReturnAmount, type ReturnAmountResult } from './return-amount';
 import { emitReturnEvent } from './return-events';
-import { type ReturnAmountDto, toReturnRequest, type ReturnRequestDto } from './return.mapper';
+import { type PhotoAudience, type ReturnAmountDto, toReturnRequest, type ReturnRequestDto } from './return.mapper';
 import { loadReturn } from './return.query';
 import { checkEligibility, faultOf, type ReturnFault, type ReturnReason } from './return-rules';
 import { dependentIssues, lc, parseCreateFields, RETURN_MSG, throwIfIssues, type CreateShape } from './returns.schemas';
@@ -29,14 +29,38 @@ export interface MemberPrincipal {
   userId: string;
 }
 
+/** Khách vãng lai (BR-RET-60): quyền = grant `n2f_oa` gắn đúng đơn `orderId` (đơn KHÔNG thuộc tài khoản thành viên). */
+export interface GuestPrincipal {
+  kind: 'guest';
+  grantHash: string;
+  orderId: string;
+}
+
+export type ReturnPrincipal = MemberPrincipal | GuestPrincipal;
+
+/** Dạng ảnh trong DTO trả về: URL ảnh trỏ về đúng nhóm endpoint của chủ thể. */
+export const audienceFor = (p: ReturnPrincipal, orderCode: string): PhotoAudience =>
+  p.kind === 'member' ? { kind: 'member' } : { kind: 'guest', orderCode };
+
+/** Định danh chủ thể cho băm Idempotency: thành viên theo tài khoản, khách theo đơn (grant mới sau OTP vẫn phát lại được). */
+const identityOf = (p: ReturnPrincipal): string => (p.kind === 'member' ? p.userId : `guest:${p.orderId}`);
+
+/** Ảnh phải do CHÍNH chủ thể tải: thành viên theo tài khoản; khách theo grant (`grant_hash`) + cùng đơn (BR-RET-62). */
+const ownPhotoSql = (p: ReturnPrincipal, orderId: string): Prisma.Sql =>
+  p.kind === 'member'
+    ? Prisma.sql`"uploader_user_id" = ${p.userId}::uuid`
+    : Prisma.sql`"grant_hash" = ${p.grantHash} AND "order_id" = ${orderId}::uuid`;
+
 type OrderWithItems = Order & { items: OrderItem[] };
 
 /** Đơn của chính thành viên; mã sai dạng / không có / của người khác -> `null` (gọi tự quyết 404 để thứ tự 422 -> 404 đúng). */
-async function findOwnedOrder(p: MemberPrincipal, rawCode: string): Promise<OrderWithItems | null> {
+async function findOwnedOrder(p: ReturnPrincipal, rawCode: string): Promise<OrderWithItems | null> {
   const code = normalizeOrderCode(rawCode);
   if (!code) return null;
   const o = await prisma.order.findUnique({ where: { code }, include: { items: true } });
-  return o && o.userId === p.userId ? o : null;
+  if (!o) return null;
+  if (p.kind === 'member') return o.userId === p.userId ? o : null;
+  return o.userId === null && o.order_id === p.orderId ? o : null;
 }
 
 const asObject = (body: unknown): Record<string, unknown> => {
@@ -68,7 +92,7 @@ const toAmountDto = (a: ReturnAmountResult): ReturnAmountDto => ({
 });
 
 /** `POST .../return/estimate` (Should): đúng số mà `createReturn` sẽ lưu; không ghi gì, không kiểm ảnh / mô tả / tài khoản / hạn. */
-export async function estimateReturn(p: MemberPrincipal, rawCode: string, body: unknown): Promise<ReturnAmountDto> {
+export async function estimateReturn(p: ReturnPrincipal, rawCode: string, body: unknown): Promise<ReturnAmountDto> {
   const raw = asObject(body);
   const order = await findOwnedOrder(p, rawCode);
   const f = parseCreateFields(raw, ['lines', 'reason']);
@@ -85,7 +109,7 @@ export interface CreateResult {
   replayed: boolean;
 }
 
-export async function createReturn(p: MemberPrincipal, rawCode: string, body: unknown, key: string, path: string): Promise<CreateResult> {
+export async function createReturn(p: ReturnPrincipal, rawCode: string, body: unknown, key: string, path: string): Promise<CreateResult> {
   const raw = asObject(body);
   const order = await findOwnedOrder(p, rawCode);
   const f = parseCreateFields(raw);
@@ -111,7 +135,7 @@ export async function createReturn(p: MemberPrincipal, rawCode: string, body: un
         account: account ? { bank: account.bank, accountNumber: hmacForHash(account.accountNumber), accountName: account.accountName } : null,
       },
     },
-    p.userId,
+    identityOf(p),
   );
 
   for (let attempt = 1; ; attempt++) {
@@ -137,7 +161,7 @@ export async function createReturn(p: MemberPrincipal, rawCode: string, body: un
           const since = new Date(at.getTime() - RETURNS_ASSUMPTIONS.photo.attachWindowMs);
           const ok = await tx.$queryRaw<Array<{ photo_id: string }>>(Prisma.sql`
             SELECT "photo_id" FROM "return_photos"
-            WHERE "photo_id" = ANY(${photoIds}::uuid[]) AND "return_id" IS NULL AND "created_at" >= ${ts(since)} AND "uploader_user_id" = ${p.userId}::uuid
+            WHERE "photo_id" = ANY(${photoIds}::uuid[]) AND "return_id" IS NULL AND "created_at" >= ${ts(since)} AND ${ownPhotoSql(p, o.order_id)}
             FOR UPDATE`);
           if (ok.length !== photoIds.length) throw Errors.validation('Ảnh minh chứng chưa hợp lệ hoặc đã hết hạn gắn.', 'photos');
         }
@@ -149,7 +173,7 @@ export async function createReturn(p: MemberPrincipal, rawCode: string, body: un
           await tx.orderReturn.create({
             data: {
               return_id: returnId, orderId: o.order_id, activeOrderId: o.order_id, state: 'requested', reason: v.reason, fault, detail: v.detail ?? '',
-              conditionAck: v.conditionAck === true, requestedVia: 'member', requestedBy: p.userId, requestedAt: at,
+              conditionAck: v.conditionAck === true, requestedVia: p.kind, requestedBy: p.kind === 'member' ? p.userId : null, requestedAt: at,
               goodsAmount: amt.goodsAmount, shippingRefund: amt.shippingRefund, returnShippingFee: amt.returnShippingFee, amount: amt.amount, amountFinal: false,
               ...(account
                 ? {
@@ -171,13 +195,13 @@ export async function createReturn(p: MemberPrincipal, rawCode: string, body: un
           orderId: o.order_id, returnId, orderStatus: o.status, paymentStatus: o.paymentStatus, kind: 'return_requested', actor: 'customer', at, reasonCode: v.reason,
         });
         const row = await loadReturn(tx, returnId);
-        const dto = await toReturnRequest(tx, row!, o.paymentMethod);
+        const dto = await toReturnRequest(tx, row!, o.paymentMethod, audienceFor(p, o.code));
         await completeIdempotency(tx, 'admin-action', key, { orderId: o.order_id, snapshot: dto });
         return { dto, replayed: false, eventId };
       }, TX);
       if (out.eventId) {
         scheduleEventEmail(out.eventId);
-        logger.info('return-requested', { returnId: out.dto.id, orderCode: order.code, userId: p.userId, action: 'create' });
+        logger.info('return-requested', { returnId: out.dto.id, orderCode: order.code, via: p.kind, action: 'create' });
       }
       return { dto: out.dto, replayed: out.replayed };
     } catch (err) {

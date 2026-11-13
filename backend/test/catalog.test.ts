@@ -290,12 +290,14 @@ describe('catalog đọc (dữ liệu seed, chỉ đọc)', () => {
     expect(withCat.body.total).toBe(1);
   });
 
-  it('T-CAT-43 đánh giá luôn [], các đường dẫn khác 404', async () => {
-    const before = queryLog.length;
+  it('T-CAT-43 (Slice 10: đổi) đánh giá: id sai dạng 404, sản phẩm chưa có đánh giá -> trang rỗng; các đường dẫn khác 404', async () => {
     const res = await g('/api/products/bat-ky-id/reviews');
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
-    expect(queryLog.length).toBe(before);
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('not-found');
+    const p = (await g('/api/products/city-vest')).body;
+    const page = await g(`/api/products/${p.id}/reviews`);
+    expect(page.status).toBe(200);
+    expect(page.body).toMatchObject({ items: [], total: 0, page: 1, limit: 10, summary: { count: 0, average: null } });
     expect((await g('/api/products/x/reviews/eligibility')).status).toBe(404);
     const sa = await g('/api/stock-alerts');
     expect(sa.status).toBe(404);
@@ -303,7 +305,8 @@ describe('catalog đọc (dữ liệu seed, chỉ đọc)', () => {
   });
 
   it('T-CAT-45 không cần cookie / header; T-CAT-46 phương thức ghi -> 404', async () => {
-    for (const path of ['/api/products', '/api/products/city-vest', '/api/products/x/reviews', '/api/size-charts/tops']) {
+    const pid = (await prisma.product.findFirstOrThrow({ where: { slug: 'city-vest' } })).product_id;
+    for (const path of ['/api/products', '/api/products/city-vest', `/api/products/${pid}/reviews`, '/api/size-charts/tops']) {
       const res = await request(app).get(path).set('X-Forwarded-For', freshIp());
       expect(res.status, path).toBe(200);
       expect(res.headers['set-cookie']).toBeUndefined();
@@ -349,10 +352,12 @@ describe('catalog đọc (dữ liệu seed, chỉ đọc)', () => {
 
   it('T-CAT-61 header cache, ETag, 304, route lạ', async () => {
     const ip = freshIp();
-    for (const path of ['/api/products', '/api/products/city-vest', '/api/products/x/reviews']) {
+    const pid = (await get('/api/products/city-vest', { ip })).body.id;
+    for (const path of ['/api/products', '/api/products/city-vest', `/api/products/${pid}/reviews`]) {
       expect((await get(path, { ip })).headers['cache-control']).toBe('public, max-age=10');
     }
-    expect((await get('/api/size-charts/tops', { ip })).headers['cache-control']).toBe('public, max-age=3600');
+    // Slice 10 (BR-CMS-03): bảng size admin sửa được nên cache 3600 -> 60 giây.
+    expect((await get('/api/size-charts/tops', { ip })).headers['cache-control']).toBe('public, max-age=60');
     const first = await get('/api/products', { ip });
     expect(first.headers.etag).toBeTruthy();
     const second = await request(app).get('/api/products').set('X-Forwarded-For', ip).set('If-None-Match', first.headers.etag);
@@ -372,11 +377,11 @@ describe('catalog đọc (dữ liệu seed, chỉ đọc)', () => {
     };
     const one = await run('/api/products?limit=1');
     const eight = await run('/api/products?limit=8');
-    expect(one).toBeLessThanOrEqual(3);
+    // Slice 10: + 1 truy vấn điểm trung bình cho cả trang (không N+1).
+    expect(one).toBeLessThanOrEqual(4);
     expect(eight).toBe(one);
-    expect(await run('/api/products/city-vest')).toBeLessThanOrEqual(2);
+    expect(await run('/api/products/city-vest')).toBeLessThanOrEqual(3);
     expect(await run('/api/size-charts/tops')).toBeLessThanOrEqual(1);
-    expect(await run('/api/products/x/reviews')).toBe(0);
   });
 });
 
@@ -493,9 +498,10 @@ describe('catalog với dữ liệu sửa đổi', () => {
     await prisma.session.updateMany({ data: { revoked_at: new Date(), revoke_reason: 'test' } });
     const c = cookieFrom(await loginPassword(A.email, A.password, freshIp()), 'n2f_sid')!;
     advance(31 * DAY);
+    const pid = (await prisma.product.findFirstOrThrow({ where: { slug: 'city-vest' } })).product_id;
     const cookies = ['n2f_sid=gia-mao', 'n2f_asid=gia-mao', c, revoked, `${c}; n2f_asid=x`];
     for (const cookie of cookies) {
-      for (const path of ['/api/products', '/api/products/city-vest', '/api/products/x/reviews', '/api/size-charts/tops']) {
+      for (const path of ['/api/products', '/api/products/city-vest', `/api/products/${pid}/reviews`, '/api/size-charts/tops']) {
         const res = await get(path, { ip: freshIp(), cookie });
         expect(res.status, path).toBe(200);
         expect(res.headers['set-cookie']).toBeUndefined();

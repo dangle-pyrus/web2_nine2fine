@@ -83,6 +83,17 @@ export const returnPhotoLimit = createRateLimit({ name: 'return-photo', ...RETUR
 export const reviewCreateLimit = createRateLimit({ name: 'review-create', ...P1_ASSUMPTIONS.reviews.createRateLimit, key: byUser });
 export const wishlistWriteLimit = createRateLimit({ name: 'wishlist-write', ...P1_ASSUMPTIONS.wishlist.writeRateLimit, key: byUser });
 
+/**
+ * Slice 10.2 (BR-RET-62, 63, S10-Q11): trả hàng vãng lai. Key = băm grant `n2f_oa` (`res.locals.guestGrantHash`, do `guestGrantAuth` gắn) hoặc IP.
+ * Đặt SAU xác thực grant (401 đứng trước 429); đếm mọi lần gọi tới được thân. Tạo yêu cầu 5 / giờ / grant + 10 / giờ / IP; tải ảnh 30 / giờ / grant + 60 / giờ / IP.
+ */
+const byGrant = (req: Request): string => String(req.res?.locals.guestGrantHash ?? req.ip ?? 'unknown');
+const G = P1_ASSUMPTIONS.guestReturn;
+export const guestReturnCreateGrantLimit = createRateLimit({ name: 'guest-return-create-grant', ...G.createPerGrant, key: byGrant });
+export const guestReturnCreateIpLimit = createRateLimit({ name: 'guest-return-create-ip', ...G.createPerIp });
+export const guestReturnPhotoGrantLimit = createRateLimit({ name: 'guest-return-photo-grant', ...G.photoPerGrant, key: byGrant });
+export const guestReturnPhotoIpLimit = createRateLimit({ name: 'guest-return-photo-ip', ...G.photoPerIp });
+
 /** Chỉ cho test. */
 export function resetCheckoutRateLimits(): void {
   for (const r of registry) r();

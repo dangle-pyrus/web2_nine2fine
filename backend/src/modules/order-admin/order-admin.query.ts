@@ -75,6 +75,8 @@ export interface SummaryRow {
   total: number;
   item_count: number;
   needs_call: boolean;
+  /** Slice 10.2 (BR-RET-65): đơn có yêu cầu trả hàng `requested` (cả thành viên lẫn vãng lai). */
+  return_pending: boolean;
   cancel_requested_at: Date | null;
   estimated_to: Date;
   tab: AdminBucket;
@@ -92,6 +94,7 @@ export async function listOrders(
       SELECT o."code", o."created_at", o."status"::text AS "status", o."payment_status"::text AS "payment_status",
         o."payment_method"::text AS "payment_method", o."recipient_name", o."total", o."cancel_requested_at", o."estimated_to",
         (SELECT COALESCE(SUM(i."quantity"), 0)::int FROM "order_items" i WHERE i."order_id" = o."order_id") AS "item_count",
+        EXISTS (SELECT 1 FROM "order_returns" r WHERE r."order_id" = o."order_id" AND r."state" = 'requested') AS "return_pending",
         ${NEEDS_CALL} AS "needs_call", (CASE ${tabCase} END)::text AS "tab"
       FROM "orders" o ${where}
       ORDER BY o."created_at" DESC, o."code" DESC

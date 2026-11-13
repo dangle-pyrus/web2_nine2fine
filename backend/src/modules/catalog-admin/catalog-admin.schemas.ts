@@ -3,6 +3,7 @@ import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import { Errors } from '../../lib/errors';
 import { SLUG_RE } from '../../lib/slug';
 import { cleanMultiline, cleanText } from '../../lib/text';
+import { evaluateSale } from './sale-input';
 
 export const BODY_MSG = 'Dữ liệu gửi lên không hợp lệ.';
 
@@ -120,6 +121,10 @@ const productShape = {
     .int({ error: 'Giá gốc phải là số nguyên lớn hơn giá bán.' })
     .nullable()
     .optional(),
+  // Slice 10 (BR-PROMO-01): kiểm chi tiết ở `refineProduct` bằng `evaluateSale`.
+  salePrice: z.number({ error: 'Giá giảm phải là số nguyên.' }).nullable().optional(),
+  saleStartsAt: z.string({ error: 'Ngày bắt đầu không hợp lệ.' }).nullable().optional(),
+  saleEndsAt: z.string({ error: 'Ngày kết thúc không hợp lệ.' }).nullable().optional(),
   material: optionalText(500, 'Chất liệu tối đa 500 ký tự.'),
   care: careSchema.optional(),
   fitSummary: optionalText(500, 'Mô tả dáng tối đa 500 ký tự.'),
@@ -134,7 +139,11 @@ const productShape = {
 
 const uniq = <T>(a: T[] | undefined): T[] | undefined => (a ? [...new Set(a)] : a);
 
-function refineProduct(v: { price: number; compareAtPrice?: number | null | undefined }, ctx: z.RefinementCtx): void {
+function refineProduct(
+  v: { price: number; compareAtPrice?: number | null | undefined; salePrice?: number | null | undefined; saleStartsAt?: string | null | undefined; saleEndsAt?: string | null | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  for (const i of evaluateSale(v).issues) ctx.addIssue({ code: 'custom', path: [i.path], message: i.message });
   if (v.compareAtPrice !== null && v.compareAtPrice !== undefined && (v.compareAtPrice <= v.price || v.compareAtPrice > PRICE.max)) {
     ctx.addIssue({ code: 'custom', path: ['compareAtPrice'], message: 'Giá gốc phải lớn hơn giá bán và không quá 100.000.000 đồng.' });
   }

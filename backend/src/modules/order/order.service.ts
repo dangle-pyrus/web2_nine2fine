@@ -6,10 +6,8 @@ import { Errors } from '../../lib/errors';
 import { cancelOrderTx, scheduleCancelEmail } from './cancel-order.service';
 import { GRANT_COOKIE, grantedOrderId } from './lookup.service';
 import { normalizeOrderCode } from './order-code';
-import { toReturnRequest } from '../returns/return.mapper';
-import { loadReturnsForOrders } from '../returns/return.query';
-import { isLive, type ReturnState } from '../returns/return-rules';
-import { ORDER_INCLUDE, OrderDto, OrderRow, toOrderDto } from './order.mapper';
+import { ORDER_INCLUDE, OrderDto, OrderRow } from './order.mapper';
+import { toOrderDtosWithReturn, viewerOf } from './order-return';
 
 /**
  * Quyền xem / huỷ một đơn: (a) phiên storefront là chủ đơn, hoặc (b) cookie `n2f_oa` gắn đúng đơn này, còn hạn.
@@ -41,30 +39,10 @@ export async function expireIfDue(order: OrderRow, at: Date = clockNow()): Promi
   return prisma.order.findUniqueOrThrow({ where: { order_id: order.order_id }, include: ORDER_INCLUDE });
 }
 
-/**
- * Slice 9: ghép `return` (yêu cầu sống mới nhất, không có thì `cancelled` mới nhất) và chỉnh `canReturn` (không có yêu cầu sống).
- * MỘT truy vấn theo mảng id (danh sách đơn không N+1). Chỉ dùng cho CHỦ đơn: người xem khác (khách tra cứu bằng OTP) không có
- * `return` và `canReturn = false` (trả hàng của khách vãng lai là lát 9.6, hoãn).
- */
-export async function toOrderDtosWithReturn(rows: OrderRow[], viewerIsOwner: boolean): Promise<OrderDto[]> {
-  if (!viewerIsOwner) return rows.map((r) => ({ ...toOrderDto(r), canReturn: false }));
-  const returns = await loadReturnsForOrders(prisma, rows.map((r) => r.order_id));
-  return Promise.all(
-    rows.map(async (r) => {
-      const dto = toOrderDto(r);
-      const ret = returns.get(r.order_id);
-      if (!ret) return dto;
-      if (isLive(ret.state as ReturnState)) dto.canReturn = false;
-      dto.return = await toReturnRequest(prisma, ret, r.paymentMethod);
-      return dto;
-    }),
-  );
-}
-
 export async function getOrderDto(req: Request, rawCode: string): Promise<OrderDto> {
   const order = await expireIfDue(await loadAccessibleOrder(req, rawCode));
   const owner = !!req.auth && req.auth.user.user_id === order.userId;
-  return (await toOrderDtosWithReturn([order], owner))[0];
+  return (await toOrderDtosWithReturn([order], viewerOf(order, owner)))[0];
 }
 
 export async function listMyOrders(
@@ -82,5 +60,5 @@ export async function listMyOrders(
       take: limit,
     }),
   ]);
-  return { items: await toOrderDtosWithReturn(rows, true), total, page, limit };
+  return { items: await toOrderDtosWithReturn(rows, 'owner'), total, page, limit };
 }

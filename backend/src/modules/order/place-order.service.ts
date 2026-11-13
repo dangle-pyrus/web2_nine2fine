@@ -151,7 +151,7 @@ async function runPlaceOrder(
     body.items.map((i) => i.variantId),
     true,
   );
-  const lines = refreshLines(body.items, rows, settings);
+  const lines = refreshLines(body.items, rows, settings, at);
   const priced = lines.filter((l) => l.effectiveQuantity > 0);
   const pricingLines = priced.map((l) => ({ variantId: l.variantId, unitPrice: l.unitPrice, quantity: l.effectiveQuantity }));
   const subtotal = sumValue(pricingLines);

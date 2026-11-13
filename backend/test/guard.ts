@@ -5,7 +5,8 @@
 import os from 'node:os';
 import path from 'node:path';
 
-export const TEST_DB_URL = 'postgresql://postgres@127.0.0.1:54329/n2f_test';
+/** Mặc định `n2f_test`; `N2F_TEST_DB_URL` (vẫn phải là `127.0.0.1/n2f_test?schema=...`) cho phép chạy song song trong schema riêng, không đụng nhau. */
+export const TEST_DB_URL = process.env.N2F_TEST_DB_URL ?? 'postgresql://postgres@127.0.0.1:54329/n2f_test';
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
 function hostOf(url: string): string | null {

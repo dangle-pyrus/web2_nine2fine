@@ -9,7 +9,8 @@ import { runInBackground, sendMail } from '../../mail/mailer';
 import { lookupCodeMail } from '../../mail/order-templates';
 import { getLockSeconds, getStates, hitWindow, lockOf, recordFailure, setLock, windowOf } from '../auth/rate-limit.service';
 import { normalizeOrderCode } from './order-code';
-import { ORDER_INCLUDE, OrderDto, toOrderDto } from './order.mapper';
+import { ORDER_INCLUDE, OrderDto } from './order.mapper';
+import { toOrderDtosWithReturn, viewerOf } from './order-return';
 
 /**
  * Tra cứu đơn khách bằng mã đơn + email + OTP (BR-CHK-26). OTP lưu băm trong `auth_action_tokens`
@@ -119,7 +120,7 @@ export async function verifyLookup(
           data: { tokenHash: hashSessionToken(grant), orderId: order.order_id, createdAt: t, expiresAt: addMs(t, ASSUMPTIONS.orderAccessTtlMs) },
         });
         setGrantCookie(res, grant);
-        return { ...toOrderDto(order), canReturn: false }; // trả hàng của khách vãng lai: lát 9.6 (hoãn)
+        return (await toOrderDtosWithReturn([order], viewerOf(order, false)))[0]; // 10.2: đơn vãng lai có canReturn / return; đơn của thành viên qua OTP: canReturn = false
       }
     }
   }

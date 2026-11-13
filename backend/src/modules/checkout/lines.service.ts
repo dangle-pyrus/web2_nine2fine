@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
+import { now as clockNow } from '../../lib/clock';
 import type { Db } from '../../lib/sql';
+import { effectivePrice, isOnSale } from '../pricing/effective-price';
 import type { Settings } from '../store/settings.service';
 
 /** Đọc + làm tươi dòng (plan mục 4.1), dùng cho giỏ, báo giá, đặt hàng. */
@@ -17,6 +19,10 @@ export interface VariantRow {
   name: string;
   price: number;
   compare_at_price: number | null;
+  /** Slice 10: đợt giảm giá (cột `timestamp(6)` UTC); `price` / `compare_at_price` là giá GỐC. */
+  sale_price: number | null;
+  sale_starts_at: Date | null;
+  sale_ends_at: Date | null;
   cover_media_id: string;
   color_media: Record<string, string> | null;
   category_id: string;
@@ -60,6 +66,7 @@ export async function loadVariantRows(db: Db, ids: readonly string[], forShare =
   const rows = await db.$queryRaw<VariantRow[]>(Prisma.sql`
     SELECT v."variant_id", v."sku", v."size", v."color_name", v."inventory_qty",
            p."product_id", p."slug", p."name", p."price"::int AS "price", p."compare_at_price"::int AS "compare_at_price",
+           p."sale_price"::int AS "sale_price", p."sale_starts_at", p."sale_ends_at",
            p."cover_media_id", p."color_media", p."category_id", p."status"::text AS "status"
     FROM "product_variants" v JOIN "products" p ON p."product_id" = v."product_id"
     WHERE v."variant_id" = ANY(${ids as string[]}::uuid[])
@@ -71,8 +78,16 @@ export async function loadVariantRows(db: Db, ids: readonly string[], forShare =
 export const availabilityOf = (inventory: number): Availability =>
   inventory <= 0 ? 'out-of-stock' : inventory <= 5 ? 'low-stock' : 'available';
 
+const saleFieldsOf = (row: VariantRow) => ({
+  price: row.price,
+  compareAtPrice: row.compare_at_price,
+  salePrice: row.sale_price,
+  saleStartsAt: row.sale_starts_at,
+  saleEndsAt: row.sale_ends_at,
+});
+
 /** Làm tươi một dòng yêu cầu theo dòng DB (hoặc `undefined` nếu biến thể không tồn tại). */
-export function refreshLine(req: RequestedLine, row: VariantRow | undefined, settings: Pick<Settings, 'maxPerVariant'>): LineCtx {
+export function refreshLine(req: RequestedLine, row: VariantRow | undefined, settings: Pick<Settings, 'maxPerVariant'>, at: Date = clockNow()): LineCtx {
   if (!row || row.status !== 'ACTIVE') {
     return {
       variantId: req.variantId,
@@ -97,6 +112,7 @@ export function refreshLine(req: RequestedLine, row: VariantRow | undefined, set
   const inventory = Math.max(0, row.inventory_qty);
   const maxQuantity = Math.min(settings.maxPerVariant, inventory);
   const effectiveQuantity = Math.min(req.quantity, maxQuantity);
+  const eff = effectivePrice(saleFieldsOf(row), at);
   const line: LineCtx = {
     variantId: req.variantId,
     productId: row.product_id,
@@ -105,7 +121,7 @@ export function refreshLine(req: RequestedLine, row: VariantRow | undefined, set
     mediaId: row.color_media?.[row.color_name] ?? row.cover_media_id,
     color: row.color_name,
     size: row.size,
-    unitPrice: row.price,
+    unitPrice: eff.price,
     requestedQuantity: req.quantity,
     maxQuantity,
     effectiveQuantity,
@@ -113,9 +129,9 @@ export function refreshLine(req: RequestedLine, row: VariantRow | undefined, set
     inventory,
     categoryId: row.category_id,
     sku: row.sku,
-    onSale: row.compare_at_price !== null && row.compare_at_price > row.price,
+    onSale: isOnSale(saleFieldsOf(row), at),
   };
-  if (row.compare_at_price !== null) line.compareAtPrice = row.compare_at_price;
+  if (eff.compareAtPrice !== null) line.compareAtPrice = eff.compareAtPrice;
   if (effectiveQuantity < req.quantity) {
     line.limitedBy = inventory < Math.min(req.quantity, settings.maxPerVariant) ? 'stock' : 'per-variant-limit';
   }
@@ -126,8 +142,9 @@ export function refreshLines(
   requested: readonly RequestedLine[],
   rows: ReadonlyMap<string, VariantRow>,
   settings: Pick<Settings, 'maxPerVariant'>,
+  at: Date = clockNow(),
 ): LineCtx[] {
-  return requested.map((r) => refreshLine(r, rows.get(r.variantId), settings));
+  return requested.map((r) => refreshLine(r, rows.get(r.variantId), settings, at));
 }
 
 /** Bỏ trường nội bộ trước khi trả ra API. */

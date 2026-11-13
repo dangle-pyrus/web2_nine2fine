@@ -3894,7 +3894,7 @@ paths:
       description: |
         Slice 10 (lát 10.3), status: locked. Quyền `content.edit` (CHỈ admin; staff -> `403 forbidden` kiểm trước khi đọc thân, DB không đổi). MỘT lần ghi nguyên văn bản `{categories, moments, blocks, updatedAt}`; bản lưu = bản công khai ngay (không nháp / xem trước / lịch; khách thấy trong <= 60 giây theo `max-age`). `updatedAt` = giá trị lần đọc gần nhất (`null` chỉ hợp lệ khi chưa có dòng lưu). Lệch -> `409 version-conflict` kèm `error.current` = `AdminHomeContent` hiện tại, KHÔNG ghi; hai admin lưu đồng thời: đúng 1 × `200`, còn lại `409`. Thành công: ghi `updatedBy` (id + tên) + `updatedAt` mới (tăng ngặt) trong một giao dịch, trả bản mới.
 
-        **Kiểm giá trị (MỌI lỗi một lần ở `error.fieldErrors`, `field` = đường dẫn đầy đủ như `blocks[2].title`, `moments[1].lines[0]`, `categories[0].href`; chuỗi NFC, cắt hai đầu, không ký tự điều khiển ngoài xuống dòng ở `description` / `lines`):** `blocks` <= 12 (kể cả khối tắt); `blocks[i].id` `^[a-z0-9][a-z0-9-]{0,39}$` và duy nhất; `kind` ∈ `campaign`, `products`, `shop`, `categories`; `eyebrow` <= 40, `title` <= 80, `description` <= 200 ký tự, `label` <= 40 (khối `products`, `shop` <= 80); khối `products` <= 6 thẻ (`title` <= 80, `caption` <= 40); `categories` 1..8 phần tử (`label` <= 40); `moments` ĐÚNG 4 phần tử theo thứ tự `work`, `dinner`, `event`, `weekend` (không thêm / xoá / đổi mã), `label` 1..40, `lines` 1..2 dòng mỗi dòng 1..60 ký tự; `href` (mọi nơi) CHỈ là đường dẫn nội bộ: bắt đầu `/`, không `//`, không `\`, không khoảng trắng / ký tự điều khiển, <= 200 ký tự (loại `javascript:`, `http:`, `//evil.com`); `mediaId` (mọi nơi): id trong thư viện ảnh đã tải lên (`up-...` phải tồn tại ở `media_assets`) hoặc id ảnh seed hợp lệ (`prisma/seed-data/media-ids.json`), lạ -> `422`; thứ tự mảng = thứ tự hiển thị. Thân > 64 KB -> `422`.
+        **Kiểm giá trị (MỌI lỗi một lần ở `error.fieldErrors`, `field` = đường dẫn đầy đủ như `blocks[2].title`, `moments[1].lines[0]`, `categories[0].href`; chuỗi NFC, cắt hai đầu, không ký tự điều khiển ngoài xuống dòng ở `description` / `lines`):** `blocks` <= 16 (kể cả khối tắt); `blocks[i].id` `^[a-z0-9][a-z0-9-]{0,39}$` và duy nhất; `kind` ∈ `campaign`, `products`, `shop`, `categories`; `eyebrow` <= 40, `title` <= 80, `description` <= 200 ký tự, `label` <= 40 (khối `products`, `shop` <= 80); khối `products` <= 6 thẻ (`title` <= 80, `caption` <= 40); `categories` 1..8 phần tử (`label` <= 40); `moments` ĐÚNG 4 phần tử theo thứ tự `work`, `dinner`, `event`, `weekend` (không thêm / xoá / đổi mã), `label` 1..40, `lines` 1..2 dòng mỗi dòng 1..60 ký tự; `href` (mọi nơi) CHỈ là đường dẫn nội bộ: bắt đầu `/`, không `//`, không `\`, không khoảng trắng / ký tự điều khiển, <= 200 ký tự (loại `javascript:`, `http:`, `//evil.com`); `mediaId` (mọi nơi): id trong thư viện ảnh đã tải lên (`up-...` phải tồn tại ở `media_assets`) hoặc id ảnh seed hợp lệ (`prisma/seed-data/media-ids.json`), lạ -> `422`; thứ tự mảng = thứ tự hiển thị. Thân > 64 KB -> `422`.
       security:
         - adminSession: []
       parameters:
@@ -7238,7 +7238,7 @@ components:
       properties:
         categories: { type: array, minItems: 1, maxItems: 8, items: { $ref: '#/components/schemas/HomeCategoryItem' } }
         moments: { type: array, maxItems: 4, items: { $ref: '#/components/schemas/HomeMomentCard' } }
-        blocks: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/HomeBlock' } }
+        blocks: { type: array, maxItems: 16, items: { $ref: '#/components/schemas/HomeBlock' } }
     HomeContentInput:
       type: object
       required: [categories, moments, blocks, updatedAt]
@@ -7247,7 +7247,7 @@ components:
       properties:
         categories: { type: array, minItems: 1, maxItems: 8, items: { $ref: '#/components/schemas/HomeCategoryItem' } }
         moments: { type: array, minItems: 4, maxItems: 4, items: { $ref: '#/components/schemas/HomeMomentInput' }, description: 'Đúng 4 phần tử, thứ tự work, dinner, event, weekend.' }
-        blocks: { type: array, maxItems: 12, items: { $ref: '#/components/schemas/HomeBlock' } }
+        blocks: { type: array, maxItems: 16, items: { $ref: '#/components/schemas/HomeBlock' } }
         updatedAt: { type: [string, 'null'], format: date-time, description: 'Giá trị lần đọc gần nhất; null chỉ khi chưa có dòng lưu.' }
     HomeContentWarning:
       type: object

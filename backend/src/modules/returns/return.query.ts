@@ -108,6 +108,7 @@ export interface ReturnSummaryRow {
   reason: string;
   fault: string;
   state: string;
+  source: string;
   amount: number;
   item_count: number;
   handled_by: string | null;
@@ -126,7 +127,7 @@ export async function listReturns(
   const order = f.sort === 'amount' ? Prisma.sql`r."amount" DESC, r."requested_at" DESC, r."return_id" DESC` : Prisma.sql`r."requested_at" DESC, r."return_id" DESC`;
   const [rows, [cnt]] = await Promise.all([
     db.$queryRaw<ReturnSummaryRow[]>(Prisma.sql`
-      SELECT r."return_id"::text AS "return_id", o."code", r."requested_at", o."recipient_name", r."reason", r."fault", r."state", r."amount",
+      SELECT r."return_id"::text AS "return_id", o."code", r."requested_at", o."recipient_name", r."reason", r."fault", r."state", r."requested_via" AS "source", r."amount",
         (SELECT COALESCE(SUM(i."quantity"), 0)::int FROM "order_return_items" i WHERE i."return_id" = r."return_id") AS "item_count",
         h."actor_name" AS "handled_by", h."actor_role"::text AS "handled_role", h."at" AS "handled_at"
       FROM "order_returns" r JOIN "orders" o ON o."order_id" = r."order_id"

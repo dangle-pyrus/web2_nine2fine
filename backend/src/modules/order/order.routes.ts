@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { parseBody, parseIdempotencyKey, parseOptionalBody } from '../../lib/validate';
 import { requireAuth } from '../../middleware/auth';
+import { guestReturnsRouter } from '../returns/guest-returns.routes';
 import { memberIdOf, optionalAuth } from '../../middleware/optional-auth';
 import { cartQuoteLimit, orderCreateLimit, orderLookupLimit } from '../../middleware/rate-limit';
 import { cancelByCustomer } from './cancel-order.service';
@@ -77,6 +78,9 @@ orderRouter.get(
     noStore(res).json(await getPaymentSession(req, String(req.params.orderCode)));
   }),
 );
+
+// Slice 10.2: trả hàng vãng lai (`/:orderCode/return`, `/return/cancel`, `/return/estimate`); ảnh ở app.ts (byte thô).
+orderRouter.use('/:orderCode/return', guestReturnsRouter);
 
 orderRouter.post(
   '/:orderCode/cancel',

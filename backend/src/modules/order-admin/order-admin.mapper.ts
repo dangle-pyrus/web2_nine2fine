@@ -199,6 +199,7 @@ export function toAdminSummary(r: SummaryRow) {
     itemCount: r.item_count,
     needsCall: r.needs_call,
     hasCancelRequest: r.status === 'cancel_requested',
+    returnPending: r.return_pending,
     tab: r.tab,
     overdue: overdueOf({ status: r.status, needsCall: r.needs_call, createdAt: r.created_at, cancelRequestedAt: r.cancel_requested_at, estimatedTo: r.estimated_to }, clockNow()),
   };

@@ -282,7 +282,7 @@ export const P1_ASSUMPTIONS = {
   content: {
     homeMaxAge: 60,
     sizeChartMaxAge: 60,
-    maxBlocks: 12,
+    maxBlocks: 16,
     maxCategories: 8,
     eyebrowMax: 40,
     titleMax: 80,

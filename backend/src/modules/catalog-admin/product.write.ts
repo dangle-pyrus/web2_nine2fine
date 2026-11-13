@@ -14,6 +14,7 @@ import { UUID_RE } from '../../lib/validate';
 import type { ProductCreateInput, ProductUpdateInput } from './catalog-admin.schemas';
 import { imagesOf, toDbStatus, AdminStatus } from './product.mapper';
 import { loadAdminProduct } from './product.query';
+import { evaluateSale, SaleChange } from './sale-input';
 import { buildImageColumns, FinalImage, normalizeVariants, NormVariant, publishMissing } from './product.rules';
 
 /**
@@ -43,6 +44,13 @@ async function withRetry<T>(fn: () => Promise<T>, max = 3): Promise<T> {
       if (attempt >= max || !isRetryable(e)) throw e;
     }
   }
+}
+
+/** Cột đợt giảm theo thay đổi đã kiểm (`keep` = không đụng). */
+function saleColumns(c: SaleChange): { salePrice?: number | null; saleStartsAt?: Date | null; saleEndsAt?: Date | null } {
+  if (c.kind === 'keep') return {};
+  if (c.kind === 'clear') return { salePrice: null, saleStartsAt: null, saleEndsAt: null };
+  return { salePrice: c.salePrice, saleStartsAt: c.startsAt, saleEndsAt: c.endsAt };
 }
 
 const isUnique = (e: unknown, col: string): boolean => {
@@ -225,6 +233,7 @@ async function createTx(tx: Db, actor: Actor, input: ProductCreateInput, explici
       searchText: buildSearchText(input.name, input.type),
       price: input.price,
       compareAtPrice: input.compareAtPrice ?? null,
+      ...saleColumns(evaluateSale(input).change),
       badge: null,
       description: input.description ?? '',
       material: input.material ?? '',
@@ -337,6 +346,12 @@ async function updateTx(tx: Db, actor: Actor, id: string, input: ProductUpdateIn
     if (missing.length > 0) throw Errors.publishIncomplete(missing);
   }
 
+  // Slice 10 (BR-PROMO-01, 05): đợt giảm; đổi `price` phải còn lớn hơn `salePrice` đang lưu (CHECK DB là lưới an toàn).
+  const saleChange = evaluateSale(input).change;
+  if (saleChange.kind === 'keep' && cur.salePrice !== null && input.price <= Number(cur.salePrice)) {
+    throw Errors.validation('Giá bán phải lớn hơn giá giảm hiện có. Sửa hoặc gỡ đợt giảm giá trước.', 'salePrice');
+  }
+
   const at = now();
   const cols = buildImageColumns(images);
   await tx.product.update({
@@ -347,6 +362,7 @@ async function updateTx(tx: Db, actor: Actor, id: string, input: ProductUpdateIn
       searchText: buildSearchText(input.name, input.type),
       price: input.price,
       compareAtPrice: input.compareAtPrice === undefined ? cur.compareAtPrice : input.compareAtPrice,
+      ...saleColumns(saleChange),
       description: input.description ?? cur.description,
       material: input.material ?? cur.material,
       care: input.care ?? cur.care,
@@ -460,5 +476,30 @@ export async function deleteProduct(id: string): Promise<void> {
     if (e instanceof AppError) throw e;
     if (isFkViolation(e)) throw Errors.productInUse(); // order_items RESTRICT: đai cuối
     throw e;
+  }
+}
+
+/* ------------------------------------------------------- giảm giá hàng loạt (Slice 10.7, Should) ------------------------------------------------------- */
+
+/** Ghi đợt giảm cho các sản phẩm đã chọn (cùng giao dịch với khoá dòng của người gọi). `updatedAt` tăng ngặt, ghi `updated_by`. */
+export async function writeBulkSale(
+  tx: Db,
+  items: ReadonlyArray<{ id: string; salePrice: number; updatedMs: number }>,
+  startsAt: Date,
+  endsAt: Date,
+  actor: Actor,
+  at: Date,
+): Promise<void> {
+  for (const it of items) {
+    await tx.product.update({
+      where: { product_id: it.id },
+      data: {
+        salePrice: it.salePrice,
+        saleStartsAt: startsAt,
+        saleEndsAt: endsAt,
+        updatedAt: new Date(Math.max(at.getTime(), it.updatedMs + 1)),
+        updatedById: actor.id,
+      },
+    });
   }
 }

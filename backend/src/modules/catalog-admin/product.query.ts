@@ -56,7 +56,7 @@ export async function listProducts(q: ProductListQuery) {
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
       SELECT p.product_id, p.slug, p.name, p.cover_media_id, p.status::text AS status,
-             c.slug AS category, c.name AS category_name, p.price, p.compare_at_price,
+             c.slug AS category, c.name AS category_name, p.price, p.compare_at_price, p.sale_price, p.sale_starts_at, p.sale_ends_at,
              COALESCE((SELECT SUM(v.inventory_qty) FROM product_variants v WHERE v.product_id = p.product_id), 0)::int AS inventory,
              (SELECT COUNT(*) FROM product_variants v WHERE v.product_id = p.product_id)::int AS variant_count,
              floor(extract(epoch FROM p.updated_at) * 1000)::float8 AS updated_ms
@@ -80,7 +80,7 @@ export async function listProducts(q: ProductListQuery) {
     hidden: Number(c.hidden),
     'out-of-stock': Number(c['out-of-stock']),
   };
-  return { items: rows.map(toAdminSummary), total: counts[q.view], page: q.page, limit: q.limit, counts };
+  return { items: rows.map((r) => toAdminSummary(r)), total: counts[q.view], page: q.page, limit: q.limit, counts };
 }
 
 /** Đọc AdminProduct trong `db` (cùng giao dịch khi gọi từ ghi). Không có / sai dạng id -> 404. */

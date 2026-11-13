@@ -17,6 +17,8 @@ export interface ListQuery {
   limit: number;
   /** undefined = không lọc theo ids; mảng rỗng = có ids nhưng không hợp lệ -> trang rỗng. */
   ids?: string[];
+  /** Slice 10 (Should): chỉ sản phẩm đang CHẠY đợt giảm. */
+  sale: boolean;
 }
 
 export type ProductWithVariants = Prisma.ProductGetPayload<{ include: { variants: true } }>;
@@ -54,6 +56,9 @@ export interface ProductDto {
   looks: unknown[];
   createdAt: string;
   salesRank: number;
+  rating?: { average: number; count: number };
+  discountPercent?: number;
+  saleEndsAt?: string;
 }
 
 export interface ProductPageDto {

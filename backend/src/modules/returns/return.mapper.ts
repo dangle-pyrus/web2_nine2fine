@@ -165,6 +165,8 @@ export async function toReturnRequest(
 
 export interface AdminReturnDto extends Omit<ReturnRequestDto, 'lines' | 'photos' | 'refundTo' | 'canCancel' | 'instructions'> {
   orderCode: string;
+  /** Slice 10.2 (BR-RET-65): nguồn yêu cầu (`guest` = Khách vãng lai, `member` = Thành viên). */
+  source: 'member' | 'guest';
   recipient: { name: string; phone: string; email: string };
   paymentMethod: 'cod' | 'bank-transfer';
   lines: Array<ReturnLineDto & { disposition?: 'restock' | 'writeoff' }>;
@@ -215,6 +217,7 @@ export async function buildAdminReturn(db: Db, returnId: string, role: 'staff' |
   const dto: AdminReturnDto = {
     ...rest,
     orderCode: order.code,
+    source: r.requestedVia === 'guest' ? 'guest' : 'member',
     recipient: { name: order.recipientName, phone: order.recipientPhone, email: order.email },
     paymentMethod: order.paymentMethod === 'bank_transfer' ? 'bank-transfer' : 'cod',
     lines: r.items.map((i) => ({ ...toLineDto(i), ...(i.disposition ? { disposition: i.disposition as 'restock' | 'writeoff' } : {}) })),

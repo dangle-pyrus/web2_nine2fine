@@ -204,12 +204,12 @@ describe('T-INV-10 / 11 / 12 danh sách và chi tiết', () => {
     }
   });
 
-  it('chi tiết đủ trường, không có tags / cost / seo; 404 id lạ', async () => {
+  it('chi tiết đủ trường (Slice 10: + 4 trường đợt giảm), không có tags / cost / seo; 404 id lạ', async () => {
     const p = await makeProduct({ name: 'Chi Tiết', status: 'ACTIVE', variants: [{ sku: 'CT-1', qty: 7 }, { sku: 'CT-2', size: 'M', qty: 2 }] });
     await makeOrder({ items: [{ variantId: p.variants[0].id, quantity: 1 }] });
     const d = (await aGet(`/products/${p.id}`, staff.cookie)).body;
     expect(Object.keys(d).sort()).toEqual(
-      ['category', 'care', 'colors', 'compareAtPrice', 'createdAt', 'description', 'fitSummary', 'genders', 'id', 'images', 'material', 'moments', 'name', 'price', 'published', 'publishedAt', 'sizes', 'slug', 'slugLocked', 'status', 'type', 'updatedAt', 'updatedBy', 'variants'].sort(),
+      ['category', 'care', 'colors', 'compareAtPrice', 'createdAt', 'description', 'fitSummary', 'genders', 'id', 'images', 'material', 'moments', 'name', 'price', 'published', 'publishedAt', 'salePrice', 'saleStartsAt', 'saleEndsAt', 'saleState', 'sizes', 'slug', 'slugLocked', 'status', 'type', 'updatedAt', 'updatedBy', 'variants'].sort(),
     );
     expect(d).toMatchObject({ published: true, slugLocked: true, status: 'active', sizes: ['S', 'M'], colors: [{ name: 'Đen', hex: '#000000' }] });
     expect(d.variants.map((v: Detail) => [v.sku, v.inventory, v.hasOrders])).toEqual([['CT-1', 7, true], ['CT-2', 2, false]]);

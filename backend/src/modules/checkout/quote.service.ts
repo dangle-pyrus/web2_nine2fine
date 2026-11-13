@@ -95,7 +95,7 @@ export async function buildQuoteDetail(input: QuoteInput, db: Db = prisma, at: D
     db,
     input.items.map((i) => i.variantId),
   );
-  const lines = refreshLines(input.items, rows, settings);
+  const lines = refreshLines(input.items, rows, settings, at);
   const priced = lines.filter((l) => l.effectiveQuantity > 0);
 
   // Hạn mức cấu trúc: tổng số lượng hiệu lực <= 20 (BR-CART-03, AC-CART-05).

@@ -15,7 +15,7 @@ import { type PhotoAudience, toPhotoDto, type ReturnPhotoDto } from './return.ma
  * Tên tệp gốc không được lưu. Không log byte / khoá lưu trữ.
  */
 
-export type PhotoOwner = { kind: 'member'; userId: string } | { kind: 'guest'; orderId: string };
+export type PhotoOwner = { kind: 'member'; userId: string } | { kind: 'guest'; orderId: string; grantHash: string };
 
 /** Thứ tự lỗi: size -> format -> dimensions. `body` là Buffer từ `express.raw`. */
 export async function uploadReturnPhoto(body: unknown, owner: PhotoOwner, audience: PhotoAudience): Promise<ReturnPhotoDto> {
@@ -45,7 +45,7 @@ export async function uploadReturnPhoto(body: unknown, owner: PhotoOwner, audien
       data: {
         storageKey: key, storage: storage.name, contentType: info.type, byteSize: out.length, width: info.width, height: info.height,
         createdAt: clockNow(),
-        ...(owner.kind === 'member' ? { uploaderUserId: owner.userId } : { orderId: owner.orderId }),
+        ...(owner.kind === 'member' ? { uploaderUserId: owner.userId } : { orderId: owner.orderId, grantHash: owner.grantHash }),
       },
     });
     return toPhotoDto(row, audience);

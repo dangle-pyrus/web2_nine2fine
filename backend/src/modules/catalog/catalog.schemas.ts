@@ -21,6 +21,7 @@ const rawSchema = z.object({
   page: optString,
   limit: optString,
   ids: optString,
+  sale: optString,
 });
 
 const empty = (v: string | undefined): string | undefined => {
@@ -57,6 +58,11 @@ export function parseListQuery(query: unknown): ListQuery {
     throw Errors.validation('Tham số available không hợp lệ.', 'available');
   }
 
+  const sl = empty(r.sale);
+  if (sl !== undefined && sl !== 'true' && sl !== 'false') {
+    throw Errors.validation('Tham số sale không hợp lệ.', 'sale');
+  }
+
   const qRaw = empty(r.q);
   let tokens: string[] = [];
   if (qRaw !== undefined) {
@@ -89,6 +95,7 @@ export function parseListQuery(query: unknown): ListQuery {
     page: intIn('page', empty(r.page), 1, 10000, 1),
     limit: intIn('limit', empty(r.limit), 1, 48, 24),
     ids,
+    sale: sl === 'true',
   };
 }
 

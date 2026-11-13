@@ -110,7 +110,7 @@ describe('T-RET-30 AC-RET-31: danh sách', () => {
     expect(r.body.items).toHaveLength(20);
     expect([r.body.total, r.body.page, r.body.limit]).toEqual([25, 1, 20]);
     expect(r.body.counts).toEqual({ all: 25, requested: 8, approved: 5, received: 4, refunded: 5, closed: 3 });
-    expect(Object.keys(r.body.items[0]).sort()).toEqual(['amount', 'fault', 'id', 'itemCount', 'orderCode', 'overdue', 'reason', 'recipientName', 'requestedAt', 'state', 'total'].filter((k) => k !== 'total').sort());
+    expect(Object.keys(r.body.items[0]).sort()).toEqual(['amount', 'fault', 'id', 'itemCount', 'orderCode', 'overdue', 'reason', 'recipientName', 'requestedAt', 'source', 'state', 'total'].filter((k) => k !== 'total').sort());
     const times = r.body.items.map((i: { requestedAt: string }) => i.requestedAt);
     expect([...times].sort().reverse()).toEqual(times);
     const closed = await aGet('/returns?state=closed', A.cookie);
