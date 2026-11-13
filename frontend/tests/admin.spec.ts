@@ -16,6 +16,9 @@ async function adminSignIn(
 }
 
 test.describe('admin', () => {
+  // The dev server compiles lazy admin chunks on first hit, so cold navigations can pass 30 s.
+  test.setTimeout(90_000);
+
   test('redirects to login when signed out', async ({ page }) => {
     await page.goto('/admin/orders');
     await expect(page).toHaveURL(/\/admin\/login\?returnUrl=/);
@@ -70,7 +73,7 @@ test.describe('admin', () => {
     await page.goto('/admin/products/p01');
     await expect(page.getByLabel('Giá vốn')).toHaveCount(0);
     await page.goto('/admin/settings/staff');
-    await expect(page).toHaveURL(/\/admin\/?$/);
+    await expect(page).toHaveURL(/\/admin\/?$/, { timeout: 20000 });
   });
 
   test('exports every filtered order, not just the page', async ({ page }) => {

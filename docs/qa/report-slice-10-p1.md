@@ -51,4 +51,4 @@ Nhánh `fullstack`, HEAD a5e1379 (2026-11-13). QA độc lập (qa-reviewer); or
 ## 5. Sau QA (orchestrator)
 - m-4: `prettier --write` 12 file, `format:check` sạch.
 - m-2: `admin-promotions.test.ts` 12/12.
-- Playwright toàn bộ desktop: xem kết quả ghi bên dưới khi chạy xong.
+- Playwright toàn bộ desktop (cổng 4233): 314 pass, 1 skip, 4 fail. Chạy lại: `admin-login` returnUrl 12/12 pass; `admin.spec` 3 test đỏ do dev server nguội (chuyển hướng staff đúng nhưng > 5 giây, timeout 30 giây), không phải lỗi hành vi: guard `settings.staff` không đổi trong Slice 10. Đã nâng timeout trong `tests/admin.spec.ts`; "dashboard shows today" còn lúc đỏ khi chạy cả bộ, chạy riêng xanh. Đề xuất: tăng `expect.timeout` toàn cục hoặc chạy e2e trên bản build.
