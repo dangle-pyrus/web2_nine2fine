@@ -103,6 +103,8 @@ export interface SummaryRow {
   sale_ends_at: Date | null;
   inventory: number;
   variant_count: number;
+  out_of_stock_count: number;
+  low_stock_count: number;
   updated_ms: number;
 }
 
@@ -123,6 +125,8 @@ export function toAdminSummary(r: SummaryRow, at: Date = clockNow()) {
     ),
     inventory: Number(r.inventory),
     variantCount: Number(r.variant_count),
+    outOfStockVariants: Number(r.out_of_stock_count),
+    lowStockVariants: Number(r.low_stock_count),
     updatedAt: new Date(Number(r.updated_ms)).toISOString(),
   };
 }

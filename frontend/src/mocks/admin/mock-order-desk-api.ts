@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { AdminSession } from '../../app/admin/core/admin-session';
 import { defaultMessage } from '../../app/admin/data-access/http-support';
 import {
+  csvFileName,
   DeskApiError,
   rateLimitedText,
   type AdminOrderDeskApi,
@@ -27,7 +28,9 @@ import {
   type DeskOrderCounts,
   type DeskOrderFilter,
   type DeskOrderPage,
+  type DeskExportQuery,
   type DeskOrderQuery,
+  type DeskSort,
   type DeskOrderSummary,
   type DeskOverdueFlag,
   type DeskStaffRef,
@@ -193,10 +196,38 @@ function summary(order: DeskOrder): DeskOrderSummary {
     tab: order.tab,
     overdue,
     ...(order.returnPending ? { returnPending: true } : {}),
+    recipientPhone: order.recipient.phone,
+    ...(order.note ? { note: order.note } : {}),
+    ...(order.shipment
+      ? { carrier: order.shipment.carrier, trackingNumber: order.shipment.trackingNumber }
+      : {}),
+    ...(order.items[0]
+      ? {
+          firstItem: {
+            name: order.items[0].name,
+            color: order.items[0].color,
+            size: order.items[0].size,
+            mediaId: order.items[0].mediaId,
+          },
+        }
+      : {}),
   };
 }
 
 const WINDOW_MS = 24 * 3600_000;
+
+/** ADM-ORD-01: the list orders of the contract (`placed-desc` by default). */
+function sortDesk(rows: DeskOrder[], sort: DeskSort = 'placed-desc'): DeskOrder[] {
+  const [field, dir] = sort.split('-') as ['placed' | 'total' | 'code', 'asc' | 'desc'];
+  const key = (order: DeskOrder): string | number =>
+    field === 'total' ? order.pricing.total : field === 'code' ? order.id : order.placedAt;
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = key(a);
+    const y = key(b);
+    return (x < y ? -1 : x > y ? 1 : 0) * sign;
+  });
+}
 
 /** "Không liên lạc được" counts (BR-ADM-16, 18): `inFirstDay` is the best run inside any 24 h 00 m window. */
 function attemptsOf(order: DeskOrder): DeskOrder['callAttempts'] {
@@ -250,6 +281,8 @@ function allowedFor(order: DeskOrder, admin: boolean): DeskAction[] {
   if (order.status === 'cancel_requested') actions.push('approve-cancel', 'reject-cancel');
   if (order.returnHandling?.state === 'pending') actions.push('restock', 'write-off');
   if (admin && (toShip || order.status === 'to_receive')) actions.push('cancel-other');
+  if (admin && order.status === 'cancelled' && order.paymentStatus === 'paid')
+    actions.push('confirm-refund');
   actions.push('add-note');
   if (toShip || order.status === 'to_receive') actions.push('print-slip');
   return actions;
@@ -294,8 +327,9 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
       return fail(new DeskApiError('unavailable', defaultMessage('unavailable')));
     const problem = this.check(query);
     if (problem) return fail(problem);
-    const rows = this.filtered(query).filter(
-      (order) => query.view === 'all' || order.tab === query.view,
+    const rows = sortDesk(
+      this.filtered(query).filter((order) => query.view === 'all' || order.tab === query.view),
+      query.sort,
     );
     const start = (query.page - 1) * query.limit;
     return respond({
@@ -315,6 +349,39 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
       counts[bucket] = rows.filter((order) => order.tab === bucket).length;
     }
     return respond(counts);
+  }
+
+  exportCsv(query: DeskExportQuery): Observable<{ blob: Blob; filename: string }> {
+    if (this.session.user()?.role !== 'admin')
+      return fail(new DeskApiError('forbidden', defaultMessage('forbidden')));
+    const codes = query.codes?.map((code) => code.toUpperCase());
+    const rows = sortDesk(
+      this.filtered(query)
+        .filter((order) => query.view === 'all' || order.tab === query.view)
+        .filter((order) => !codes || codes.includes(order.id)),
+      query.sort,
+    ).slice(0, 5000);
+    const cell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const lines = [
+      ['Mã đơn', 'Ngày đặt', 'Khách hàng', 'Thanh toán', 'Trạng thái', 'Số SP', 'Tổng tiền']
+        .map(cell)
+        .join(','),
+      ...rows.map((order) =>
+        [
+          cell(order.id),
+          cell(new Date(order.placedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })),
+          cell(order.recipient.name),
+          cell(order.paymentMethod === 'cod' ? 'COD' : 'Chuyển khoản'),
+          cell(order.status),
+          String(order.items.reduce((sum, line) => sum + line.quantity, 0)),
+          String(order.pricing.total),
+        ].join(','),
+      ),
+    ];
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n') + '\r\n'], {
+      type: 'text/csv;charset=utf-8',
+    });
+    return respond({ blob, filename: csvFileName() });
   }
 
   get(orderCode: string): Observable<DeskOrder> {
@@ -512,6 +579,11 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
       case 'returned-stock':
         if (!(order.status === 'cancelled' && order.returnHandling?.state === 'pending')) wrong();
         break;
+      case 'confirm-refund':
+        if (this.session.user()?.role !== 'admin')
+          throw new DeskApiError('forbidden', defaultMessage('forbidden'));
+        if (!(order.status === 'cancelled' && order.paymentStatus === 'paid')) wrong();
+        break;
     }
     if (command.action === 'ship') {
       const code = command.trackingNumber.trim().toUpperCase();
@@ -692,6 +764,23 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
           'cancel_rejected',
           'Từ chối yêu cầu huỷ',
           { detail: reason },
+          next,
+          staff,
+        );
+        break;
+      }
+      case 'confirm-refund': {
+        const reference = command.reference.trim();
+        const note = command.note?.trim();
+        next = { ...next, paymentStatus: 'refunded' };
+        entry = this.event(
+          order,
+          'refunded',
+          'Xác nhận đã hoàn tiền đơn huỷ',
+          {
+            detail: `Đã hoàn ${order.pricing.total.toLocaleString('vi-VN')}₫ về nơi khách đã thanh toán.`,
+            note: [`Mã giao dịch: ${reference}`, note].filter(Boolean).join(' · '),
+          },
           next,
           staff,
         );

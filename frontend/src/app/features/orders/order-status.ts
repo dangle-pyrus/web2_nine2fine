@@ -20,35 +20,34 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string }>
 };
 
 /**
- * History tabs. Each tab is named exactly like the badge of the orders it holds, so a shopper never
- * sees "Đang chuẩn bị hàng" under a "Vận chuyển" tab. `active` tabs show a count.
+ * History tabs (ORD-02): five, one per COMMON status group. "Chờ giao hàng" also holds orders with a
+ * pending cancel request (`cancel_requested`); return requests stay under "Hoàn thành" since the
+ * order itself is completed. `active` tabs show a count.
  */
 export const ORDER_TABS = [
   { id: 'pending-payment', label: 'Chờ thanh toán', statuses: ['pending-payment'], active: true },
   {
     id: 'processing',
-    label: 'Đang chuẩn bị',
+    label: 'Chờ giao hàng',
     statuses: ['pending-confirmation', 'processing', 'cancel-requested'],
     active: true,
   },
-  { id: 'shipping', label: 'Đang vận chuyển', statuses: ['shipping'], active: true },
   {
-    id: 'delivering',
-    label: 'Đang giao hàng',
-    statuses: ['delivering', 'delivery-failed'],
+    id: 'shipping',
+    label: 'Đang giao',
+    statuses: ['shipping', 'delivering', 'delivery-failed'],
     active: true,
   },
-  { id: 'completed', label: 'Hoàn thành', statuses: ['completed'], active: false },
+  {
+    id: 'completed',
+    label: 'Hoàn thành',
+    statuses: ['completed', 'return-requested', 'returned'],
+    active: false,
+  },
   {
     id: 'cancelled',
     label: 'Đã hủy',
     statuses: ['cancelled', 'returned-to-sender'],
-    active: false,
-  },
-  {
-    id: 'returned',
-    label: 'Trả hàng/Hoàn tiền',
-    statuses: ['return-requested', 'returned'],
     active: false,
   },
 ] as const satisfies readonly {

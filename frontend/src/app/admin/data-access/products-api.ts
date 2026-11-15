@@ -44,8 +44,18 @@ interface WireProductSummary {
   saleState?: SaleState;
   inventory: number;
   variantCount: number;
+  outOfStockVariants?: number;
+  lowStockVariants?: number;
   updatedAt: string;
 }
+
+/** ADM-PRD-13: list order on the API (`sort`). */
+const WIRE_SORT: Record<string, string> = {
+  'updatedAt:desc': 'updated',
+  'createdAt:desc': 'created',
+  'name:asc': 'name',
+  'inventory:asc': 'stock-asc',
+};
 
 interface WireProductPage {
   items: WireProductSummary[];
@@ -200,11 +210,11 @@ export class HttpAdminProductsApi implements AdminProductsApi {
   private readonly base = `${this.root}/products`;
 
   list(query: ProductQuery) {
-    // The API sorts newest-updated first (no `sort` / `dir`), so those two are not sent.
     const params: Record<string, string> = {
       page: String(query.page),
       limit: String(query.pageSize),
       view: query.view,
+      sort: WIRE_SORT[`${query.sort}:${query.dir ?? 'desc'}`] ?? 'updated',
     };
     if (query.search) params['q'] = query.search;
     if (query.category) params['category'] = query.category;
@@ -223,6 +233,8 @@ export class HttpAdminProductsApi implements AdminProductsApi {
           saleState: item.saleState,
           inventory: item.inventory,
           variantCount: item.variantCount,
+          outOfStockVariants: item.outOfStockVariants,
+          lowStockVariants: item.lowStockVariants,
           updatedAt: item.updatedAt,
         })),
         total: wire.total,

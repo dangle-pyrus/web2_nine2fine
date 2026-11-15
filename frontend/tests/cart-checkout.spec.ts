@@ -295,7 +295,7 @@ async function signIn(
   await afterLoad?.();
   await page.getByLabel('Email').fill(MEMBER.email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 }
 
@@ -432,7 +432,7 @@ test('AC-CART-16: signing in from checkout keeps the picked line and the typed f
   await expect(page).toHaveURL(/\/auth\/login\?returnUrl=%2Fcheckout/);
   await page.getByLabel('Email').fill(MEMBER.email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).toHaveURL(/\/checkout$/);
   await expect(page.getByRole('textbox', { name: 'Họ và tên', exact: true })).toHaveValue(

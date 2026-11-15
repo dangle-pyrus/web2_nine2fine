@@ -29,7 +29,7 @@ const approve = (code: string, cookie: string, headers?: Record<string, string>)
   act(code, 'cancel-request/approve', { expectedStatus: 'cancel_requested' }, cookie, headers);
 const reject = (code: string, reason: unknown, cookie: string) =>
   act(code, 'cancel-request/reject', { expectedStatus: 'cancel_requested', ...(reason === undefined ? {} : { reason }) }, cookie);
-const customerCancel = (code: string, cookie: string, body: unknown = {}) => post(`/api/orders/${code}/cancel`, body, { cookie, ip: freshIp() });
+const customerCancel = (code: string, cookie: string, body: unknown = { reasonCode: 'changed_mind' }) => post(`/api/orders/${code}/cancel`, body, { cookie, ip: freshIp() });
 const row = (code: string) => prisma.order.findUniqueOrThrow({ where: { code }, include: { events: true } });
 const kinds = async (code: string, kind: string) => (await row(code)).events.filter((e) => e.kind === kind).length;
 const mailsFor = (code: string) => mails.filter((m) => m.subject.includes(`#${code}`));

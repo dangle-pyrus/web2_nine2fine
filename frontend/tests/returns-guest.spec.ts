@@ -122,7 +122,7 @@ async function lookUp(page: Page): Promise<void> {
   await page.getByLabel('Mã đơn hàng').fill(CODE);
   await page.getByLabel('Email đặt hàng').fill(EMAIL);
   await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
-  await page.getByLabel('Mã xác minh (8 số)').fill('12345678');
+  await page.getByLabel('Mã xác minh (6 số)').fill('123456');
   await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByRole('heading', { name: `Đơn #${CODE}` })).toBeVisible();
 }

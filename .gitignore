@@ -1,3 +1,43 @@
 
 # Slice 6: ảnh tải lên (driver local)
 .media/
+
+# Phụ thuộc, build, bí mật (phòng khi .gitignore con bị bỏ sót)
+node_modules/
+dist/
+.angular/
+.env
+.env.*
+!.env.example
+*.log
+*.bundle
+*.tgz
+*.dump
+*.bak
+*.sql.gz
+
+# Ảnh tải lên / ảnh trả hàng (kho riêng tư, driver local)
+.media-private/
+backend/.media*/
+
+# Kết quả test, báo cáo trình chạy test
+test-results/
+playwright-report/
+
+# File chuyển / tạm của quy trình làm việc cục bộ
+.n2f-tmp/
+.slice5-transfer/
+.xfer/
+scratchpad_dummy
+
+# Bản sao logo nằm lẻ ở gốc repo (bản chính nằm ở frontend/public/assets/brand/)
+/lazada-logo.svg
+/shopee-logo.svg
+/tiktokshop-logo.svg
+
+# Thư mục riêng của máy: Claude, IDE, hệ điều hành
+.claude/settings.local.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

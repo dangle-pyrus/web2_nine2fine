@@ -22,6 +22,7 @@ import { canPay, cancelLabels, formatDate } from '../orders/order-status';
 import { canRequestReturn, returnDeadline } from '../orders/order-returns';
 import { storeSettings } from '../../core/store-settings';
 import { OrderCancellation } from '../account/orders/order-cancellation';
+import { OrderReceipt } from '../account/orders/order-receipt';
 import { OrderStatusBadge } from '../orders/order-status-badge';
 import { OrderView } from '../orders/order-view';
 import { ReturnStatusSection } from '../orders/return-status-section';
@@ -88,22 +89,22 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           } @else {
             <div class="field code">
               <label for="track-code"
-                >Mã xác minh (8 số)<span class="req" aria-hidden="true">*</span></label
+                >Mã xác minh (6 số)<span class="req" aria-hidden="true">*</span></label
               >
               <input
                 id="track-code"
                 formControlName="code"
                 inputmode="numeric"
                 autocomplete="one-time-code"
-                maxlength="8"
+                maxlength="6"
                 aria-required="true"
                 [attr.aria-invalid]="invalid('code')"
                 [attr.aria-describedby]="invalid('code') ? 'track-code-error' : null"
               />
               @if (invalid('code')) {
-                <p class="field-error" id="track-code-error">Nhập đủ 8 chữ số của mã xác minh.</p>
+                <p class="field-error" id="track-code-error">Nhập đủ 6 chữ số của mã xác minh.</p>
               }
-              <p class="hint">Mã có hiệu lực 10 phút.</p>
+              <p class="hint">Mã có hiệu lực 5 phút.</p>
             </div>
             <div class="verify-actions">
               <button class="pill" type="submit" [disabled]="busy() || lockSeconds() > 0">
@@ -161,6 +162,17 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                   (click)="cancel(current)"
                 >
                   {{ cancelling() ? labels(current).busy : labels(current).idle }}
+                </button>
+              }
+              @if (current.canConfirmReceived) {
+                <button
+                  type="button"
+                  class="pill"
+                  data-testid="confirm-received"
+                  [disabled]="cancelling()"
+                  (click)="received(current)"
+                >
+                  {{ cancelling() ? 'Đang xác nhận…' : 'Đã nhận hàng' }}
                 </button>
               }
               @if (returnable(current) && returnsOnServer) {
@@ -399,6 +411,7 @@ export class TrackOrderPage {
   private readonly guestView = inject(GuestOrderView);
   private readonly api = inject(CHECKOUT_API);
   private readonly cancellation = inject(OrderCancellation);
+  private readonly receipt = inject(OrderReceipt);
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly result = viewChild<ElementRef<HTMLElement>>('result');
@@ -553,9 +566,9 @@ export class TrackOrderPage {
     this.cancellation
       .ask(order)
       .pipe(
-        switchMap(({ reason }) => {
+        switchMap((choice) => {
           this.cancelling.set(true);
-          return this.api.cancel(order.id, reason).pipe(finalize(() => this.cancelling.set(false)));
+          return this.api.cancel(order.id, choice).pipe(finalize(() => this.cancelling.set(false)));
         }),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -576,6 +589,30 @@ export class TrackOrderPage {
       });
   }
 
+  /** ORD-11: the guest confirms the parcel arrived. */
+  received(order: Order): void {
+    this.notice.set('');
+    this.error.set('');
+    this.receipt
+      .ask(order)
+      .pipe(
+        switchMap(() => {
+          this.cancelling.set(true);
+          return this.api
+            .confirmReceived(order.id)
+            .pipe(finalize(() => this.cancelling.set(false)));
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (updated) => {
+          this.order.set(updated);
+          this.notice.set(`Cảm ơn bạn! Đơn #${updated.id} đã hoàn thành.`);
+        },
+        error: (error: unknown) => this.onCancelError(error, order.id),
+      });
+  }
+
   private show(order: Order, focus = true): void {
     this.order.set(order);
     this.guestView.set(order);
@@ -588,9 +625,11 @@ export class TrackOrderPage {
 
   private onCancelError(error: unknown, orderCode: string): void {
     const code = error instanceof CheckoutError ? error.code : 'unavailable';
-    if (code === 'not-cancellable') {
+    if (code === 'not-cancellable' || code === 'invalid-transition') {
       this.error.set(
-        'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
+        code === 'invalid-transition'
+          ? 'Đơn hàng không ở trạng thái đang giao. Đã cập nhật lại đơn.'
+          : 'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
       );
       // Show where the order is now (the 30-minute view is still open).
       this.api

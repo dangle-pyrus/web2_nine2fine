@@ -1,4 +1,4 @@
-import { HOUR, MINUTE } from '../lib/clock';
+import { DAY, HOUR, MINUTE } from '../lib/clock';
 
 /**
  * GIẢ ĐỊNH CHỜ THẮNG (Slice 3), gom một chỗ để đổi dễ. Đổi hành vi ở đây là đổi contract locked (qua handoff).
@@ -7,11 +7,28 @@ import { HOUR, MINUTE } from '../lib/clock';
  * - Q3 địa giới: 34 tỉnh/thành, seed `prisma/seed-data/vn-locations.json`.
  * - Q4 huỷ `to_ship`: thay bởi S4-Q1 (xem `toShipCancelMode`); lát 4.5 đã phát hành với 'request'.
  */
+/**
+ * Chuẩn OTP chung (Thắng chốt 2026-11-14) cho mọi luồng dùng mã qua email: đăng nhập, đăng ký, quên mật khẩu, tra cứu đơn.
+ * 6 chữ số, hiệu lực 5 phút, dùng một lần; gửi lại sau 60 giây, 5 lần / 30 phút / email, 10 lần / giờ / IP;
+ * sai 5 lần thì mã bị vô hiệu và khoá xác thực bằng mã 15 phút.
+ */
+export const OTP_POLICY = {
+  digits: 6,
+  ttlMs: 5 * MINUTE,
+  resendSeconds: 60,
+  sendPerEmailMax: 5,
+  sendPerEmailWindowMs: 30 * MINUTE,
+  sendPerIpMax: 10,
+  sendPerIpWindowMs: HOUR,
+  maxWrong: 5,
+  lockMs: 15 * MINUTE,
+} as const;
+
 export const ASSUMPTIONS = {
   /** Q1: mã giảm % làm tròn xuống tới bội số này (đồng). */
   percentRoundStep: 1000,
-  /** Q1: OTP tra cứu đơn khách theo BR-AUTH-04..09 (8 số, 10 phút, gửi lại sau 60 giây, sai 5 lần khoá 15 phút). */
-  lookupOtpResendSeconds: 60,
+  /** Q1: OTP tra cứu đơn khách theo `OTP_POLICY` (6 số, 5 phút, gửi lại sau 60 giây, sai 5 lần khoá 15 phút). */
+  lookupOtpResendSeconds: OTP_POLICY.resendSeconds,
   /** Q1: quyền xem đơn khách sau OTP (cookie n2f_oa). */
   orderAccessTtlMs: 30 * MINUTE,
   /**
@@ -30,6 +47,8 @@ export const ASSUMPTIONS = {
   voucherMissWindowMs: 15 * MINUTE,
   /** Đơn tối thiểu cho "cần gọi xác nhận" (BR-CHK-20). */
   noConfirmCallBelowTotal: 1_000_000,
+  /** COMMON-01.9 / ORD-11: đơn `to_receive` không có phản hồi sau khoảng này (tính từ lúc bàn giao) thì hệ thống tự hoàn thành. */
+  autoCompleteAfterMs: 7 * DAY,
   /** Đơn trùng (BR-CHK-16, Should): cùng SĐT + cùng sản phẩm trong khoảng này. */
   duplicateWindowMs: 10 * MINUTE,
 } as const;
@@ -151,10 +170,9 @@ export const canSeeContact = (role: string): boolean =>
  * Đổi một câu trả lời = sửa đúng một chỗ ở đây (hoặc `revenue.sql.ts` cho S8-Q1) + BR/contract theo quy trình.
  */
 export const INSIGHTS_ASSUMPTIONS = {
-  /** S8-Q5: báo cáo <= 366 ngày, nhật ký <= 92 ngày, biểu đồ Tổng quan 30 ngày. */
+  /** S8-Q5: báo cáo <= 366 ngày, nhật ký <= 92 ngày. */
   reportMaxDays: 366,
   auditMaxDays: 92,
-  seriesDays: 30,
   /** Khoảng mặc định khi thiếu `from`: `to` - 29 ngày (30 ngày gồm hai đầu). */
   defaultSpanDays: 29,
   topDashboard: 5,

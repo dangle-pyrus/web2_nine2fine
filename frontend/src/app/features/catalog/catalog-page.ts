@@ -21,6 +21,7 @@ import {
   MOMENTS,
   SORT_OPTIONS,
   CatalogQuery,
+  Product,
   ProductPage,
   SEARCH_MAX_LENGTH,
   SortOrder,
@@ -35,6 +36,7 @@ import { OverlayService } from '../../shared/ui/overlay.service';
 import { readLocal, writeLocal } from '../../core/local-state';
 
 const FILTERS_HIDDEN_KEY = 'n2f.plp.filters-hidden';
+const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
 
 type CatalogResult = {
   status: 'loading' | 'success' | 'error';
@@ -125,6 +127,27 @@ export class CatalogPage {
     ].filter(Boolean).length;
   });
 
+  /** PLP-04: one removable chip per active filter, in the order of the filter panel. */
+  readonly chips = computed(() => {
+    const q = this.query();
+    const out: { key: string; label: string }[] = [];
+    const gender = GENDERS.find((item) => item.value === q.gender)?.label;
+    if (gender) out.push({ key: 'gender', label: gender });
+    const category = CATEGORIES.find((item) => item.value === q.category)?.label;
+    if (category) out.push({ key: 'category', label: category });
+    const moment = MOMENTS.find((item) => item.value === q.moment)?.label;
+    if (moment) out.push({ key: 'moment', label: moment });
+    if (q.size) out.push({ key: 'size', label: `Size ${q.size}` });
+    if (q.color) out.push({ key: 'color', label: q.color });
+    if (q.maxPrice) out.push({ key: 'maxPrice', label: `Dưới ${VND.format(q.maxPrice)}` });
+    if (q.available) out.push({ key: 'available', label: 'Còn hàng' });
+    if (q.sale) out.push({ key: 'sale', label: 'Đang giảm giá' });
+    return out;
+  });
+
+  /** PLP-03: bestsellers shown under an empty search result. */
+  readonly bestsellers = signal<Product[]>([]);
+
   /** Saved ids the wishlist list was fetched for (a sign-in sync can bring in others). */
   private requestedWishlist = new Set<string>();
 
@@ -150,7 +173,7 @@ export class CatalogPage {
           const genderLabel = GENDERS.find((item) => item.value === gender)?.label;
           const category = path.get('category') ?? params.get('category') ?? '';
           const moment = path.get('moment') ?? params.get('moment') ?? '';
-          const sort = params.get('sort') ?? 'featured';
+          const sort = params.get('sort') ?? DEFAULT_QUERY.sort;
           const price = Number(params.get('maxPrice'));
           this.isWishlist.set(data['kind'] === 'wishlist');
           this.heading.set(
@@ -176,7 +199,7 @@ export class CatalogPage {
             maxPrice: Number.isFinite(price) && price > 0 ? price : 0,
             sort: SORT_OPTIONS.some((option) => option.value === sort)
               ? (sort as SortOrder)
-              : 'featured',
+              : DEFAULT_QUERY.sort,
           };
           this.query.set(query);
           this.loadingMore.set(false);
@@ -222,7 +245,25 @@ export class CatalogPage {
         }),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((result) => this.result.set(result));
+      .subscribe((result) => {
+        this.result.set(result);
+        this.loadBestsellers(result);
+      });
+  }
+
+  private loadBestsellers(result: CatalogResult): void {
+    const searching = !this.isWishlist() && !!this.query().q;
+    if (result.status !== 'success' || result.page.items.length || !searching) {
+      if (result.status !== 'loading') this.bestsellers.set([]);
+      return;
+    }
+    this.api
+      .list({ ...DEFAULT_QUERY, sort: 'bestselling', available: true, page: 1, limit: 8 })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => this.bestsellers.set(page.items),
+        error: () => this.bestsellers.set([]),
+      });
   }
 
   update(key: string, value: string | boolean | number): void {

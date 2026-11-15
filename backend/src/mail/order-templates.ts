@@ -129,7 +129,7 @@ export function orderCancelledMail(o: OrderDto, isMember: boolean, contact: Mail
   };
 }
 
-/** Thư OTP tra cứu đơn khách (định dạng "...: 12345678" giống thư mã đăng nhập). */
+/** Thư OTP tra cứu đơn khách (định dạng "...: 123456" giống thư mã đăng nhập). */
 export function lookupCodeMail(to: string, orderCode: string, code: string): MailMessage {
   return {
     to,
@@ -139,7 +139,7 @@ export function lookupCodeMail(to: string, orderCode: string, code: string): Mai
       '',
       `Mã xác thực để tra cứu đơn #${orderCode} tại nine2fine của bạn là: ${code}`,
       '',
-      'Mã có hiệu lực trong 10 phút và chỉ dùng được một lần.',
+      'Mã có hiệu lực trong 5 phút và chỉ dùng được một lần.',
       'Không chia sẻ mã này với bất kỳ ai, kể cả người tự xưng là nhân viên nine2fine.',
       'Nếu bạn không yêu cầu mã này, hãy bỏ qua thư.',
       '',

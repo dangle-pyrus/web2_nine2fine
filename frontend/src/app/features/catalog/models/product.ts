@@ -180,7 +180,8 @@ export const DEFAULT_QUERY: CatalogQuery = {
   maxPrice: 0,
   available: false,
   q: '',
-  sort: 'featured',
+  // PLP-07: newest first unless the shopper picks another order.
+  sort: 'newest',
 };
 
 /** Colours the catalog filter offers. */

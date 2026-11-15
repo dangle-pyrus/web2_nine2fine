@@ -83,6 +83,15 @@ export async function revenueByDay(db: Db, span: Span): Promise<Map<string, DayR
   return new Map(rows.map((r) => [r.d, { date: r.d, revenue: n(r.revenue), orders: n(r.orders), units: n(r.units) }]));
 }
 
+/** Theo GIỜ VN (0..23) trong một khoảng (Tổng quan "Hôm nay"); chỉ giờ có đơn. Cùng định nghĩa doanh thu. */
+export async function revenueByHour(db: Db, span: Span): Promise<Map<number, number>> {
+  const rows = await db.$queryRaw<Array<{ h: number; revenue: bigint }>>(Prisma.sql`
+    WITH ${revenueCte([span])}
+    SELECT EXTRACT(HOUR FROM l.delivered_at + INTERVAL '7 hours')::int AS h, SUM(l.amount)::bigint AS revenue
+    FROM li l GROUP BY 1`);
+  return new Map(rows.map((r) => [n(r.h), n(r.revenue)]));
+}
+
 export interface PaymentRow {
   method: 'cod' | 'bank_transfer';
   orders: number;

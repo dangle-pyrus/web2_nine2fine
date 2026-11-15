@@ -103,7 +103,7 @@ describe('T-CON-05 đặt hàng + huỷ đơn khác đồng thời', () => {
       const t0 = Date.now();
       const [placed, cancelled] = await Promise.all([
         submitOrder(bodyB).then((r) => ({ r, ms: Date.now() - t0 })),
-        post(`/api/orders/${a.body.order.id}/cancel`, {}, { cookie: owner.cookie, ip: freshIp() }).then((r) => ({ r, ms: Date.now() - t0 })),
+        post(`/api/orders/${a.body.order.id}/cancel`, { reasonCode: 'changed_mind' }, { cookie: owner.cookie, ip: freshIp() }).then((r) => ({ r, ms: Date.now() - t0 })),
       ]);
       expect(placed.r.status).toBe(201);
       expect(cancelled.r.status).toBe(200);
@@ -121,7 +121,7 @@ describe('T-CON-06 hai yêu cầu huỷ cùng đơn', () => {
   it('to_ship (S4-Q1 request): một 200 cancel_requested, một 409 not-cancellable; tồn không đổi, 1 sự kiện', async () => {
     const m = await loginMember('con6r@example.com');
     const o = await submitOrder(await orderBody([it1(top, 2)], { cookie: m.cookie, email: m.email }), { cookie: m.cookie });
-    const cancel = () => post(`/api/orders/${o.body.order.id}/cancel`, {}, { cookie: m.cookie, ip: freshIp() });
+    const cancel = () => post(`/api/orders/${o.body.order.id}/cancel`, { reasonCode: 'changed_mind' }, { cookie: m.cookie, ip: freshIp() });
     const rs = await Promise.all([cancel(), cancel()]);
     expect(statuses(rs)).toEqual([200, 409]);
     expect(rs.find((r) => r.status === 409)!.body.error.code).toBe('not-cancellable');
@@ -135,7 +135,7 @@ describe('T-CON-06 hai yêu cầu huỷ cùng đơn', () => {
     const m = await loginMember('con6@example.com');
     const o = await submitOrder(await orderBody([it1(top, 2)], { cookie: m.cookie, email: m.email }), { cookie: m.cookie });
     expect(await stockOf(top)).toBe(3);
-    const cancel = () => post(`/api/orders/${o.body.order.id}/cancel`, {}, { cookie: m.cookie, ip: freshIp() });
+    const cancel = () => post(`/api/orders/${o.body.order.id}/cancel`, { reasonCode: 'changed_mind' }, { cookie: m.cookie, ip: freshIp() });
     const rs = await Promise.all([cancel(), cancel()]);
     expect(statuses(rs)).toEqual([200, 409]);
     expect(rs.find((r) => r.status === 409)!.body.error.code).toBe('not-cancellable');

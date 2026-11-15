@@ -394,6 +394,10 @@ export interface AdminProductSummary {
   saleState?: SaleState;
   inventory: number;
   variantCount: number;
+  /** ADM-PRD-14 / ADM-INV-06: variants with nothing to sell, and at or under their low-stock threshold. */
+  outOfStockVariants?: number;
+  lowStockVariants?: number;
+  createdAt?: string;
   updatedAt: string;
 }
 

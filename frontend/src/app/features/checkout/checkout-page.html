@@ -69,6 +69,13 @@
 
       <section aria-labelledby="shipping-title">
         <h2 id="shipping-title"><span class="step">2</span>Địa chỉ giao hàng</h2>
+        @if (session.signedIn() && addressBookLoaded()) {
+        <p class="hint">
+          @if (savedAddresses().length) { Chọn một địa chỉ trong sổ địa chỉ hoặc giao đến địa chỉ
+          khác. } @else { Sổ địa chỉ của bạn chưa có địa chỉ nào. }
+          <a routerLink="/account/addresses">Quản lý sổ địa chỉ</a>
+        </p>
+        }
         @if (savedAddresses().length) {
         <fieldset class="options">
           <legend class="sr-only">Chọn địa chỉ đã lưu</legend>
@@ -88,7 +95,10 @@
           }
           <label class="option">
             <input type="radio" formControlName="savedAddress" [value]="newAddress" />
-            <span><strong>Giao đến địa chỉ khác</strong></span>
+            <span
+              ><strong>Giao đến địa chỉ khác</strong
+              ><small>Nhập địa chỉ mới, có thể lưu vào sổ địa chỉ</small></span
+            >
           </label>
         </fieldset>
         }
@@ -158,6 +168,15 @@
             <p class="field-error">Nhập địa chỉ cụ thể (5–200 ký tự).</p>
             }
           </div>
+          @if (canSaveAddress()) {
+          <label class="check wide">
+            <input type="checkbox" formControlName="saveAddress" />
+            <span
+              >Lưu địa chỉ này vào sổ địa chỉ @if (!savedAddresses().length) {(đặt làm mặc
+              định)}</span
+            >
+          </label>
+          }
         </div>
         <div class="field">
           <label for="checkout-note">Ghi chú (không bắt buộc)</label>

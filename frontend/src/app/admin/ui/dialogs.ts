@@ -53,11 +53,11 @@ export class AdminDialogs {
   }
 
   /** Right-hand panel for quick edits that keep the list visible (4.1, 5.6). */
-  drawer<D, R>(component: ComponentType<unknown>, data: D): DialogRef<R, unknown> {
+  drawer<D, R>(component: ComponentType<unknown>, data: D, wide = false): DialogRef<R, unknown> {
     return this.dialog.open<R, D, unknown>(component, {
       data,
       injector: this.injector,
-      panelClass: 'adm-drawer-panel',
+      panelClass: wide ? ['adm-drawer-panel', 'adm-drawer-panel--wide'] : 'adm-drawer-panel',
       backdropClass: 'adm-overlay-backdrop',
       positionStrategy: this.overlay.position().global().right('0').top('0'),
       autoFocus: 'first-tabbable',

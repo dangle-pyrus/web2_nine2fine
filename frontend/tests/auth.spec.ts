@@ -10,7 +10,7 @@ import {
 const member = MOCK_ACCOUNTS[0];
 const disabled = MOCK_ACCOUNTS.find((account) => account.disabled)!;
 const staff = MOCK_ACCOUNTS.find((account) => account.role === 'staff')!;
-const CODE_LABEL = 'Mã xác thực (8 số)';
+const CODE_LABEL = 'Mã xác thực (6 số)';
 const SIGN_IN = { name: 'Đăng nhập', exact: true } as const;
 
 async function submitEmail(page: Page, email: string, url = '/auth/login'): Promise<void> {
@@ -43,7 +43,7 @@ test.describe('storefront sign-in', () => {
     await expect(page).toHaveURL(/\/auth\/login\?returnUrl=%2Fshop/);
     await page.getByLabel('Email').fill(`  ${member.email.toUpperCase()} `);
     await page.getByRole('button', { name: 'Tiếp tục' }).click();
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Nhập mã 8 số');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Nhập mã 6 số');
     await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
     await expect(page.getByText(/Gửi lại mã trong \d+ giây/)).toBeVisible();
     await expect(page.getByRole('button', { name: /Gửi lại mã sau/ })).toBeDisabled();
@@ -100,7 +100,7 @@ test.describe('storefront sign-in', () => {
     await expect(page.getByText('Nhập địa chỉ email hợp lệ.')).toBeVisible();
     await page.getByLabel('Email').fill(`  ${member.email.toUpperCase()}  `);
     await page.getByRole('button', { name: 'Tiếp tục' }).click();
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Nhập mã 8 số');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Nhập mã 6 số');
   });
 
   test('AC-AUTH-05: lookup rate limit shows the wait; AC-AUTH-94: offline keeps the email', async ({
@@ -127,14 +127,13 @@ test.describe('storefront sign-in', () => {
     }
     await page.getByLabel(CODE_LABEL).fill('11111111');
     await page.getByRole('button', SIGN_IN).click();
-    const locked = page
-      .getByRole('alert')
-      .filter({ hasText: 'Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.' });
-    await expect(locked).toBeVisible();
-    // A right code is refused during the lock.
-    await page.getByLabel(CODE_LABEL).fill(DEMO_VERIFICATION_CODE);
-    await page.getByRole('button', SIGN_IN).click();
-    await expect(locked).toBeVisible();
+    // LOGIN-04: the verification session is locked for 15 minutes, with a countdown.
+    const locked = page.getByTestId('code-lock');
+    await expect(locked).toContainText('Phiên xác thực tạm khoá');
+    await expect(locked).toContainText(/1[45]:\d{2}/);
+    // Nothing can be sent during the lock.
+    await expect(page.getByLabel(CODE_LABEL)).toBeDisabled();
+    await expect(page.getByRole('button', SIGN_IN)).toBeDisabled();
     await page.getByRole('button', { name: 'Sử dụng mật khẩu' }).click();
     await page.getByRole('textbox', { name: 'Mật khẩu', exact: true }).fill(member.password ?? '');
     await page.getByRole('button', SIGN_IN).click();
@@ -269,13 +268,13 @@ test.describe('storefront register', () => {
 
     await page.getByRole('button', { name: 'Tạo tài khoản' }).click();
     await expect(page.getByLabel(CODE_LABEL)).toBeFocused();
-    await expect(page.getByText('Nhập đủ 8 chữ số của mã xác thực.')).toBeVisible();
+    await expect(page.getByText('Nhập đủ 6 chữ số của mã xác thực.')).toBeVisible();
     await expect(page.getByText('Nhập tên của bạn.')).toBeVisible();
     await expect(page.getByText('Nhập họ của bạn.')).toBeVisible();
     await expect(page.getByText('Bạn cần đồng ý để tạo tài khoản.')).toBeVisible();
 
-    await page.getByLabel(CODE_LABEL).fill('1234-5678');
-    await expect(page.getByLabel(CODE_LABEL)).toHaveValue('12345678');
+    await page.getByLabel(CODE_LABEL).fill('123-456');
+    await expect(page.getByLabel(CODE_LABEL)).toHaveValue('123456');
     await first(page).fill('An<3');
     await last(page).fill('x'.repeat(51));
     await page.getByRole('button', { name: 'Tạo tài khoản' }).click();

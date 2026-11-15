@@ -33,10 +33,30 @@ const fromBeforeTo = (v: { from?: string; to?: string }, ctx: z.RefinementCtx) =
 export const countsQuerySchema = z.object(filterShape).superRefine(fromBeforeTo);
 
 const LIMIT_MSG = 'Số đơn mỗi trang phải từ 1 đến 50.';
+
+/** ADM-ORD-01: sắp xếp theo ngày đặt / tổng tiền / mã đơn, tăng hoặc giảm; mặc định ngày đặt mới nhất trước. */
+export const SORTS = ['placed-desc', 'placed-asc', 'total-desc', 'total-asc', 'code-desc', 'code-asc'] as const;
+export type AdminOrderSort = (typeof SORTS)[number];
+const sortField = z.preprocess(blankToUndef, z.enum(SORTS, { error: 'Cách sắp xếp không hợp lệ.' }).default('placed-desc'));
+
+const CODES_MSG = 'Danh sách mã đơn không hợp lệ.';
+/** ADM-ORD-18: xuất CSV theo phạm vi: `codes` (trang hiện tại / đơn đã chọn) hoặc toàn bộ đơn khớp bộ lọc (không gửi `codes`). */
+export const exportQuerySchema = z
+  .object({
+    ...filterShape,
+    view: z.preprocess(blankToUndef, z.enum(TABS, { error: 'Tab không hợp lệ.' }).default('all')),
+    sort: sortField,
+    codes: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() ? v.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean) : undefined),
+      z.array(z.string().regex(/^[A-Z0-9]{4,20}$/, { error: CODES_MSG }), { error: CODES_MSG }).max(200, { error: CODES_MSG }).optional(),
+    ),
+  })
+  .superRefine(fromBeforeTo);
 export const listQuerySchema = z
   .object({
     ...filterShape,
     view: z.preprocess(blankToUndef, z.enum(TABS, { error: 'Tab không hợp lệ.' }).default('all')),
+    sort: sortField,
     page: z.preprocess(
       blankToUndef,
       z.coerce.number({ error: 'Trang không hợp lệ.' }).int({ error: 'Trang không hợp lệ.' }).min(1, { error: 'Trang không hợp lệ.' }).default(1),
@@ -70,6 +90,17 @@ const requireNote = (note: string | undefined, ctx: z.RefinementCtx) => {
 };
 
 export const expectedStatusSchema = z.object({ expectedStatus });
+
+const REFUND_REF_MSG = 'Nhập mã giao dịch hoàn tiền (3–60 ký tự).';
+/** COMMON-02.4: admin ghi nhận đã hoàn tiền đơn huỷ; mã giao dịch bắt buộc (đối soát). */
+export const confirmRefundSchema = z.object({
+  expectedStatus,
+  reference: z
+    .string({ error: REFUND_REF_MSG })
+    .transform((v) => v.normalize('NFC').trim())
+    .refine((v) => [...v].length >= 3 && [...v].length <= 60, { error: REFUND_REF_MSG }),
+  note: optionalNote,
+});
 
 const INTERNAL_NOTE_MSG = 'Ghi chú nội bộ từ 1 đến 500 ký tự.';
 /** BR-ADM-38: không có `expectedStatus` (ghi chú hợp lệ ở mọi trạng thái); trim, 1-500 ký tự. */
@@ -128,6 +159,7 @@ export const rejectCancelSchema = z.object({
 });
 
 export type CallAttemptBody = z.output<typeof callAttemptSchema>;
+export type ConfirmRefundBody = z.output<typeof confirmRefundSchema>;
 export type ShipBody = z.output<typeof shipSchema>;
 export type CancelBody = z.output<typeof cancelSchema>;
 export type ReturnedStockBody = z.output<typeof returnedStockSchema>;

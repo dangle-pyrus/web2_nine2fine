@@ -8,6 +8,7 @@ const MESSAGES: Record<AccountErrorCode, string> = {
   'rate-limited': 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.',
   'not-found': 'Không tìm thấy thông tin yêu cầu.',
   'invalid-password': 'Mật khẩu hiện tại chưa đúng.',
+  'invalid-transition': 'Đơn hàng không ở trạng thái đang giao. Vui lòng tải lại trang.',
   'not-cancellable':
     'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Vui lòng gọi hotline để được hỗ trợ.',
   'not-returnable': 'Đơn hàng này không còn trong thời hạn hoặc điều kiện trả hàng.',

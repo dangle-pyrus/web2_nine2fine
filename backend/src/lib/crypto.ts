@@ -1,8 +1,9 @@
 import { createHash, createHmac, randomBytes, randomInt } from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import { OTP_POLICY } from '../config/assumptions';
 import { getConfig } from '../config/env';
 
-export const generateOtp = (): string => String(randomInt(0, 100_000_000)).padStart(8, '0');
+export const generateOtp = (digits: number = OTP_POLICY.digits): string => String(randomInt(0, 10 ** digits)).padStart(digits, '0');
 
 /** HMAC-SHA256(secret, email|purpose|code) dạng hex (BR-AUTH-04). */
 export const hashOtp = (email: string, purpose: string, code: string): string =>

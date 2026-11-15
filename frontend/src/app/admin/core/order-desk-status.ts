@@ -116,6 +116,7 @@ export const ACTION_LABELS: Record<DeskAction, string> = {
   'reject-cancel': 'Từ chối huỷ',
   'add-note': 'Thêm ghi chú nội bộ',
   'print-slip': 'In phiếu giao',
+  'confirm-refund': 'Xác nhận đã hoàn tiền',
 };
 
 export function actorLabel(actor: DeskTimelineEntry['actor']): string {

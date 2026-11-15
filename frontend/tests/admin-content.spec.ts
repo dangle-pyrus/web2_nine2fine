@@ -50,6 +50,7 @@ test.describe('admin Slice 10: reviews, content, collections', () => {
     await expect(page.getByRole('heading', { name: 'Bộ sưu tập' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tạo bộ sưu tập' })).toHaveCount(0);
     await page.goto('/admin/size-charts');
+    await expect(page.getByRole('button', { name: 'Chỉnh sửa' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Thêm cột' })).toHaveCount(0);
     expect(api.calls.filter((call) => call.method !== 'GET')).toHaveLength(0);
   });
@@ -58,10 +59,14 @@ test.describe('admin Slice 10: reviews, content, collections', () => {
     page,
   }) => {
     const api = await setup(page, 'staff');
+    // 2026-11-15: the screen opens on "Chưa trả lời" (to-do inbox); "Tất cả" shows every review.
     await page.goto('/admin/reviews');
+    await expect(page.locator('.review')).toHaveCount(2);
+    await expect(page.getByTestId('review-inbox')).toContainText('2 chưa trả lời');
+    await page.getByRole('button', { name: /Tất cả/ }).click();
     await expect(page.locator('.review')).toHaveCount(3);
     await expect(page.getByRole('button', { name: /Chưa trả lời/ })).toContainText('2');
-    await expect(page.getByRole('button', { name: /2 sao trở xuống/ })).toContainText('1');
+    await expect(page.getByRole('button', { name: /^1–2 sao/ })).toContainText('1');
     await page.getByRole('button', { name: /Chưa trả lời/ }).click();
     await expect(page.locator('.review')).toHaveCount(2);
     expect(
@@ -104,7 +109,7 @@ test.describe('admin Slice 10: reviews, content, collections', () => {
 
   test('BR-REV-07: a lost race (409) reloads the list and says so', async ({ page }) => {
     const api = await setup(page, 'staff');
-    await page.goto('/admin/reviews');
+    await page.goto('/admin/reviews?view=all');
     await expect(page.locator('.review')).toHaveCount(3);
     api.conflictOnce.add('review');
     const before = api.find('GET', /\/reviews$/).length;
@@ -174,6 +179,7 @@ test.describe('admin Slice 10: reviews, content, collections', () => {
   }) => {
     const api = await setup(page, 'admin');
     await page.goto('/admin/size-charts');
+    await page.getByRole('button', { name: 'Chỉnh sửa' }).first().click();
     await expect(page.getByRole('button', { name: 'Thêm cột' }).first()).toBeVisible();
     await page.getByLabel('Ngực size S').fill('84–88');
     await saveBar(page, 'Lưu');
@@ -182,6 +188,7 @@ test.describe('admin Slice 10: reviews, content, collections', () => {
     expect(saved.body).toMatchObject({ updatedAt: null, bodyColumns: ['Ngực'] });
     await expect(page.getByText('Đã chỉnh sửa')).toBeVisible();
 
+    await page.getByRole('button', { name: 'Chỉnh sửa' }).first().click();
     api.chartFieldErrors = [{ field: 'body[0].values.Ngực', message: 'Ô số đo không được trống.' }];
     await page.getByLabel('Ngực size S').fill('90');
     await saveBar(page, 'Lưu');
@@ -239,12 +246,12 @@ test.describe('admin Slice 10: sale price, bulk sale, return labels', () => {
   }) => {
     const { api } = await catalog(page, ADMIN);
     await page.goto('/admin/products/p-live');
-    await expect(page.getByRole('group', { name: /Giá giảm có hạn/ })).toContainText(
-      'Đang giảm giá',
-    );
-    await expect(page.getByLabel('Từ ngày')).toHaveValue('2026-11-10');
-    await expect(page.getByLabel('Đến hết ngày')).toHaveValue('2026-11-20');
-    await expect(page.getByText('Giảm 23% so với giá bán.')).toBeVisible();
+    await expect(page.getByText('Đang giảm giá')).toBeVisible();
+    await expect(page.getByText('10/11/2026 – 20/11/2026')).toBeVisible();
+    await page.getByRole('button', { name: 'Đặt thời hạn giảm giá' }).click();
+    await expect(dialog(page).getByLabel('Từ ngày')).toHaveValue('2026-11-10');
+    await expect(dialog(page).getByLabel('Đến hết ngày')).toHaveValue('2026-11-20');
+    await dialog(page).getByRole('button', { name: 'Xong' }).click();
 
     // A sale price at or above the price is refused before any request.
     await page.locator('#p-sale-price').fill('1290000');
@@ -255,7 +262,9 @@ test.describe('admin Slice 10: sale price, bulk sale, return labels', () => {
     expect(api.find('PUT', /\/products\/p-live$/)).toHaveLength(0);
 
     await page.locator('#p-sale-price').fill('890000');
-    await page.getByLabel('Đến hết ngày').fill('2026-12-01');
+    await page.getByRole('button', { name: 'Đặt thời hạn giảm giá' }).click();
+    await dialog(page).getByLabel('Đến hết ngày').fill('2026-12-01');
+    await dialog(page).getByRole('button', { name: 'Xong' }).click();
     await saveBar(page, 'Lưu');
     await expect(page.getByRole('status')).toContainText('Đã lưu sản phẩm');
     expect(api.find('PUT', /\/products\/p-live$/).at(-1)?.body).toMatchObject({
@@ -264,7 +273,8 @@ test.describe('admin Slice 10: sale price, bulk sale, return labels', () => {
       saleEndsAt: '2026-12-01',
     });
 
-    await page.getByRole('button', { name: 'Gỡ đợt giảm giá' }).click();
+    await page.getByRole('button', { name: 'Đặt thời hạn giảm giá' }).click();
+    await dialog(page).getByRole('button', { name: 'Gỡ đợt giảm giá' }).click();
     await saveBar(page, 'Lưu');
     await expect(page.getByRole('status')).toContainText('Đã lưu sản phẩm');
     expect(api.find('PUT', /\/products\/p-live$/).at(-1)?.body).toMatchObject({
@@ -302,7 +312,7 @@ test.describe('admin Slice 10: sale price, bulk sale, return labels', () => {
     await expect(page.getByRole('button', { name: 'Giảm giá hàng loạt' })).toHaveCount(0);
     await page.goto('/admin/products/p-live');
     await expect(page.locator('#p-sale-price')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Gỡ đợt giảm giá' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Đặt thời hạn giảm giá' })).toHaveCount(0);
   });
 
   test('BR-RET-65: the return list names who sent it; the order list flags a waiting request', async ({

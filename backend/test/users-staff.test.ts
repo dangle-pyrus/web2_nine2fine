@@ -94,7 +94,7 @@ describe('T-USR-31 AC-USR-32: tạo nhân viên không mật khẩu', () => {
     expect(sent[0].text).toContain('"Quên mật khẩu"');
     expect(sent[0].text).not.toContain('/auth/forgot-password');
     expect(sent[0].text).toContain('/admin/login');
-    expect(sent[0].text).not.toMatch(/\d{8}/);
+    expect(sent[0].text).not.toMatch(/\d{6}/);
     expect(sent[0].text).not.toMatch(/mật khẩu (là|:)/i);
     expect((await uGet('/staff', A())).body.map((m: { email: string }) => m.email)).toContain('ha.tran@nine2fine.test');
   });
@@ -162,7 +162,7 @@ describe('T-USR-33 AC-USR-34: lỗi gửi thư không làm hỏng việc tạo',
       },
     });
     const { code } = await sendCode('hoa-s@nine2fine.test', 'reset-password');
-    expect(code).toMatch(/^\d{8}$/);
+    expect(code).toMatch(/^\d{6}$/);
   });
 });
 
@@ -179,13 +179,13 @@ describe('T-USR-34 AC-USR-35, 36: từ tài khoản chưa có mật khẩu tới
 
     useClock(new Date().toISOString());
     const first = await sendCode(email, 'reset-password');
-    expect(first.code).toMatch(/^\d{8}$/);
-    advance(11 * 60_000);
+    expect(first.code).toMatch(/^\d{6}$/);
+    advance(6 * 60_000);
     const expired = await post('/api/auth/password/reset', { email, code: first.code, newPassword: 'Nine2fine9' });
     expect(expired.status).toBe(422);
     expect(expired.body.error.code).toBe('invalid-code');
     const second = await sendCode(email, 'reset-password');
-    expect(second.code).toMatch(/^\d{8}$/);
+    expect(second.code).toMatch(/^\d{6}$/);
     const weak = await post('/api/auth/password/reset', { email, code: second.code, newPassword: 'yeu' });
     expect(weak.status).toBe(422);
     expect(weak.body.error).toMatchObject({ field: 'newPassword' });

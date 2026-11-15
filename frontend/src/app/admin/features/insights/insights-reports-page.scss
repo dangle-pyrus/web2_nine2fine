@@ -1,0 +1,231 @@
+/* Báo cáo theo tab (2026-11-15): thẻ trắng bo góc, biểu đồ SVG tự vẽ, một màu nhấn (đen). */
+.report-tabs {
+  margin-bottom: 20px;
+}
+.rpt-card {
+  padding: 20px;
+  border: 1px solid var(--adm-divider);
+  border-radius: 14px;
+  background: var(--adm-raised);
+  margin: 0;
+  &:last-child {
+    border-bottom: 1px solid var(--adm-divider);
+  }
+}
+.extra {
+  display: grid;
+  gap: 32px;
+  transition: opacity 120ms ease-out;
+  &.is-refreshing {
+    opacity: 0.6;
+  }
+}
+.soon {
+  padding: 8px;
+}
+
+/* ---------- Waterfall ---------- */
+.waterfall {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+  height: 240px;
+}
+.wf-col {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  gap: 6px;
+  text-align: center;
+  min-width: 0;
+}
+.wf-value {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  &.neg {
+    color: var(--adm-critical-fg);
+  }
+}
+.wf-track {
+  position: relative;
+  border-bottom: 1px solid var(--adm-divider);
+}
+.wf-bar {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  border-radius: 6px;
+  background: var(--adm-text);
+  &[data-kind='minus'] {
+    background: #f3b4b4;
+  }
+  &[data-kind='plus'] {
+    background: #9ad3ae;
+  }
+}
+.wf-label {
+  color: var(--adm-text-secondary);
+}
+
+/* ---------- Donut ---------- */
+.donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.donut {
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+  transform: rotate(0deg);
+}
+.donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  i {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .num {
+    margin-left: auto;
+    padding-left: 12px;
+  }
+}
+
+/* ---------- Horizontal bars ---------- */
+.hbars {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  li {
+    display: grid;
+    grid-template-columns: minmax(90px, 1.1fr) minmax(0, 2fr) auto;
+    align-items: center;
+    gap: 12px;
+  }
+}
+.hbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hbar-track {
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--adm-muted);
+  overflow: hidden;
+}
+.hbar {
+  display: block;
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--adm-text);
+}
+
+/* ---------- New vs returning ---------- */
+.split-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+.split-bar {
+  height: 14px;
+  margin: 8px 0;
+  border-radius: 9999px;
+  background: #c7cdd4;
+  overflow: hidden;
+  .a {
+    display: block;
+    height: 100%;
+    background: var(--adm-text);
+  }
+}
+.sw {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  &.a {
+    background: var(--adm-text);
+  }
+  &.b {
+    background: #c7cdd4;
+  }
+}
+
+/* ---------- Heatmap ---------- */
+.heat {
+  display: grid;
+  gap: 3px;
+  overflow-x: auto;
+}
+.heat-row {
+  display: grid;
+  grid-template-columns: 28px repeat(24, minmax(14px, 1fr));
+  gap: 3px;
+  align-items: center;
+}
+.heat-hours span {
+  text-align: left;
+  font-size: 10px;
+}
+.heat-cell {
+  height: 20px;
+  border-radius: 4px;
+  background: var(--adm-muted);
+  &[data-level='1'] {
+    background: #d9dce1;
+  }
+  &[data-level='2'] {
+    background: #9ca3af;
+  }
+  &[data-level='3'] {
+    background: #4b5563;
+  }
+  &[data-level='4'] {
+    background: #111111;
+  }
+}
+
+@media (max-width: 767px) {
+  .waterfall {
+    height: 200px;
+    gap: 6px;
+  }
+  .wf-value {
+    font-size: 10px;
+  }
+  .donut-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .hbars li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    .hbar-track {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+  }
+  .heat-row {
+    grid-template-columns: 24px repeat(24, 12px);
+  }
+}

@@ -83,6 +83,19 @@
         Kết quả cho “{{ query().q }}”
         <button type="button" class="text-button" (click)="update('q', '')">Xóa</button>
       </p>
+      } @if (chips().length) {
+      <ul class="filter-chips" aria-label="Bộ lọc đang áp dụng">
+        @for (chip of chips(); track chip.key) {
+        <li>
+          <button type="button" class="chip" (click)="update(chip.key, '')">
+            {{ chip.label }}
+            <span aria-hidden="true">×</span>
+            <span class="sr-only">Bỏ lọc {{ chip.label }}</span>
+          </button>
+        </li>
+        }
+        <li><button type="button" class="text-button" (click)="clear()">Xóa tất cả</button></li>
+      </ul>
       } @if (result().status === 'loading') {
       <div class="product-grid" aria-label="Đang tải sản phẩm">
         @for (index of [0,1,2,3,4,5]; track index) {
@@ -124,7 +137,15 @@
         @if (!isWishlist() && hasFilters()) {
         <button class="button dark" type="button" (click)="clear()">Xóa bộ lọc</button> }
       </n2f-empty-state>
-      } @else {
+      @if (bestsellers().length) {
+      <section class="bestsellers" aria-labelledby="bestsellers-title">
+        <h2 id="bestsellers-title">Sản phẩm bán chạy</h2>
+        <div class="product-grid">
+          @for (product of bestsellers(); track product.id) {
+          <n2f-product-card [product]="product" /> }
+        </div>
+      </section>
+      } } @else {
       <div class="product-grid">
         @for (product of visibleProducts(); track product.id) {
         <n2f-product-card [product]="product" /> }

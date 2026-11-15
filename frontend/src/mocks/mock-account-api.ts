@@ -127,6 +127,13 @@ export class MockAccountApi implements AccountApi {
       return typeof result === 'string' ? failWith(result) : respond(result);
     });
   }
+  confirmReceived(id: string): Observable<Order> {
+    return this.withData((data) => {
+      if (!data.orders.some((candidate) => candidate.id === id)) return failWith('not-found');
+      const result = this.store.confirmReceived(id);
+      return typeof result === 'string' ? failWith(result) : respond(result);
+    });
+  }
   requestReturn(id: string, input: ReturnRequestInput): Observable<Order> {
     return this.withData((data) => {
       const order = data.orders.find((candidate) => candidate.id === id);

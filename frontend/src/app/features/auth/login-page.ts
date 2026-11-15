@@ -30,7 +30,7 @@ interface LoginNavigationState {
 
 const HEADINGS: Record<LoginStep, string> = {
   email: 'Nhập email của bạn để tham gia hoặc đăng nhập.',
-  code: 'Nhập mã 8 số chúng tôi vừa gửi qua email của bạn.',
+  code: 'Nhập mã 6 số chúng tôi vừa gửi qua email của bạn. Mã có hiệu lực 5 phút.',
   password: 'Nhập mật khẩu của bạn để đăng nhập vào tài khoản.',
 };
 
@@ -109,7 +109,7 @@ const HEADINGS: Record<LoginStep, string> = {
               <p class="form-error" role="alert"><n2f-auth-message [message]="problem" /></p>
             }
             <div class="stack">
-              <button class="pill wide" type="submit" [disabled]="busy()">
+              <button class="pill wide" type="submit" [disabled]="busy() || codeField?.locked()">
                 {{ busy() ? 'Đang đăng nhập…' : 'Đăng nhập' }}
               </button>
               <span class="divider">hoặc</span>
@@ -169,7 +169,7 @@ export class LoginPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
-  private readonly codeField = viewChild<VerificationCodeField>('codeField');
+  protected readonly codeField = viewChild<VerificationCodeField>('codeField');
   private readonly builder = inject(FormBuilder).nonNullable;
 
   readonly emailForm = this.builder.group({
@@ -230,7 +230,7 @@ export class LoginPage {
             error.code === 'code-locked' ||
             (error.code === 'validation' && error.field === 'code'));
         if (!field || !belongsToCode) return this.error.set(authMessage(error));
-        field.fail(authMessage(error));
+        field.fail(authMessage(error), error);
         field.focus();
       },
     );

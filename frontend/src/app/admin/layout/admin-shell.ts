@@ -16,8 +16,15 @@ import { API_CONFIG } from '../../core/api-config';
 import { AdminSession } from '../core/admin-session';
 import type { Permission } from '../core/permissions';
 import { ROLE_LABELS } from '../core/permissions';
-import { ADMIN_AUTH_API, ADMIN_ORDERS_API, ADMIN_RETURNS_API } from '../data-access/admin-apis';
+import {
+  ADMIN_AUTH_API,
+  ADMIN_INVENTORY_API,
+  ADMIN_ORDERS_API,
+  ADMIN_RETURNS_API,
+} from '../data-access/admin-apis';
+import { ADMIN_REVIEWS_API } from '../data-access/content-api';
 import { ADMIN_ORDER_DESK_API } from '../data-access/order-desk-api';
+import { ADMIN_RETURN_DESK_API } from '../data-access/returns-api';
 import { AdminDialogs } from '../ui/dialogs';
 import { AdmIcon } from '../ui/icon';
 import { isShortcutEvent } from '../ui/keyboard';
@@ -27,25 +34,32 @@ import { CommandPalette } from './command-palette';
 import { GO_TO } from './shortcuts';
 import { ShortcutsDialog } from './shortcuts-dialog';
 
+type CountKey = 'toFulfil' | 'returns' | 'outOfStock' | 'reviews';
+type GroupKey = 'daily' | 'catalog' | 'growth' | 'website';
+
 interface NavItem {
   label: string;
   icon: string;
   link: string;
   permission: Permission;
+  /** The earlier mock back office guards some routes with another permission. */
+  legacyPermission?: Permission;
   exact?: boolean;
-  /** Only on the order desk (the earlier back office lists it under Đơn hàng). */
-  deskOnly?: boolean;
+  group: GroupKey;
   /** Key into `counts` for the "needs action" number (2.1). */
-  count?: 'toFulfil' | 'returns';
-  children?: {
-    label: string;
-    link: string;
-    count?: 'returns';
-    exact?: boolean;
-  }[];
+  count?: CountKey;
 }
 
+/** Four small headings; every item stays a top-level link (no sub-menus). */
+const GROUPS: { key: GroupKey; label: string }[] = [
+  { key: 'daily', label: 'Vận hành hằng ngày' },
+  { key: 'catalog', label: 'Sản phẩm' },
+  { key: 'growth', label: 'Tăng trưởng' },
+  { key: 'website', label: 'Website' },
+];
+
 const COLLAPSE_KEY = 'n2f.admin.sidebar';
+const GROUPS_KEY = 'n2f.admin.sidebar.groups';
 /** Sidebar counts refresh this often while the tab is visible. */
 const COUNTS_REFRESH_MS = 60_000;
 const DESK_CATALOG_LINKS = ['/admin/products', '/admin/inventory', '/admin/promotions'];
@@ -93,6 +107,9 @@ export class AdminShell {
   private readonly ordersApi = this.deskMode ? null : inject(ADMIN_ORDERS_API);
   private readonly returnsApi = this.deskMode ? null : inject(ADMIN_RETURNS_API);
   private readonly deskApi = this.deskMode ? inject(ADMIN_ORDER_DESK_API) : null;
+  private readonly returnDeskApi = inject(ADMIN_RETURN_DESK_API);
+  private readonly inventoryApi = inject(ADMIN_INVENTORY_API);
+  private readonly reviewsApi = inject(ADMIN_REVIEWS_API);
   private readonly dialogs = inject(AdminDialogs);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -105,9 +122,11 @@ export class AdminShell {
   );
   protected readonly collapsed = signal(readCollapsed());
   protected readonly drawerOpen = signal(false);
-  protected readonly counts = signal<{ toFulfil: number; returns: number }>({
+  protected readonly counts = signal<Record<CountKey, number>>({
     toFulfil: 0,
     returns: 0,
+    outOfStock: 0,
+    reviews: 0,
   });
   protected readonly url = toSignal(
     this.router.events.pipe(
@@ -124,6 +143,7 @@ export class AdminShell {
       link: '/admin',
       permission: 'orders.view',
       exact: true,
+      group: 'daily',
     },
     {
       label: 'Đơn hàng',
@@ -131,78 +151,84 @@ export class AdminShell {
       link: '/admin/orders',
       permission: 'orders.view',
       count: 'toFulfil',
-      children: [
-        { label: 'Đơn hàng', link: '/admin/orders' },
-        { label: 'Trả hàng', link: '/admin/returns', count: 'returns' },
-      ],
+      group: 'daily',
     },
     {
       label: 'Trả hàng',
       icon: 'reiconUndo',
       link: DESK_RETURNS_LINK,
       permission: 'returns.process',
-      deskOnly: true,
+      legacyPermission: 'orders.view',
+      count: 'returns',
+      group: 'daily',
+    },
+    {
+      label: 'Tồn kho',
+      icon: 'reiconBox',
+      link: '/admin/inventory',
+      permission: 'inventory.view',
+      count: 'outOfStock',
+      group: 'daily',
     },
     {
       label: 'Sản phẩm',
       icon: 'reiconTshirt',
       link: '/admin/products',
       permission: 'products.view',
-      children: [
-        { label: 'Tất cả sản phẩm', link: '/admin/products' },
-        { label: 'Bộ sưu tập', link: '/admin/collections' },
-        { label: 'Bảng size', link: '/admin/size-charts' },
-        { label: 'Đánh giá', link: '/admin/reviews' },
-      ],
-    },
-    { label: 'Tồn kho', icon: 'reiconBox', link: '/admin/inventory', permission: 'inventory.view' },
-    {
-      label: 'Khách hàng',
-      icon: 'reiconUsers',
-      link: '/admin/customers',
-      permission: 'customers.view',
-    },
-    {
-      label: 'Khuyến mãi',
-      icon: 'reiconTicketSale',
-      link: '/admin/promotions',
-      permission: 'promotions.view',
-    },
-    {
-      label: 'Nội dung trang chủ',
-      icon: 'reiconWidget',
-      link: '/admin/content',
-      permission: 'content.view',
+      group: 'catalog',
     },
     {
       label: 'Bộ sưu tập',
       icon: 'reiconGalleryAdd',
       link: '/admin/collections',
       permission: 'content.view',
-      deskOnly: true,
+      group: 'catalog',
     },
     {
       label: 'Bảng size',
       icon: 'reiconRuler',
       link: '/admin/size-charts',
       permission: 'content.view',
-      deskOnly: true,
+      group: 'catalog',
     },
     {
       label: 'Đánh giá',
       icon: 'reiconStar',
       link: '/admin/reviews',
       permission: 'reviews.moderate',
-      deskOnly: true,
+      count: 'reviews',
+      group: 'catalog',
+    },
+    {
+      label: 'Khách hàng',
+      icon: 'reiconUsers',
+      link: '/admin/customers',
+      permission: 'customers.view',
+      group: 'growth',
+    },
+    {
+      label: 'Khuyến mãi',
+      icon: 'reiconTicketSale',
+      link: '/admin/promotions',
+      permission: 'promotions.view',
+      group: 'growth',
     },
     {
       label: 'Báo cáo',
       icon: 'reiconChartBar',
       link: '/admin/reports',
       permission: 'dashboard.revenue',
+      group: 'growth',
+    },
+    {
+      label: 'Nội dung trang chủ',
+      icon: 'reiconWidget',
+      link: '/admin/content',
+      permission: 'content.view',
+      group: 'website',
     },
   ];
-  /** Modules the role may not see are hidden, not disabled (8.2). */
+  /** Modules the role may not see are hidden, not disabled (8.2). Same flat list in both modes. */
   protected readonly items = computed(() => {
     this.session.user();
     const deskLinks = [
@@ -216,12 +242,23 @@ export class AdminShell {
       ...(this.reviewsHttp ? ['/admin/reviews'] : []),
     ];
     const visible = this.deskMode
-      ? this.nav
-          .filter((item) => deskLinks.includes(item.link))
-          .map((item) => ({ ...item, children: undefined }))
-      : this.nav.filter((item) => !item.deskOnly);
-    return visible.filter((item) => this.session.can(item.permission));
+      ? this.nav.filter((item) => deskLinks.includes(item.link))
+      : this.nav;
+    return visible.filter((item) =>
+      this.session.can(
+        this.deskMode ? item.permission : (item.legacyPermission ?? item.permission),
+      ),
+    );
   });
+  /** Items under their heading; a heading with nothing the person may open is left out. */
+  protected readonly groups = computed(() =>
+    GROUPS.map((group) => ({
+      ...group,
+      items: this.items().filter((item) => item.group === group.key),
+    })).filter((group) => group.items.length > 0),
+  );
+  /** Headings the person folded; remembered in this browser. */
+  protected readonly folded = signal<ReadonlySet<GroupKey>>(readFolded());
   /** Cài đặt: the whole menu entry in the earlier back office; on the desk only the connected groups. */
   protected readonly showSettings = computed(() => {
     this.session.user();
@@ -280,12 +317,21 @@ export class AdminShell {
     this.refreshCounts();
   }
 
-  isSection(link: string): boolean {
+  isActive(item: NavItem): boolean {
     const url = this.url().split('?')[0];
-    const item = this.nav.find((entry) => entry.link === link);
-    return [link, ...(item?.children?.map((child) => child.link) ?? [])].some((prefix) =>
-      url.startsWith(prefix),
-    );
+    return item.exact ? url === item.link : url === item.link || url.startsWith(item.link + '/');
+  }
+
+  toggleGroup(key: GroupKey): void {
+    const next = new Set(this.folded());
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.folded.set(next);
+    try {
+      localStorage.setItem(GROUPS_KEY, JSON.stringify([...next]));
+    } catch {
+      /* Storage unavailable: the choice lasts for this page only. */
+    }
   }
 
   toggleCollapsed(): void {
@@ -353,6 +399,7 @@ export class AdminShell {
   }
 
   private refreshCounts(): void {
+    this.refreshSideCounts();
     if (!this.session.can('orders.view')) return;
     if (this.deskApi) {
       // Work waiting for the team: calls to make, cancel requests, returned parcels.
@@ -361,10 +408,10 @@ export class AdminShell {
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
           next: (counts) =>
-            this.counts.set({
+            this.counts.update((value) => ({
+              ...value,
               toFulfil: counts['to-confirm'] + counts['cancel-requests'] + counts['returning'],
-              returns: 0,
-            }),
+            })),
           error: () => undefined,
         });
       return;
@@ -394,6 +441,50 @@ export class AdminShell {
         error: () => undefined,
       });
   }
+
+  /**
+   * Trả hàng (desk), Tồn kho and Đánh giá badges: the same figures as "Cần xử lý" on Tổng quan
+   * (returns waiting for approval / goods / refund, SKUs with nothing to sell, unanswered reviews).
+   * Only asked for when the item is in the menu, so no module that is not connected is called.
+   */
+  private refreshSideCounts(): void {
+    const shown = new Set(this.items().map((item) => item.link));
+    const set = (key: CountKey, value: number) =>
+      this.counts.update((counts) => ({ ...counts, [key]: value }));
+    if (this.deskMode && shown.has(DESK_RETURNS_LINK)) {
+      this.returnDeskApi
+        .list({ state: 'requested', q: '', sort: 'requestedAt', page: 1, limit: 20 })
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (page) =>
+            set(
+              'returns',
+              (page.counts.requested ?? 0) +
+                (page.counts.approved ?? 0) +
+                (page.counts.received ?? 0),
+            ),
+          error: () => undefined,
+        });
+    }
+    if (shown.has('/admin/inventory')) {
+      this.inventoryApi
+        .facets({})
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (facets) => set('outOfStock', facets.counts.out),
+          error: () => undefined,
+        });
+    }
+    if (shown.has('/admin/reviews')) {
+      this.reviewsApi
+        .list({ view: 'unanswered', rating: 0, page: 1, limit: 20 })
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: (page) => set('reviews', page.counts.unanswered),
+          error: () => undefined,
+        });
+    }
+  }
 }
 
 function readCollapsed(): boolean {
@@ -401,5 +492,18 @@ function readCollapsed(): boolean {
     return localStorage.getItem(COLLAPSE_KEY) === '1';
   } catch {
     return false;
+  }
+}
+
+function readFolded(): ReadonlySet<GroupKey> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(GROUPS_KEY) ?? '[]');
+    return new Set(
+      Array.isArray(value)
+        ? value.filter((key): key is GroupKey => GROUPS.some((group) => group.key === key))
+        : [],
+    );
+  } catch {
+    return new Set();
   }
 }

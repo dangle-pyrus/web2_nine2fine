@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { catchError, map, Observable } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
 import { CheckoutError, toCheckoutError } from '../../checkout/checkout-api';
-import { Order } from '../../orders/order-models';
+import { CancelChoice, Order } from '../../orders/order-models';
 import { OrderDto, toOrder } from '../../orders/order-mapper';
 import { canCancel, cancelModeOf } from '../../orders/order-status';
 import { AccountError } from './account-api';
@@ -20,7 +20,9 @@ export interface OrdersApi {
   list(query: { page: number; limit: number }): Observable<OrderPage>;
   /** `orderCode` is the order `id` (`N2F...`). */
   get(orderCode: string): Observable<Order>;
-  cancel(orderCode: string, reason?: string): Observable<Order>;
+  cancel(orderCode: string, choice?: CancelChoice): Observable<Order>;
+  /** ORD-11: the shopper confirms the parcel arrived (`to_receive` -> `completed`). */
+  confirmReceived(orderCode: string): Observable<Order>;
 }
 
 export const ORDERS_API = new InjectionToken<OrdersApi>('ORDERS_API');
@@ -45,20 +47,27 @@ export class HttpOrdersApi implements OrdersApi {
       .get<OrderDto>(`${this.base}/${encodeURIComponent(orderCode)}`)
       .pipe(map(toOrder), catchError(toCheckoutError));
   }
-  cancel(orderCode: string, reason?: string): Observable<Order> {
+  cancel(orderCode: string, choice?: CancelChoice): Observable<Order> {
     return this.http
-      .post<OrderDto>(
-        `${this.base}/${encodeURIComponent(orderCode)}/cancel`,
-        reason ? { reason } : {},
-      )
+      .post<OrderDto>(`${this.base}/${encodeURIComponent(orderCode)}/cancel`, choice ?? {})
+      .pipe(map(toOrder), catchError(toCheckoutError));
+  }
+  confirmReceived(orderCode: string): Observable<Order> {
+    return this.http
+      .post<OrderDto>(`${this.base}/${encodeURIComponent(orderCode)}/received`, {})
       .pipe(map(toOrder), catchError(toCheckoutError));
   }
 }
 
-/** The mock has no server, so "may the shopper cancel" comes from the local rule. */
+/** The mock has no server, so "may the shopper cancel / confirm receipt" comes from the local rules. */
 export function withCancel(order: Order): Order {
   const can = canCancel(order);
-  return { ...order, canCancel: can, cancelMode: can ? cancelModeOf(order) : undefined };
+  return {
+    ...order,
+    canCancel: can,
+    cancelMode: can ? cancelModeOf(order) : undefined,
+    canConfirmReceived: order.status === 'shipping' || order.status === 'delivering',
+  };
 }
 
 const MESSAGES = {
@@ -67,6 +76,7 @@ const MESSAGES = {
     'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
   unauthenticated: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
   'rate-limited': 'Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.',
+  'invalid-transition': 'Đơn hàng không ở trạng thái đang giao. Đã cập nhật lại đơn.',
 } as const;
 
 /** One message for failures of either adapter. */

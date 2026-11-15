@@ -60,8 +60,7 @@ test.describe('admin', () => {
     await adminSignIn(page);
     await page.goto('/admin/inventory?view=out');
     const row = page.locator('tbody tr').first();
-    await row.hover();
-    await row.getByRole('button', { name: 'Điều chỉnh' }).click();
+    await row.click();
     await page.getByLabel('Số lượng thay đổi').fill('4');
     await page.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
     await expect(page.getByText(/Đã cập nhật tồn kho .*: còn 4/)).toBeVisible();
@@ -208,6 +207,8 @@ test.describe('admin', () => {
     await page.locator('textarea').first().fill('Cảm ơn bạn, shop đã ghi nhận.');
     await page.getByRole('button', { name: 'Đăng phản hồi' }).click();
     await expect(page.getByText('Đã đăng phản hồi')).toBeVisible();
+    // The answered review leaves "Chưa trả lời" once the list reloads; it shows under "Tất cả".
+    await page.getByRole('button', { name: /Tất cả/ }).click();
     await expect(page.getByText('Cảm ơn bạn, shop đã ghi nhận.')).toBeVisible();
   });
 });

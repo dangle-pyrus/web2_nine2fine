@@ -8,57 +8,89 @@ import type { WireImageRef } from './catalog-media';
 
 export type InsightsRange = 'today' | '7d' | '30d';
 
-export interface KpiValue {
+// ---------- Tổng quan v2 (docs/api/openapi.yaml, tag admin-dashboard) ----------
+
+export interface DashboardKpi {
   value: number;
-  /** (this period - previous) / previous, `null` when the previous period is 0 (shown as "—"). */
+  /** Same figure for the compare period (yesterday / previous Mon–Sun week / previous month). */
+  previous: number;
+  /** (value - previous) / previous; `null` when `previous` is 0. */
   change: number | null;
 }
 
+/** Work waiting now (not tied to the range). */
 export interface DashboardTodo {
   toConfirm: number;
   pendingPayment: number;
   toFulfil: number;
-  inTransit: number;
   cancelRequests: number;
-  returning: number;
   lateDelivery: number;
+  returnRequested: number;
+  returnApproved: number;
+  returnReceived: number;
   lowStock: number;
   outOfStock: number;
-  /** Slice 9: requests waiting for approval / goods / refund; absent in older answers. */
-  returnRequested?: number;
-  returnApproved?: number;
-  returnReceived?: number;
 }
 
-export interface RevenuePoint {
-  date: string;
-  revenue: number;
-  previous: number;
+/** `revenue` / `orders` are `null` for an hour not reached yet or a day the compare month lacks. */
+export interface DashboardPoint {
+  key: string;
+  label: string;
+  revenue: number | null;
+  orders: number | null;
+}
+
+export interface DashboardSeries {
+  unit: 'hour' | 'day';
+  /** This period; `previous[i]` is the compare bucket matched to `points[i]`. */
+  points: DashboardPoint[];
+  previous: DashboardPoint[];
+}
+
+export interface DashboardRecentOrder {
+  id: string;
+  code: string;
+  createdAt: string;
+  customerName: string;
+  total: number;
+  status: 'to_pay' | 'to_ship' | 'to_receive' | 'completed' | 'cancel_requested' | 'cancelled';
+  paymentStatus: string;
+  /** The API only sends `website`; marketplace rows are frontend demo data (marketplace-demo.ts). */
+  channel: 'website' | 'shopee' | 'tiktok' | 'lazada';
 }
 
 export interface DashboardTopProduct {
+  rank: number;
+  /** Rank in the compare period, `null` = not ranked then ("Mới"). */
+  previousRank: number | null;
   productId: string;
   name: string;
   image: WireImageRef | null;
+  category: { slug: string; name: string };
   units: number;
   revenue: number;
+  /** Share of the period's net revenue, 0..1. */
+  share: number;
 }
 
 /**
- * Staff receive only `generatedAt`, `orders` and `todo`: every other key is absent (BR-DSH-07), so
- * the screen has to cope with their absence rather than with zeros.
+ * Staff receive only `kpis.orders`, `todo` and `recentOrders` besides the periods: every money key
+ * is absent (BR-DSH-07), so the screen copes with absence rather than zeros.
  */
 export interface Dashboard {
   generatedAt: string;
-  orders: KpiValue;
+  range: InsightsRange;
+  period: { from: string; to: string };
+  comparePeriod: { from: string; to: string };
+  kpis: {
+    orders: DashboardKpi;
+    netRevenue?: DashboardKpi;
+    averageOrderValue?: DashboardKpi;
+    returnRate?: DashboardKpi;
+  };
   todo: DashboardTodo;
-  range?: InsightsRange;
-  period?: { from: string; to: string; previousFrom: string; previousTo: string };
-  revenue?: KpiValue;
-  completedOrders?: KpiValue;
-  averageOrderValue?: KpiValue;
-  newCustomers?: KpiValue;
-  revenueSeries?: RevenuePoint[];
+  recentOrders: DashboardRecentOrder[];
+  series?: DashboardSeries;
   topProducts?: DashboardTopProduct[];
 }
 

@@ -170,7 +170,7 @@ export const N = { email: 'new@example.com' };
 export function lastCode(email: string): string | undefined {
   for (let i = mails.length - 1; i >= 0; i--) {
     if (mails[i].to === email) {
-      const m = /: (\d{8})/.exec(mails[i].text);
+      const m = /: (\d{6})\b/.exec(mails[i].text);
       if (m) return m[1];
     }
   }
@@ -187,7 +187,7 @@ export async function sendCode(email: string, purpose: 'login' | 'register' | 'r
 export const loginPassword = (email: string, password: string, ip?: string) =>
   post('/api/auth/login/password', { email, password }, { ip });
 
-export const wrongCode = (real: string | undefined) => (real === '00000000' ? '11111111' : '00000000');
+export const wrongCode = (real: string | undefined) => (real === '000000' ? '111111' : '000000');
 /** variantId theo slug + màu + size của catalog seed. */
 export async function vid(slug: string, color: string, size: string): Promise<string> {
   const v = await prisma.productVariant.findFirstOrThrow({ where: { colorName: color, size, product: { slug } } });
@@ -581,7 +581,7 @@ export function assertNoSecrets(res: { text: string }): void {
   }
   if (/(SELECT|INSERT|UPDATE)[^"]*FROM/i.test(res.text) || /prisma/i.test(res.text)) throw new Error('response leaks SQL / prisma detail');
   for (const m of mails) {
-    const code = /: (\d{8})/.exec(m.text)?.[1];
+    const code = /: (\d{6})\b/.exec(m.text)?.[1];
     if (code && res.text.includes(code)) throw new Error('response contains an OTP code');
   }
 }

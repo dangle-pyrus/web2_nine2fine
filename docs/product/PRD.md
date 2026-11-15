@@ -1,5 +1,7 @@
 # PRD nine2fine
 
+> **Cập nhật 2026-11-14:** dự án không còn dùng Supabase. Các AC / lát ghi "trên Supabase" hay "DB Supabase" nay áp dụng cho PostgreSQL cục bộ (database `nine2fine`); ảnh lưu đĩa cục bộ. Xem `docs/decisions.md` 2026-11-14.
+
 Chủ sở hữu: product-owner. Nguồn bối cảnh: `frontend/document/nine2fine_MASTER_PLAN.md` (mục 0, 19, 20, 33, 34, 39, 44, 52), `frontend/document/backend-integration.md`, code FE `frontend/src/app/features/auth/**`, code BE `backend/src/modules/auth/*`, `backend/prisma/schema.prisma`.
 
 Quy ước: "(đề xuất PO)" = con số PO tự đề xuất, không có trong tài liệu gốc. "(chờ xác nhận)" = chưa triển khai cho đến khi câu hỏi mở tương ứng được trả lời. "(chốt 2026-11-07)" = Thắng đã trả lời câu hỏi mở, ghi trong `docs/decisions.md`.
@@ -1267,7 +1269,7 @@ Nguồn: backlog 4.9 (phần sản phẩm, tồn kho thủ công, khuyến mãi)
 | Mã | Mức | Nguồn | Quy tắc |
 | --- | --- | --- | --- |
 | BR-INV-24 | Must | S6-Q5 | Tải ảnh (chỉ admin), 1 tệp / yêu cầu: JPEG, PNG hoặc WebP xác định theo nội dung tệp (không theo đuôi); ≤ 5 MB; cạnh ngắn ≥ 600 px, cạnh dài ≤ 6.000 px. Sai → 422 `invalid-image` `reason` ∈ {`format`, `size`, `dimensions`}. Tên lưu do máy chủ sinh (không dùng tên gốc). Trả `id` (≤ 100 ký tự) và `url` công khai. |
-| BR-INV-25 | Must (chờ xác nhận nơi lưu) | S6-Q1 | Lưu ảnh qua lớp lưu trữ đổi được bằng cấu hình. Dev/test: đĩa cục bộ. Bản thật: S6-Q1 (mặc định PO: Supabase Storage, bucket công khai). Không chặn lát khác; chặn 6.8. |
+| BR-INV-25 | Must (chờ xác nhận nơi lưu) | S6-Q1 | Lưu ảnh qua lớp lưu trữ đổi được bằng cấu hình. Dev/test: đĩa cục bộ. Bản thật: đĩa cục bộ (`MEDIA_STORAGE=local`, S6-Q1 đã chốt 2026-11-14 khi bỏ Supabase). Không chặn lát khác. |
 | BR-INV-26 | Must | BR-CAT-10; K5 | Sản phẩm có 0–12 ảnh (`ACTIVE` cần ≥ 1; > 12 → 422 `field: images`), thứ tự do admin sắp; ảnh đầu = ảnh bìa (`cover_media_id`), toàn bộ theo thứ tự = gallery. Mỗi ảnh gắn 0 hoặc 1 màu của sản phẩm (màu không có → 422); `color_media[màu]` = ảnh đầu tiên gắn màu đó. Alt ≤ 125 ký tự (trống = tên sản phẩm). Id ảnh không phải ảnh đã tải lên hay id thư viện có sẵn → 422 `field: images`. |
 | BR-INV-27 | Must | K5 | Ảnh thư viện của sản phẩm seed hiện trong form admin và giữ nguyên id khi lưu. Storefront (thẻ sản phẩm, PDP, giỏ, checkout, đơn) hiện đúng cả ảnh tải lên lẫn ảnh thư viện; dòng đơn cũ giữ ảnh đã chụp. |
 | BR-INV-28 | Must | — | Không xoá tệp ảnh trong slice này: bỏ ảnh khỏi sản phẩm chỉ gỡ tham chiếu (đơn cũ vẫn hiện ảnh). Dọn ảnh mồ côi: Won't. |
@@ -1366,7 +1368,7 @@ Mặc định PO, làm trước theo mặc định; Thắng đổi được bằ
 
 | # | Câu hỏi | Ảnh hưởng | Mặc định PO | Trạng thái |
 | --- | --- | --- | --- | --- |
-| S6-Q1 | Lưu ảnh ở đâu (bản thật)? | BR-INV-25; lát 6.4 (phần bản thật), 6.8 | Supabase Storage, bucket công khai `product-images`; dev/test đĩa cục bộ qua lớp lưu trữ đổi được. | Chờ Thắng (không chặn 6.1–6.7) |
+| S6-Q1 | Lưu ảnh ở đâu (bản thật)? | BR-INV-25; lát 6.4 (phần bản thật), 6.8 | Đĩa cục bộ (`MEDIA_STORAGE=local`) cho cả dev/test và bản chạy thật; driver Supabase trong code không dùng. | Đã chốt 2026-11-14 (bỏ Supabase, xem decisions) |
 | S6-Q2 | Ma trận quyền staff/admin | BR-INV-02 | Staff: xem + điều chỉnh tồn; admin: mọi việc còn lại. | Mặc định PO |
 | S6-Q3 | Slug có được đổi sau khi công khai? | BR-INV-13 | Không (khoá sau lần công khai đầu; không làm chuyển hướng slug cũ). | Mặc định PO |
 | S6-Q4 | Sửa voucher đã có lượt dùng | BR-INV-40, 42 | Mã không bao giờ đổi; loại/giá trị/giảm tối đa khoá khi đã có lượt; không xoá mã đã dùng (tắt thay vì xoá). | Mặc định PO |
@@ -1526,7 +1528,7 @@ Dữ liệu tham chiếu: admin A, A2; staff S; nhân viên N (staff, mới tạ
 - Ở `adminUsersMode: http` hai màn không có dữ liệu mock; Playwright mock pass nguyên.
 - **Đóng AC hoãn:** AC-AUTH-75 bằng AC-USR-26, 27 (và 29); AC-AUTH-85 bằng AC-USR-02 (staff 403 / admin được trên API nhân viên). Ghi kết quả vào backlog G4.
 - Khoá hoặc đổi vai trò luôn thu hồi mọi phiên và có đúng 1 dòng nhật ký (AC-USR-22, 26, 27, 42); không bao giờ 0 admin hoạt động (AC-USR-40, 41); admin không biết mật khẩu nhân viên (AC-USR-32, 35).
-- Lát nghiệm thu thật trên Supabase (7.7) cần Thắng duyệt áp migration.
+- Lát nghiệm thu thật trên PostgreSQL cục bộ `nine2fine` (7.7) cần Thắng duyệt áp migration.
 
 ### 7. Câu hỏi mở
 
@@ -1738,7 +1740,7 @@ Dữ liệu tham chiếu (hôm nay = ngày D theo giờ VN; 00:00 VN = 17:00 UTC
 - Ở `adminInsightsMode: http` bốn màn không có dữ liệu mock và không còn số bịa; Playwright mock pass nguyên.
 - Một định nghĩa số liệu: tổng theo ngày = theo sản phẩm = theo danh mục = theo phương thức = KPI (AC-INS-13); số việc cần làm và tồn kho bằng số ở màn Đơn hàng / Tồn kho (AC-DSH-05, 06); staff không nhận số tiền ở Tổng quan (AC-DSH-09).
 - Mỗi lần lưu cài đặt có thay đổi đúng 1 dòng nhật ký, lỗi / từ chối không để lại dòng (AC-SET-12); đổi cài đặt không đổi đơn đã tạo (AC-SET-11); API công khai chỉ gồm whitelist (AC-SET-13).
-- Lát nghiệm thu thật trên Supabase (8.7) cần Thắng duyệt áp migration và nhập thông tin pháp lý thật (G9).
+- Lát nghiệm thu thật trên PostgreSQL cục bộ `nine2fine` (8.7) cần Thắng duyệt áp migration và nhập thông tin pháp lý thật (G9).
 
 ### 7. Câu hỏi mở
 
@@ -1943,7 +1945,7 @@ Dữ liệu tham chiếu (hôm nay = ngày D theo giờ VN; mỗi AC chạy trê
 - Dữ liệu nhạy cảm: số tài khoản không có trong phản hồi cho khách / staff, email, sự kiện, nhật ký, log; xoá khi trạng thái cuối (AC-RET-17); ảnh không công khai (AC-RET-15).
 - Số liệu: doanh thu thuần và các khối vẫn khớp (AC-RET-51 + AC-INS-13), hạng thành viên theo chính sách công bố (AC-RET-53), chữ chính sách / trợ giúp khớp hành vi (AC-RET-54).
 - Cần cập nhật tài liệu cũ: AC-INS-07 (`/admin/returns` không còn "Chưa khả dụng" ở HTTP), BR-INS-09 (theo BR-RET-51), BR-DSH-07 (`returnRequests` có dữ liệu), K5 Slice 5 và S5-Q5 (trả hàng không còn Won't; địa chỉ trả `isReturn` vẫn Won't).
-- Lát nghiệm thu thật trên Supabase (9.8) cần Thắng duyệt áp migration và chạy thử một yêu cầu trả hàng thật (nhận email, nhập kho, hoàn tiền).
+- Lát nghiệm thu thật trên PostgreSQL cục bộ `nine2fine` (9.8) cần Thắng duyệt áp migration và chạy thử một yêu cầu trả hàng thật (nhận email, nhập kho, hoàn tiền).
 
 ### 7. Câu hỏi mở
 
@@ -2240,7 +2242,7 @@ Dữ liệu tham chiếu (mỗi AC chạy trên DB sạch với dữ liệu sau 
 - Wishlist: không mất mục chờ, không hồi sinh mục đã xoá (AC-WISH-05, 06); không vượt 100 dưới đua (AC-WISH-03).
 - Trả hàng vãng lai: số tài khoản không rò ra (AC-RET-64); ảnh không công khai (AC-RET-62).
 - Cần cập nhật tài liệu cũ: AC-INS-07 (menu admin: các mục Nội dung, Đánh giá, Bộ sưu tập theo cờ), BR-CAT-17 / AC-CAT-43 (không áp khi `reviewsMode = http`), BR-AUTH-32 (wishlist đồng bộ sau gộp), BR-RET-54(d) (khi A phát hành), BR-ADM-23 (không đổi; liên kết "Viết đánh giá" ở chi tiết đơn là Should), `Cache-Control` size chart (openapi: 3600 → 60).
-- Lát nghiệm thu thật trên Supabase (10.9) cần Thắng duyệt áp migration và kiểm tay các luồng thật (gửi đánh giá bằng đơn đã giao, trả hàng vãng lai có thư thật, wishlist hai trình duyệt, nội dung trang chủ, giá giảm đặt đơn thật).
+- Lát nghiệm thu thật trên PostgreSQL cục bộ `nine2fine` (10.9) cần Thắng duyệt áp migration và kiểm tay các luồng thật (gửi đánh giá bằng đơn đã giao, trả hàng vãng lai có thư thật, wishlist hai trình duyệt, nội dung trang chủ, giá giảm đặt đơn thật).
 
 ### 7. Câu hỏi mở
 

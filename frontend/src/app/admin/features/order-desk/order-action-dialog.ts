@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  CANCEL_ACTION_REASON,
   CANCEL_REASON_LABELS,
   cancelReasonsOf,
   NOTE_REQUIRED_REASONS,
@@ -22,6 +23,8 @@ import {
   DESK_INTERNAL_NOTE_MAX,
   DESK_NOTE_MAX,
   DESK_NOTE_MIN,
+  DESK_REFUND_REF_MAX,
+  DESK_REFUND_REF_MIN,
   DESK_TRACKING_MAX,
   DESK_TRACKING_MIN,
   DESK_TRACKING_PATTERN,
@@ -42,7 +45,28 @@ export type DeskActionKind =
   | 'write-off'
   | 'approve-cancel'
   | 'reject-cancel'
-  | 'add-note';
+  | 'add-note'
+  | 'confirm-refund';
+
+/** The dialog an `allowedActions` entry opens (null: no dialog, e.g. print-slip). */
+export function actionKindOf(action: DeskAction): DeskActionKind | null {
+  if (action in CANCEL_ACTION_REASON) return 'cancel';
+  switch (action) {
+    case 'call-attempt':
+    case 'confirm':
+    case 'ship':
+    case 'deliver':
+    case 'restock':
+    case 'write-off':
+    case 'approve-cancel':
+    case 'reject-cancel':
+    case 'add-note':
+    case 'confirm-refund':
+      return action;
+    default:
+      return null;
+  }
+}
 
 export interface DeskActionDialogData {
   order: DeskOrder;
@@ -95,6 +119,7 @@ const TITLES: Record<DeskActionKind, string> = {
   'approve-cancel': 'Duyệt yêu cầu huỷ?',
   'reject-cancel': 'Từ chối yêu cầu huỷ?',
   'add-note': 'Thêm ghi chú nội bộ',
+  'confirm-refund': 'Xác nhận đã hoàn tiền?',
 };
 
 const SUBMIT_LABELS: Record<DeskActionKind, string> = {
@@ -108,6 +133,7 @@ const SUBMIT_LABELS: Record<DeskActionKind, string> = {
   'approve-cancel': 'Duyệt huỷ',
   'reject-cancel': 'Từ chối huỷ',
   'add-note': 'Lưu ghi chú',
+  'confirm-refund': 'Đã hoàn tiền',
 };
 
 /** Where a failure of the write ends up (BR-ADM-13..15, 34). */
@@ -205,6 +231,28 @@ function refuseMessage(code: string, kind: DeskActionKind): string {
             </p>
             @if (errors()['trackingNumber']; as message) {
               <p class="error" id="desk-tracking-error">{{ message }}</p>
+            }
+          </div>
+        }
+        @if (kind === 'confirm-refund') {
+          <div class="field">
+            <label for="desk-refund-ref" class="req">Mã giao dịch hoàn tiền</label>
+            <input
+              id="desk-refund-ref"
+              class="input mono"
+              name="reference"
+              autocomplete="off"
+              [ngModel]="reference()"
+              (ngModelChange)="reference.set($event)"
+              [disabled]="busy()"
+              [attr.aria-invalid]="!!errors()['reference']"
+              [attr.aria-describedby]="errors()['reference'] ? 'desk-refund-ref-error' : null"
+            />
+            <p class="hint">
+              Mã chuyển khoản hoặc số tham chiếu của ngân hàng, {{ refMin }}-{{ refMax }} ký tự.
+            </p>
+            @if (errors()['reference']; as message) {
+              <p class="error" id="desk-refund-ref-error">{{ message }}</p>
             }
           </div>
         }
@@ -312,6 +360,9 @@ export class DeskActionDialog {
   protected readonly carrier = signal('');
   protected readonly tracking = signal('');
   protected readonly note = signal('');
+  protected readonly reference = signal('');
+  protected readonly refMin = DESK_REFUND_REF_MIN;
+  protected readonly refMax = DESK_REFUND_REF_MAX;
   protected readonly busy = signal(false);
   protected readonly errors = signal<Record<string, string>>({});
   protected readonly failure = signal('');
@@ -329,6 +380,7 @@ export class DeskActionDialog {
       case 'write-off':
       case 'reject-cancel':
       case 'add-note':
+      case 'confirm-refund':
         return this.kind !== 'cancel' || !!this.reason();
       default:
         return false;
@@ -388,6 +440,8 @@ export class DeskActionDialog {
         return 'đơn trở về “Đang chuẩn bị” và khách nhận email kèm lý do. Khách không gửi lại được yêu cầu thứ hai.';
       case 'add-note':
         return 'ghi chú hiện trong lịch sử đơn cho nhân viên. Không đổi trạng thái, khách không thấy, không gửi email.';
+      case 'confirm-refund':
+        return 'tiền của đơn đã huỷ đã được chuyển lại cho khách. Thanh toán chuyển sang “Đã hoàn tiền” và khách thấy trên đơn. Không hoàn tác được.';
     }
   }
 
@@ -479,6 +533,23 @@ export class DeskActionDialog {
       case 'approve-cancel':
         command = { action: 'approve-cancel', expectedStatus };
         break;
+      case 'confirm-refund': {
+        const reference = this.reference().trim();
+        if (
+          [...reference].length < DESK_REFUND_REF_MIN ||
+          [...reference].length > DESK_REFUND_REF_MAX
+        )
+          errors['reference'] =
+            `Mã giao dịch từ ${DESK_REFUND_REF_MIN} đến ${DESK_REFUND_REF_MAX} ký tự.`;
+        if (note.length > DESK_NOTE_MAX) errors['note'] = `Ghi chú tối đa ${DESK_NOTE_MAX} ký tự.`;
+        command = {
+          action: 'confirm-refund',
+          expectedStatus,
+          reference,
+          ...(note ? { note } : {}),
+        };
+        break;
+      }
       case 'reject-cancel':
         if (note.length < DESK_NOTE_MIN || note.length > DESK_NOTE_MAX)
           errors['note'] = reasonRange;
@@ -565,6 +636,7 @@ export class DeskActionDialog {
         return cancelReasonsOf(order).includes(command.reason);
       case 'approve-cancel':
       case 'reject-cancel':
+      case 'confirm-refund':
         return allowed.includes(command.action);
       case 'returned-stock':
         return allowed.includes(command.decision === 'restocked' ? 'restock' : 'write-off');
@@ -599,7 +671,7 @@ export class DeskActionDialog {
         return;
       case 'validation': {
         const fields = (error as AdminApiError).fields;
-        const known = ['reason', 'note', 'carrier', 'trackingNumber'];
+        const known = ['reason', 'note', 'carrier', 'trackingNumber', 'reference'];
         const mine = Object.entries(fields)
           .filter(([field]) => known.includes(field))
           // The reject reason is typed in the shared text box.
@@ -676,6 +748,8 @@ export class DeskActionDialog {
         return 'Đã từ chối yêu cầu huỷ. Đơn trở về “Đang chuẩn bị”.';
       case 'add-note':
         return 'Đã thêm ghi chú nội bộ. Chỉ nhân viên thấy ghi chú này.';
+      case 'confirm-refund':
+        return 'Đã xác nhận hoàn tiền. Thanh toán của đơn chuyển sang “Đã hoàn tiền”.';
     }
   }
 }

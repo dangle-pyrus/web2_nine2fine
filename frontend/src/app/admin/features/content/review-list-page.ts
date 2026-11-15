@@ -23,10 +23,11 @@ import { ReasonDialog, ReasonDialogData } from '../../ui/reason-dialog';
 import { AdminToastService } from '../../ui/toast';
 import { mediaSrc } from './media-picker';
 
+/** "Chưa trả lời" first and by default: the screen opens as a to-do inbox (2026-11-15). */
 const VIEWS: { value: AdminReviewView; label: string; count: keyof AdminReviewCounts }[] = [
-  { value: 'all', label: 'Tất cả', count: 'all' },
   { value: 'unanswered', label: 'Chưa trả lời', count: 'unanswered' },
-  { value: 'low', label: '2 sao trở xuống', count: 'low' },
+  { value: 'low', label: '1–2 sao', count: 'low' },
+  { value: 'all', label: 'Tất cả', count: 'all' },
   { value: 'hidden', label: 'Đã ẩn', count: 'hidden' },
 ];
 
@@ -75,6 +76,37 @@ type ReviewListQuery = PageQuery & { view: AdminReviewView; rating: number };
       }
     </adm-page-header>
     <div class="page-body page-body--wide">
+      @if (page(); as data) {
+        <div class="inbox" data-testid="review-inbox">
+          <div class="inbox-text">
+            <p class="strong">Hộp việc cần làm</p>
+            <p class="small secondary">
+              @if (data.counts.unanswered || data.counts.low) {
+                Trả lời đánh giá mới và xử lý đánh giá thấp trước. Mỗi dòng có liên kết mở đúng sản
+                phẩm.
+              } @else {
+                Không còn đánh giá nào cần xử lý.
+              }
+            </p>
+          </div>
+          <button
+            type="button"
+            class="inbox-chip"
+            [class.is-active]="query().view === 'unanswered'"
+            (click)="list.update({ view: 'unanswered', rating: 0 })"
+          >
+            <span class="num">{{ data.counts.unanswered | admNum }}</span> chưa trả lời
+          </button>
+          <button
+            type="button"
+            class="inbox-chip inbox-chip--low"
+            [class.is-active]="query().view === 'low'"
+            (click)="list.update({ view: 'low', rating: 0 })"
+          >
+            <span class="num">{{ data.counts.low | admNum }}</span> đánh giá 1–2 sao
+          </button>
+        </div>
+      }
       <nav class="tabs" aria-label="Lọc đánh giá">
         @for (item of views; track item.value) {
           <button
@@ -157,7 +189,11 @@ type ReviewListQuery = PageQuery & { view: AdminReviewView; rating: number };
                     {{ review.hiddenReason }}
                   </p>
                 }
-                <a class="product" [routerLink]="['/admin/products', review.productId]">
+                <a
+                  class="product"
+                  [routerLink]="['/admin/products', review.productId]"
+                  [attr.title]="'Mở sản phẩm ' + review.productName"
+                >
                   @if (review.productImage) {
                     <img class="thumb thumb--sm" [src]="src(review.productImage)" alt="" />
                   }
@@ -258,6 +294,46 @@ type ReviewListQuery = PageQuery & { view: AdminReviewView; rating: number };
     .select--sm {
       width: auto;
     }
+    .inbox {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      border-radius: 14px;
+      background: var(--adm-muted);
+    }
+    .inbox-text {
+      flex: 1;
+      min-width: 220px;
+      .strong {
+        font-weight: 600;
+      }
+    }
+    .inbox-chip {
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 14px;
+      border: 1px solid var(--adm-divider);
+      border-radius: 9999px;
+      background: var(--adm-raised);
+      font: inherit;
+      color: var(--adm-text);
+      cursor: pointer;
+      .num {
+        font-weight: 600;
+      }
+      &.is-active {
+        border-color: var(--adm-text);
+        box-shadow: inset 0 0 0 1px var(--adm-text);
+      }
+    }
+    .inbox-chip--low .num {
+      color: var(--adm-critical-fg);
+    }
     .reviews {
       list-style: none;
       margin: 0;
@@ -338,7 +414,11 @@ export class ReviewListPage {
   protected readonly replyMin = REPLY_MIN;
   protected readonly replyMax = REPLY_MAX;
   protected readonly pageSizes = PAGE_SIZES;
-  protected readonly list = urlQuery<ReviewListQuery>({ view: 'all', rating: 0, pageSize: 20 });
+  protected readonly list = urlQuery<ReviewListQuery>({
+    view: 'unanswered',
+    rating: 0,
+    pageSize: 20,
+  });
   protected readonly query = this.list.query;
   private readonly request = computed<AdminReviewQuery>(() => {
     const { view, rating, page, pageSize } = this.query();

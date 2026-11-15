@@ -7,10 +7,11 @@ import { cartQuoteLimit, orderCreateLimit, orderLookupLimit } from '../../middle
 import { cancelByCustomer } from './cancel-order.service';
 import { requestLookupCode, verifyLookup } from './lookup.service';
 import { ORDER_INCLUDE, toOrderDto } from './order.mapper';
-import { cancelSchema, listQuerySchema, lookupCodesSchema, lookupVerifySchema, placeOrderSchema } from './order.schemas';
+import { cancelReasonText, cancelSchema, listQuerySchema, lookupCodesSchema, lookupVerifySchema, placeOrderSchema } from './order.schemas';
 import { getOrderDto, listMyOrders, loadAccessibleOrder } from './order.service';
 import { getPaymentSession } from './payment.service';
 import { placeOrder } from './place-order.service';
+import { confirmReceivedByCustomer } from './receive-order.service';
 import prisma from '../../config/prisma';
 
 type Handler = (req: Request, res: Response) => Promise<void>;
@@ -89,9 +90,23 @@ orderRouter.post(
   wrap(async (req, res) => {
     const order = await loadAccessibleOrder(req, String(req.params.orderCode));
     const body = parseOptionalBody(cancelSchema, req.body && Object.keys(req.body).length ? req.body : undefined);
-    await cancelByCustomer(order.order_id, body.reason ?? null);
+    // COMMON-01.5: yêu cầu huỷ đơn `to_ship` bắt buộc chọn lý do; huỷ `to_pay` thì lý do tuỳ chọn.
+    const reason = cancelReasonText(body, order.status === 'to_ship');
+    await cancelByCustomer(order.order_id, reason);
     const after = await prisma.order.findUniqueOrThrow({ where: { order_id: order.order_id }, include: ORDER_INCLUDE });
     noStore(res).json(toOrderDto(after));
+  }),
+);
+
+/** COMMON-01.9 / ORD-11: khách bấm "Đã nhận hàng" (chỉ khi đơn đang `to_receive`; máy chủ kiểm lại). */
+orderRouter.post(
+  '/:orderCode/received',
+  cartQuoteLimit,
+  optionalAuth,
+  wrap(async (req, res) => {
+    const order = await loadAccessibleOrder(req, String(req.params.orderCode));
+    await confirmReceivedByCustomer(order.order_id);
+    noStore(res).json(await getOrderDto(req, String(req.params.orderCode)));
   }),
 );
 

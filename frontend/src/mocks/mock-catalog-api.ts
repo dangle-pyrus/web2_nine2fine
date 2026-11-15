@@ -120,6 +120,10 @@ export class MockCatalogApi implements CatalogApi {
       if (query.sort === 'price-desc') items.sort((a, b) => b.price - a.price);
       if (query.sort === 'newest') items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       if (query.sort === 'bestselling') items.sort((a, b) => a.salesRank - b.salesRank);
+      // PLP-09: sold-out products always go last (stable sort keeps the chosen order otherwise).
+      const soldOut = (product: (typeof items)[number]) =>
+        product.variants.every((variant) => variant.inventory <= 0) ? 1 : 0;
+      items.sort((a, b) => soldOut(a) - soldOut(b));
       const limit = query.limit ?? DEFAULT_LIMIT;
       const page = query.page ?? 1;
       return of({

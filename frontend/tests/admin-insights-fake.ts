@@ -728,11 +728,104 @@ export class InsightsApi {
     if (this.role !== 'admin') return this.error(route, 403, 'forbidden', 'Không đủ quyền');
     if (path === '/reports/sales' && method === 'GET') return this.report(route, url);
     if (path === '/reports/sales/export' && method === 'GET') return this.csv(route, url);
+    if (path === '/reports-extra' && method === 'GET') return this.extra(route, url);
     if (path === '/settings/store' && method === 'GET')
       return this.reply(route, 200, this.current());
     if (path === '/settings/store' && method === 'PUT') return this.save(route, body);
     if (path === '/audit-log' && method === 'GET') return this.auditLog(route, url);
     return this.error(route, 404, 'not-found', 'Không tìm thấy.');
+  }
+
+  /**
+   * `GET /api/admin/reports-extra` (admin upgrade 2026-11-15): fixed figures in the shape of
+   * backend/src/modules/insights-extra; `empty` gives an all-zero answer like an empty range.
+   */
+  private extra(route: Route, url: URL) {
+    const from = url.searchParams.get('from') ?? shift(todayVn(), -29);
+    const to = url.searchParams.get('to') ?? todayVn();
+    const zero = this.empty;
+    const heatmap = Array.from({ length: 7 }, (_, d) =>
+      Array.from({ length: 24 }, (_, h) => (zero ? 0 : d === 4 && h === 20 ? 3 : h === 9 ? 1 : 0)),
+    );
+    return this.reply(route, 200, {
+      generatedAt: new Date().toISOString(),
+      from,
+      to,
+      days: 30,
+      customers: {
+        buyers: zero ? 0 : 5,
+        newBuyers: zero ? 0 : 3,
+        returningBuyers: zero ? 0 : 2,
+        repeatBuyers: zero ? 0 : 1,
+        repeatRate: zero ? 0 : 0.2,
+        newOrders: zero ? 0 : 3,
+        returningOrders: zero ? 0 : 3,
+        newSpend: zero ? 0 : 1_500_000,
+        returningSpend: zero ? 0 : 2_100_000,
+        members: zero ? 0 : 4,
+        guests: zero ? 0 : 1,
+      },
+      operations: {
+        medianMinutes: zero
+          ? { confirm: null, handover: null, deliver: null }
+          : { confirm: 45, handover: 1500, deliver: 2880 },
+        counts: {
+          placed: zero ? 0 : 7,
+          cancelled: zero ? 0 : 1,
+          confirmed: 5,
+          handedOver: 4,
+          delivered: 4,
+        },
+        onTime: zero
+          ? { delivered: 0, onTime: 0, rate: 0 }
+          : { delivered: 4, onTime: 3, rate: 0.75 },
+        cancelReasons: zero ? [] : [{ code: 'unreachable', actor: 'staff', orders: 1 }],
+      },
+      returns: zero
+        ? []
+        : [
+            {
+              reason: 'not-fit',
+              fault: 'customer',
+              requests: 1,
+              refunded: 1,
+              refundedAmount: 300_000,
+            },
+          ],
+      promotions: {
+        orders: zero ? 0 : 6,
+        ordersWithVoucher: zero ? 0 : 2,
+        share: zero ? 0 : 0.3333,
+        orderValue: zero ? 0 : 3_600_000,
+        voucherOrderValue: zero ? 0 : 1_250_000,
+        totalDiscount: zero ? 0 : 80_000,
+        codes: zero
+          ? []
+          : [
+              {
+                code: 'GIAM50K',
+                kind: 'discount',
+                orders: 1,
+                discount: 50_000,
+                orderValue: 650_000,
+              },
+              {
+                code: 'FREESHIP',
+                kind: 'shipping',
+                orders: 1,
+                discount: 30_000,
+                orderValue: 600_000,
+              },
+            ],
+      },
+      provinces: zero
+        ? []
+        : [
+            { code: '79', name: 'TP. Hồ Chí Minh', orders: 4, orderValue: 2_400_000 },
+            { code: '01', name: 'Hà Nội', orders: 2, orderValue: 1_200_000 },
+          ],
+      heatmap,
+    });
   }
 
   /** `GET /api/store/settings`: the whitelist, no cookie needed. */

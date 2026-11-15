@@ -135,12 +135,11 @@ export const ADMIN_ROUTES: Routes = [
                       ),
                   },
                   {
+                    // The detail is a drawer over the list: old links land on `?return=<id>`.
                     path: ':id',
-                    title: T('Chi tiết trả hàng'),
-                    loadComponent: () =>
-                      import('./features/returns/return-desk-detail-page').then(
-                        (m) => m.ReturnDeskDetailPage,
-                      ),
+                    pathMatch: 'full',
+                    redirectTo: ({ params }) =>
+                      `/admin/returns?return=${encodeURIComponent(params['id'] ?? '')}`,
                   },
                 ],
               },
@@ -156,12 +155,11 @@ export const ADMIN_ROUTES: Routes = [
                       ),
                   },
                   {
+                    // The detail is a drawer over the list: old links land on `?order=<code>`.
                     path: ':id',
-                    title: T('Chi tiết đơn hàng'),
-                    loadComponent: () =>
-                      import('./features/order-desk/order-desk-detail-page').then(
-                        (m) => m.OrderDeskDetailPage,
-                      ),
+                    pathMatch: 'full',
+                    redirectTo: ({ params }) =>
+                      `/admin/orders?order=${encodeURIComponent(params['id'] ?? '')}`,
                   },
                 ],
               },
@@ -202,10 +200,23 @@ export const ADMIN_ROUTES: Routes = [
               {
                 path: 'inventory',
                 canMatch: [catalogHttp],
-                title: T('Tồn kho'),
                 canActivate: [requirePermission('inventory.view')],
-                loadComponent: () =>
-                  import('./features/inventory/inventory-page').then((m) => m.InventoryPage),
+                children: [
+                  {
+                    path: '',
+                    title: T('Tồn kho'),
+                    loadComponent: () =>
+                      import('./features/inventory/inventory-page').then((m) => m.InventoryPage),
+                  },
+                  {
+                    path: 'channels/:key',
+                    title: T('Cấu hình kênh'),
+                    loadComponent: () =>
+                      import('./features/inventory/channel-setup-page').then(
+                        (m) => m.ChannelSetupPage,
+                      ),
+                  },
+                ],
               },
               {
                 path: 'promotions',
@@ -457,10 +468,23 @@ export const ADMIN_ROUTES: Routes = [
               },
               {
                 path: 'inventory',
-                title: T('Tồn kho'),
                 canActivate: [requirePermission('inventory.view')],
-                loadComponent: () =>
-                  import('./features/inventory/inventory-page').then((m) => m.InventoryPage),
+                children: [
+                  {
+                    path: '',
+                    title: T('Tồn kho'),
+                    loadComponent: () =>
+                      import('./features/inventory/inventory-page').then((m) => m.InventoryPage),
+                  },
+                  {
+                    path: 'channels/:key',
+                    title: T('Cấu hình kênh'),
+                    loadComponent: () =>
+                      import('./features/inventory/channel-setup-page').then(
+                        (m) => m.ChannelSetupPage,
+                      ),
+                  },
+                ],
               },
               {
                 path: 'customers',

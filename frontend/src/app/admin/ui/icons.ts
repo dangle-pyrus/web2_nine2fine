@@ -64,10 +64,17 @@ import {
   reiconEye,
   reiconEyeOff,
   reiconChatSquare,
+  reiconUserCircle,
+  reiconCard,
+  reiconNote,
 } from './icon-svgs';
+/** Filled arrows in a circle: the up / down mark of the dashboard deltas. */
+import { reiconArrowDownCircleFill, reiconArrowUpCircleFill } from '@ng-icons/reicon/fill';
 
 export function provideAdminIcons() {
   return provideIcons({
+    reiconArrowUpCircleFill,
+    reiconArrowDownCircleFill,
     reiconGift,
     reiconPie,
     reiconLink,
@@ -132,5 +139,8 @@ export function provideAdminIcons() {
     reiconEye,
     reiconEyeOff,
     reiconChatSquare,
+    reiconUserCircle,
+    reiconCard,
+    reiconNote,
   });
 }

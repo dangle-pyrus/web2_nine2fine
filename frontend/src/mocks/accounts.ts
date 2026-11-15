@@ -1,7 +1,7 @@
 import { AuthRole, AuthUser } from '../app/features/auth/data-access/auth-api';
 
 /** Demo-only values for the mock adapter; never real customer data or credentials. */
-export const DEMO_VERIFICATION_CODE = '12345678';
+export const DEMO_VERIFICATION_CODE = '123456';
 
 export interface MockAccount extends Omit<AuthUser, 'role'> {
   /** Defaults to `member`; staff sign in through the admin mock (`src/mocks/admin`). */

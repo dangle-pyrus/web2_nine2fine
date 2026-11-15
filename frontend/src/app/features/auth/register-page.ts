@@ -177,7 +177,7 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
           <p class="form-error" role="alert"><n2f-auth-message [message]="problem" /></p>
         }
         <div class="actions">
-          <button class="pill" type="submit" [disabled]="busy()">
+          <button class="pill" type="submit" [disabled]="busy() || codeField?.locked()">
             {{ busy() ? 'Đang tạo tài khoản…' : 'Tạo tài khoản' }}
           </button>
         </div>
@@ -253,7 +253,7 @@ export class RegisterPage {
   private readonly injector = inject(Injector);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
-  private readonly codeField = viewChild<VerificationCodeField>('codeField');
+  protected readonly codeField = viewChild<VerificationCodeField>('codeField');
   private readonly builder = inject(FormBuilder).nonNullable;
   readonly form = this.builder.group({
     code: ['', [Validators.required, Validators.pattern(CODE_PATTERN)]],
@@ -343,7 +343,7 @@ export class RegisterPage {
     const aboutCode =
       failure?.code === 'invalid-code' || failure?.code === 'code-locked' || field === 'code';
     if (code && aboutCode) {
-      code.fail(message);
+      code.fail(message, error);
       code.focus();
     } else if (field && SERVER_FIELDS.includes(field)) {
       this.serverErrors.set({ [field]: message.text });

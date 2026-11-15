@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Errors } from '../../lib/errors';
 import { emailField, phoneField } from '../../lib/validate';
 import { itemsField, quoteAddressField, voucherCodesField } from '../checkout/checkout.schemas';
 
@@ -82,16 +83,51 @@ export const lookupVerifySchema = z.object({
   code: z
     .string({ error: 'Nhập đủ 8 chữ số của mã xác thực.' })
     .transform((v) => v.replace(/[\s-]/g, ''))
-    .refine((v) => /^[0-9]{8}$/.test(v), { error: 'Nhập đủ 8 chữ số của mã xác thực.' }),
+    .refine((v) => /^[0-9]{6}$/.test(v), { error: 'Nhập đủ 6 chữ số của mã xác thực.' }),
 });
 
+/**
+ * COMMON-01.5 / ORD-CC-02: lý do khách yêu cầu huỷ đơn `to_ship` (bắt buộc chọn một). Câu chữ vào `cancel_request_reason`
+ * (admin + lịch sử đơn thấy nguyên câu). "Khác" cần ghi chú.
+ */
+export const CUSTOMER_CANCEL_REASONS = {
+  changed_mind: 'Tôi không còn nhu cầu mua nữa',
+  change_variant: 'Tôi muốn đổi size, màu hoặc sản phẩm khác',
+  change_address: 'Tôi muốn đổi địa chỉ hoặc thông tin nhận hàng',
+  better_price: 'Tôi tìm được nơi bán giá tốt hơn',
+  slow_delivery: 'Thời gian giao hàng dự kiến quá lâu',
+  other: 'Lý do khác',
+} as const;
+export type CustomerCancelReason = keyof typeof CUSTOMER_CANCEL_REASONS;
+const REASON_CODES = Object.keys(CUSTOMER_CANCEL_REASONS) as [CustomerCancelReason, ...CustomerCancelReason[]];
+
+const freeText = z
+  .string({ error: 'Lý do tối đa 250 ký tự.' })
+  .transform((v) => v.trim())
+  .refine((v) => [...v].length <= 250, { error: 'Lý do tối đa 250 ký tự.' });
+
 export const cancelSchema = z.object({
-  reason: z
-    .string({ error: 'Lý do tối đa 250 ký tự.' })
-    .transform((v) => v.trim())
-    .refine((v) => [...v].length <= 250, { error: 'Lý do tối đa 250 ký tự.' })
-    .optional(),
+  /** Mã lý do (bắt buộc khi gửi yêu cầu huỷ đơn `to_ship`, kiểm ở route theo trạng thái đơn). */
+  reasonCode: z.enum(REASON_CODES, { error: 'Chọn lý do hủy đơn.' }).optional(),
+  /** Ghi chú thêm (bắt buộc khi chọn "Lý do khác"); giữ tên `reason` cho đơn `to_pay` (không bắt buộc). */
+  reason: freeText.optional(),
 });
+
+/** Câu lưu vào đơn: nhãn lý do (+ ghi chú). `required` = yêu cầu huỷ `to_ship` phải có lý do. */
+export function cancelReasonText(b: { reasonCode?: CustomerCancelReason; reason?: string }, required: boolean): string | null {
+  const note = b.reason && b.reason.length > 0 ? b.reason : null;
+  if (!b.reasonCode) {
+    // Ứng dụng gửi `reasonCode`; một câu tự do (client cũ) vẫn được nhận như lý do.
+    if (required && !note) throw Errors.validation('Chọn lý do hủy đơn.', 'reasonCode');
+    return note;
+  }
+  if (b.reasonCode === 'other') {
+    if (!note) throw Errors.validation('Nhập lý do hủy đơn.', 'reason');
+    return `${CUSTOMER_CANCEL_REASONS.other}: ${note}`.slice(0, 250);
+  }
+  const label = CUSTOMER_CANCEL_REASONS[b.reasonCode];
+  return (note ? `${label}. ${note}` : label).slice(0, 250);
+}
 
 export const listQuerySchema = z.object({
   page: z.coerce.number({ error: 'Trang không hợp lệ.' }).int({ error: 'Trang không hợp lệ.' }).min(1, { error: 'Trang không hợp lệ.' }).default(1),

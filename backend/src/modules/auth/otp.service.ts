@@ -1,3 +1,4 @@
+import { OTP_POLICY } from '../../config/assumptions';
 import prisma from '../../config/prisma';
 import { addMs, MINUTE, now, secondsUntil } from '../../lib/clock';
 import { generateOtp, hashOtp } from '../../lib/crypto';
@@ -9,9 +10,9 @@ type DbPurpose = 'login' | 'register' | 'reset_password';
 
 export const toDbPurpose = (p: CodePurpose): DbPurpose => (p === 'reset-password' ? 'reset_password' : p);
 
-export const OTP_TTL_MS = 10 * MINUTE;
-const MAX_WRONG = 5;
-const LOCK_MS = 15 * MINUTE;
+export const OTP_TTL_MS = OTP_POLICY.ttlMs;
+const MAX_WRONG = OTP_POLICY.maxWrong;
+const LOCK_MS = OTP_POLICY.lockMs;
 const VERIFY_IP_FAIL_LIMIT = 30;
 
 /** Tạo mã mới (vô hiệu mã cũ cùng email + mục đích, BR-AUTH-07). Trả mã dạng rõ để gửi thư; DB chỉ lưu HMAC. */

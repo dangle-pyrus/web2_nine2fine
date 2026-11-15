@@ -133,6 +133,13 @@ export class ProductPage {
     () => this.product()?.variants.filter((v) => v.color.name === this.color()) ?? [],
   );
   readonly soldOut = computed(() => this.variants().filter((variant) => !variant.inventory));
+  /** PDP-07: quantity to add, at most min(stock of the chosen size, per-variant limit). */
+  readonly quantity = signal(1);
+  readonly maxQuantity = computed(() => {
+    const limit = this.cart.policy().maxPerVariant;
+    const variant = this.selected();
+    return Math.max(1, variant ? Math.min(limit, variant.inventory) : limit);
+  });
   readonly selected = computed(() => this.variants().find((v) => v.size === this.size()));
   readonly saved = computed(() => {
     const item = this.product();
@@ -180,6 +187,7 @@ export class ProductPage {
             (variants.find((variant) => variant.inventory > 0) ?? variants[0])?.color.name ?? '',
           );
           this.size.set('');
+          this.quantity.set(1);
           this.error.set('');
           this.reviews.set([]);
           this.reviewSummary.set(EMPTY_SUMMARY);
@@ -226,14 +234,26 @@ export class ProductPage {
     });
   }
 
+  /** PDP-03: a colour whose every size is out of stock is dimmed (still selectable to see it). */
+  colorSoldOut(color: string): boolean {
+    const variants = this.product()?.variants.filter((v) => v.color.name === color) ?? [];
+    return variants.length > 0 && variants.every((variant) => !variant.inventory);
+  }
+
+  setQuantity(value: number): void {
+    this.quantity.set(Math.min(Math.max(1, value), this.maxQuantity()));
+  }
+
   chooseColor(color: string): void {
     this.color.set(color);
     this.size.set('');
+    this.quantity.set(1);
     this.error.set('');
   }
 
   chooseSize(size: string): void {
     this.size.set(size);
+    this.setQuantity(this.quantity());
     this.error.set('');
   }
 
@@ -340,7 +360,7 @@ export class ProductPage {
     if (!picked) return;
     const { item, variant } = picked;
     const inCart = this.cart.lines().some((line) => line.variantId === variant.id);
-    if (!inCart && !this.cart.add(item, variant)) {
+    if (!inCart && !this.cart.add(item, variant, this.quantity())) {
       this.error.set(this.cart.message());
       return;
     }
@@ -352,7 +372,7 @@ export class ProductPage {
     const picked = this.requireVariant();
     if (!picked) return;
     const { item, variant } = picked;
-    if (!this.cart.add(item, variant)) {
+    if (!this.cart.add(item, variant, this.quantity())) {
       this.error.set(this.cart.message());
       return;
     }

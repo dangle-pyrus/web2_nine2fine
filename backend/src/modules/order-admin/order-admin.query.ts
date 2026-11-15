@@ -4,7 +4,7 @@ import { foldCol } from '../../lib/sql-fold';
 import { foldVi } from '../../lib/text';
 import { Db, ts } from '../../lib/sql';
 import { vnDayRange } from '../../lib/vn-time';
-import type { AdminBucket, AdminTab, OrderFilter as PublicOrderFilter } from './order-admin.schemas';
+import type { AdminBucket, AdminOrderSort, AdminTab, OrderFilter as PublicOrderFilter } from './order-admin.schemas';
 
 /** Nội bộ: thêm `userId` (Slice 7, đơn của một khách); contract admin-orders không đổi. */
 type OrderFilter = PublicOrderFilter & { userId?: string };
@@ -80,24 +80,43 @@ export interface SummaryRow {
   cancel_requested_at: Date | null;
   estimated_to: Date;
   tab: AdminBucket;
+  /** Chỉ đọc cho danh sách (UI 2 dòng): SĐT, ghi chú khách, vận đơn, món đầu. */
+  recipient_phone: string;
+  note: string | null;
+  carrier: string | null;
+  tracking_number: string | null;
+  first_item: { name: string; color: string; size: string; mediaId: string } | null;
 }
 
+const ORDER_BY: Record<AdminOrderSort, Prisma.Sql> = {
+  'placed-desc': Prisma.sql`o."created_at" DESC, o."code" DESC`,
+  'placed-asc': Prisma.sql`o."created_at" ASC, o."code" ASC`,
+  'total-desc': Prisma.sql`o."total" DESC, o."created_at" DESC`,
+  'total-asc': Prisma.sql`o."total" ASC, o."created_at" DESC`,
+  'code-desc': Prisma.sql`o."code" DESC`,
+  'code-asc': Prisma.sql`o."code" ASC`,
+};
+
 export async function listOrders(
-  f: OrderFilter & { view: AdminTab; page: number; limit: number },
+  f: OrderFilter & { view: AdminTab; page: number; limit: number; sort?: AdminOrderSort; codes?: string[] },
   db: Db = prisma,
 ): Promise<{ rows: SummaryRow[]; total: number }> {
   const conds = filterConds(f);
   if (f.view !== 'all') conds.push(TAB_SQL[f.view]);
+  if (f.codes) conds.push(f.codes.length ? Prisma.sql`o."code" IN (${Prisma.join(f.codes)})` : Prisma.sql`FALSE`);
   const where = whereOf(conds);
   const [rows, [cnt]] = await Promise.all([
     db.$queryRaw<SummaryRow[]>(Prisma.sql`
       SELECT o."code", o."created_at", o."status"::text AS "status", o."payment_status"::text AS "payment_status",
         o."payment_method"::text AS "payment_method", o."recipient_name", o."total", o."cancel_requested_at", o."estimated_to",
+        o."recipient_phone", o."note", o."carrier", o."tracking_number",
+        (SELECT json_build_object('name', i."name", 'color', i."color_name", 'size', i."size", 'mediaId', i."media_id")
+           FROM "order_items" i WHERE i."order_id" = o."order_id" ORDER BY i."line_no" LIMIT 1) AS "first_item",
         (SELECT COALESCE(SUM(i."quantity"), 0)::int FROM "order_items" i WHERE i."order_id" = o."order_id") AS "item_count",
         EXISTS (SELECT 1 FROM "order_returns" r WHERE r."order_id" = o."order_id" AND r."state" = 'requested') AS "return_pending",
         ${NEEDS_CALL} AS "needs_call", (CASE ${tabCase} END)::text AS "tab"
       FROM "orders" o ${where}
-      ORDER BY o."created_at" DESC, o."code" DESC
+      ORDER BY ${ORDER_BY[f.sort ?? 'placed-desc']}
       LIMIT ${f.limit} OFFSET ${(f.page - 1) * f.limit}`),
     db.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`SELECT COUNT(*) AS "n" FROM "orders" o ${where}`),
   ]);

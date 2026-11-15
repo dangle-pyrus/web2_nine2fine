@@ -51,6 +51,7 @@ const TITLES: Record<string, string> = {
   return_received: 'Nhận hàng trả về',
   return_refunded: 'Xác nhận hoàn tiền trả hàng',
   return_cancelled: 'Khách huỷ yêu cầu trả hàng',
+  refunded: 'Xác nhận đã hoàn tiền đơn huỷ',
 };
 
 /** Timeline admin: MỚI NHẤT TRƯỚC (BR-ADM-10); người = tên + vai trò chụp tại lúc làm. */
@@ -86,6 +87,7 @@ export const stateOf = (o: Order): StateOrder => ({
   returnedFromTransit: o.returnedFromTransit,
   returnHandledAt: o.returnHandledAt,
   stockRestoredAt: o.stockRestoredAt,
+  paymentStatus: o.paymentStatus,
 });
 
 /** Người thực hiện lấy từ ảnh chụp ở sự kiện (đổi tên / xoá user không đổi vết); thiếu thì dùng bản ghi user. */
@@ -200,6 +202,10 @@ export function toAdminSummary(r: SummaryRow) {
     needsCall: r.needs_call,
     hasCancelRequest: r.status === 'cancel_requested',
     returnPending: r.return_pending,
+    recipientPhone: r.recipient_phone,
+    ...(r.note ? { note: r.note } : {}),
+    ...(r.carrier && r.tracking_number ? { carrier: r.carrier, trackingNumber: r.tracking_number } : {}),
+    ...(r.first_item ? { firstItem: r.first_item } : {}),
     tab: r.tab,
     overdue: overdueOf({ status: r.status, needsCall: r.needs_call, createdAt: r.created_at, cancelRequestedAt: r.cancel_requested_at, estimatedTo: r.estimated_to }, clockNow()),
   };

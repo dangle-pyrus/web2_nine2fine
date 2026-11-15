@@ -18,6 +18,13 @@ export interface StoreInfo {
   privacyEmail: string;
   hours: string;
   notificationUrl: string | null;
+  /** Social pages from the store settings; `facebook` also drives the Messenger chat button (CHAT-01). */
+  social?: {
+    facebook: string | null;
+    instagram: string | null;
+    tiktok: string | null;
+    youtube: string | null;
+  };
 }
 
 /** Built-in values; the live ones are `storeSettings().info`. */
@@ -34,4 +41,5 @@ export const STORE_INFO: Readonly<StoreInfo> = {
   hours: '9:00 – 21:00, tất cả các ngày trong tuần',
   /** Ministry notification link (online.gov.vn); null until the website has been notified. */
   notificationUrl: null,
+  social: { facebook: null, instagram: null, tiktok: null, youtube: null },
 };

@@ -41,7 +41,7 @@ async function signIn(page: Page, returnUrl: string): Promise<void> {
 async function signInHere(page: Page): Promise<void> {
   await page.getByLabel('Email').fill(member.email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).not.toHaveURL(/\/auth\//);
 }

@@ -35,6 +35,8 @@ interface SortRow {
   salePrice: number | null;
   saleStartsAt: Date | null;
   saleEndsAt: Date | null;
+  /** PLP-09: còn ít nhất một biến thể có tồn. */
+  inStock: boolean;
 }
 
 /** Sắp xếp / lọc bằng giá hiệu lực ở TS (plan mục 3): MỘT hàm `effectivePrice`, không biểu thức SQL thứ hai. Hoà bằng `slug` tăng. */
@@ -47,7 +49,8 @@ function compareRows(sort: SortKey, now: Date): (a: SortRow, b: SortRow) => numb
     'price-desc': (a, b) => eff(b) - eff(a),
     bestselling: (a, b) => a.salesRank - b.salesRank,
   };
-  return (a, b) => key[sort](a, b) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
+  // PLP-09: sản phẩm hết hàng ở mọi biến thể luôn xếp cuối, bất kể cách sắp xếp.
+  return (a, b) => Number(b.inStock) - Number(a.inStock) || key[sort](a, b) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
 }
 
 const findFull = (where: Prisma.ProductWhereInput) =>
@@ -82,8 +85,10 @@ export async function listProducts(q: ListQuery, at: Date = clockNow()): Promise
   };
 
   // Lọc `maxPrice` / `sale=true` và sắp theo giá cần GIÁ HIỆU LỰC (đợt giảm có giờ bắt đầu / kết thúc): làm ở TS bằng đúng hàm
-  // `effectivePrice` trên cột nhẹ của các sản phẩm khớp bộ lọc còn lại, rồi cắt trang. Mọi trường hợp khác giữ sắp / phân trang ở DB.
-  const viaTs = q.maxPrice !== undefined || q.sale || q.sort === 'price-asc' || q.sort === 'price-desc';
+  // `effectivePrice` trên cột nhẹ của các sản phẩm khớp bộ lọc còn lại, rồi cắt trang.
+  // PLP-09 (2026-11-14): hàng hết mọi biến thể luôn xếp cuối, nên mọi cách sắp đều đi đường TS (trừ khi đã lọc "Còn hàng":
+  // khi đó mọi sản phẩm đều còn hàng và DB sắp / phân trang như cũ). Danh mục nhỏ (vài trăm sản phẩm) nên chi phí thấp.
+  const viaTs = q.maxPrice !== undefined || q.sale || q.sort === 'price-asc' || q.sort === 'price-desc' || !q.available;
 
   let total: number;
   let rows: Awaited<ReturnType<typeof findFull>>;
@@ -101,6 +106,8 @@ export async function listProducts(q: ListQuery, at: Date = clockNow()): Promise
         salePrice: true,
         saleStartsAt: true,
         saleEndsAt: true,
+        // Đếm trong cùng câu SQL (không thêm truy vấn quan hệ, T-CAT-52).
+        _count: { select: { variants: { where: { inventoryQty: { gt: 0 } } } } },
       },
     });
     const cands: SortRow[] = slim.map((r) => ({
@@ -114,6 +121,7 @@ export async function listProducts(q: ListQuery, at: Date = clockNow()): Promise
       salePrice: moneyOrNull(r.salePrice),
       saleStartsAt: r.saleStartsAt,
       saleEndsAt: r.saleEndsAt,
+      inStock: r._count.variants > 0,
     }));
     const matched = cands
       .filter((r) => (q.maxPrice === undefined || effectivePrice(r, at).price <= q.maxPrice) && (!q.sale || isSaleRunning(r, at)))

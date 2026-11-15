@@ -25,7 +25,7 @@ test('catalog filters survive product navigation; guests sign in before saving a
   await expect(page).toHaveURL(/\/auth\/login\?returnUrl=/);
   await page.getByLabel('Email').fill(MOCK_ACCOUNTS[0].email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).toHaveURL(/moment=work/);
   await expect(page.getByRole('button', { name: 'Bỏ yêu thích Nine-to-Fine Shirt' })).toBeVisible();
@@ -148,13 +148,14 @@ test('catalog fits every planned viewport width', async ({ page, isMobile }, tes
 test('quick add from the listing, toast feedback and removing lines in selection mode', async ({
   page,
 }) => {
-  await page.goto('/new-in');
+  // Fixed order (the default is now "Mới nhất", PLP-07) so the first two cards stay the same.
+  await page.goto('/new-in?sort=featured');
   const card = page.locator('n2f-product-card').first();
   await card.getByRole('button', { name: /^Chọn size để thêm/ }).click();
   // The pill stays inactive until a size is chosen; the sheet closes without opening the PDP.
   await expect(card.getByRole('button', { name: 'Thêm vào giỏ' })).toBeDisabled();
   await card.locator('.sheet-close').click();
-  await expect(page).toHaveURL(/\/new-in$/);
+  await expect(page).toHaveURL(/\/new-in\?sort=featured$/);
   await card.getByRole('button', { name: /^Chọn size để thêm/ }).click();
   await card.getByRole('button', { name: 'Size M' }).click();
   await card.getByRole('button', { name: 'Thêm vào giỏ' }).click();
@@ -183,7 +184,7 @@ test('quick add from the listing, toast feedback and removing lines in selection
 test('selection mode summary follows the picked lines and checks out only those', async ({
   page,
 }) => {
-  await page.goto('/new-in');
+  await page.goto('/new-in?sort=featured');
   for (const [index, size] of [
     [0, 'M'],
     [1, 'S'],

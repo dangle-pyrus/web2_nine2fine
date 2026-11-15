@@ -44,7 +44,8 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const api = await setup(page);
     await signIn(page);
     const menu = page.locator('nav.sidebar .menu-list a');
-    await expect(menu).toHaveText([/Đơn hàng/, /Sản phẩm/, /Tồn kho/, /Khuyến mãi/]);
+    // Grouped sidebar (2026-11-15): Vận hành hằng ngày › Sản phẩm › Tăng trưởng.
+    await expect(menu).toHaveText([/Đơn hàng/, /Tồn kho/, /Sản phẩm/, /Khuyến mãi/]);
     await page.goto('/admin/customers');
     await expect(page.getByRole('heading', { name: 'Chưa khả dụng' })).toBeVisible();
     await expect(page.getByText('Đơn hàng, Sản phẩm, Tồn kho và Khuyến mãi')).toBeVisible();
@@ -53,7 +54,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     expect(api.find('GET', /\/admin\/products$/)).toHaveLength(1);
   });
 
-  test('AC-INV-10: product list sends q and limit, never sort; tabs carry the counts', async ({
+  test('AC-INV-10 / ADM-PRD-13: product list sends q, limit and sort; tabs carry the counts', async ({
     page,
   }) => {
     const api = await setup(page);
@@ -62,11 +63,21 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const tabs = page.getByRole('navigation', { name: 'Chế độ xem sản phẩm' });
     await expect(tabs.getByRole('button', { name: /Tất cả/ })).toContainText('2');
     await expect(tabs.getByRole('button', { name: /Nháp/ })).toContainText('1');
-    await expect(page.getByLabel('Sắp xếp')).toHaveCount(0);
     const first = api.find('GET', /\/admin\/products$/)[0].url.searchParams;
     expect(first.get('limit')).toBe('50');
     expect(first.get('page')).toBe('1');
-    expect(first.has('sort') || first.has('dir') || first.has('pageSize')).toBe(false);
+    expect(first.get('sort')).toBe('updated');
+    expect(first.has('dir') || first.has('pageSize')).toBe(false);
+    // ADM-PRD-13: the four API orders.
+    await page.getByLabel('Sắp xếp').selectOption('inventory:asc');
+    await expect
+      .poll(() =>
+        api
+          .find('GET', /\/admin\/products$/)
+          .at(-1)!
+          .url.searchParams.get('sort'),
+      )
+      .toBe('stock-asc');
     await page.getByLabel('Tìm sản phẩm').fill('váy');
     await page.getByLabel('Tìm sản phẩm').press('Enter');
     await expect(rows(page)).toHaveCount(1);
@@ -170,10 +181,10 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await expect(page.getByLabel('Giá Đen S')).toHaveCount(0);
     const sizes = page.getByRole('group', { name: 'Size' }).getByRole('button');
     await expect(sizes).toHaveText(['S', 'M', 'L', 'XL']);
-    // Published: the slug is locked (BR-INV-13) and a SKU with orders cannot change.
-    await expect(page.getByLabel('Đường dẫn sản phẩm')).toBeDisabled();
-    await expect(page.getByLabel('SKU Đen S')).toBeDisabled();
-    await expect(page.getByLabel('SKU Đen M')).toBeEnabled();
+    // The slug and SKU are not on the form; stock is a colour x size matrix.
+    await expect(page.getByLabel('Đường dẫn sản phẩm')).toHaveCount(0);
+    await expect(page.getByLabel('SKU Đen S')).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: 'SKU' })).toHaveCount(0);
   });
 
   test('AC-INV-08, 46: the voucher form has two audiences, one category and the two switches', async ({
@@ -197,30 +208,22 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     expect(customerRequests).toEqual([]);
   });
 
-  test('AC-INV-14, 16: duplicate slug lands on the slug, publish gaps are listed, then it saves', async ({
-    page,
-  }) => {
+  test('AC-INV-14, 16: publish gaps are listed, then it saves', async ({ page }) => {
     const api = await setup(page);
     await signIn(page);
     await page.goto('/admin/products/new');
     await page.getByLabel('Tên sản phẩm').fill('Váy lụa mới');
-    await page.getByLabel('Giá bán').fill('450000');
+    await page.getByLabel('Giá bán (gốc)').fill('450000');
     await page.getByLabel('Dòng mô tả ngắn').fill('Váy lụa dáng dài');
     await page.getByRole('checkbox', { name: 'Work' }).check();
-    await page.getByLabel('Đường dẫn sản phẩm').fill('vay-nhap');
-    await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
-    await expect(page.locator('p.error', { hasText: 'Đường dẫn đã được dùng.' })).toBeVisible();
-    expect(api.products).toHaveLength(2);
-
-    await page.getByLabel('Đường dẫn sản phẩm').fill('');
-    await page.locator('select[aria-labelledby="status-title"]').selectOption('active');
+    await page.getByRole('radio', { name: 'Đang bán' }).click();
     await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
     // New product without an image: "Đang bán" needs one (BR-INV-14).
     await expect(
       page.getByRole('alert').filter({ hasText: 'Còn thiếu: ảnh sản phẩm' }),
     ).toBeVisible();
 
-    await page.locator('select[aria-labelledby="status-title"]').selectOption('draft');
+    await page.getByRole('radio', { name: 'Nháp' }).click();
     await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
     await expect(page).toHaveURL(/\/admin\/products\/p-new-/);
     const created = api.find('POST', /\/admin\/products$/).at(-1)!.body as Record<string, unknown>;
@@ -240,7 +243,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await signIn(page);
     await page.goto('/admin/products/new');
     await page.getByLabel('Tên sản phẩm').fill('Áo thử');
-    await page.getByLabel('Giá bán').fill('450000');
+    await page.getByLabel('Giá bán (gốc)').fill('450000');
     await page.getByRole('checkbox', { name: 'Nữ' }).uncheck();
     await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
     await expect(
@@ -283,7 +286,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     for (const price of ['450000', '500000']) {
       await page.goto('/admin/products/new');
       await page.getByLabel('Tên sản phẩm').fill('Váy lụa');
-      await page.getByLabel('Giá bán').fill(price);
+      await page.getByLabel('Giá bán (gốc)').fill(price);
       await page.getByLabel('Dòng mô tả ngắn').fill('Váy lụa dáng dài');
       await page.getByRole('checkbox', { name: 'Work' }).check();
       await page.getByRole('button', { name: 'Lưu sản phẩm' }).click();
@@ -350,23 +353,6 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     ).toBeEnabled();
   });
 
-  test('AC-INV-20: deleting a product that was on sale says to hide it; a draft is deleted', async ({
-    page,
-  }) => {
-    const api = await setup(page);
-    await signIn(page);
-    await page.goto('/admin/products/p-live');
-    await page.getByRole('button', { name: 'Xóa sản phẩm' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Xóa sản phẩm' }).click();
-    await expect(toast(page)).toContainText('hãy Ẩn thay vì xoá');
-    await expect(page).toHaveURL(/\/admin\/products\/p-live/);
-    await page.goto('/admin/products/p-draft');
-    await page.getByRole('button', { name: 'Xóa sản phẩm' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Xóa sản phẩm' }).click();
-    await expect(page).toHaveURL(/\/admin\/products$/);
-    expect(api.products).toHaveLength(1);
-  });
-
   test('AC-INV-17: bulk "Đang bán" with a product that has no image is refused as a whole', async ({
     page,
     isMobile,
@@ -412,7 +398,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     expect(sent.headers['content-type']).toBe('image/png');
     expect(sent.raw?.equals(pngBytes(800, 1000))).toBe(true);
     // Saving sends the id, alt and colour of each image, in order.
-    await page.locator('select[aria-labelledby="status-title"]').selectOption('active');
+    await page.getByRole('radio', { name: 'Đang bán' }).click();
     await page
       .getByRole('region', { name: 'Thay đổi chưa lưu' })
       .getByRole('button', { name: 'Lưu' })
@@ -457,7 +443,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const tabs = page.getByRole('navigation', { name: 'Lọc theo trạng thái tồn kho' });
     await expect(tabs.getByRole('button', { name: /Tất cả/ })).toContainText('2');
     await expect(tabs.getByRole('button', { name: /Hết hàng/ })).toContainText('1');
-    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    await rows(page).first().click();
     const drawer = page.locator('.drawer');
     await drawer.getByRole('button', { name: 'Đặt số đếm được' }).click();
     await drawer.getByLabel('Số lượng thực tế').fill('13');
@@ -481,7 +467,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const api = await setup(page);
     await signIn(page);
     await page.goto('/admin/inventory');
-    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    await rows(page).first().click();
     const drawer = page.locator('.drawer');
     await drawer.getByLabel('Số lượng thay đổi').fill('5');
     api.aborts.add('POST /inventory/v-live-s/adjustments');
@@ -503,7 +489,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const api = await setup(page);
     await signIn(page);
     await page.goto('/admin/inventory');
-    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    await rows(page).first().click();
     const drawer = page.locator('.drawer');
     await expect(drawer.getByText('Bán theo đơn')).toBeVisible();
     await expect(drawer.locator('.history li').nth(1)).toContainText('—');
@@ -520,7 +506,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const api = await setup(page);
     await signIn(page);
     await page.goto('/admin/inventory');
-    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    await rows(page).first().click();
     const drawer = page.locator('.drawer');
     const reason = drawer.getByLabel('Lý do');
     await expect(reason).toHaveValue('received');
@@ -543,7 +529,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     const api = await setup(page);
     await signIn(page);
     await page.goto('/admin/inventory');
-    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    await rows(page).first().click();
     const drawer = page.locator('.drawer');
     await drawer.getByLabel('Số lượng thay đổi').fill('3');
     let refuse = true;
@@ -625,7 +611,7 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await page.goto('/admin/inventory');
     await expect(page.getByRole('button', { name: 'Ngưỡng sắp hết', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Chọn tất cả SKU trên trang')).toHaveCount(0);
-    await rows(page).first().getByRole('button', { name: 'Điều chỉnh' }).click();
+    await rows(page).first().click();
     await expect(page.locator('.drawer').getByLabel('Số lượng thay đổi')).toBeVisible();
     expect(
       api.requests.filter((item) => item.method !== 'GET' && !/adjust/.test(item.url.pathname)),

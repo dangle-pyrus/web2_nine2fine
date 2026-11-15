@@ -92,7 +92,7 @@ describe('codes (OTP)', () => {
     for (let i = 0; i < 40; i++) {
       await prisma.authRateLimit.deleteMany({});
       const { code } = await sendCode(A.email, 'login', freshIp());
-      expect(code).toMatch(/^\d{8}$/);
+      expect(code).toMatch(/^\d{6}$/);
       codes.push(code!);
     }
     expect(new Set(codes).size).toBeGreaterThan(35);
@@ -120,16 +120,16 @@ describe('codes (OTP)', () => {
     expect(again.body.error.code).toBe('invalid-code');
   });
 
-  it('AC-AUTH-11/12: hết hạn 10 phút: 9:50 ok; 10:01 invalid-code và không tăng bộ đếm sai', async () => {
+  it('AC-AUTH-11/12: LOGIN-02 hết hạn 5 phút: 4:50 ok; 5:01 invalid-code và không tăng bộ đếm sai', async () => {
     useClock('2026-11-07T10:00:00Z');
     const { code } = await sendCode(A.email, 'login');
-    advance(9 * 60 * 1000 + 50 * 1000);
+    advance(4 * 60 * 1000 + 50 * 1000);
     expect((await post('/api/auth/login/code', { email: A.email, code })).status).toBe(200);
 
     await prisma.authRateLimit.deleteMany({});
     advance(61 * 1000);
     const { code: code2 } = await sendCode(A.email, 'login');
-    advance(10 * 60 * 1000 + 1000);
+    advance(5 * 60 * 1000 + 1000);
     const late = await post('/api/auth/login/code', { email: A.email, code: code2 });
     expect(late.status).toBe(422);
     expect(late.body.error.code).toBe('invalid-code');
@@ -175,14 +175,14 @@ describe('codes (OTP)', () => {
     expect(reset.status).toBe(200);
   });
 
-  it('AC-AUTH-16: IP yêu cầu 30 mã / giờ, lần 31 bị từ chối, không thư', async () => {
+  it('AC-AUTH-16: LOGIN-03 IP yêu cầu 10 mã / giờ, lần 11 bị từ chối, không thư', async () => {
     const ip = freshIp();
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 10; i++) {
       expect((await post('/api/auth/codes', { email: `u${i}@example.com`, purpose: 'login' }, { ip })).status).toBe(200);
     }
     await flushMail();
     const before = mails.length;
-    const res = await post('/api/auth/codes', { email: 'u31@example.com', purpose: 'login' }, { ip });
+    const res = await post('/api/auth/codes', { email: 'u11@example.com', purpose: 'login' }, { ip });
     await flushMail();
     expect(res.status).toBe(429);
     expect(res.body.error.code).toBe('rate-limited');
@@ -232,10 +232,10 @@ describe('codes (OTP)', () => {
 
   it('AC-AUTH-21: email N (không có mã) sai 5 lần -> cùng hành vi như A', async () => {
     for (let i = 0; i < 4; i++) {
-      const r = await post('/api/auth/login/code', { email: N.email, code: '12345678' });
+      const r = await post('/api/auth/login/code', { email: N.email, code: '123456' });
       expect(r.body.error.code).toBe('invalid-code');
     }
-    const fifth = await post('/api/auth/login/code', { email: N.email, code: '12345678' });
+    const fifth = await post('/api/auth/login/code', { email: N.email, code: '123456' });
     expect(fifth.status).toBe(429);
     expect(fifth.body.error.code).toBe('code-locked');
   });
@@ -273,7 +273,7 @@ describe('codes (OTP)', () => {
     const mailA = mails.find((m) => m.to === A.email)!;
     expect(mailA.subject).toMatch(/đã có tài khoản/);
     expect(lastCode(A.email)).toBeUndefined();
-    expect(lastCode(N.email)).toMatch(/^\d{8}$/);
+    expect(lastCode(N.email)).toMatch(/^\d{6}$/);
   });
 
   it('AC-AUTH-25: login cho N -> 200 kèm thời gian chờ, không có thư', async () => {
@@ -300,8 +300,8 @@ describe('codes (OTP)', () => {
       ['/api/auth/lookup', { email }],
       ['/api/auth/codes', { email, purpose: 'login' }],
       ['/api/auth/login/password', { email, password: 'Nine2fine1' }],
-      ['/api/auth/login/code', { email, code: '12345678' }],
-      ['/api/auth/register', { email, code: '12345678', firstName: 'A', lastName: 'B', acceptedTerms: true }],
+      ['/api/auth/login/code', { email, code: '123456' }],
+      ['/api/auth/register', { email, code: '123456', firstName: 'A', lastName: 'B', acceptedTerms: true }],
     ];
     for (const [url, body] of bodies) {
       const r = await post(url, body);

@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DialogRef } from '@angular/cdk/dialog';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -13,24 +21,57 @@ import {
 } from '../../core/order-desk-status';
 import { paymentBadge } from '../../core/status';
 import { ADMIN_ORDER_DESK_API } from '../../data-access/order-desk-api';
+import { AdminSession } from '../../core/admin-session';
+import { AdminDialogs } from '../../ui/dialogs';
+import { AdminToastService } from '../../ui/toast';
+import { errorMessage } from '../../data-access/http-support';
+import {
+  actionKindOf,
+  DeskActionDialog,
+  type DeskActionDialogData,
+  type DeskActionOutcome,
+} from './order-action-dialog';
+import {
+  BulkShipDialog,
+  type BulkShipData,
+  type BulkShipResult,
+  ExportDialog,
+  type ExportDialogData,
+  type ExportScope,
+} from './order-desk-bulk';
 import {
   DESK_DEFAULT_LIMIT,
   DESK_LIMITS,
   DESK_MAX_SEARCH,
+  DESK_SORTS,
+  type DeskOrderSummary,
+  type DeskSort,
   type DeskOrderCounts,
   type DeskOrderQuery,
   type DeskPaymentMethod,
+  type DeskAction,
+  type DeskBucket,
   type DeskTab,
 } from '../../data-access/order-desk-models';
 import { AdmBadge } from '../../ui/badge';
+import { AdmCopyButton } from '../../ui/copy-button';
+import { mediaSrc } from '../content/media-picker';
+import { OrderDetailDrawer } from './order-detail-drawer';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
-import { loader } from '../../ui/list-state';
+import { DATE_PRESETS, loader, presetRange, Selection } from '../../ui/list-state';
 import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
 
 const TAB_VALUES = DESK_TABS.map((tab) => tab.value);
+const SORT_VALUES = DESK_SORTS.map((sort) => sort.value);
+/** One-click button of a row: the first step the order's tab waits for (the server still decides). */
+const QUICK_ACTIONS: Partial<Record<DeskBucket, { action: DeskAction; label: string }>> = {
+  'to-confirm': { action: 'confirm', label: 'Xác nhận' },
+  'to-fulfil': { action: 'ship', label: 'Bàn giao' },
+  'in-transit': { action: 'deliver', label: 'Giao xong' },
+};
 
 /**
  * Orders desk list (Slice 4, BR-ADM-05..08): tabs with counts, search, payment and date filters,
@@ -43,6 +84,7 @@ const TAB_VALUES = DESK_TABS.map((tab) => tab.value);
     RouterLink,
     AdmPageHeader,
     AdmBadge,
+    AdmCopyButton,
     AdmIcon,
     AdmPager,
     AdmSkeletonRows,
@@ -58,6 +100,17 @@ export class OrderDeskListPage {
   private readonly api = inject(ADMIN_ORDER_DESK_API);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(AdminDialogs);
+  private readonly toast = inject(AdminToastService);
+  private drawerRef: DialogRef<boolean> | null = null;
+  /** ADM-ORD-18: CSV export is admin only. */
+  protected readonly canExport = inject(AdminSession).user()?.role === 'admin';
+  protected readonly sorts = DESK_SORTS;
+  protected readonly presets = DATE_PRESETS;
+  protected readonly src = mediaSrc;
+  private readonly customRange = signal(false);
+  protected readonly selection = new Selection<string>();
+  protected readonly exporting = signal(false);
 
   protected readonly tabs = DESK_TABS;
   protected readonly methods = DESK_PAYMENT_METHODS;
@@ -74,7 +127,9 @@ export class OrderDeskListPage {
         const view = params.get('view') as DeskTab;
         const payment = params.get('payment');
         const limit = Number(params.get('limit'));
+        const sort = params.get('sort') as DeskSort;
         return {
+          sort: SORT_VALUES.includes(sort) ? sort : 'placed-desc',
           view: TAB_VALUES.includes(view) ? view : 'all',
           q: params.get('q') ?? '',
           payment: payment === 'cod' || payment === 'bank-transfer' ? payment : '',
@@ -87,6 +142,11 @@ export class OrderDeskListPage {
     ),
     { requireSync: true },
   );
+  /** `?order=<code>`: the detail drawer is open on that order (old `/admin/orders/<code>` links land here). */
+  private readonly openId = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('order') ?? '')),
+    { requireSync: true },
+  );
   protected readonly view = loader(this.query, (query) => this.api.list(query));
   protected readonly page = this.view.data;
   protected readonly counts = signal<DeskOrderCounts | null>(null);
@@ -96,6 +156,30 @@ export class OrderDeskListPage {
     const query = this.query();
     return !!(query.q || query.payment || query.from || query.to);
   });
+  protected readonly ids = computed(() => this.page()?.items.map((order) => order.id) ?? []);
+  protected readonly selectedOrders = computed(() =>
+    (this.page()?.items ?? []).filter((order) => this.selection.has(order.id)),
+  );
+  /** ADM-ORD-19: only when every ticked order can be handed over now. */
+  protected readonly canBulkShip = computed(() => {
+    const orders = this.selectedOrders();
+    return (
+      orders.length > 0 &&
+      orders.length === this.selection.count() &&
+      orders.every((order) => order.status === 'to_ship' && !order.needsCall)
+    );
+  });
+  /** Select value: the preset matching from/to exactly, else "custom" when a range is set. */
+  protected readonly rangeValue = computed(() => {
+    const { from, to } = this.query();
+    const match = DATE_PRESETS.find((preset) => {
+      const range = presetRange(preset.value);
+      return range.from === from && range.to === to;
+    });
+    return this.customRange() || (!match && (from || to)) ? 'custom' : (match?.value ?? '');
+  });
+  protected readonly paymentLabel = (value: string) =>
+    DESK_PAYMENT_METHODS.find((method) => method.value === value)?.label ?? value;
   protected readonly rangeInvalid = computed(() => {
     const { from, to } = this.query();
     return !!from && !!to && from > to;
@@ -114,6 +198,11 @@ export class OrderDeskListPage {
         takeUntilDestroyed(),
       )
       .subscribe((counts) => this.counts.set(counts));
+    // The drawer follows the URL: open on `?order=`, closed (also by "back") without it.
+    toObservable(this.openId)
+      .pipe(takeUntilDestroyed())
+      .subscribe((id) => (id ? this.showDrawer(id) : this.drawerRef?.close()));
+    inject(DestroyRef).onDestroy(() => this.drawerRef?.close());
     // Typing waits 300 ms before it asks the server (BR-ADM-06).
     toObservable(this.search)
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
@@ -124,7 +213,121 @@ export class OrderDeskListPage {
   }
 
   setTab(view: DeskTab): void {
+    // ADM-ORD-19: a new tab starts with nothing selected.
+    this.selection.clear();
     this.update({ view });
+  }
+
+  setRangeChoice(value: string): void {
+    this.customRange.set(value === 'custom');
+    if (value === 'custom') return;
+    const range = presetRange(value);
+    this.update({ from: range.from, to: range.to });
+  }
+
+  quickOf(order: DeskOrderSummary): { action: DeskAction; label: string } | null {
+    const quick = QUICK_ACTIONS[order.tab];
+    return quick && (quick.action !== 'confirm' || order.needsCall) ? quick : null;
+  }
+
+  /** Row button: loads the order, and opens the action's dialog only if the server allows it now. */
+  quickRun(order: DeskOrderSummary, action: DeskAction): void {
+    const kind = actionKindOf(action);
+    if (!kind) return;
+    this.api.get(order.id).subscribe({
+      next: (full) => {
+        if (!full.allowedActions.includes(action)) return this.setOpen(order.id);
+        this.dialogs
+          .modal<DeskActionDialogData, DeskActionOutcome>(DeskActionDialog, { order: full, kind })
+          .closed.subscribe((outcome) => {
+            if (!outcome) return;
+            this.toast.show(outcome.message);
+            this.retry();
+          });
+      },
+      error: (error: unknown) => this.toast.error(errorMessage(error)),
+    });
+  }
+
+  /** Click on a row (not on its links, buttons or checkbox) opens that order in the drawer. */
+  openQuick(order: DeskOrderSummary, event?: Event): void {
+    if ((event?.target as HTMLElement | undefined)?.closest('a,button,input,label,adm-copy')) return;
+    this.setOpen(order.id);
+  }
+
+  private setOpen(id: string | null): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { order: id },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private showDrawer(id: string): void {
+    if (this.drawerRef) return;
+    const ref = this.dialogs.drawer<{ id: string }, boolean>(OrderDetailDrawer, { id }, true);
+    this.drawerRef = ref;
+    ref.closed.subscribe((changed) => {
+      this.drawerRef = null;
+      if (changed) this.retry();
+      if (this.openId()) this.setOpen(null);
+    });
+  }
+
+  bulkShip(): void {
+    const orders: DeskOrderSummary[] = this.selectedOrders();
+    if (!this.canBulkShip()) return;
+    this.dialogs
+      .modal<BulkShipData, BulkShipResult>(BulkShipDialog, { orders }, [
+        'adm-modal-panel',
+        'adm-modal-panel--wide',
+      ])
+      .closed.subscribe((result) => {
+        if (!result || (!result.shipped && !result.failed)) return;
+        this.selection.clear();
+        this.retry();
+        this.toast.show(
+          result.failed
+            ? `Đã bàn giao ${result.shipped} đơn, ${result.failed} đơn chưa bàn giao được.`
+            : `Đã bàn giao ${result.shipped} đơn cho vận chuyển.`,
+        );
+      });
+  }
+
+  exportCsv(): void {
+    const data: ExportDialogData = {
+      pageCount: this.page()?.items.length ?? 0,
+      selectedCount: this.selection.count(),
+      matchingCount: this.page()?.total ?? 0,
+    };
+    this.dialogs
+      .modal<ExportDialogData, ExportScope>(ExportDialog, data)
+      .closed.subscribe((scope) => {
+        if (!scope) return;
+        const { q, payment, from, to, view, sort } = this.query();
+        const codes =
+          scope === 'page'
+            ? this.ids()
+            : scope === 'selected'
+              ? [...this.selection.ids()]
+              : undefined;
+        this.exporting.set(true);
+        this.api.exportCsv({ q, payment, from, to, view, sort, codes }).subscribe({
+          next: ({ blob, filename }) => {
+            this.exporting.set(false);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          },
+          error: (error: unknown) => {
+            this.exporting.set(false);
+            this.toast.error(errorMessage(error));
+          },
+        });
+      });
   }
 
   update(patch: Partial<DeskOrderQuery>): void {
@@ -139,6 +342,8 @@ export class OrderDeskListPage {
         payment: next.payment || null,
         from: next.from || null,
         to: next.to || null,
+        order: this.openId() || null,
+        sort: next.sort === 'placed-desc' ? null : next.sort,
         page: next.page === 1 ? null : next.page,
         limit: next.limit === DESK_DEFAULT_LIMIT ? null : next.limit,
       },
@@ -151,6 +356,8 @@ export class OrderDeskListPage {
 
   clearFilters(): void {
     this.search.set('');
+    this.selection.clear();
+    this.customRange.set(false);
     this.update({ q: '', payment: '', from: '', to: '', view: 'all' });
   }
 

@@ -42,7 +42,9 @@ export type DeskAction =
   | 'approve-cancel'
   | 'reject-cancel'
   | 'add-note'
-  | 'print-slip';
+  | 'print-slip'
+  /** COMMON-02.4: admin confirms the money of a cancelled, paid order went back. */
+  | 'confirm-refund';
 
 import type { AdminReturn } from './returns-api';
 
@@ -71,6 +73,8 @@ export type DeskEventKind =
   | 'stock_restocked'
   | 'stock_written_off'
   | 'note'
+  /** COMMON-02.4: admin confirmed the refund of a cancelled, paid order. */
+  | 'refunded'
   /** Slice 9: one event per step of a return request (never an account number). */
   | 'return_requested'
   | 'return_approved'
@@ -108,6 +112,12 @@ export interface DeskOrderSummary {
   overdue: DeskOverdueFlag[];
   /** Slice 9 / 10 (Should, BR-RET-44, 65): a return request waits for staff. */
   returnPending?: boolean;
+  /** Read-only extras for the two-line list rows (openapi `AdminOrderSummary`). */
+  recipientPhone?: string;
+  note?: string;
+  carrier?: string;
+  trackingNumber?: string;
+  firstItem?: { name: string; color: string; size: string; mediaId: string };
 }
 
 export interface DeskOrderPage {
@@ -220,6 +230,7 @@ export type DeskCommand =
   | { action: 'approve-cancel'; expectedStatus: DeskOrderStatus }
   /** Internal note (BR-ADM-38): valid in every status, so it carries no `expectedStatus`. */
   | { action: 'add-note'; note: string }
+  | { action: 'confirm-refund'; expectedStatus: DeskOrderStatus; reference: string; note?: string }
   | { action: 'reject-cancel'; expectedStatus: DeskOrderStatus; reason: string }
   | {
       action: 'returned-stock';
@@ -238,11 +249,33 @@ export interface DeskOrderFilter {
   to: string;
 }
 
+/** ADM-ORD-01: list order (API `sort`). */
+export type DeskSort =
+  'placed-desc' | 'placed-asc' | 'total-desc' | 'total-asc' | 'code-desc' | 'code-asc';
+export const DESK_SORTS: { value: DeskSort; label: string }[] = [
+  { value: 'placed-desc', label: 'Mới đặt nhất' },
+  { value: 'placed-asc', label: 'Cũ nhất' },
+  { value: 'total-desc', label: 'Tổng tiền cao nhất' },
+  { value: 'total-asc', label: 'Tổng tiền thấp nhất' },
+  { value: 'code-desc', label: 'Mã đơn Z–A' },
+  { value: 'code-asc', label: 'Mã đơn A–Z' },
+];
+
 export interface DeskOrderQuery extends DeskOrderFilter {
   view: DeskTab;
   page: number;
   limit: number;
+  sort?: DeskSort;
 }
+
+/** ADM-ORD-18: CSV of the given codes, or of every order matching the filters when `codes` is absent. */
+export interface DeskExportQuery extends DeskOrderFilter {
+  view: DeskTab;
+  sort?: DeskSort;
+  codes?: string[];
+}
+export const DESK_REFUND_REF_MIN = 3;
+export const DESK_REFUND_REF_MAX = 60;
 
 export const DESK_MAX_SEARCH = 100;
 export const DESK_DEFAULT_LIMIT = 20;

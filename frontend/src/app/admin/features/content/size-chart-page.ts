@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { AdminSession } from '../../core/admin-session';
 import {
   ADMIN_CONTENT_API,
@@ -10,12 +9,10 @@ import {
 } from '../../data-access/content-api';
 import { errorMessage } from '../../data-access/http-support';
 import { AdminApiError } from '../../data-access/models';
-import { DateTimePipe } from '../../core/format.pipes';
 import { AdmBadge } from '../../ui/badge';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
 import { AdmPageHeader } from '../../ui/page-header';
-import { AdmSaveBar } from '../../ui/save-bar';
 import { AdminToastService } from '../../ui/toast';
 import { HasUnsavedChanges } from '../../ui/unsaved-changes';
 
@@ -31,31 +28,11 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
  */
 @Component({
   selector: 'adm-size-chart-page',
-  imports: [
-    FormsModule,
-    RouterLink,
-    AdmPageHeader,
-    AdmBadge,
-    AdmIcon,
-    AdmEmptyState,
-    AdmSaveBar,
-    DateTimePipe,
-  ],
+  imports: [FormsModule, AdmPageHeader, AdmBadge, AdmIcon, AdmEmptyState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
-    <adm-page-header heading="Bảng size">
-      <p subtitle class="secondary small">
-        Mỗi danh mục một bảng, hiện ở mục "Hướng dẫn chọn size" trên trang sản phẩm.
-      </p>
-    </adm-page-header>
-    <adm-save-bar
-      [visible]="canEdit && dirty()"
-      [saving]="saving()"
-      label="Bảng size chưa được lưu"
-      (save)="save()"
-      (discard)="discard()"
-    />
+    <adm-page-header heading="Bảng size" />
     <div class="page-body page-body--wide">
       @if (error(); as message) {
         <adm-empty kind="error" heading="Không tải được bảng size" [description]="message">
@@ -74,29 +51,9 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
           }
         </nav>
         @if (current(); as chart) {
-          <div class="meta">
-            <p class="secondary">
-              Áp dụng cho
-              <a
-                class="link"
-                routerLink="/admin/products"
-                [queryParams]="{ category: chart.category }"
-                >{{ chart.productCount }} sản phẩm</a
-              >
-              thuộc danh mục {{ chart.label }}.
-            </p>
-            @if (chart.customised) {
-              <adm-badge label="Đã chỉnh sửa" tone="info" />
-            }
-            @if (chart.updatedAt) {
-              <span class="small secondary"
-                >Lưu lúc {{ chart.updatedAt | admDateTime }}
-                @if (chart.updatedBy; as by) {
-                  bởi {{ by.name }}
-                }
-              </span>
-            }
-          </div>
+          @if (chart.customised) {
+            <div class="meta"><adm-badge label="Đã chỉnh sửa" tone="info" /></div>
+          }
           @if (conflict(); as other) {
             <div class="banner" role="alert">
               <p>
@@ -132,42 +89,55 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
           }
           @if (draft(); as value) {
             @for (table of tables; track table.key) {
+              @let editing = isEditing(table.key);
               <section class="section" [attr.aria-labelledby]="table.key + '-title'">
                 <header>
                   <h2 [id]="table.key + '-title'">{{ table.title }}</h2>
                   @if (canEdit) {
                     <span class="row">
-                      <button
-                        type="button"
-                        class="adm-btn adm-btn--sm"
-                        (click)="addColumn(table.key)"
-                      >
-                        <adm-icon name="reiconPlus" [size]="16" /> Thêm cột
-                      </button>
-                      <button type="button" class="adm-btn adm-btn--sm" (click)="addRow(table.key)">
-                        <adm-icon name="reiconPlus" [size]="16" /> Thêm size
-                      </button>
+                      @if (editing) {
+                        <button
+                          type="button"
+                          class="adm-btn adm-btn--lg"
+                          [disabled]="saving()"
+                          (click)="discard(table.key)"
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          class="adm-btn adm-btn--lg adm-btn--primary"
+                          [class.is-busy]="saving()"
+                          [disabled]="saving()"
+                          (click)="save(table.key)"
+                        >
+                          Lưu
+                        </button>
+                      } @else {
+                        <button type="button" class="adm-btn adm-btn--lg" (click)="edit(table.key)">
+                          Chỉnh sửa
+                        </button>
+                      }
                     </span>
                   }
                 </header>
                 <p class="section-desc">{{ table.hint }}</p>
-                <div class="table-wrap">
-                  <table class="table grid" [attr.aria-describedby]="table.key + '-title'">
+                <div class="frame table-wrap">
+                  <table class="preview" [attr.aria-describedby]="table.key + '-title'">
                     <thead>
                       <tr>
                         <th>Size</th>
                         @for (column of value[columns[table.key]]; track $index; let c = $index) {
                           <th>
-                            <span class="head">
-                              <input
-                                class="input input--sm"
-                                [attr.aria-label]="'Tên cột ' + (c + 1)"
-                                maxlength="20"
-                                [disabled]="!canEdit"
-                                [ngModel]="column"
-                                (ngModelChange)="renameColumn(table.key, c, $event)"
-                              />
-                              @if (canEdit) {
+                            @if (editing) {
+                              <span class="head">
+                                <input
+                                  class="input input--sm cell"
+                                  [attr.aria-label]="'Tên cột ' + (c + 1)"
+                                  maxlength="20"
+                                  [ngModel]="column"
+                                  (ngModelChange)="renameColumn(table.key, c, $event)"
+                                />
                                 <button
                                   type="button"
                                   class="adm-btn adm-btn--icon adm-btn--sm adm-btn--ghost"
@@ -176,11 +146,13 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
                                 >
                                   <adm-icon name="reiconX" [size]="14" />
                                 </button>
-                              }
-                            </span>
+                              </span>
+                            } @else {
+                              {{ column }}
+                            }
                           </th>
                         }
-                        @if (canEdit) {
+                        @if (editing) {
                           <th class="w-actions"><span class="sr-only">Xóa</span></th>
                         }
                       </tr>
@@ -188,34 +160,40 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
                     <tbody>
                       @for (row of value[table.key]; track $index; let r = $index) {
                         <tr>
-                          <td>
-                            <input
-                              class="input input--sm size"
-                              [attr.aria-label]="'Size dòng ' + (r + 1)"
-                              [attr.aria-invalid]="!!errors()[table.key + '[' + r + '].size']"
-                              maxlength="10"
-                              [disabled]="!canEdit"
-                              [ngModel]="row.size"
-                              (ngModelChange)="setSize(table.key, r, $event)"
-                            />
-                          </td>
+                          <th scope="row">
+                            @if (editing) {
+                              <input
+                                class="input input--sm cell size"
+                                [attr.aria-label]="'Size dòng ' + (r + 1)"
+                                [attr.aria-invalid]="!!errors()[table.key + '[' + r + '].size']"
+                                maxlength="10"
+                                [ngModel]="row.size"
+                                (ngModelChange)="setSize(table.key, r, $event)"
+                              />
+                            } @else {
+                              {{ row.size }}
+                            }
+                          </th>
                           @for (column of value[columns[table.key]]; track $index) {
                             <td>
-                              <input
-                                class="input input--sm num"
-                                inputmode="decimal"
-                                [attr.aria-label]="column + ' size ' + row.size"
-                                [attr.aria-invalid]="
-                                  !!errors()[table.key + '[' + r + '].values.' + column]
-                                "
-                                maxlength="20"
-                                [disabled]="!canEdit"
-                                [ngModel]="row.values[column] ?? ''"
-                                (ngModelChange)="setCell(table.key, r, column, $event)"
-                              />
+                              @if (editing) {
+                                <input
+                                  class="input input--sm cell"
+                                  inputmode="decimal"
+                                  [attr.aria-label]="column + ' size ' + row.size"
+                                  [attr.aria-invalid]="
+                                    !!errors()[table.key + '[' + r + '].values.' + column]
+                                  "
+                                  maxlength="20"
+                                  [ngModel]="row.values[column] ?? ''"
+                                  (ngModelChange)="setCell(table.key, r, column, $event)"
+                                />
+                              } @else {
+                                {{ row.values[column] || '–' }}
+                              }
                             </td>
                           }
-                          @if (canEdit) {
+                          @if (editing) {
                             <td class="w-actions">
                               <button
                                 type="button"
@@ -232,6 +210,20 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
                     </tbody>
                   </table>
                 </div>
+                @if (editing) {
+                  <div class="row adds">
+                    <button
+                      type="button"
+                      class="adm-btn adm-btn--sm"
+                      (click)="addColumn(table.key)"
+                    >
+                      <adm-icon name="reiconPlus" [size]="16" /> Thêm cột
+                    </button>
+                    <button type="button" class="adm-btn adm-btn--sm" (click)="addRow(table.key)">
+                      <adm-icon name="reiconPlus" [size]="16" /> Thêm size
+                    </button>
+                  </div>
+                }
               </section>
             }
           }
@@ -258,21 +250,53 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
       }
     }
     .meta {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px 12px;
-      margin: 16px 0 24px;
+      margin: 16px 0 0;
     }
-    .grid {
-      min-width: 480px;
+    .frame {
+      padding: 16px;
+      border-radius: var(--adm-radius-lg);
+      background: var(--adm-muted);
+    }
+    .preview {
+      width: 100%;
+      min-width: 360px;
+      border-collapse: collapse;
+      text-align: center;
       th,
       td {
-        padding: 6px 8px;
+        height: 44px;
+        padding: 0 8px;
+        font-variant-numeric: tabular-nums;
       }
-      .input {
-        min-width: 72px;
+      th:first-child {
+        text-align: left;
       }
+      thead th {
+        font-weight: 400;
+        color: var(--adm-text-secondary);
+      }
+      tbody th {
+        font-weight: 500;
+      }
+    }
+    .section > header h2 {
+      font-size: 20px;
+      line-height: 28px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+    .cell {
+      width: 100%;
+      min-width: 72px;
+      height: 32px;
+      background: #fff;
+      text-align: center;
+    }
+    .size {
+      width: 72px;
+      min-width: 0;
+      font-weight: 500;
+      text-align: left;
     }
     .head {
       display: flex;
@@ -280,9 +304,8 @@ const COLUMNS: Record<Table, 'bodyColumns' | 'garmentColumns'> = {
       gap: 2px;
       font-weight: 400;
     }
-    .size {
-      width: 72px;
-      font-weight: 500;
+    .adds {
+      margin-top: 12px;
     }
   `,
 })
@@ -300,6 +323,7 @@ export class SizeChartPage implements HasUnsavedChanges {
   protected readonly error = signal('');
   protected readonly active = signal('');
   protected readonly draft = signal<SizeChart | null>(null);
+  protected readonly editing = signal<Record<Table, boolean>>({ body: false, garment: false });
   protected readonly saving = signal(false);
   protected readonly errors = signal<Record<string, string>>({});
   protected readonly conflict = signal<AdminSizeChart | null>(null);
@@ -314,13 +338,14 @@ export class SizeChartPage implements HasUnsavedChanges {
     const draft = this.draft();
     return !!current && !!draft && JSON.stringify(draft) !== JSON.stringify(current.chart);
   });
+  protected readonly anyEditing = computed(() => this.editing().body || this.editing().garment);
 
   constructor() {
     this.load();
   }
 
   hasUnsavedChanges(): boolean {
-    return this.canEdit && this.dirty() && !this.saving();
+    return this.canEdit && this.anyEditing() && this.dirty() && !this.saving();
   }
 
   onBeforeUnload(event: BeforeUnloadEvent): void {
@@ -345,6 +370,7 @@ export class SizeChartPage implements HasUnsavedChanges {
       return;
     }
     this.active.set(category);
+    this.editing.set({ body: false, garment: false });
     this.errors.set({});
     this.conflict.set(null);
     const chart = this.charts()?.find((item) => item.category === category);
@@ -398,16 +424,37 @@ export class SizeChartPage implements HasUnsavedChanges {
     this.update((chart) => chart[table].splice(index, 1));
   }
 
-  save(): void {
+  isEditing(table: Table): boolean {
+    return this.editing()[table];
+  }
+
+  edit(table: Table): void {
+    this.editing.update((state) => ({ ...state, [table]: true }));
+  }
+
+  /** Both tables share one payload: send the saved copy with only this table replaced by my draft. */
+  save(table: Table): void {
     const draft = this.draft();
     const current = this.current();
     if (!draft || !current) return;
+    const payload = structuredClone(current.chart);
+    payload[table] = draft[table];
+    payload[COLUMNS[table]] = draft[COLUMNS[table]];
     this.saving.set(true);
     this.errors.set({});
-    this.api.saveSizeChart(current.category, draft, current.updatedAt).subscribe({
+    this.api.saveSizeChart(current.category, payload, current.updatedAt).subscribe({
       next: (saved) => {
         this.saving.set(false);
+        const other: Table = table === 'body' ? 'garment' : 'body';
+        const keep = this.editing()[other] ? draft : null;
         this.replace(saved);
+        if (keep) {
+          this.editing.update((state) => ({ ...state, [other]: true }));
+          this.update((chart) => {
+            chart[other] = keep[other];
+            chart[COLUMNS[other]] = keep[COLUMNS[other]];
+          });
+        }
         this.toast.show(`Đã lưu bảng size ${saved.label}`);
       },
       error: (error: unknown) => {
@@ -423,8 +470,18 @@ export class SizeChartPage implements HasUnsavedChanges {
     });
   }
 
-  discard(): void {
-    this.select(this.active(), true);
+  /** Drop my unsaved edits of this table only. */
+  discard(table: Table): void {
+    const saved = this.current()?.chart;
+    if (!saved) return;
+    this.update((chart) => {
+      chart[table] = structuredClone(saved[table]);
+      chart[COLUMNS[table]] = [...saved[COLUMNS[table]]];
+    });
+    this.errors.update((errors) =>
+      Object.fromEntries(Object.entries(errors).filter(([path]) => !path.startsWith(table))),
+    );
+    this.editing.update((state) => ({ ...state, [table]: false }));
   }
 
   /** 409: take what the other admin saved. */

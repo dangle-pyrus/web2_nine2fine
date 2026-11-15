@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
+import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import { Errors } from '../../lib/errors';
 import { escapeLike } from '../../lib/like';
 import type { Db } from '../../lib/sql';
@@ -42,6 +43,16 @@ function viewCond(view: ProductListQuery['view']): Prisma.Sql {
   }
 }
 
+const ORDER_BY: Record<ProductListQuery['sort'], Prisma.Sql> = {
+  updated: Prisma.sql`p.updated_at DESC, p.product_id DESC`,
+  created: Prisma.sql`p.created_at DESC, p.product_id DESC`,
+  name: Prisma.sql`p.name COLLATE "C" ASC, p.product_id ASC`,
+  'stock-asc': Prisma.sql`inventory ASC, p.updated_at DESC, p.product_id DESC`,
+};
+
+/** ADM-INV-06 / ADM-PRD-14: ngưỡng sắp hết của biến thể (riêng hoặc mặc định cửa hàng). */
+const THRESHOLD_SQL = Prisma.sql`COALESCE(v.low_stock_threshold, (SELECT low_stock_default FROM store_settings WHERE id = 1), ${CATALOG_ASSUMPTIONS.defaultLowStockThreshold})`;
+
 export interface ProductCounts {
   all: number;
   active: number;
@@ -59,10 +70,13 @@ export async function listProducts(q: ProductListQuery) {
              c.slug AS category, c.name AS category_name, p.price, p.compare_at_price, p.sale_price, p.sale_starts_at, p.sale_ends_at,
              COALESCE((SELECT SUM(v.inventory_qty) FROM product_variants v WHERE v.product_id = p.product_id), 0)::int AS inventory,
              (SELECT COUNT(*) FROM product_variants v WHERE v.product_id = p.product_id)::int AS variant_count,
+             (SELECT COUNT(*) FROM product_variants v WHERE v.product_id = p.product_id AND v.inventory_qty = 0)::int AS out_of_stock_count,
+             (SELECT COUNT(*) FROM product_variants v WHERE v.product_id = p.product_id AND v.inventory_qty > 0
+                AND v.inventory_qty <= ${THRESHOLD_SQL})::int AS low_stock_count,
              floor(extract(epoch FROM p.updated_at) * 1000)::float8 AS updated_ms
       FROM products p JOIN categories c ON c.category_id = p.category_id
       WHERE ${where} AND ${viewCond(q.view)}
-      ORDER BY p.updated_at DESC, p.product_id DESC
+      ORDER BY ${ORDER_BY[q.sort]}
       LIMIT ${q.limit} OFFSET ${offset}`),
     prisma.$queryRaw<Array<Record<keyof ProductCounts, number>>>(Prisma.sql`
       SELECT COUNT(*)::int AS "all",

@@ -31,6 +31,7 @@ import { paymentSimulatorRouter } from './modules/payment/simulator.routes';
 import {
   adminAuditRouter, adminDashboardRouter, adminReportsRouter, adminSettingsRouter,
 } from './modules/insights-admin/insights-admin.routes';
+import { adminReportsExtraRouter } from './modules/insights-extra/insights-extra.routes';
 import {
   adminCategoriesRouter,
   adminInventoryRouter,
@@ -127,6 +128,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
   api.use('/admin/reports', ...adminInsights, adminReportsRouter);
   api.use('/admin/settings', ...adminInsights, adminSettingsRouter);
   api.use('/admin/audit-log', ...adminInsights, adminAuditRouter);
+  // Nâng cấp admin 2026-11-15: báo cáo mở rộng CHỈ ĐỌC (khách hàng, vận hành, trả hàng, voucher, tỉnh, giờ đặt).
+  api.use('/admin/reports-extra', ...adminInsights, adminReportsExtraRouter);
   // Slice 9: cùng khuôn; quyền theo hành động (`requirePermission`) ở router, trước Zod và trước DB.
   const adminReturns = [noStore, requireAuth('admin'), requireRole('staff', 'admin'), adminRateLimit];
   api.use('/admin/returns', ...adminReturns, adminReturnsRouter);

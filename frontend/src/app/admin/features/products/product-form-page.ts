@@ -29,6 +29,13 @@ import { AdmSaveBar } from '../../ui/save-bar';
 import { AdminToastService } from '../../ui/toast';
 import { HasUnsavedChanges } from '../../ui/unsaved-changes';
 import { AdjustStockDrawer } from '../inventory/adjust-stock-drawer';
+import { ProductColorDialog, type ColorDialogData, type ColorOption } from './product-color-dialog';
+import { AdmProductReviews } from './product-reviews-panel';
+import {
+  SaleScheduleDialog,
+  type SaleScheduleData,
+  type SaleScheduleResult,
+} from './sale-schedule-dialog';
 
 /** Sizes in garment order (6.3: never alphabetical). */
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
@@ -121,6 +128,7 @@ function toInput(product: AdminProduct): ProductInput {
     AdmEmptyState,
     NumPipe,
     DateTimePipe,
+    AdmProductReviews,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './product-form-page.html',
@@ -147,7 +155,6 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly id = routeParam('id');
   protected readonly isNew = computed(() => !this.id());
   protected readonly canEdit = this.session.can('products.edit');
-  protected readonly canDelete = this.session.can('products.delete');
   /** Slice 10: the sale fields need `promotions.edit` as well (admin only, BR-PROMO-05). */
   protected readonly canSale = this.contract && this.session.can('promotions.edit');
   protected readonly canSeeCost = !this.contract && this.session.can('products.cost');
@@ -156,7 +163,6 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly moments = MOMENTS;
   protected readonly statusOptions = PRODUCT_STATUS_OPTIONS;
   protected readonly allSizes = this.contract ? API_SIZES : SIZES;
-  protected readonly presetColors = PRESET_COLORS;
   protected readonly badge = productBadge;
 
   protected readonly loading = signal(false);
@@ -168,17 +174,11 @@ export class ProductFormPage implements HasUnsavedChanges {
   private readonly original = signal(JSON.stringify(emptyProduct()));
   protected readonly touched = signal<Record<string, boolean>>({});
   protected readonly serverErrors = signal<Record<string, string>>({});
-  protected readonly groupBy = signal<'color' | 'size'>('color');
-  protected readonly selectedVariants = signal<ReadonlySet<string>>(new Set());
-  protected readonly bulkPrice = signal<number | null>(null);
-  protected readonly bulkStock = signal<number | null>(null);
-  protected readonly newColor = signal({ name: '', hex: '#888888' });
   protected readonly dragIndex = signal<number | null>(null);
   /** A message that stays until the next save or reload (version conflict, publish gaps). */
   protected readonly notice = signal<
     { kind: 'conflict' } | { kind: 'publish'; missing: string[] } | null
   >(null);
-  protected readonly slugPrefix = 'nine2fine.vn/product/';
 
   protected readonly dirty = computed(() => JSON.stringify(this.draft()) !== this.original());
 
@@ -193,9 +193,6 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected stockLocked(variant: AdminVariant): boolean {
     return this.savedVariantIds().has(variant.id);
   }
-  protected readonly bulkStockAllowed = computed(() =>
-    [...this.selectedVariants()].some((id) => !this.savedVariantIds().has(id)),
-  );
 
   protected readonly errors = computed(() => {
     const draft = this.draft();
@@ -255,41 +252,6 @@ export class ProductFormPage implements HasUnsavedChanges {
   protected readonly totalStock = computed(() =>
     this.draft().variants.reduce((sum, variant) => sum + variant.inventory, 0),
   );
-
-  /** Variant table grouped by colour (default) or size, with per-group totals (6.3). */
-  protected readonly groups = computed(() => {
-    const { variants, colors, sizes } = this.draft();
-    if (this.groupBy() === 'color') {
-      return colors.map((color) => {
-        const rows = sizes
-          .map((size) =>
-            variants.find((variant) => variant.color.name === color.name && variant.size === size),
-          )
-          .filter((row): row is AdminVariant => !!row);
-        return {
-          key: color.name,
-          label: color.name,
-          hex: color.hex,
-          rows,
-          stock: rows.reduce((sum, row) => sum + row.inventory, 0),
-        };
-      });
-    }
-    return sizes.map((size) => {
-      const rows = colors
-        .map((color) =>
-          variants.find((variant) => variant.color.name === color.name && variant.size === size),
-        )
-        .filter((row): row is AdminVariant => !!row);
-      return {
-        key: size,
-        label: `Size ${size}`,
-        hex: '',
-        rows,
-        stock: rows.reduce((sum, row) => sum + row.inventory, 0),
-      };
-    });
-  });
 
   protected readonly seoPreview = computed(() => {
     const draft = this.draft();
@@ -381,7 +343,6 @@ export class ProductFormPage implements HasUnsavedChanges {
     this.original.set(JSON.stringify(input));
     this.touched.set({});
     this.serverErrors.set({});
-    this.selectedVariants.set(new Set());
   }
 
   patch(change: Partial<ProductInput>): void {
@@ -484,7 +445,16 @@ export class ProductFormPage implements HasUnsavedChanges {
     this.applyOptions({ sizes });
   }
 
-  addColor(color: { name: string; hex: string }): void {
+  pickColors(): void {
+    this.dialogs
+      .modal<ColorDialogData, ColorOption[]>(ProductColorDialog, {
+        presets: PRESET_COLORS,
+        taken: this.draft().colors.map((color) => color.name),
+      })
+      .closed.subscribe((colors) => colors?.forEach((color) => this.addColor(color)));
+  }
+
+  addColor(color: ColorOption): void {
     const name = color.name.trim();
     if (!name || this.draft().colors.some((item) => item.name.toLowerCase() === name.toLowerCase()))
       return;
@@ -493,7 +463,6 @@ export class ProductFormPage implements HasUnsavedChanges {
       return;
     }
     this.applyOptions({ colors: [...this.draft().colors, { name, hex: color.hex }] });
-    this.newColor.set({ name: '', hex: '#888888' });
   }
 
   removeColor(name: string): void {
@@ -548,55 +517,11 @@ export class ProductFormPage implements HasUnsavedChanges {
   }
 
   updateVariant(id: string, change: Partial<AdminVariant>): void {
-    if (change.sku !== undefined) this.autoSkus.delete(id);
     this.patch({
       variants: this.draft().variants.map((variant) =>
         variant.id === id ? { ...variant, ...change } : variant,
       ),
     });
-  }
-
-  toggleVariant(id: string, on: boolean): void {
-    const next = new Set(this.selectedVariants());
-    if (on) next.add(id);
-    else next.delete(id);
-    this.selectedVariants.set(next);
-  }
-
-  toggleGroup(rows: AdminVariant[], on: boolean): void {
-    const next = new Set(this.selectedVariants());
-    for (const row of rows) {
-      if (on) next.add(row.id);
-      else next.delete(row.id);
-    }
-    this.selectedVariants.set(next);
-  }
-
-  groupChecked(rows: AdminVariant[]): boolean {
-    return rows.length > 0 && rows.every((row) => this.selectedVariants().has(row.id));
-  }
-
-  applyBulk(): void {
-    const ids = this.selectedVariants();
-    const price = this.bulkPrice();
-    const stock = this.bulkStock();
-    this.patch({
-      variants: this.draft().variants.map((variant) =>
-        ids.has(variant.id)
-          ? {
-              ...variant,
-              ...(price !== null ? { price: price > 0 ? price : null } : {}),
-              ...(stock !== null && stock >= 0 && !this.stockLocked(variant)
-                ? { inventory: Math.floor(stock) }
-                : {}),
-            }
-          : variant,
-      ),
-    });
-    this.toast.show(`Đã cập nhật ${ids.size} biến thể. Nhớ lưu sản phẩm.`);
-    this.selectedVariants.set(new Set());
-    this.bulkPrice.set(null);
-    this.bulkStock.set(null);
   }
 
   /** Opens the same drawer as the Tồn kho page, then writes the new count into draft and baseline. */
@@ -653,7 +578,27 @@ export class ProductFormPage implements HasUnsavedChanges {
     this.reset(JSON.parse(this.original()) as ProductInput);
   }
 
+  /** ADM-PRD-10: saving a product as "Đã ẩn" takes it off the shop, so it asks first. */
   save(): void {
+    const before = (JSON.parse(this.original()) as ProductInput).status;
+    if (this.id() && before !== 'hidden' && this.draft().status === 'hidden') {
+      this.dialogs
+        .confirm({
+          title: `Ẩn sản phẩm "${this.draft().name}"?`,
+          message:
+            'Sản phẩm sẽ không hiện trên cửa hàng và khách không mua được nữa. Bạn có thể chuyển lại "Đang bán" bất cứ lúc nào.',
+          confirmLabel: 'Ẩn sản phẩm',
+          danger: true,
+        })
+        .subscribe((ok) => {
+          if (ok) this.persist();
+        });
+      return;
+    }
+    this.persist();
+  }
+
+  private persist(): void {
     this.touched.set({
       name: true,
       price: true,
@@ -722,6 +667,24 @@ export class ProductFormPage implements HasUnsavedChanges {
     this.toast.error(errorMessage(error));
   }
 
+  /** Thời hạn giảm giá nằm trong hộp thoại riêng; "Gỡ đợt giảm" bỏ cả ba trường. */
+  editSale(): void {
+    const { saleStartsAt, saleEndsAt } = this.draft();
+    this.dialogs
+      .modal<SaleScheduleData, SaleScheduleResult>(SaleScheduleDialog, {
+        startsAt: saleStartsAt ?? null,
+        endsAt: saleEndsAt ?? null,
+        canRemove: this.hasSale(),
+      })
+      .closed.subscribe((result) => {
+        if (!result) return;
+        if (result === 'remove') this.removeSale();
+        else this.patch({ saleStartsAt: result.startsAt, saleEndsAt: result.endsAt });
+        this.touch('saleStartsAt');
+        this.touch('saleEndsAt');
+      });
+  }
+
   /** "Gỡ đợt giảm": all three fields `null` removes the sale (BR-PROMO-05). */
   removeSale(): void {
     this.patch({ salePrice: null, saleStartsAt: null, saleEndsAt: null });
@@ -729,39 +692,16 @@ export class ProductFormPage implements HasUnsavedChanges {
 
   protected readonly missingText = (missing: string[]): string => missingLabels(missing).join(', ');
 
-  remove(): void {
-    const product = this.product();
-    if (!product) return;
-    this.dialogs
-      .confirm({
-        title: `Xóa sản phẩm "${product.name}"?`,
-        message:
-          'Sản phẩm và toàn bộ biến thể, tồn kho sẽ bị xóa vĩnh viễn. Nếu chỉ muốn ngừng bán, hãy chuyển trạng thái sang "Đã ẩn".',
-        confirmLabel: 'Xóa sản phẩm',
-        danger: true,
-      })
-      .subscribe((ok) => {
-        if (!ok) return;
-        this.api.remove(product.id).subscribe({
-          next: () => {
-            this.original.set(JSON.stringify(this.draft()));
-            this.toast.show('Đã xóa sản phẩm');
-            void this.router.navigateByUrl('/admin/products');
-          },
-          error: (error: unknown) => this.toast.error(errorMessage(error)),
-        });
-      });
-  }
-
-  clearSelection(): void {
-    this.selectedVariants.set(new Set());
-  }
-
   protected readonly uploadSlots = computed(() =>
     Array.from({ length: this.uploading() }, (_, index) => index),
   );
-  protected hasColor(name: string): boolean {
-    return this.draft().colors.some((color) => color.name === name);
+  protected variantAt(color: string, size: string): AdminVariant | undefined {
+    return this.draft().variants.find(
+      (variant) => variant.color.name === color && variant.size === size,
+    );
+  }
+  protected dmy(value: string | null | undefined): string {
+    return value ? value.split('-').reverse().join('/') : '';
   }
   protected stockValue(value: unknown): number {
     return Math.max(0, Math.floor(this.numberOrNull(value) ?? 0));

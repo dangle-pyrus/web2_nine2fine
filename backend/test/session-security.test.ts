@@ -270,7 +270,7 @@ describe('security / CORS / errors', () => {
   it('AC-AUTH-93: mỗi loại lỗi có mã ổn định', async () => {
     expect((await post('/api/auth/lookup', { email: 'x' })).body.error.code).toBe('validation');
     expect((await loginPassword(A.email, 'Sai-sai1')).body.error.code).toBe('invalid-credentials');
-    expect((await post('/api/auth/login/code', { email: A.email, code: '12345678' })).body.error.code).toBe('invalid-code');
+    expect((await post('/api/auth/login/code', { email: A.email, code: '123456' })).body.error.code).toBe('invalid-code');
     expect((await get('/api/account/ping')).body.error.code).toBe('unauthenticated');
   });
 
@@ -372,10 +372,10 @@ describe('guard / mail outbox / seed', () => {
     }
   });
 
-  it('thư mã chứa mã, hạn 10 phút, cảnh báo không chia sẻ, không có link đăng nhập (BR-AUTH-37)', async () => {
+  it('thư mã chứa mã, hạn 5 phút, cảnh báo không chia sẻ, không có link đăng nhập (BR-AUTH-37)', async () => {
     await sendCode(A.email, 'login');
     const m = mails.find((x) => x.to === A.email)!;
-    expect(m.text).toMatch(/10 phút/);
+    expect(m.text).toMatch(/5 phút/);
     expect(m.text).toMatch(/Không chia sẻ/);
     expect(m.text).not.toMatch(/https?:\/\//);
   });

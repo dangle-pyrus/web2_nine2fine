@@ -54,7 +54,7 @@ info:
     **status: locked (2026-11-07)**: contract Slice 3 được chốt cùng tài liệu `docs/api/cart-checkout-implementation-plan.md`; phần auth và catalog ở trên không đổi (chỉ thêm mã lỗi và thuộc tính tuỳ chọn của `ErrorResponse`, xem `ErrorCode`). BR/AC: `docs/product/PRD.md` mục "Slice 3: Cart & Checkout" (BR-CART, BR-CHK, BR-VOU; AC-CART, AC-CHK, AC-VOU); khi mâu thuẫn, PRD thắng. Nguồn nghiệp vụ: `docs/product/cart-checkout-business-rules.md`.
 
     **Giả định chờ Thắng (đánh dấu `[giả định chờ Thắng]`, đổi thì sửa theo quy trình contract locked):**
-    1. COMMON-01..06 không có nội dung: tên trạng thái đơn / thanh toán theo danh sách nêu trong CHK-PAY-14; mã giảm % làm tròn **xuống** tới 1.000 ₫; tra cứu đơn khách bằng OTP theo thông số BR-AUTH-04..09 (8 số, 10 phút, gửi lại sau 60 giây), quyền xem đơn sau OTP 30 phút.
+    1. COMMON-01..06 không có nội dung: tên trạng thái đơn / thanh toán theo danh sách nêu trong CHK-PAY-14; mã giảm % làm tròn **xuống** tới 1.000 ₫; tra cứu đơn khách bằng OTP theo thông số BR-AUTH-04..09 (6 số, 5 phút, gửi lại sau 60 giây; chuẩn OTP 2026-11-14), quyền xem đơn sau OTP 30 phút.
     2. Chuyển khoản QR tự đối soát (SePay hoặc tương đương) chưa có tài khoản nhận: khi `bankTransferEnabled = false` thì `bank-transfer` bị khoá trong `paymentMethods`, `POST /orders` với `bank-transfer` -> `422 validation` (`field: paymentMethod`), `GET /orders/{orderCode}/payment` -> `404 not-found`. **Cập nhật 2026-11-13:** đã chọn SePay; webhook `POST /payments/sepay/webhook` (máy chủ SePay gọi, xem path) và `bankTransferEnabled` hiệu lực = cờ DB `store_settings.bank_transfer_enabled` VÀ đủ `BANK_*` + `SEPAY_WEBHOOK_KEY`. Thiếu một trong số đó thì hành vi khi tắt như trên.
     3. Địa giới: toàn quốc, 34 tỉnh/thành và phường/xã sau 01/07/2025.
     4. Khách tự huỷ đơn `to_ship` thẳng (`cancelledBy = customer`) cho tới khi có slice Admin; khi đó `to_ship` chuyển sang `cancel_requested` (đổi hành vi, cần quy trình contract).
@@ -192,7 +192,7 @@ tags:
   - name: admin-promotions
     description: 'Slice 6, status: locked. Khuyến mãi = bảng `vouchers` mà checkout đang dùng: danh sách + trạng thái, tạo, sửa, bật / tắt, xoá mã chưa dùng. Staff chỉ đọc.'
   - name: admin-media
-    description: 'Slice 6, status: locked. Tải ảnh sản phẩm lên (chỉ admin) qua lớp lưu trữ `local` / `supabase`.'
+    description: 'Slice 6, status: locked. Tải ảnh sản phẩm lên (chỉ admin) qua lớp lưu trữ `local` (driver `supabase` còn trong code nhưng không dùng từ 2026-11-14).'
   - name: media
     description: 'Slice 6, status: locked. Công khai. Địa chỉ ổn định của ảnh tải lên, storefront dùng cho mọi `mediaId` không có trong media manifest.'
   - name: admin-customers
@@ -273,13 +273,13 @@ paths:
     post:
       tags: [storefront-auth]
       operationId: requestCode
-      summary: Gửi / gửi lại mã 8 số (BR-AUTH-04..09)
+      summary: Gửi / gửi lại mã 6 số (BR-AUTH-04..09, LOGIN-02)
       description: |
         Phản hồi 200 luôn giống nhau dù email có tài khoản hay không (BR-AUTH-03, 09):
         - `register` + email chưa có tài khoản: gửi mã. `register` + đã có: gửi thư "đã có tài khoản", không mã.
         - `login` / `reset-password` + tài khoản hoạt động: gửi mã. Không có tài khoản: không gửi gì. Tài khoản bị vô hiệu: gửi thư báo khoá kèm email hỗ trợ, không mã.
         - Đang trong thời gian chờ 60 giây (cùng email + mục đích): không tạo mã mới, mã cũ còn hiệu lực, vẫn 200 với `resendAfterSeconds` = số giây còn lại (BR-AUTH-06a, AC-AUTH-13/14).
-        Mã hết hạn sau 10 phút; tạo mã mới vô hiệu mã cũ cùng email + mục đích (BR-AUTH-05, 07).
+        Mã hết hạn sau 5 phút (LOGIN-02); 10 lần gửi / giờ / IP (LOGIN-03); sai 5 lần khoá 15 phút (LOGIN-04); tạo mã mới vô hiệu mã cũ cùng email + mục đích (BR-AUTH-05, 07).
         Giới hạn: 5 lần gửi / 30 phút / email / mục đích; 30 lần / giờ / IP (BR-AUTH-06b/c) -> `429 rate-limited`. Email đang bị khoá xác thực bằng mã (BR-AUTH-08) -> `429 code-locked`.
       parameters:
         - $ref: '#/components/parameters/CsrfHeader'
@@ -1132,7 +1132,7 @@ paths:
       operationId: requestOrderLookupCode
       summary: Khách gửi mã đơn + email để nhận OTP tra cứu (BR-CHK-26)
       description: |
-        Luôn `200` cùng nội dung dù mã đơn / email có khớp hay không; chỉ gửi OTP khi khớp (chống dò đơn, AC-CHK-31). OTP 8 số, hiệu lực 10 phút, gửi lại sau 60 giây, hạn mức gửi như BR-AUTH-04..09 `[giả định chờ Thắng]`; lưu băm trong `auth_action_tokens` (`purpose = guest_order_lookup`). Email so sánh sau trim + chữ thường. Giới hạn: 10 yêu cầu / 15 phút / IP (chung với `lookup/verify`).
+        Luôn `200` cùng nội dung dù mã đơn / email có khớp hay không; chỉ gửi OTP khi khớp (chống dò đơn, AC-CHK-31). OTP 6 số, hiệu lực 5 phút, gửi lại sau 60 giây, hạn mức gửi như BR-AUTH-04..09 (chuẩn OTP 2026-11-14); lưu băm trong `auth_action_tokens` (`purpose = guest_order_lookup`). Email so sánh sau trim + chữ thường. Giới hạn: 10 yêu cầu / 15 phút / IP (chung với `lookup/verify`).
       parameters:
         - $ref: '#/components/parameters/CsrfHeader'
       requestBody:
@@ -1242,7 +1242,11 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                reason: { type: string, maxLength: 250, description: 'Lý do (tuỳ chọn), lưu vào lịch sử đơn.' }
+                reasonCode:
+                  type: string
+                  enum: [changed_mind, change_variant, change_address, better_price, slow_delivery, other]
+                  description: 'COMMON-01.5 / ORD-CC-02 (2026-11-14): lý do chọn trong danh sách. Bắt buộc khi gửi yêu cầu huỷ `to_ship` (thiếu cả `reasonCode` lẫn `reason` -> `422`, `field: reasonCode`); `other` cần `reason` (thiếu -> `422`, `field: reason`). Máy chủ ghép nhãn + ghi chú thành câu lý do.'
+                reason: { type: string, maxLength: 250, description: 'Ghi chú thêm (bắt buộc với `other`). Client cũ gửi riêng `reason` vẫn được nhận như lý do.' }
       responses:
         '200':
           description: 'Đơn sau khi huỷ (`to_pay`), hoặc đơn ở `cancel_requested` (`to_ship`, Slice 4).'
@@ -1667,6 +1671,74 @@ paths:
         '422': { $ref: '#/components/responses/Validation' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderCode}/received:
+    post:
+      tags: [order]
+      operationId: confirmOrderReceived
+      summary: Khách xác nhận "Đã nhận hàng" (ORD-11, COMMON-01.9; 2026-11-14)
+      description: 'Chỉ khi `to_receive` (`Order.canConfirmReceived = true`): `completed`, `deliveredAt` = bây giờ, COD chuyển `paid`; 1 sự kiện `delivered` (actor customer), không gửi thư. Trạng thái khác -> `409 invalid-transition` ("Đơn hàng không ở trạng thái đang giao."). Không bấm thì việc nền tự hoàn thành sau 7 ngày kể từ `handedOverAt` (actor system, gửi thư giao thành công). Quyền: chủ đơn hoặc cookie `n2f_oa`.'
+      parameters:
+        - { name: orderCode, in: path, required: true, schema: { $ref: '#/components/schemas/OrderCodeInput' } }
+        - $ref: '#/components/parameters/CsrfHeader'
+      security:
+        - storefrontSession: []
+        - orderAccess: []
+      responses:
+        '200':
+          description: Đơn sau khi hoàn thành.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: '`invalid-transition`: đơn không ở `to_receive`.' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/orders/{orderCode}/refund-confirmed:
+    post:
+      tags: [admin-orders]
+      operationId: adminConfirmRefund
+      summary: Xác nhận đã hoàn tiền đơn huỷ (COMMON-02.4, CHK-PAY-14, ORD-CC-06; 2026-11-14)
+      description: 'Chỉ admin (staff `403`). Đơn `cancelled` còn `paymentStatus = paid` (có `confirm-refund` trong `allowedActions`) -> `paymentStatus = refunded`, 1 sự kiện `refunded` (khách thấy "Đã hoàn tiền"; mã giao dịch chỉ ở ghi chú nội bộ). Thân: `expectedStatus` (= `cancelled`), `reference` 3..60 ký tự, `note` tuỳ chọn <= 250. Sai trạng thái / chưa thanh toán -> `409 invalid-transition`.'
+      security:
+        - adminSession: []
+      parameters:
+        - $ref: '#/components/parameters/AdminOrderCode'
+        - $ref: '#/components/parameters/CsrfHeader'
+        - $ref: '#/components/parameters/AdminIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedStatus, reference]
+              properties:
+                expectedStatus: { type: string }
+                reference: { type: string, minLength: 3, maxLength: 60 }
+                note: { type: string, maxLength: 250 }
+      responses:
+        '200': { $ref: '#/components/responses/AdminOrderUpdated' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: '`invalid-transition` / `order-state-changed`.' }
+        '422': { $ref: '#/components/responses/Validation' }
+  /admin/orders/export:
+    get:
+      tags: [admin-orders]
+      operationId: adminExportOrders
+      summary: Xuất CSV danh sách đơn (ADM-ORD-18; 2026-11-14)
+      description: 'Chỉ admin (staff `403`). Cùng bộ lọc với danh sách (`view`, `q`, `payment`, `from`, `to`, `sort`); `codes` (mã đơn cách nhau dấu phẩy, <= 200) = trang hiện tại / đơn đã chọn; vắng = mọi đơn khớp lọc, tối đa 5.000. `text/csv; charset=utf-8`, có BOM, CRLF, chống công thức; `Content-Disposition: attachment; filename="don-hang-YYYY-MM-DD.csv"` (ngày VN). Cột: Mã đơn, Ngày đặt, Khách hàng, Thanh toán, Trạng thái, Số SP, Tổng tiền.'
+      security:
+        - adminSession: []
+      parameters:
+        - { name: codes, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [placed-desc, placed-asc, total-desc, total-asc, code-desc, code-asc], default: placed-desc } }
+      responses:
+        '200': { description: Tệp CSV., content: { text/csv: { schema: { type: string } } } }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '422': { $ref: '#/components/responses/Validation' }
   /admin/orders/{orderCode}/notes:
     post:
       tags: [admin-orders]
@@ -2633,7 +2705,7 @@ paths:
       x-status: locked
       summary: Tạo nhân viên không mật khẩu + thư hướng dẫn (BR-USR-19, 20, 24; S7-Q1)
       description: |
-        Chỉ admin. Bắt buộc `Idempotency-Key`. `name` 2..100 ký tự (NFC, gộp khoảng trắng; hiển thị lại đúng chuỗi đã nhập), `email` hợp lệ <= 254 ký tự (cắt hai đầu, chữ thường), `role` in (`staff`, `admin`). Email đã tồn tại ở **bất kỳ** tài khoản nào (kể cả khách, không phân biệt hoa thường) -> `409 duplicate`, `field: email`, không tạo gì. Thành công: tài khoản `is_active = true`, `password_hash` NULL, `marketing_opt_in = false`, 1 dòng nhật ký `staff-created`, `201` (phản hồi không có mật khẩu), và SAU khi commit 1 thư tới email đó nêu vai trò + hướng dẫn mở "Quên mật khẩu" của storefront, nhập đúng email này và mã 8 chữ số nhận bằng thư (BR-AUTH-20); thư **không** chứa mã hay mật khẩu. Lỗi gửi thư: vẫn `201`, không `500`. Thêm giới hạn 10 lần / 60 phút / admin (`429`). Gửi lại cùng khoá + cùng nội dung -> `200` với đúng kết quả đầu, không tạo / gửi thư lần hai.
+        Chỉ admin. Bắt buộc `Idempotency-Key`. `name` 2..100 ký tự (NFC, gộp khoảng trắng; hiển thị lại đúng chuỗi đã nhập), `email` hợp lệ <= 254 ký tự (cắt hai đầu, chữ thường), `role` in (`staff`, `admin`). Email đã tồn tại ở **bất kỳ** tài khoản nào (kể cả khách, không phân biệt hoa thường) -> `409 duplicate`, `field: email`, không tạo gì. Thành công: tài khoản `is_active = true`, `password_hash` NULL, `marketing_opt_in = false`, 1 dòng nhật ký `staff-created`, `201` (phản hồi không có mật khẩu), và SAU khi commit 1 thư tới email đó nêu vai trò + hướng dẫn mở "Quên mật khẩu" của storefront, nhập đúng email này và mã 6 chữ số nhận bằng thư (BR-AUTH-20); thư **không** chứa mã hay mật khẩu. Lỗi gửi thư: vẫn `201`, không `500`. Thêm giới hạn 10 lần / 60 phút / admin (`429`). Gửi lại cùng khoá + cùng nội dung -> `200` với đúng kết quả đầu, không tạo / gửi thư lần hai.
       security:
         - adminSession: []
       parameters:
@@ -2781,12 +2853,20 @@ paths:
       tags: [admin-dashboard]
       operationId: adminGetDashboard
       x-status: locked
-      summary: Tổng quan - việc cần làm, KPI, biểu đồ 30 ngày, top sản phẩm (BR-DSH-01..08)
+      summary: Tổng quan v2 - KPI theo kỳ, biểu đồ, việc cần làm, đơn gần đây, xếp hạng sản phẩm (BR-DSH-01..08; nâng cấp 2026-11-15)
       description: |
-        Quyền: staff, admin (`dashboard.view`); phần tiền chỉ admin (`dashboard.revenue`), lọc Ở MÁY CHỦ (BR-DSH-07).
-        `range` in `today` (mặc định) | `7d` | `30d`; giá trị khác -> `422 validation`, `field: range`. `today` = 00:00 giờ VN hôm nay tới lúc gọi, so với CÙNG khoảng giờ của cùng thứ tuần trước; `7d` / `30d` = 7 / 30 ngày VN gồm hôm nay, so với 7 / 30 ngày liền trước (D3). `change` = (kỳ này - kỳ trước) / kỳ trước, 4 chữ số thập phân, `null` khi kỳ trước bằng 0.
-        **staff** nhận đúng ba khoá `generatedAt`, `orders`, `todo` (không có `range`, `period`, `revenue`, `completedOrders`, `averageOrderValue`, `newCustomers`, `revenueSeries`, `topProducts`). **admin** nhận thêm các khoá đó. `todo` không phụ thuộc `range`: `toConfirm`, `pendingPayment`, `toFulfil`, `inTransit`, `cancelRequests`, `returning` bằng đúng số của `GET /admin/orders/counts` (không bộ lọc) cùng thời điểm; `lowStock`, `outOfStock` bằng đúng số tab "Sắp hết" / "Hết hàng" của `GET /admin/inventory/facets`; `lateDelivery` = đơn `to_receive` có `estimatedTo` sớm hơn hôm nay (VN).
-        `revenueSeries` luôn đủ 30 điểm (D-29..D, cũ trước, ngày không có doanh thu = 0), không phụ thuộc `range`; `previous` = cùng vị trí của 30 ngày liền trước. `topProducts` tối đa 5 sản phẩm trong `range`, `units` giảm, hoà `revenue` giảm rồi `productId` tăng.
+        Quyền: staff, admin (`dashboard.view`); phần tiền chỉ admin (`dashboard.revenue`), lọc Ở MÁY CHỦ (BR-DSH-07). Chỉ đọc.
+        `range` in `today` (mặc định) | `7d` | `30d`; giá trị khác -> `422 validation`, `field: range`. Kỳ (`period`) và kỳ so sánh (`comparePeriod`), nửa mở, giờ VN:
+        - `today`: [00:00 hôm nay, lúc gọi) so với NGUYÊN ngày hôm qua [00:00, 24:00).
+        - `7d`: 7 ngày gần nhất gồm hôm nay so với NGUYÊN tuần lịch liền trước tuần hiện tại (Thứ Hai 00:00 đến hết Chủ nhật). Hai khoảng có thể chồng nhau vài ngày (cố ý).
+        - `30d`: 30 ngày gần nhất gồm hôm nay so với NGUYÊN tháng lịch trước (ngày 1 đến ngày cuối tháng).
+        Hai kỳ có thể khác độ dài (cố ý). `change` = (value - previous) / previous, 4 chữ số thập phân, `null` khi `previous` = 0.
+        `kpis`: `netRevenue` (doanh thu thuần, cùng định nghĩa Slice 8/9: đơn `completed` + đã thanh toán theo `delivered_at`, trừ hàng hoàn, không gồm ship); `orders` (đơn ĐẶT trong kỳ, không tính đơn huỷ); `averageOrderValue` (= `netRevenue` / số đơn tính doanh thu); `returnRate` (yêu cầu trả/đổi tạo trong kỳ, trừ đã huỷ, chia số đơn đã giao trong kỳ; 0..1; tăng là xấu).
+        `series`: `points` (kỳ này) và `previous` (kỳ so sánh) cùng độ dài, khớp theo CHỈ SỐ. `today`: 24 điểm theo giờ 0h..23h, giờ chưa tới = `null`, `previous[i]` = cùng giờ hôm qua. `7d`: 7 điểm theo ngày (cũ trước), `previous[i]` = ngày CÙNG THỨ của tuần so sánh. `30d`: 30 điểm theo ngày, `previous[i]` = ngày CÙNG NGÀY TRONG THÁNG của tháng so sánh (tháng đó không có ngày ấy -> `revenue`, `orders` = `null`, `key` = ''). `revenue` theo `delivered_at`, `orders` theo `created_at` (cùng định nghĩa KPI).
+        `todo`: trạng thái HIỆN TẠI, không theo `range`: `toConfirm`, `pendingPayment`, `toFulfil`, `cancelRequests` = số tab cùng tên của `GET /admin/orders/counts`; `returnRequested` / `returnApproved` / `returnReceived` = tab của `GET /admin/returns`; `lowStock`, `outOfStock` = tab Tồn kho; `lateDelivery` = đơn `to_receive` có `estimatedTo` sớm hơn hôm nay (VN).
+        `recentOrders`: tối đa 10 đơn ĐẶT trong kỳ, mới trước; máy chủ chỉ trả `channel: website`. Dòng Shopee / TikTok Shop / Lazada trên màn hình hiện là DỮ LIỆU DEMO do frontend trộn vào (`frontend/src/app/admin/data-access/marketplace-demo.ts`).
+        `topProducts`: tối đa 5 sản phẩm theo doanh thu trong kỳ (hoà: `units` giảm rồi `productId` tăng); `previousRank` = hạng theo doanh thu trong kỳ so sánh (xét 100 hạng đầu), `null` = không có hạng ("Mới"); `share` = `revenue` / `kpis.netRevenue.value` (0..1).
+        **staff** nhận `generatedAt`, `range`, `period`, `comparePeriod`, `kpis` (chỉ `orders`), `todo`, `recentOrders`; không có `netRevenue`, `averageOrderValue`, `returnRate`, `series`, `topProducts` (khoá vắng, không phải `null`).
       security:
         - adminSession: []
       parameters:
@@ -4577,8 +4657,8 @@ components:
       examples: ['minh@example.com']
     Code:
       type: string
-      pattern: '^[0-9]{8}$'
-      description: 8 chữ số, có thể bắt đầu bằng 0. Server bỏ khoảng trắng và `-` trước khi kiểm. Chỉ so băm HMAC (BR-AUTH-04).
+      pattern: '^[0-9]{6}$'
+      description: 6 chữ số (chuẩn OTP 2026-11-14), có thể bắt đầu bằng 0. Server bỏ khoảng trắng và `-` trước khi kiểm. Chỉ so băm HMAC (BR-AUTH-04).
       examples: ['04817392']
     CodePurpose:
       type: string
@@ -5460,6 +5540,20 @@ components:
         tab: { $ref: '#/components/schemas/AdminOrderBucket' }
         overdue: { type: array, items: { $ref: '#/components/schemas/AdminOverdueFlag' }, description: 'Should (BR-ADM-40). Rỗng nếu trong hạn.' }
         returnPending: { type: boolean, description: 'Slice 9 / Slice 10 (Should, BR-RET-44, 65): đơn có yêu cầu trả hàng `requested` (cả thành viên lẫn vãng lai). Có thể vắng nếu chưa làm Should.' }
+        recipientPhone: { type: string, description: 'Cộng thêm (UI danh sách 2 dòng, chỉ đọc): SĐT người nhận, cùng giá trị `AdminOrder.recipient.phone`.' }
+        note: { type: string, description: 'Cộng thêm: lời nhắn của khách khi đặt; vắng nếu không có.' }
+        carrier: { type: string, description: 'Cộng thêm: ĐVVC đã nhập lúc bàn giao; chỉ có cùng `trackingNumber`.' }
+        trackingNumber: { type: string, description: 'Cộng thêm: mã vận đơn đã nhập lúc bàn giao.' }
+        firstItem:
+          type: object
+          required: [name, color, size, mediaId]
+          additionalProperties: false
+          description: 'Cộng thêm: dòng hàng đầu tiên (theo `lineNo`) để hiện ảnh + tên + biến thể; `itemCount` cho biết còn bao nhiêu món.'
+          properties:
+            name: { type: string }
+            color: { type: string }
+            size: { type: string }
+            mediaId: { type: string }
     AdminOrderPage:
       type: object
       required: [items, total, page, limit]
@@ -6221,89 +6315,123 @@ components:
       enum: [today, 7d, 30d]
       default: today
       description: 'Slice 8 (BR-DSH-01).'
-    AdminKpiValue:
+    AdminDashboardKpi:
       type: object
-      required: [value, change]
+      required: [value, previous, change]
       additionalProperties: false
-      description: 'Slice 8. `value`: số nguyên (đồng hoặc số đơn / khách). `change` = (kỳ này - kỳ trước) / kỳ trước, làm tròn half-up 4 chữ số thập phân; `null` khi kỳ trước bằng 0 (FE hiện "—").'
+      description: 'Tổng quan v2. `value` / `previous`: kỳ này / kỳ so sánh (đồng, số đơn, hoặc tỉ lệ 0..1 với `returnRate`). `change` = (value - previous) / previous, 4 chữ số thập phân; `null` khi `previous` = 0 (FE hiện "—").'
       properties:
-        value: { type: integer, minimum: 0 }
+        value: { type: number, minimum: 0 }
+        previous: { type: number, minimum: 0 }
         change: { type: [number, 'null'], minimum: -1 }
     AdminDashboardTodo:
       type: object
-      required: [toConfirm, pendingPayment, toFulfil, inTransit, cancelRequests, returning, lateDelivery, lowStock, outOfStock, returnRequested, returnApproved, returnReceived]
+      required: [toConfirm, pendingPayment, toFulfil, cancelRequests, lateDelivery, returnRequested, returnApproved, returnReceived, lowStock, outOfStock]
       additionalProperties: false
-      description: 'Slice 8 (BR-DSH-03..05). Tại lúc gọi, không phụ thuộc `range`. Sáu số đầu = số tab cùng tên của `GET /admin/orders/counts` (`to-confirm`, `pending-payment`, `to-fulfil`, `in-transit`, `cancel-requests`, `returning`); `lowStock` / `outOfStock` = số tab "Sắp hết" / "Hết hàng" của Tồn kho (cùng hàm đếm, ngưỡng riêng SKU hoặc `low_stock_default`).'
+      description: 'Trạng thái hiện tại, không phụ thuộc `range` (xem mô tả `GET /admin/dashboard`). Tổng quan v2 bỏ `inTransit` và `returning`.'
       properties:
         toConfirm: { type: integer, minimum: 0 }
         pendingPayment: { type: integer, minimum: 0 }
         toFulfil: { type: integer, minimum: 0 }
-        inTransit: { type: integer, minimum: 0 }
         cancelRequests: { type: integer, minimum: 0 }
-        returning: { type: integer, minimum: 0 }
-        lateDelivery: { type: integer, minimum: 0, description: 'Should (BR-DSH-05): đơn `to_receive` có `estimated_to` sớm hơn hôm nay (VN).' }
+        lateDelivery: { type: integer, minimum: 0 }
+        returnRequested: { type: integer, minimum: 0 }
+        returnApproved: { type: integer, minimum: 0 }
+        returnReceived: { type: integer, minimum: 0 }
         lowStock: { type: integer, minimum: 0 }
         outOfStock: { type: integer, minimum: 0 }
-        returnRequested: { type: integer, minimum: 0, description: 'Slice 9 (draft, BR-RET-50): số yêu cầu trả hàng `requested` (tab Chờ duyệt của `GET /admin/returns`). Cả staff và admin; không phụ thuộc `range`.' }
-        returnApproved: { type: integer, minimum: 0, description: 'Slice 9 (draft): số yêu cầu `approved` (Chờ nhận hàng).' }
-        returnReceived: { type: integer, minimum: 0, description: 'Slice 9 (draft): số yêu cầu `received` (Chờ hoàn tiền).' }
     AdminDashboardPeriod:
       type: object
-      required: [from, to, previousFrom, previousTo]
+      required: [from, to]
       additionalProperties: false
-      description: 'Slice 8, chỉ admin. Nửa mở [from, to) tính bằng ISO UTC. `today`: `from` = 00:00 VN hôm nay, `to` = `generatedAt`; kỳ trước = cùng khoảng giờ của cùng thứ tuần trước. `7d` / `30d`: `to` = 00:00 VN ngày mai; kỳ trước = 7 / 30 ngày liền trước.'
+      description: 'Nửa mở [from, to), ISO UTC (ranh giới ngày theo giờ VN).'
       properties:
         from: { type: string, format: date-time }
         to: { type: string, format: date-time }
-        previousFrom: { type: string, format: date-time }
-        previousTo: { type: string, format: date-time }
-    AdminRevenuePoint:
+    AdminDashboardPoint:
       type: object
-      required: [date, revenue, previous]
+      required: [key, label, revenue, orders]
       additionalProperties: false
       properties:
-        date: { type: string, format: date, description: 'Ngày VN `YYYY-MM-DD`.' }
-        revenue: { type: integer, minimum: 0 }
-        previous: { type: integer, minimum: 0, description: 'Doanh thu của cùng vị trí trong 30 ngày liền trước.' }
-    AdminTopProduct:
+        key: { type: string, description: 'Giờ `0`..`23` (today) hoặc ngày VN `YYYY-MM-DD`; chuỗi rỗng khi không có ngày khớp.' }
+        label: { type: string, description: 'Nhãn trục: `9h`, `T2 09/11`, `14/10`.' }
+        revenue: { type: [integer, 'null'], minimum: 0 }
+        orders: { type: [integer, 'null'], minimum: 0 }
+    AdminDashboardSeries:
       type: object
-      required: [productId, name, image, units, revenue]
+      required: [unit, points, previous]
       additionalProperties: false
       properties:
+        unit: { type: string, enum: [hour, day] }
+        points: { type: array, items: { $ref: '#/components/schemas/AdminDashboardPoint' } }
+        previous: { type: array, items: { $ref: '#/components/schemas/AdminDashboardPoint' }, description: 'Cùng độ dài với `points`, khớp theo chỉ số.' }
+    AdminDashboardRecentOrder:
+      type: object
+      required: [id, code, createdAt, customerName, total, status, paymentStatus, channel]
+      additionalProperties: false
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, pattern: '^N2F[0-9]{10}$' }
+        createdAt: { type: string, format: date-time }
+        customerName: { type: string, description: 'Tên người nhận.' }
+        total: { type: integer, minimum: 0 }
+        status: { type: string, enum: [to_pay, to_ship, to_receive, completed, cancel_requested, cancelled] }
+        paymentStatus: { type: string, enum: [pending, paid, failed, refunded, partially_refunded] }
+        channel: { type: string, enum: [website], description: 'Máy chủ chỉ có kênh website; kênh sàn trên màn hình là dữ liệu demo của frontend.' }
+    AdminDashboardTopProduct:
+      type: object
+      required: [rank, previousRank, productId, name, image, category, units, revenue, share]
+      additionalProperties: false
+      properties:
+        rank: { type: integer, minimum: 1, maximum: 5 }
+        previousRank: { type: [integer, 'null'], minimum: 1 }
         productId: { type: string, format: uuid }
-        name: { type: string, description: 'Tên chụp trên dòng đơn mới nhất của sản phẩm trong khoảng.' }
+        name: { type: string, description: 'Tên chụp trên dòng đơn mới nhất của sản phẩm trong kỳ.' }
         image:
           oneOf:
             - $ref: '#/components/schemas/AdminImageRef'
             - type: 'null'
           description: 'Ảnh bìa hiện tại của sản phẩm, thiếu thì `media_id` của dòng đơn.'
-        units: { type: integer, minimum: 1 }
+        category:
+          type: object
+          required: [slug, name]
+          additionalProperties: false
+          properties:
+            slug: { type: string }
+            name: { type: string }
+        units: { type: integer, minimum: 0 }
         revenue: { type: integer, minimum: 0 }
+        share: { type: number, minimum: 0, maximum: 1 }
     AdminDashboard:
       type: object
-      required: [generatedAt, orders, todo]
+      required: [generatedAt, range, period, comparePeriod, kpis, todo, recentOrders]
       additionalProperties: false
       description: |
-        Slice 8 (BR-DSH-02, 06, 07). staff: CHỈ `generatedAt`, `orders`, `todo`. admin: thêm mọi khoá còn lại. Máy chủ không bao giờ gửi `returnRate`, `deliveryFailed`, `returnRequests` (Won't).
+        Tổng quan v2 (nâng cấp 2026-11-15). staff: `kpis` chỉ có `orders`, không có `series`, `topProducts`. admin: đủ mọi khoá.
       properties:
         generatedAt: { type: string, format: date-time }
-        orders: { $ref: '#/components/schemas/AdminKpiValue' }
-        todo: { $ref: '#/components/schemas/AdminDashboardTodo' }
         range: { $ref: '#/components/schemas/DashboardRange' }
         period: { $ref: '#/components/schemas/AdminDashboardPeriod' }
-        revenue: { $ref: '#/components/schemas/AdminKpiValue' }
-        completedOrders: { $ref: '#/components/schemas/AdminKpiValue' }
-        averageOrderValue: { $ref: '#/components/schemas/AdminKpiValue' }
-        newCustomers: { $ref: '#/components/schemas/AdminKpiValue' }
-        revenueSeries:
+        comparePeriod: { $ref: '#/components/schemas/AdminDashboardPeriod' }
+        kpis:
+          type: object
+          required: [orders]
+          additionalProperties: false
+          properties:
+            netRevenue: { $ref: '#/components/schemas/AdminDashboardKpi' }
+            orders: { $ref: '#/components/schemas/AdminDashboardKpi' }
+            averageOrderValue: { $ref: '#/components/schemas/AdminDashboardKpi' }
+            returnRate: { $ref: '#/components/schemas/AdminDashboardKpi' }
+        todo: { $ref: '#/components/schemas/AdminDashboardTodo' }
+        recentOrders:
           type: array
-          minItems: 30
-          maxItems: 30
-          items: { $ref: '#/components/schemas/AdminRevenuePoint' }
+          maxItems: 10
+          items: { $ref: '#/components/schemas/AdminDashboardRecentOrder' }
+        series: { $ref: '#/components/schemas/AdminDashboardSeries' }
         topProducts:
           type: array
           maxItems: 5
-          items: { $ref: '#/components/schemas/AdminTopProduct' }
+          items: { $ref: '#/components/schemas/AdminDashboardTopProduct' }
     AdminReportFigure:
       type: object
       required: [value, previous]

@@ -1,38 +1,20 @@
-@switch (state().kind) { @case ('loading') {
-<adm-page-header heading="Đang tải đơn hàng" back="/admin/orders" />
-<div class="columns" role="status" aria-label="Đang tải đơn hàng">
-  <div class="col-main">
-    <div class="sk-block" aria-hidden="true"></div>
-    <div class="sk-block" aria-hidden="true"></div>
-  </div>
-  <div class="col-side"><div class="sk-block" aria-hidden="true"></div></div>
-</div>
-} @case ('not-found') {
-<adm-page-header heading="Không tìm thấy đơn hàng" back="/admin/orders" />
-<adm-empty
-  heading="Không tìm thấy đơn hàng"
-  description="Mã đơn không tồn tại hoặc sai dạng. Kiểm tra lại mã rồi tìm trong danh sách."
->
-  <a class="adm-btn" routerLink="/admin/orders">Về danh sách đơn hàng</a>
-</adm-empty>
-} @case ('error') {
-<adm-page-header heading="Đơn hàng" back="/admin/orders" />
-<adm-empty kind="error" heading="Không tải được đơn hàng" [description]="errorText()">
-  <button type="button" class="adm-btn" (click)="retry()">Thử lại</button>
-</adm-empty>
-} @case ('ready') { @if (order(); as order) {
-<adm-page-header [heading]="'#' + order.id" back="/admin/orders">
-  <ng-container badges>
-    <adm-badge [spec]="paymentBadge(paymentState(order))" />
-    <adm-badge [spec]="statusBadge(order)" />
-  </ng-container>
-  <p subtitle class="secondary small subtitle">
-    <adm-copy [value]="order.id" label="mã đơn" /> Đặt lúc {{ order.placedAt | admDateTime }}
-  </p>
-</adm-page-header>
+@if (order(); as order) {
+<div class="drawer od">
+  <header>
+    <div class="od-title">
+      <div class="od-id">
+        <h2 class="mono">#{{ order.id }}</h2>
+        <adm-badge [spec]="statusBadge(order)" />
+        <adm-badge [spec]="paymentBadge(paymentState(order))" />
+      </div>
+      <p class="secondary small">Đặt lúc {{ order.placedAt | admDateTime }}</p>
+    </div>
+    <button type="button" class="adm-btn adm-btn--sm adm-btn--icon" aria-label="Đóng" (click)="close()">
+      <adm-icon name="reiconX" [size]="16" />
+    </button>
+  </header>
 
-<div class="columns">
-  <div class="col-main">
+  <div class="drawer-body">
     @if (order.needsCall) {
     <div class="banner banner--warning" role="status">
       <adm-icon name="reiconPhone" />
@@ -54,8 +36,8 @@
     </div>
     }
 
+    @if (notice(); as notice) {
     <div #live class="notice-live" tabindex="-1" aria-live="polite">
-      @if (notice(); as notice) {
       <div
         class="banner"
         [class.banner--success]="notice.tone === 'success'"
@@ -71,62 +53,75 @@
           Đóng
         </button>
       </div>
-      }
     </div>
+    }
 
-    <section class="section" aria-labelledby="actions-title">
-      <header><h2 id="actions-title">Thao tác</h2></header>
-      @if (actions().length) {
-      <ul class="actions">
-        @for (button of buttons().live; track button.kind) {
+    <section class="section" aria-labelledby="customer-title">
+      <header>
+        <h2 id="customer-title">Thông tin giao hàng</h2>
+      </header>
+      <div class="frame">
+      <ul class="info">
         <li>
-          <button
-            type="button"
-            class="adm-btn"
-            [class.adm-btn--primary]="
-              button.kind !== 'cancel' &&
-            button.kind !== 'write-off' &&
-            button.kind !== 'reject-cancel' &&
-            button.kind !== 'add-note'
-            "
-            [attr.data-action]="button.kind"
-            (click)="open(button.kind)"
-          >
-            {{ button.kind === 'cancel' ? 'Huỷ đơn' : actionLabels[button.action] }}
-          </button>
+          <adm-icon name="reiconUserCircle" [size]="18" />
+          <span class="cell-title">{{ order.recipient.name }}</span>
         </li>
-        } @if (canPrint()) {
         <li>
-          <button type="button" class="adm-btn" data-action="print-slip" (click)="printSlip()">
-            {{ actionLabels['print-slip'] }}
-          </button>
+          <adm-icon name="reiconPhone" [size]="18" />
+          <a class="link" [href]="'tel:' + order.recipient.phone">{{ order.recipient.phone }}</a>
+        </li>
+        <li>
+          <adm-icon name="reiconEnvelope" [size]="18" />
+          <span>{{ order.recipient.email }}</span>
+        </li>
+        <li>
+          <adm-icon name="reiconMapPoint" [size]="18" />
+          <span>
+            {{ order.shippingAddress.street }}, {{ order.shippingAddress.ward }}, {{
+            order.shippingAddress.province }}
+          </span>
+        </li>
+        @if (order.note) {
+        <li class="note-row">
+          <adm-icon name="reiconNote" [size]="18" />
+          <span class="secondary">Khách nhắn: “{{ order.note }}”</span>
         </li>
         }
       </ul>
-      <p class="small secondary">
-        Chỉ hiện thao tác máy chủ cho phép ở bước này. Mỗi thao tác hỏi xác nhận trước khi gửi.
-      </p>
-      } @else {
-      <p class="secondary">Không có thao tác nào cho đơn này.</p>
-      }
+      </div>
     </section>
-
+    @if (order.invoice; as invoice) {
+    <section class="section" aria-labelledby="invoice-title">
+      <header>
+        <h2 id="invoice-title">Hoá đơn công ty</h2></header>
+      <div class="frame">
+      <p class="cell-title">{{ invoice.companyName }}</p>
+      <p>MST {{ invoice.taxCode }}</p>
+      <p>{{ invoice.address }}</p>
+      <p>{{ invoice.email }}</p>
+      </div>
+    </section>
+    }
     <section class="section" aria-labelledby="items-title">
-      <header><h2 id="items-title">Sản phẩm ({{ order.items.length }})</h2></header>
+      <header>
+        <h2 id="items-title">Sản phẩm ({{ order.items.length }})</h2></header>
+      <div class="frame">
       <ul class="items">
         @for (item of order.items; track item.variantId) {
         <li>
+          <img class="thumb" [src]="src(item.mediaId)" alt="" />
           <div class="item-main">
             <span class="cell-title">{{ item.name }}</span>
             <p class="small secondary">
-              {{ item.color }} / {{ item.size }}<span class="sku-tag mono">{{ item.sku }}</span>
+              {{ item.color }} / {{ item.size }}
             </p>
+            <p class="small secondary">{{ item.unitPrice | admMoney }} × {{ item.quantity }}</p>
           </div>
-          <p class="num secondary">{{ item.unitPrice | admMoney }} × {{ item.quantity }}</p>
           <p class="num line-total">{{ item.unitPrice * item.quantity | admMoney }}</p>
         </li>
         }
       </ul>
+      </div>
     </section>
 
     <section class="section" aria-labelledby="pay-title">
@@ -134,6 +129,7 @@
         <h2 id="pay-title">Thanh toán</h2>
         <adm-badge [spec]="paymentBadge(paymentState(order))" />
       </header>
+      <div class="frame">
       <dl class="totals">
         <div>
           <dt>Tạm tính</dt>
@@ -176,10 +172,13 @@
         </div>
         }
       </dl>
+      </div>
     </section>
 
     <section class="section" aria-labelledby="ship-title">
-      <header><h2 id="ship-title">Vận chuyển</h2></header>
+      <header>
+        <h2 id="ship-title">Vận chuyển</h2></header>
+      <div class="frame">
       <dl class="dl two">
         @if (order.shipment; as shipment) {
         <div>
@@ -196,7 +195,14 @@
         </div>
         } @else {
         <div class="span-2">
+          @if (order.tab === 'to-fulfil') {
+          <dd class="attn">
+            <adm-icon name="reiconAlertTriangle" [size]="18" />
+            <span>Chưa bàn giao cho đơn vị vận chuyển. Bàn giao khi hàng đã đóng gói xong.</span>
+          </dd>
+          } @else {
           <dd class="secondary">Chưa bàn giao cho đơn vị vận chuyển.</dd>
+          }
         </div>
         } @if (order.deliveredAt) {
         <div>
@@ -209,19 +215,25 @@
           <dd>{{ order.estimatedDelivery.from }} đến {{ order.estimatedDelivery.to }}</dd>
         </div>
       </dl>
+      </div>
     </section>
 
     @if (order.confirmation; as confirmation) {
     <section class="section" aria-labelledby="confirm-title">
-      <header><h2 id="confirm-title">Xác nhận</h2></header>
+      <header>
+        <h2 id="confirm-title">Xác nhận</h2></header>
+      <div class="frame">
       <p>
         Khách xác nhận lúc {{ confirmation.confirmedAt | admDateTime }}, ghi bởi {{
         staff(confirmation.confirmedBy) }}.
       </p>
+      </div>
     </section>
     } @if (order.cancelRequest; as request) {
     <section class="section" aria-labelledby="request-title">
-      <header><h2 id="request-title">Yêu cầu huỷ</h2></header>
+      <header>
+        <h2 id="request-title">Yêu cầu huỷ</h2></header>
+      <div class="frame">
       <dl class="dl two">
         <div>
           <dt>Gửi lúc</dt>
@@ -249,10 +261,13 @@
         </div>
         }
       </dl>
+      </div>
     </section>
     } @if (order.cancellation; as cancellation) {
     <section class="section" aria-labelledby="cancel-title">
-      <header><h2 id="cancel-title">Huỷ đơn</h2></header>
+      <header>
+        <h2 id="cancel-title">Huỷ đơn</h2></header>
+      <div class="frame">
       <dl class="dl two">
         <div>
           <dt>Huỷ lúc</dt>
@@ -292,10 +307,13 @@
         </div>
         }
       </dl>
+      </div>
     </section>
     } @if (order.returnHandling; as handling) {
     <section class="section" aria-labelledby="return-title">
-      <header><h2 id="return-title">Hàng hoàn</h2></header>
+      <header>
+        <h2 id="return-title">Hàng hoàn</h2></header>
+      <div class="frame">
       <p>
         @switch (handling.state) { @case ('pending') {Hàng hoàn chờ xử lý: cộng lại tồn kho hoặc
         loại bỏ.} @case ('restocked') {Đã cộng lại tồn kho.} @default {Đã loại bỏ, không cộng tồn
@@ -303,6 +321,7 @@
         admDateTime }} bởi {{ staff(handling.decidedBy) }}) } @if (handling.note) {: {{
         handling.note }} }
       </p>
+      </div>
     </section>
     } @if (order.return && returnsOn) {
     <adm-return-panel [ret]="order.return" (updated)="onReturnUpdated($event)" />
@@ -313,6 +332,7 @@
         <h2 id="history-title">Lịch sử đơn hàng</h2>
         <span class="small secondary">Mới nhất trước</span>
       </header>
+      <div class="frame">
       <ol class="timeline">
         @for (entry of order.timeline; track $index) {
         <li>
@@ -337,36 +357,56 @@
         </li>
         }
       </ol>
+      </div>
     </section>
   </div>
 
-  <div class="col-side">
-    <section class="section" aria-labelledby="customer-title">
-      <header><h2 id="customer-title">Người nhận</h2></header>
-      <p class="cell-title">{{ order.recipient.name }}</p>
-      <p>
-        <a class="link" [href]="'tel:' + order.recipient.phone">{{ order.recipient.phone }}</a>
-        <adm-copy [value]="order.recipient.phone" label="số điện thoại" />
-      </p>
-      <p>{{ order.recipient.email }}</p>
-    </section>
-    <section class="section" aria-labelledby="address-title">
-      <header><h2 id="address-title">Địa chỉ giao hàng</h2></header>
-      <p>{{ order.shippingAddress.street }}</p>
-      <p>{{ order.shippingAddress.ward }}, {{ order.shippingAddress.province }}</p>
-      @if (order.note) {
-      <p class="note secondary">Ghi chú của khách: “{{ order.note }}”</p>
-      }
-    </section>
-    @if (order.invoice; as invoice) {
-    <section class="section" aria-labelledby="invoice-title">
-      <header><h2 id="invoice-title">Hoá đơn công ty</h2></header>
-      <p class="cell-title">{{ invoice.companyName }}</p>
-      <p>MST {{ invoice.taxCode }}</p>
-      <p>{{ invoice.address }}</p>
-      <p>{{ invoice.email }}</p>
-    </section>
+  <footer>
+    @for (button of footer().secondary; track button.kind) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--lg"
+      [attr.data-action]="button.kind"
+      (click)="open(button.kind)"
+    >
+      {{ button.kind === 'cancel' ? 'Huỷ đơn' : actionLabels[button.action] }}
+    </button>
+    } @if (canPrint()) {
+    <button type="button" class="adm-btn adm-btn--lg" data-action="print-slip" (click)="printSlip()">
+      <adm-icon name="reiconPrinter" [size]="16" /> {{ actionLabels['print-slip'] }}
+    </button>
+    } @if (footer().primary; as primary) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--lg adm-btn--primary push"
+      [attr.data-action]="primary.kind"
+      (click)="open(primary.kind)"
+    >
+      {{ actionLabels[primary.action] }}
+    </button>
+    } @if (!actions().length) {
+    <span class="secondary">Không có thao tác nào cho đơn này.</span>
     }
+  </footer>
+</div>
+} @else {
+<div class="drawer od">
+  <header>
+    <h2 class="mono">#{{ id }}</h2>
+    <button type="button" class="adm-btn adm-btn--sm adm-btn--icon" aria-label="Đóng" (click)="close()">
+      <adm-icon name="reiconX" [size]="16" />
+    </button>
+  </header>
+  <div class="drawer-body">
+    @switch (state().kind) { @case ('not-found') {
+    <p>Mã đơn không tồn tại hoặc sai dạng.</p>
+    } @case ('error') {
+    <p role="alert">{{ errorText() }}</p>
+    <div><button type="button" class="adm-btn" (click)="retry()">Thử lại</button></div>
+    } @default {
+    <div class="sk-block" role="status" aria-label="Đang tải đơn hàng"></div>
+    <div class="sk-block" aria-hidden="true"></div>
+    } }
   </div>
 </div>
-} } }
+}

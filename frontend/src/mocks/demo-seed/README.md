@@ -17,7 +17,7 @@ toán còn 3 giờ"), nên dữ liệu không bao giờ trông cũ.
 | `new.demo@nine2fine.vn`  | Hạng **Bronze**, không có đơn/địa chỉ/phiếu (xem empty state không cần đăng ký) |
 | Email bất kỳ chưa có     | Đăng ký mới → tài khoản trống, hạng **Bronze** (xem empty state)                |
 
-Cách đăng nhập: vào **Đăng nhập** → nhập email → **Tiếp tục** → nhập mã `12345678` (mã demo
+Cách đăng nhập: vào **Đăng nhập** → nhập email → **Tiếp tục** → nhập mã `123456` (mã demo
 `DEMO_VERIFICATION_CODE` trong `src/mocks/accounts.ts`), hoặc bấm **Sử dụng mật khẩu** và nhập
 `Nine2fine1`. Đây chỉ là giá trị demo của mock, không phải mật khẩu thật.
 

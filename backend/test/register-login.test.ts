@@ -139,7 +139,7 @@ describe('register', () => {
   });
 
   it('AC-AUTH-38: email A đã tồn tại + mã bất kỳ -> invalid-code (không lộ email-registered)', async () => {
-    const r = await reg('12345678', {}, A.email);
+    const r = await reg('123456', {}, A.email);
     expect(r.status).toBe(422);
     expect(r.body.error.code).toBe('invalid-code');
   });
@@ -165,7 +165,7 @@ describe('login with code', () => {
   });
 
   it('AC-AUTH-61: đăng nhập thất bại không tạo phiên', async () => {
-    await post('/api/auth/login/code', { email: A.email, code: '12345678' });
+    await post('/api/auth/login/code', { email: A.email, code: '123456' });
     await loginPassword(A.email, 'Sai1');
     expect(await prisma.session.count()).toBe(0);
   });
@@ -344,7 +344,7 @@ describe('password reset', () => {
     const { code } = await sendCode(A.email, 'reset-password');
     expect((await reset(code, 'Nine2fine9')).status).toBe(204);
     expect((await reset(code, 'Nine2fine8')).body.error.code).toBe('invalid-code');
-    expect((await reset('12345678', 'Nine2fine8', N.email)).body.error.code).toBe('invalid-code');
+    expect((await reset('123456', 'Nine2fine8', N.email)).body.error.code).toBe('invalid-code');
   });
 
   it('thư "mật khẩu đã thay đổi" được gửi (Should)', async () => {

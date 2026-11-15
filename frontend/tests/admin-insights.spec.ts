@@ -45,8 +45,8 @@ test.describe('admin insights on the API (Slice 8)', () => {
     await expect(menu(page)).toHaveText([
       /Tổng quan/,
       /Đơn hàng/,
-      /Sản phẩm/,
       /Tồn kho/,
+      /Sản phẩm/,
       /Khách hàng/,
       /Khuyến mãi/,
       /Báo cáo/,
@@ -108,7 +108,8 @@ test.describe('admin insights on the API (Slice 8)', () => {
       '7d',
     ]);
     await page.getByRole('button', { name: '30 ngày' }).click();
-    const rows = page.getByTestId('top-products').locator('tbody tr');
+    // "Sản phẩm nổi bật": the top three of the range, as picture cards.
+    const rows = page.getByTestId('top-products').locator('.featured-item');
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(0)).toContainText('Áo thun cotton');
     await expect(rows.nth(1)).toContainText('Áo sơ mi linen');
@@ -123,12 +124,17 @@ test.describe('admin insights on the API (Slice 8)', () => {
       toFulfil: '/admin/orders?view=to-fulfil',
       inTransit: '/admin/orders?view=in-transit',
       cancelRequests: '/admin/orders?view=cancel-requests',
-      returning: '/admin/orders?view=returning',
       lowStock: '/admin/inventory?view=low',
       outOfStock: '/admin/inventory?view=out',
     };
     for (const [key, href] of Object.entries(expected))
       await expect(page.getByTestId(`todo-${key}`)).toHaveAttribute('href', href);
+    // Rows at 0 are hidden (refresh 2026-11-15); late parcels and cancel requests come first.
+    await expect(page.getByTestId('todo-returning')).toHaveCount(0);
+    await expect(page.getByTestId('todo').locator('a').first()).toHaveAttribute(
+      'data-testid',
+      'todo-lateDelivery',
+    );
     await expect(page.getByTestId('todo-lowStock').locator('.count')).toHaveText('2');
     await page.getByTestId('todo-toConfirm').click();
     await expect(page).toHaveURL(/\/admin\/orders\?view=to-confirm/);
@@ -198,9 +204,13 @@ test.describe('admin insights on the API (Slice 8)', () => {
     ]);
     await expect(page.getByTestId('by-payment').locator('tbody tr')).toHaveCount(2);
     await expect(page.getByText('Theo danh mục hiện tại của sản phẩm')).toBeVisible();
-    // Top products by units, then by revenue (URL carries sort).
+    await expect(page.getByTestId('waterfall')).toBeVisible();
+    // Top products live in the "Sản phẩm & tồn kho" tab (2026-11-15); by units, then by revenue.
+    await page.getByTestId('tab-products').click();
+    await expect(page).toHaveURL(/tab=products/);
     await page.getByRole('button', { name: 'Theo doanh thu' }).click();
     await expect(page).toHaveURL(/sort=revenue/);
+    await expect(page).toHaveURL(/tab=products/);
     await expect(page.getByTestId('top-products').locator('tbody tr').first()).toContainText(
       'Áo thun cotton',
     );
@@ -228,8 +238,9 @@ test.describe('admin insights on the API (Slice 8)', () => {
 
   test('AC-RPT-10: an empty range is flat, a lost connection keeps from / to', async ({ page }) => {
     const api = await setup(page);
-    await page.goto('/admin/reports?from=2025-01-01&to=2025-01-07');
+    await page.goto('/admin/reports?from=2025-01-01&to=2025-01-07&tab=products');
     await expect(page.getByTestId('top-products')).toContainText('Chưa có đơn trong khoảng này');
+    await page.getByTestId('tab-sales').click();
     await expect(page.getByTestId('by-category')).toContainText('Chưa có đơn trong khoảng này');
     await expect(page.getByTestId('kpi-revenue')).toContainText(money('0'));
     await expect(page.getByTestId('kpi-revenue')).toContainText('—');
@@ -242,6 +253,41 @@ test.describe('admin insights on the API (Slice 8)', () => {
     await expect(page.getByTestId('report-kpis')).toBeVisible();
     await expect(page).toHaveURL(/from=2026-10-01&to=2026-10-31/);
     expect(api.requests.at(-1)?.url.searchParams.get('to')).toBe('2026-10-31');
+  });
+
+  test('Báo cáo tabs (2026-11-15): customers, operations, promotions read /reports-extra only when open', async ({
+    page,
+  }) => {
+    const api = await setup(page);
+    await page.goto('/admin/reports');
+    await expect(page.getByTestId('report-kpis')).toBeVisible();
+    expect(api.find('GET', /reports-extra$/)).toHaveLength(0);
+    await page.getByTestId('tab-customers').click();
+    await expect(page).toHaveURL(/tab=customers/);
+    await expect(page.getByTestId('customer-kpis')).toContainText('20,0%');
+    await expect(page.getByTestId('by-province')).toContainText('TP. Hồ Chí Minh');
+    expect(
+      api
+        .find('GET', /reports-extra$/)
+        .at(-1)
+        ?.url.searchParams.has('from'),
+    ).toBe(true);
+    await page.getByTestId('tab-operations').click();
+    await expect(page.getByTestId('ops-kpis')).toContainText('45 phút');
+    await expect(page.getByTestId('ops-kpis')).toContainText('75,0%');
+    await expect(page.getByTestId('cancel-reasons')).toContainText('Không liên lạc được');
+    await expect(page.getByTestId('return-reasons')).toContainText('Không vừa');
+    await expect(page.getByTestId('order-heatmap')).toContainText('Cao điểm: T6');
+    await page.getByTestId('tab-promotions').click();
+    await expect(page.getByTestId('voucher-table')).toContainText('GIAM50K');
+    await expect(page.getByTestId('promo-kpis')).toContainText(money('80.000'));
+    // A failure shows a sentence and Thử lại, never sample numbers.
+    api.failures.set('GET /reports-extra', { status: 403, code: 'forbidden' });
+    await page.getByRole('button', { name: '7 ngày' }).click();
+    await expect(page.getByTestId('extra-error')).toContainText('Bạn không có quyền');
+    await page.getByTestId('extra-error').getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByTestId('voucher-table')).toBeVisible();
+    await expect(page).toHaveURL(/tab=promotions/);
   });
 
   test('AC-RPT-11: CSV download keeps the server file name, a 429 says how long to wait', async ({

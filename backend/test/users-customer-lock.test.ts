@@ -137,7 +137,7 @@ describe('T-USR-22 AC-USR-24: khách bị khoá', () => {
     mails.length = 0;
     const reset = await sendCode(u.email, 'reset-password');
     expect(reset.code).toBeUndefined();
-    expect(mails.every((m) => !/: \d{8}/.test(m.text))).toBe(true);
+    expect(mails.every((m) => !/: \d{6}/.test(m.text))).toBe(true);
 
     const items = [{ variantId: await vid('off-duty-top', 'Trắng', 'S'), quantity: 1 }];
     const placed = await submitOrder(await orderBody(items, { email: u.email, phone: '0911000222' }));

@@ -71,7 +71,7 @@ export function parseListQuery(query: unknown): ListQuery {
     tokens = parseSearchTokens(q);
   }
 
-  const sort = empty(r.sort) ?? 'featured';
+  const sort = empty(r.sort) ?? 'newest'; // PLP-07: mặc định Mới nhất
   if (!SORTS.includes(sort as SortKey)) throw Errors.validation('Tham số sort không hợp lệ.', 'sort');
 
   let ids: string[] | undefined;

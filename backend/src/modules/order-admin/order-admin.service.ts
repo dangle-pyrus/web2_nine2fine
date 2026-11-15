@@ -12,7 +12,7 @@ import { acquireIdempotency, completeIdempotency, requestHash } from '../order/i
 import { EventActorUser, insertOrderEvent, staffDisplayName } from '../order/order-event';
 import { scheduleEventEmail } from '../order/order-email.service';
 import { ADMIN_ORDER_INCLUDE, toAdminOrder, withAdminReturn } from './order-admin.mapper';
-import type { CallAttemptBody, CancelBody, NoteBody, RejectCancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
+import type { CallAttemptBody, CancelBody, ConfirmRefundBody, NoteBody, RejectCancelBody, ReturnedStockBody, ShipBody } from './order-admin.schemas';
 import {
   AdminAction, AdminCancelReason, callStatsOf, cancelActionOf, checkTransition, SHOP_CANCEL_REASON_TEXT, StateOrder,
 } from './order-state';
@@ -39,7 +39,8 @@ export type ActionInput =
   | { kind: 'returned-stock'; body: ReturnedStockBody }
   | { kind: 'approve-cancel'; body: { expectedStatus: order_status } }
   | { kind: 'reject-cancel'; body: RejectCancelBody }
-  | { kind: 'note'; body: NoteBody };
+  | { kind: 'note'; body: NoteBody }
+  | { kind: 'confirm-refund'; body: ConfirmRefundBody };
 
 interface LockedOrder {
   order_id: string;
@@ -263,6 +264,22 @@ async function doNote(c: Ctx, b: NoteBody): Promise<Done> {
   return { eventId, emailTemplate: null };
 }
 
+/** COMMON-02.4: đơn huỷ còn `paid` -> `refunded` (tiền đã hoàn tay); 1 sự kiện `refunded`, khách thấy "Đã hoàn tiền". */
+async function doConfirmRefund(c: Ctx, b: ConfirmRefundBody): Promise<Done> {
+  const [row] = await c.tx.$queryRaw<Array<{ total: number }>>(Prisma.sql`
+    UPDATE "orders" SET "payment_status" = 'refunded'
+    WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'cancelled' AND "payment_status" = 'paid'
+    RETURNING "total"`);
+  if (!row) await stateChanged(c);
+  const amount = new Intl.NumberFormat('vi-VN').format(Number(row.total));
+  const eventId = await insertOrderEvent(c.tx, {
+    orderId: c.o.order_id, at: c.at, fromStatus: 'cancelled', toStatus: 'cancelled', paymentStatus: 'refunded',
+    actor: 'shop', actorUser: c.user, kind: 'refunded', detail: `Đã hoàn ${amount}₫ về nơi bạn đã thanh toán.`,
+    internalNote: b.note ? `Mã giao dịch: ${b.reference}. ${b.note}`.slice(0, 500) : `Mã giao dịch: ${b.reference}`,
+  });
+  return { eventId, emailTemplate: null };
+}
+
 /* ---------------- Khuôn chung ---------------- */
 
 const isRetryable = (err: unknown): boolean => {
@@ -315,6 +332,7 @@ export async function runAction(p: {
           const state: StateOrder = {
             status: o.status, paymentMethod: o.payment_method, needsConfirmCall: o.needs_confirm_call, confirmedAt: o.confirmed_at,
             returnedFromTransit: o.returned_from_transit, returnHandledAt: o.return_handled_at, stockRestoredAt: o.stock_restored_at,
+            paymentStatus: o.payment_status,
           };
           const stats = p.input.kind === 'note' ? callStatsOf([]) : callStatsOf(action === 'cancel-unreachable' ? await callTimes(tx, o.order_id) : []);
           const v = p.input.kind === 'note' ? { ok: true as const } : checkTransition(action, state, p.actor.role, stats);
@@ -336,6 +354,7 @@ export async function runAction(p: {
             : i.kind === 'approve-cancel' ? await doApproveCancel(c)
             : i.kind === 'reject-cancel' ? await doRejectCancel(c, i.body)
             : i.kind === 'note' ? await doNote(c, i.body)
+            : i.kind === 'confirm-refund' ? await doConfirmRefund(c, i.body)
             : await doReturnedStock(c, i.body);
 
           // 9. Đọc lại (cùng tx); 8. lưu khoá idempotency với bản chụp.

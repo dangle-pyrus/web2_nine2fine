@@ -203,6 +203,31 @@ export interface OrderEvent {
 /** `cancelMode` of the API: cancel now (`to_pay`) or send a request the shop reviews (`to_ship`). */
 export type CancelMode = 'cancel' | 'request';
 
+/** Reasons a shopper picks when cancelling (COMMON-01.5, ORD-CC-02); same codes as the API. */
+export const CANCEL_REASONS = [
+  { code: 'changed_mind', label: 'Tôi không còn nhu cầu mua nữa' },
+  { code: 'change_variant', label: 'Tôi muốn đổi size, màu hoặc sản phẩm khác' },
+  { code: 'change_address', label: 'Tôi muốn đổi địa chỉ hoặc thông tin nhận hàng' },
+  { code: 'better_price', label: 'Tôi tìm được nơi bán giá tốt hơn' },
+  { code: 'slow_delivery', label: 'Thời gian giao hàng dự kiến quá lâu' },
+  { code: 'other', label: 'Lý do khác' },
+] as const;
+export type CancelReasonCode = (typeof CANCEL_REASONS)[number]['code'];
+
+/** What the cancel dialog hands back: a reason from the list, plus a note (required for "other"). */
+export interface CancelChoice {
+  reasonCode: CancelReasonCode;
+  reason?: string;
+}
+
+/** Reason text the mocks store, the way the server writes it. */
+export function cancelChoiceText(choice: CancelChoice | undefined): string | undefined {
+  if (!choice) return undefined;
+  const label = CANCEL_REASONS.find((r) => r.code === choice.reasonCode)?.label ?? '';
+  if (choice.reasonCode === 'other') return `${label}: ${choice.reason ?? ''}`;
+  return choice.reason ? `${label}. ${choice.reason}` : label;
+}
+
 /** The shopper's cancel request (Slice 4). One per order: after a rejection the hotline is the way. */
 export interface OrderCancelRequest {
   /** ISO datetime. */
@@ -262,6 +287,8 @@ export interface Order {
   statusNote?: string;
   /** API orders: the server says whether the shopper may cancel now. */
   canCancel?: boolean;
+  /** API orders (ORD-11): the parcel is on its way, so the shopper may press "Đã nhận hàng". */
+  canConfirmReceived?: boolean;
   /** API orders: what the cancel button does (`request` = "Gửi yêu cầu huỷ"); absent when `canCancel` is false. */
   cancelMode?: CancelMode;
   /** API orders: the shopper's cancel request, pending or rejected. */

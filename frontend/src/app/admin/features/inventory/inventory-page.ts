@@ -2,24 +2,43 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   signal,
   untracked,
 } from '@angular/core';
+import { DialogRef } from '@angular/cdk/dialog';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { of } from 'rxjs';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { map, Observable, of } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
 import { AdminSession } from '../../core/admin-session';
+import { money } from '../../core/format';
 import { NumPipe } from '../../core/format.pipes';
-import { ADMIN_INVENTORY_API } from '../../data-access/admin-apis';
+import { ADMIN_INVENTORY_API, ADMIN_PRODUCTS_API } from '../../data-access/admin-apis';
+import {
+  CHANNELS,
+  channelStock,
+  DEFAULT_RULES,
+  MARKETPLACES,
+  readRules,
+  readSetups,
+  sampleSyncLog,
+  saveRules,
+  type AllocationRules,
+  type ChannelKey,
+  type ChannelStock,
+  type MarketplaceKey,
+} from '../../data-access/marketplace-demo';
 import { errorMessage } from '../../data-access/http-support';
 import type {
   InventoryFacets,
   InventoryItem,
   InventoryQuery,
   InventoryView,
+  Page,
   StockStatus,
 } from '../../data-access/models';
 import type { BadgeSpec } from '../../core/status';
@@ -33,13 +52,24 @@ import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
 import { AdminToastService } from '../../ui/toast';
-import { AdjustStockDrawer } from './adjust-stock-drawer';
+import { AdjustStockData, AdjustStockDrawer } from './adjust-stock-drawer';
 import {
   DefaultThresholdData,
   DefaultThresholdDialog,
   SkuThresholdData,
   SkuThresholdDialog,
 } from './threshold-dialogs';
+
+/** The URL also keeps the channel and a sync flag; both are applied here, not by the API. */
+type InvQuery = InventoryQuery & { channel: string; flag: string };
+type ChipKey = 'search' | 'category' | 'color' | 'size' | 'channel' | 'flag';
+
+const FLAGS: Record<string, string> = {
+  error: 'Lỗi đồng bộ',
+  zero: 'Về 0 trên kênh',
+};
+
+const MARKET_KEYS = MARKETPLACES.map((channel) => channel.key);
 
 const VIEWS: { value: InventoryView; label: string }[] = [
   { value: 'all', label: 'Tất cả' },
@@ -83,6 +113,25 @@ const SORTS: { value: string; label: string }[] = [
   template: `
     <adm-page-header heading="Tồn kho">
       <ng-container actions>
+        <button
+          type="button"
+          class="adm-btn adm-btn--lg"
+          data-testid="sync-all"
+          [class.is-busy]="syncing()"
+          [disabled]="syncing() || !allItems()"
+          (click)="syncAll()"
+        >
+          <adm-icon name="reiconRefresh" [size]="16" />
+          {{ syncing() ? 'Đang đồng bộ…' : 'Đồng bộ lại' }}
+        </button>
+        <button
+          type="button"
+          class="adm-btn adm-btn--lg"
+          data-testid="sync-log-open"
+          (click)="logOpen.set(true)"
+        >
+          <adm-icon name="reiconHistory" [size]="16" /> Nhật ký đồng bộ
+        </button>
         @if (canThresholds) {
           <button
             type="button"
@@ -104,6 +153,233 @@ const SORTS: { value: string; label: string }[] = [
       </ng-container>
     </adm-page-header>
     <div class="page-body page-body--wide">
+      @if (loadError()) {
+        <div class="banner banner--critical demo-banner" role="alert">
+          <adm-icon name="reiconAlertCircle" [size]="20" />
+          <div class="banner-body">
+            <p class="banner-title">Không tải được số liệu các kênh</p>
+          </div>
+          <button type="button" class="adm-btn adm-btn--sm banner-action" (click)="loadAll()">
+            Thử lại
+          </button>
+        </div>
+      } @else if (errors().count && query().flag !== 'error') {
+        <div class="banner banner--warning demo-banner" role="alert" data-testid="sync-errors">
+          <adm-icon name="reiconAlertTriangle" [size]="20" />
+          <div class="banner-body">
+            <p class="banner-title">
+              {{ errors().count }} SKU trên {{ errors().names.join(', ') }} đang hiện sai số lượng
+            </p>
+          </div>
+          <button
+            type="button"
+            class="adm-btn adm-btn--sm banner-action"
+            (click)="list.update({ flag: 'error' })"
+          >
+            Xem SKU lỗi
+          </button>
+        </div>
+      }
+      <div class="banner banner--info demo-banner" role="note" data-testid="marketplace-demo">
+        <adm-icon name="reiconInfoCircle" [size]="20" />
+        <div class="banner-body">
+          <p class="banner-title">Kết nối sàn đang ở chế độ demo</p>
+          <p class="small secondary">
+            Số liệu Shopee, TikTok Shop và Lazada là dữ liệu mẫu, sinh từ số "Có thể bán" thật của
+            Website. Website là số thật.
+          </p>
+        </div>
+      </div>
+
+      <div class="channels" data-testid="channel-cards">
+        @for (card of channelCards(); track card.key) {
+          <a
+            class="ch-card"
+            [routerLink]="['/admin/inventory/channels', card.key]"
+            [attr.aria-label]="card.name + ': ' + card.status.label"
+          >
+            <img class="ch-logo ch-logo--card" [src]="card.logo" [alt]="card.name" />
+            <dl class="ch-stats">
+              <div>
+                <dt class="small tertiary">SKU</dt>
+                <dd class="num">{{ card.skus === null ? '—' : (card.skus | admNum) }}</dd>
+              </div>
+              <div>
+                <dt class="small tertiary">Trạng thái</dt>
+                <dd><adm-badge [spec]="card.status" /></dd>
+              </div>
+            </dl>
+          </a>
+        }
+      </div>
+
+      <div class="ch-bar">
+        <div class="segmented" role="group" aria-label="Kênh bán">
+          @for (item of channelTabs; track item.key) {
+            <button
+              type="button"
+              [class.is-active]="channel() === item.key"
+              [attr.aria-pressed]="channel() === item.key"
+              (click)="setChannel(item.key)"
+            >
+              {{ item.label }}
+            </button>
+          }
+        </div>
+        <span class="spacer"></span>
+        @if (zeroCount() && query().flag !== 'zero') {
+          <button type="button" class="adm-btn adm-btn--sm" (click)="list.update({ flag: 'zero' })">
+            {{ zeroCount() }} SKU còn hàng nhưng về 0 trên kênh
+          </button>
+        }
+        <button
+          type="button"
+          class="adm-btn adm-btn--sm"
+          [attr.aria-expanded]="rulesOpen()"
+          aria-controls="alloc-rules"
+          (click)="rulesOpen.set(!rulesOpen())"
+        >
+          <adm-icon name="reiconSettings" [size]="14" /> Quy tắc phân bổ
+        </button>
+      </div>
+
+      @if (rulesOpen()) {
+        <section class="rules" id="alloc-rules" aria-labelledby="rules-title">
+          <header>
+            <h2 id="rules-title">Quy tắc phân bổ tồn kho</h2>
+            <p class="small secondary">
+              Tồn đệm là số giữ lại, không đẩy lên kênh, để hai kênh không cùng bán chiếc cuối cùng.
+              @if (!canThresholds) {
+                Chỉ admin được đổi quy tắc.
+              }
+            </p>
+          </header>
+          <div class="rules-mode" role="radiogroup" aria-label="Cách phân bổ">
+            <label class="check">
+              <input
+                type="radio"
+                name="alloc-mode"
+                [checked]="draftRules().mode === 'shared'"
+                [disabled]="!canThresholds"
+                (change)="patchRules({ mode: 'shared' })"
+              />
+              <span>Dùng chung: mọi kênh bán từ cùng số Có thể bán</span>
+            </label>
+            <label class="check">
+              <input
+                type="radio"
+                name="alloc-mode"
+                [checked]="draftRules().mode === 'split'"
+                [disabled]="!canThresholds"
+                (change)="patchRules({ mode: 'split' })"
+              />
+              <span>Chia theo %: mỗi kênh một phần</span>
+            </label>
+          </div>
+          <div class="rules-grid" [class.rules-grid--shared]="draftRules().mode === 'shared'">
+            <div class="rules-row small tertiary" aria-hidden="true">
+              <span>Kênh</span>
+              @if (draftRules().mode === 'split') {
+                <span>Tỉ lệ</span>
+              }
+              <span>Tồn đệm</span>
+            </div>
+            @for (ch of channels; track ch.key) {
+              <div class="rules-row">
+                <span class="row"><img class="ch-logo" [src]="ch.logo" [alt]="ch.name" /></span>
+                @if (draftRules().mode === 'split') {
+                  <label class="affix">
+                    <span class="sr-only">Phần trăm cho {{ ch.name }}</span>
+                    <input
+                      class="input input--sm"
+                      type="number"
+                      min="0"
+                      max="100"
+                      [value]="draftRules().split[ch.key]"
+                      [disabled]="!canThresholds"
+                      (input)="setSplit(ch.key, $any($event.target).value)"
+                    />
+                    <span class="suffix">%</span>
+                  </label>
+                }
+                <label class="affix">
+                  <span class="sr-only">Tồn đệm cho {{ ch.name }}</span>
+                  <input
+                    class="input input--sm"
+                    type="number"
+                    min="0"
+                    max="99"
+                    [value]="draftRules().buffer[ch.key]"
+                    [disabled]="!canThresholds"
+                    (input)="setBuffer(ch.key, $any($event.target).value)"
+                  />
+                  <span class="suffix">cái</span>
+                </label>
+              </div>
+            }
+          </div>
+          <p class="small secondary" data-testid="rules-preview">
+            Ví dụ SKU có 10 có thể bán →
+            @for (ch of marketplaces; track ch.key) {
+              {{ ch.name }} {{ preview()[ch.key] }}{{ $last ? '' : ',' }}
+            }
+          </p>
+          @if (splitError(); as message) {
+            <p class="error" role="alert">{{ message }}</p>
+          }
+          <div class="row">
+            @if (canThresholds) {
+              <button
+                type="button"
+                class="adm-btn adm-btn--sm adm-btn--ghost"
+                (click)="resetRules()"
+              >
+                Về mặc định
+              </button>
+            }
+            <span class="spacer"></span>
+            @if (canThresholds) {
+              <span class="small tertiary">Chỉ áp dụng trên máy này (demo)</span>
+            }
+            <button type="button" class="adm-btn adm-btn--sm" (click)="rulesOpen.set(false)">
+              Đóng
+            </button>
+            @if (canThresholds) {
+              <button
+                type="button"
+                class="adm-btn adm-btn--sm adm-btn--primary"
+                [disabled]="!!splitError()"
+                (click)="applyRules()"
+              >
+                Lưu quy tắc
+              </button>
+            }
+          </div>
+        </section>
+      }
+
+      <div class="kpis inv-kpis" data-testid="inventory-kpis">
+        @for (kpi of kpis(); track kpi.key) {
+          @if (kpi.view; as target) {
+            <button
+              type="button"
+              class="kpi-btn"
+              [attr.data-testid]="'inv-kpi-' + kpi.key"
+              [attr.aria-pressed]="query().view === target"
+              (click)="list.update({ view: query().view === target ? 'all' : target })"
+            >
+              <span class="kpi-label">{{ kpi.label }}</span>
+              <span class="kpi-value num" [class.bad]="kpi.bad">{{ kpi.value }}</span>
+            </button>
+          } @else {
+            <div [attr.data-testid]="'inv-kpi-' + kpi.key">
+              <p class="kpi-label">{{ kpi.label }}</p>
+              <p class="kpi-value num" [class.bad]="kpi.bad">{{ kpi.value }}</p>
+            </div>
+          }
+        }
+      </div>
+
       <nav class="tabs" aria-label="Lọc theo trạng thái tồn kho">
         @for (item of views; track item.value) {
           <button
@@ -118,19 +394,6 @@ const SORTS: { value: string; label: string }[] = [
           </button>
         }
       </nav>
-      @if (facets(); as f) {
-        <p class="rule small secondary">
-          <adm-icon name="reiconInfoCircle" [size]="16" />
-          <span
-            >Một SKU là "Sắp hết" khi số Có thể bán còn bằng hoặc thấp hơn ngưỡng. Ngưỡng mặc định
-            hiện là <strong>{{ f.defaultThreshold }}</strong
-            >{{ f.customCount ? ', ' + f.customCount + ' SKU dùng ngưỡng riêng' : '' }}.</span
-          >
-          @if (canThresholds) {
-            <button type="button" class="link" (click)="editDefault()">Đổi ngưỡng</button>
-          }
-        </p>
-      }
       <form class="toolbar" role="search" (ngSubmit)="list.update({ search: search().trim() })">
         <div class="affix search">
           <span class="prefix-icon"><adm-icon name="reiconSearch" [size]="16" /></span>
@@ -247,6 +510,10 @@ const SORTS: { value: string; label: string }[] = [
           >
             <a class="adm-btn adm-btn--primary" routerLink="/admin/products/new">Thêm sản phẩm</a>
           </adm-empty>
+        } @else if (channelEmpty(); as empty) {
+          <adm-empty [heading]="empty.heading" [description]="empty.description">
+            <a class="adm-btn adm-btn--primary" [routerLink]="empty.link">{{ empty.action }}</a>
+          </adm-empty>
         } @else {
           <adm-empty
             heading="Không có SKU nào khớp bộ lọc"
@@ -274,21 +541,41 @@ const SORTS: { value: string; label: string }[] = [
                   </th>
                 }
                 <th>Sản phẩm</th>
-                <th>SKU</th>
                 <th>Trạng thái</th>
                 <th class="num">Trong kho</th>
                 <th class="num">Đang giữ</th>
                 <th class="num">Có thể bán</th>
                 <th class="num">Ngưỡng</th>
-                <th><span class="sr-only">Thao tác</span></th>
+                @for (ch of shownChannels(); track ch.key) {
+                  <th
+                    class="num ch-col"
+                    [class.ch-off]="!isConnected(ch.key)"
+                    [attr.title]="isConnected(ch.key) ? null : 'Chưa kết nối'"
+                  >
+                    <img class="ch-logo" [src]="ch.logo" [alt]="ch.name" />
+                  </th>
+                }
               </tr>
             </thead>
             @if (view.state().loading) {
-              <tbody [admSkeleton]="10" [columns]="canThresholds ? 9 : 8"></tbody>
+              <tbody
+                [admSkeleton]="10"
+                [columns]="(canThresholds ? 7 : 6) + shownChannels().length"
+              ></tbody>
             } @else {
               <tbody>
                 @for (item of page()?.items ?? []; track item.variantId) {
-                  <tr [class.is-selected]="selection.has(item.variantId)">
+                  <tr
+                    class="is-clickable"
+                    tabindex="0"
+                    [class.is-selected]="selection.has(item.variantId)"
+                    (click)="open(item, $event)"
+                    [attr.aria-label]="
+                      'Xem tồn kho ' + item.productName + ' ' + item.color.name + '/' + item.size
+                    "
+                    (keydown.enter)="openByKey(item, $event)"
+                    (keydown.space)="openByKey(item, $event)"
+                  >
                     @if (canThresholds) {
                       <td class="w-check">
                         <label class="check">
@@ -305,11 +592,7 @@ const SORTS: { value: string; label: string }[] = [
                       <div class="cell-media">
                         <img class="thumb" [src]="item.image || placeholder" alt="" />
                         <div>
-                          <a
-                            class="cell-title"
-                            [routerLink]="['/admin/products', item.productId]"
-                            >{{ item.productName }}</a
-                          >
+                          <span class="cell-title">{{ item.productName }}</span>
                           <div class="cell-sub">
                             <span class="swatch" [style.background]="item.color.hex"></span>
                             {{ item.color.name }} / {{ item.size }}
@@ -317,7 +600,6 @@ const SORTS: { value: string; label: string }[] = [
                         </div>
                       </div>
                     </td>
-                    <td class="mono" data-label="SKU">{{ item.sku }}</td>
                     <td data-label="Trạng thái"><adm-badge [spec]="status[item.status]" /></td>
                     <td class="num" data-label="Trong kho">{{ item.onHand | admNum }}</td>
                     <td class="num secondary" data-label="Đang giữ" title="Giữ cho đơn chưa giao">
@@ -326,28 +608,34 @@ const SORTS: { value: string; label: string }[] = [
                     <td class="num strong" data-label="Có thể bán">
                       {{ item.available | admNum }}
                     </td>
-                    <td class="num" data-label="Ngưỡng">
-                      @if (canThresholds) {
-                        <button
-                          type="button"
-                          class="threshold"
-                          [attr.aria-label]="'Đổi ngưỡng sắp hết của ' + item.sku"
-                          (click)="editThreshold(item)"
-                        >
-                          {{ item.lowStockThreshold }}
-                          <span class="tertiary small">{{
-                            item.thresholdCustom ? 'riêng' : 'mặc định'
-                          }}</span>
-                        </button>
-                      } @else {
-                        {{ item.lowStockThreshold }}
-                      }
-                    </td>
-                    <td class="row-actions">
-                      <button type="button" class="adm-btn adm-btn--sm" (click)="adjust(item)">
-                        {{ canAdjust ? 'Điều chỉnh' : 'Lịch sử' }}
-                      </button>
-                    </td>
+                    <td class="num" data-label="Ngưỡng">{{ item.lowStockThreshold | admNum }}</td>
+                    @for (ch of shownChannels(); track ch.key) {
+                      @let stock = stockFor(item, ch.key);
+                      <td class="num ch-cell" [attr.data-label]="ch.name">
+                        @if (!stock.connected) {
+                          <span class="tertiary">—</span>
+                        } @else if (!stock.linked) {
+                          <span class="small tertiary">Chưa liên kết</span>
+                        } @else {
+                          <span class="ch-qty" [attr.title]="ch.demo ? syncTitle(stock) : null"
+                            >{{ stock.listed | admNum }}
+                            @if (ch.demo) {
+                              <i
+                                class="sync-dot"
+                                [attr.data-state]="stock.state"
+                                aria-hidden="true"
+                              ></i>
+                              @if (stock.state !== 'synced') {
+                                <span class="small" [class.bad]="stock.state === 'error'">{{
+                                  stock.state === 'error' ? 'Lệch' : 'Chờ'
+                                }}</span>
+                              }
+                              <span class="sr-only">{{ syncTitle(stock) }}</span>
+                            }
+                          </span>
+                        }
+                      </td>
+                    }
                   </tr>
                 }
               </tbody>
@@ -365,48 +653,285 @@ const SORTS: { value: string; label: string }[] = [
         }
       }
     </div>
+
+    @if (logOpen()) {
+      <div class="log-scrim" (click)="logOpen.set(false)" aria-hidden="true"></div>
+      <aside
+        class="log-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="log-title"
+        data-testid="sync-log"
+        (keydown.escape)="logOpen.set(false)"
+      >
+        <header class="log-head">
+          <div>
+            <h2 id="log-title">Nhật ký đồng bộ</h2>
+            <p class="small tertiary">Dữ liệu mẫu, kết nối sàn đang ở chế độ demo</p>
+          </div>
+          <button
+            type="button"
+            class="adm-btn adm-btn--icon adm-btn--ghost adm-btn--sm"
+            aria-label="Đóng nhật ký"
+            (click)="logOpen.set(false)"
+          >
+            <adm-icon name="reiconX" [size]="16" />
+          </button>
+        </header>
+        <ol class="log-list">
+          @for (entry of syncLog(); track entry.id) {
+            <li [class.failed]="!entry.ok">
+              <img class="ch-logo ch-logo--log" [src]="channelLogo(entry.channel)" alt="" />
+              <div class="log-text">
+                <p>
+                  <span class="mono">{{ entry.sku }}</span>
+                  <span class="secondary">{{ entry.change }}</span>
+                </p>
+                <p class="small" [class.bad]="!entry.ok" [class.tertiary]="entry.ok">
+                  {{ entry.ok ? '' : 'Lỗi: ' }}{{ entry.message }} · {{ entry.ago }} phút trước
+                </p>
+                @if (!entry.ok) {
+                  <p class="small">
+                    <a
+                      class="link"
+                      [routerLink]="['/admin/inventory/channels', entry.channel]"
+                      [queryParams]="entry.channel === 'tiktok' ? null : { q: entry.sku }"
+                      >{{ entry.channel === 'tiktok' ? 'Kết nối lại' : 'Liên kết SKU' }}</a
+                    >
+                    @if (variantOf(entry.sku); as id) {
+                      <button type="button" class="link" (click)="viewSku(id)">Xem SKU</button>
+                    }
+                  </p>
+                }
+              </div>
+            </li>
+          }
+        </ol>
+      </aside>
+    }
   `,
   styles: `
-    .rule {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin: 12px 0;
-    }
     .strong {
       font-weight: 600;
-    }
-    .threshold {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 6px;
-      border: 0;
-      border-bottom: 1px dashed var(--adm-divider);
-      background: none;
-      padding: 2px 0;
-      font: inherit;
-      color: inherit;
-      cursor: pointer;
-      &:hover {
-        border-bottom-color: var(--adm-text);
-      }
     }
     .cell-sub .swatch {
       width: 10px;
       height: 10px;
     }
-    .row-actions {
-      width: 1%;
+    /* ---------- Multichannel (demo, 2026-11-15) ---------- */
+    .demo-banner {
+      margin-bottom: 16px;
+    }
+    .channels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .ch-card {
+      display: grid;
+      gap: 16px;
+      align-content: start;
+      padding: 16px;
+      border-radius: 14px;
+      background: var(--adm-raised);
+      color: inherit;
+      text-decoration: none;
+      box-shadow:
+        0 0 0 1px var(--adm-divider),
+        0 1px 2px rgba(0, 0, 0, 0.03);
+      transition: box-shadow 120ms ease-out;
+      &:hover {
+        box-shadow:
+          0 0 0 1px var(--adm-text-tertiary),
+          0 1px 2px rgba(0, 0, 0, 0.03);
+      }
+    }
+    .ch-logo {
+      height: 18px;
+      max-width: 96px;
+      object-fit: contain;
+      vertical-align: middle;
+    }
+    .ch-stats {
+      display: flex;
+      gap: 32px;
+      margin: 0;
+      dd {
+        margin: 4px 0 0;
+        font-size: 20px;
+        line-height: 28px;
+        font-weight: 600;
+      }
+    }
+    .ch-logo--card {
+      height: 28px;
+      max-width: 128px;
+    }
+    .ch-logo--log {
+      width: 72px;
+      height: 16px;
+      margin: 4px 8px 0 0;
+      flex-shrink: 0;
+      object-position: left center;
+    }
+    .bad {
+      color: var(--adm-critical-fg);
+    }
+    tr.is-clickable {
+      cursor: pointer;
+    }
+    .ch-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .rules {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+      border-radius: 14px;
+      background: var(--adm-muted);
+      h2 {
+        font-size: 15px;
+        line-height: 22px;
+      }
+    }
+    .rules-mode {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+    }
+    .rules-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .rules-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px 96px;
+      align-items: center;
+      gap: 10px;
+    }
+    .rules-grid--shared .rules-row {
+      grid-template-columns: minmax(0, 1fr) 96px;
+    }
+    .kpi-btn {
+      width: 100%;
+      border-style: solid;
+      border-color: var(--adm-divider);
+      border-width: 0 0 0 1px;
+      background: none;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      &:hover .kpi-value {
+        text-decoration: underline;
+        text-underline-offset: 4px;
+      }
+    }
+    .kpi-btn span {
+      display: block;
+    }
+    .ch-off .ch-logo {
+      opacity: 0.4;
+    }
+    .inv-kpis {
+      margin-bottom: 8px;
+      .kpi-value.bad {
+        color: var(--adm-critical-fg);
+      }
+    }
+    .ch-col,
+    .ch-cell {
       white-space: nowrap;
-      text-align: right;
+    }
+    .ch-qty {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sync-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--adm-success-fg);
+      &[data-state='pending'] {
+        background: #d97706;
+      }
+      &[data-state='error'] {
+        background: var(--adm-critical-fg);
+      }
+    }
+    .log-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: rgba(0, 0, 0, 0.32);
+    }
+    .log-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 100;
+      width: min(420px, 100vw);
+      display: flex;
+      flex-direction: column;
+      background: var(--adm-raised);
+      box-shadow: var(--adm-shadow-lg);
+    }
+    .log-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 20px;
+      border-bottom: 1px solid var(--adm-divider);
+      h2 {
+        font-size: 16px;
+        line-height: 24px;
+      }
+    }
+    .log-list {
+      list-style: none;
+      margin: 0;
+      padding: 8px 20px 24px;
+      overflow-y: auto;
+      li {
+        display: flex;
+        align-items: flex-start;
+        gap: 4px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--adm-divider);
+      }
+      li.failed {
+        background: linear-gradient(90deg, var(--adm-critical-bg), transparent 70%);
+      }
+      p {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+      }
+    }
+    .log-text {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
     }
   `,
 })
 export class InventoryPage {
   private readonly api = inject(ADMIN_INVENTORY_API);
+  private readonly productsApi = inject(ADMIN_PRODUCTS_API);
   private readonly dialogs = inject(AdminDialogs);
   private readonly toast = inject(AdminToastService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private drawerRef: DialogRef<InventoryItem> | null = null;
+  private destroyed = false;
   protected readonly canAdjust = inject(AdminSession).can('inventory.adjust');
   /** Only an admin changes thresholds (S6-Q2); staff see them. */
   protected readonly canThresholds = inject(AdminSession).can('inventory.thresholds');
@@ -416,16 +941,18 @@ export class InventoryPage {
   protected readonly views = VIEWS;
   protected readonly sorts = SORTS;
   protected readonly status = STATUS;
-  protected readonly list = urlQuery<InventoryQuery>({
+  protected readonly list = urlQuery<InvQuery>({
     view: 'all',
     category: '',
     color: '',
     size: '',
+    channel: '',
+    flag: '',
     sort: 'available',
     dir: 'asc',
   });
   protected readonly query = this.list.query;
-  protected readonly view = loader(this.query, (query) => this.api.list(query));
+  protected readonly view = loader(this.query, (query) => this.fetchRows(query));
   protected readonly page = this.view.data;
   protected readonly search = signal(this.query().search);
   protected readonly total = computed(() => this.page()?.total ?? 0);
@@ -433,12 +960,19 @@ export class InventoryPage {
   protected readonly selection = new Selection<string>();
   protected readonly ids = computed(() => (this.page()?.items ?? []).map((item) => item.variantId));
   protected readonly filtered = computed(() => {
-    const { view, search, category, color, size } = this.query();
-    return view !== 'all' || !!search || !!category || !!color || !!size;
+    const { view, search, category, color, size, channel, flag } = this.query();
+    return view !== 'all' || !!search || !!category || !!color || !!size || !!channel || !!flag;
   });
   protected readonly chips = computed(() => {
-    const { search, category, color, size } = this.query();
-    const chips: { key: 'search' | 'category' | 'color' | 'size'; label: string }[] = [];
+    const { search, category, color, size, flag } = this.query();
+    const chips: { key: ChipKey; label: string }[] = [];
+    const channel = this.channel();
+    if (channel !== 'all')
+      chips.push({
+        key: 'channel',
+        label: `Kênh: ${CHANNELS.find((c) => c.key === channel)!.name}`,
+      });
+    if (flag && FLAGS[flag]) chips.push({ key: 'flag', label: FLAGS[flag] });
     if (search) chips.push({ key: 'search', label: `Tìm: "${search}"` });
     if (category)
       chips.push({
@@ -450,7 +984,383 @@ export class InventoryPage {
     return chips;
   });
 
+  // ---------- Multichannel view (marketplace figures are DEMO data, see marketplace-demo.ts) ----------
+  protected readonly channels = CHANNELS;
+  protected readonly channelTabs: { key: 'all' | ChannelKey; label: string }[] = [
+    { key: 'all', label: 'Tất cả kênh' },
+    ...CHANNELS.map((channel) => ({ key: channel.key, label: channel.name })),
+  ];
+  protected readonly marketplaces = MARKETPLACES;
+  protected readonly channel = computed<'all' | ChannelKey>(() => {
+    const key = this.query().channel;
+    return CHANNELS.some((channel) => channel.key === key) ? (key as ChannelKey) : 'all';
+  });
+  protected readonly loadError = signal(false);
+  protected readonly rules = signal<AllocationRules>(readRules());
+  protected readonly draftRules = signal<AllocationRules>(this.rules());
+  protected readonly rulesOpen = signal(false);
+  protected readonly logOpen = signal(false);
+  protected readonly syncing = signal(false);
+  /** Set after "Đồng bộ lại" in this visit: pending pushes are done (sample). */
+  private readonly flushed = signal(false);
+  /** Connection and SKU links saved on each channel's setup page (demo). */
+  private readonly setups = signal(readSetups());
+  /** Every SKU (no filter), for the KPI strip, the channel cards and the drawer. */
+  protected readonly allItems = signal<InventoryItem[] | null>(null);
+  /** Selling price per product, for "Giá trị tồn". */
+  private readonly prices = signal<Map<string, number>>(new Map());
+
+  protected readonly shownChannels = computed(() => {
+    const channel = this.channel();
+    return channel === 'all' ? CHANNELS : CHANNELS.filter((item) => item.key === channel);
+  });
+
+  protected isConnected(key: ChannelKey): boolean {
+    return key === 'website' || this.setups()[key].connected;
+  }
+
+  protected setChannel(key: 'all' | ChannelKey): void {
+    this.list.update({ channel: key === 'all' ? '' : key });
+  }
+
+  /** Channel and sync filters run here on every SKU, since the API only knows the stock itself. */
+  private matches(item: InventoryItem, query: InvQuery): boolean {
+    const market = MARKET_KEYS.find((key) => key === query.channel);
+    if (market && !this.stockFor(item, market).linked) return false;
+    if (!query.flag) return true;
+    const keys = market ? [market] : MARKET_KEYS;
+    return keys.some((key) => {
+      const stock = this.stockFor(item, key);
+      return query.flag === 'error'
+        ? stock.state === 'error'
+        : stock.linked && stock.listed === 0 && item.available > 0;
+    });
+  }
+
+  private allMatching(query: InvQuery): Observable<InventoryItem[]> {
+    return fetchAllPages((index, pageSize) =>
+      this.api.list({ ...query, page: index, pageSize }),
+    ).pipe(map((items) => items.filter((item) => this.matches(item, query))));
+  }
+
+  private fetchRows(query: InvQuery): Observable<Page<InventoryItem>> {
+    const market = !!query.channel && query.channel !== 'website';
+    if (!market && !query.flag) return this.api.list(query);
+    const { page, pageSize } = query;
+    return this.allMatching(query).pipe(
+      map((items) => ({
+        items: items.slice((page - 1) * pageSize, page * pageSize),
+        total: items.length,
+        page,
+        pageSize,
+      })),
+    );
+  }
+
+  protected stockFor(item: InventoryItem, channel: ChannelKey): ChannelStock {
+    const stock = channelStock(
+      item.sku,
+      item.available,
+      channel,
+      this.rules(),
+      channel === 'website' ? undefined : this.setups()[channel],
+    );
+    return stock.state === 'pending' && this.flushed()
+      ? { ...stock, listed: stock.expected, state: 'synced' }
+      : stock;
+  }
+
+  protected readonly channelCards = computed(() => {
+    const items = this.allItems() ?? [];
+    return CHANNELS.map((channel) => {
+      let status: BadgeSpec = { label: 'Đang hoạt động', tone: 'success' };
+      if (channel.key !== 'website') {
+        const stocks = items.map((item) => this.stockFor(item, channel.key));
+        status = !this.setups()[channel.key].connected
+          ? { label: 'Chưa kết nối', tone: 'neutral' }
+          : stocks.some((stock) => stock.state === 'error')
+            ? { label: 'Lỗi đồng bộ', tone: 'critical' }
+            : { label: 'Đã kết nối', tone: 'success' };
+      }
+      const skus = !this.allItems()
+        ? null
+        : channel.key === 'website'
+          ? items.length
+          : items.filter((item) => this.stockFor(item, channel.key).linked).length;
+      return { ...channel, status, skus };
+    });
+  });
+
+  protected readonly errors = computed(() => {
+    const items = this.allItems() ?? [];
+    const query = { ...this.query(), flag: 'error' };
+    const only = this.channel();
+    return {
+      count: items.filter((item) => this.matches(item, query)).length,
+      names: MARKETPLACES.filter(
+        (ch) =>
+          (only === 'all' || only === ch.key) &&
+          items.some((item) => this.stockFor(item, ch.key).state === 'error'),
+      ).map((ch) => ch.name),
+    };
+  });
+
+  protected readonly zeroCount = computed(() => {
+    const query = { ...this.query(), flag: 'zero' };
+    return (this.allItems() ?? []).filter((item) => this.matches(item, query)).length;
+  });
+
+  /** A channel with nothing to show because it is not connected or has no linked SKU. */
+  protected readonly channelEmpty = computed(() => {
+    const key = this.channel();
+    if (key === 'all' || key === 'website') return null;
+    const name = CHANNELS.find((c) => c.key === key)!.name;
+    const link = ['/admin/inventory/channels', key];
+    if (!this.setups()[key].connected)
+      return {
+        heading: `${name} chưa kết nối`,
+        description: 'Kết nối kênh để đẩy tồn kho lên sàn.',
+        action: 'Kết nối kênh',
+        link,
+      };
+    const items = this.allItems();
+    if (items && !items.some((item) => this.stockFor(item, key).linked))
+      return {
+        heading: `Chưa có SKU nào liên kết với ${name}`,
+        description: 'Liên kết SKU để tồn kho được đẩy lên kênh.',
+        action: 'Liên kết SKU',
+        link,
+      };
+    return null;
+  });
+
+  protected readonly preview = computed(() => {
+    const rules = this.draftRules();
+    return Object.fromEntries(
+      MARKET_KEYS.map((key) => [key, channelStock('', 10, key, rules).expected]),
+    ) as Record<MarketplaceKey, number>;
+  });
+
+  protected readonly kpis = computed<
+    { key: string; label: string; value: string; bad: boolean; view?: InventoryView }[]
+  >(() => {
+    const items = this.allItems();
+    const channel = this.channel();
+    const prices = this.prices();
+    const dash = '—';
+    const labels = {
+      onHand: 'Trong kho',
+      skus: 'Số lượng SKU',
+      low: 'SKU sắp hết',
+      out: 'Hết hàng',
+      value: 'Giá trị tồn (giá bán)',
+    };
+    if (!items)
+      return Object.entries(labels).map(([key, label]) => ({
+        key,
+        label,
+        value: dash,
+        bad: false,
+      }));
+    // Real stock (what is in the warehouse); a channel only narrows which SKUs count.
+    const scoped =
+      channel === 'all' ? items : items.filter((item) => this.stockFor(item, channel).linked);
+    const fmt = (value: number) => value.toLocaleString('vi-VN');
+    const out = scoped.filter((item) => item.status === 'out').length;
+    const value = scoped.reduce(
+      (sum, item) => sum + item.onHand * (prices.get(item.productId) ?? 0),
+      0,
+    );
+    return [
+      {
+        key: 'onHand',
+        label: labels.onHand,
+        value: fmt(scoped.reduce((sum, item) => sum + item.onHand, 0)),
+        bad: false,
+      },
+      {
+        key: 'skus',
+        label: labels.skus,
+        value: channel === 'all' ? fmt(items.length) : `${fmt(scoped.length)}/${fmt(items.length)}`,
+        bad: false,
+      },
+      {
+        key: 'low',
+        label: labels.low,
+        value: fmt(scoped.filter((item) => item.status === 'low').length),
+        bad: false,
+        view: 'low',
+      },
+      { key: 'out', label: labels.out, value: fmt(out), bad: out > 0, view: 'out' },
+      { key: 'value', label: labels.value, value: prices.size ? money(value) : dash, bad: false },
+    ];
+  });
+
+  protected readonly syncLog = computed(() =>
+    sampleSyncLog(
+      (this.allItems() ?? [])
+        .slice(0, 40)
+        .map((item) => ({ sku: item.sku, available: item.available })),
+    ),
+  );
+
+  protected readonly splitError = computed(() => {
+    const rules = this.draftRules();
+    if (rules.mode !== 'split') return '';
+    const sum = CHANNELS.reduce((total, channel) => total + (rules.split[channel.key] || 0), 0);
+    return sum === 100 ? '' : `Tổng phần trăm các kênh phải bằng 100% (hiện ${sum}%).`;
+  });
+
+  protected syncTitle(stock: ChannelStock): string {
+    if (stock.state === 'error')
+      return `Lỗi đồng bộ: sàn đang hiện ${stock.listed}, đúng ra là ${stock.expected} (mẫu)`;
+    if (stock.state === 'pending') return `Đang chờ đẩy: sẽ thành ${stock.expected} (mẫu)`;
+    return 'Đã đồng bộ (mẫu)';
+  }
+
+  protected channelLogo(key: ChannelKey): string {
+    return CHANNELS.find((channel) => channel.key === key)!.logo;
+  }
+
+  /**
+   * The server already pushes every change to every channel, so this is only the fallback: it
+   * retries what is still pending or failed. Sample: waits 1–2 seconds, then says so.
+   */
+  protected syncAll(): void {
+    const items = this.allItems() ?? [];
+    const on = MARKETPLACES.filter((ch) => this.setups()[ch.key].connected);
+    if (!on.length) {
+      this.toast.error('Chưa có kênh nào kết nối');
+      return;
+    }
+    const pushed = items.filter((item) =>
+      on.some((ch) => this.stockFor(item, ch.key).state === 'pending'),
+    ).length;
+    this.syncing.set(true);
+    const timer = setTimeout(
+      () => {
+        this.syncing.set(false);
+        this.flushed.set(true);
+        this.view.reload();
+        const failed = on
+          .map((ch) => ({
+            name: ch.name,
+            n: items.filter((item) => this.stockFor(item, ch.key).state === 'error').length,
+          }))
+          .filter((entry) => entry.n);
+        const skipped = MARKETPLACES.length - on.length;
+        const text =
+          `Đã đẩy ${pushed} SKU` + (skipped ? `, bỏ qua ${skipped} kênh chưa kết nối` : '') + '.';
+        if (failed.length)
+          this.toast.error(
+            `${text} Còn lỗi: ${failed.map((entry) => `${entry.n} SKU ở ${entry.name}`).join(', ')}.`,
+          );
+        else this.toast.show(text);
+      },
+      1000 + Math.round(Math.random() * 1000),
+    );
+    this.destroyRef.onDestroy(() => clearTimeout(timer));
+  }
+
+  protected patchRules(patch: Partial<AllocationRules>): void {
+    this.draftRules.update((rules) => ({ ...rules, ...patch }));
+  }
+
+  protected setSplit(channel: ChannelKey, value: string): void {
+    const n = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+    this.draftRules.update((rules) => ({ ...rules, split: { ...rules.split, [channel]: n } }));
+  }
+
+  protected setBuffer(channel: ChannelKey, value: string): void {
+    const n = Math.max(0, Math.min(99, Math.round(Number(value) || 0)));
+    this.draftRules.update((rules) => ({ ...rules, buffer: { ...rules.buffer, [channel]: n } }));
+  }
+
+  protected resetRules(): void {
+    this.draftRules.set(structuredClone(DEFAULT_RULES));
+  }
+
+  protected applyRules(): void {
+    if (this.splitError()) return;
+    this.rules.set(this.draftRules());
+    this.view.reload();
+    saveRules(this.draftRules());
+    this.rulesOpen.set(false);
+    this.toast.show('Đã lưu quy tắc phân bổ (trên trình duyệt này)');
+  }
+
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected loadAll(): void {
+    this.loadError.set(false);
+    fetchAllPages((index, pageSize) =>
+      this.api.list({
+        view: 'all',
+        search: '',
+        category: '',
+        color: '',
+        size: '',
+        sort: 'available',
+        dir: 'asc',
+        page: index,
+        pageSize,
+      }),
+    ).subscribe({
+      next: (items) => this.allItems.set(items),
+      error: () => this.loadError.set(true),
+    });
+  }
+
+  private loadPrices(): void {
+    fetchAllPages((index, pageSize) =>
+      this.productsApi.list({
+        view: 'all',
+        category: '',
+        search: '',
+        sort: 'name',
+        dir: 'asc',
+        page: index,
+        pageSize,
+      }),
+    ).subscribe({
+      next: (products) =>
+        this.prices.set(new Map(products.map((product) => [product.id, product.price]))),
+      error: () => undefined,
+    });
+  }
+
   constructor() {
+    if (this.route.snapshot.queryParamMap.get('rules') === '1') this.rulesOpen.set(true);
+    this.loadAll();
+    this.loadPrices();
+    this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+      this.drawerRef?.close();
+    });
+    // `?sku=<variantId>`: the stock drawer is open on that SKU.
+    const openSku = toSignal(
+      this.route.queryParamMap.pipe(map((params) => params.get('sku') ?? '')),
+      {
+        requireSync: true,
+      },
+    );
+    effect(() => {
+      const sku = openSku();
+      const items = this.allItems();
+      untracked(() => {
+        if (!sku) {
+          this.drawerRef?.close();
+          return;
+        }
+        if (this.drawerRef || !items) return;
+        const item = items.find((entry) => entry.variantId === sku);
+        if (item) this.showDrawer(item);
+        else {
+          this.toast.error('Không tìm thấy SKU');
+          void this.setOpen(null);
+        }
+      });
+    });
     // Tab counts follow the search / category / colour / size filters (not the status tab).
     effect(() => {
       const { search, category, color, size } = this.query();
@@ -458,7 +1368,7 @@ export class InventoryPage {
     });
   }
 
-  removeChip(key: 'search' | 'category' | 'color' | 'size'): void {
+  removeChip(key: ChipKey): void {
     if (key === 'search') this.search.set('');
     this.list.update({ [key]: '' });
   }
@@ -525,17 +1435,77 @@ export class InventoryPage {
       });
   }
 
-  adjust(item: InventoryItem): void {
-    this.dialogs
-      .drawer<{ item: InventoryItem; canAdjust: boolean }, InventoryItem>(AdjustStockDrawer, {
+  protected variantOf(sku: string): string | undefined {
+    return this.allItems()?.find((item) => item.sku === sku)?.variantId;
+  }
+
+  protected viewSku(id: string): void {
+    this.logOpen.set(false);
+    void this.setOpen(id);
+  }
+
+  protected openByKey(item: InventoryItem, event: Event): void {
+    if ((event.target as HTMLElement).closest('a,button,input,label')) return;
+    event.preventDefault();
+    this.open(item, event);
+  }
+
+  /** A row opens its SKU in the drawer; clicks on the checkbox do not. */
+  open(item: InventoryItem, event: Event): void {
+    if ((event.target as HTMLElement).closest('a,button,input,label')) return;
+    void this.setOpen(item.variantId);
+  }
+
+  private setOpen(sku: string | null): Promise<boolean> {
+    return this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { sku },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private showDrawer(item: InventoryItem): void {
+    const ref = this.dialogs.drawer<AdjustStockData, InventoryItem>(
+      AdjustStockDrawer,
+      {
         item,
         canAdjust: this.canAdjust,
-      })
-      .closed.subscribe((updated) => {
+        canThresholds: this.canThresholds,
+        channels: CHANNELS.map((channel) => {
+          const stock = this.stockFor(item, channel.key);
+          return {
+            key: channel.key,
+            name: channel.name,
+            logo: channel.logo,
+            linked: stock.linked,
+            connected: stock.connected,
+            listed: stock.listed,
+            expected: stock.expected,
+            state: stock.state,
+            note: this.explain(item.available, channel.key),
+          };
+        }),
+        editThreshold: () => this.editThreshold(item),
+      },
+      true,
+    );
+    this.drawerRef = ref;
+    ref.closed.subscribe((updated) => {
+      this.drawerRef = null;
+      if (this.destroyed) return;
+      void this.setOpen(null).then(() => {
         if (!updated) return;
         this.refresh();
         this.toast.show(`Đã cập nhật tồn kho ${updated.sku}: còn ${updated.onHand}`);
       });
+    });
+  }
+
+  /** How a channel's figure follows from "Có thể bán" under the allocation rules. */
+  private explain(available: number, key: ChannelKey): string {
+    const { mode, split, buffer } = this.rules();
+    const base = mode === 'split' ? `${split[key]}% của ${available}` : `= ${available} có thể bán`;
+    return buffer[key] ? `${base} − ${buffer[key]} tồn đệm` : base;
   }
 
   exportCsv(): void {
@@ -549,12 +1519,7 @@ export class InventoryPage {
       })
       .closed.subscribe((scope) => {
         if (!scope) return;
-        const rows =
-          scope === 'page'
-            ? of(page.items)
-            : fetchAllPages((index, pageSize) =>
-                this.api.list({ ...this.query(), page: index, pageSize }),
-              );
+        const rows = scope === 'page' ? of(page.items) : this.allMatching(this.query());
         rows.subscribe({
           next: (items) => {
             downloadCsv(
@@ -569,6 +1534,7 @@ export class InventoryPage {
                 'Đang giữ',
                 'Có thể bán',
                 'Ngưỡng sắp hết',
+                ...CHANNELS.map((ch) => `Số hiện trên ${ch.name}`),
               ],
               items.map((item) => [
                 item.sku,
@@ -580,6 +1546,14 @@ export class InventoryPage {
                 item.reserved,
                 item.available,
                 item.lowStockThreshold,
+                ...CHANNELS.map((ch) => {
+                  const stock = this.stockFor(item, ch.key);
+                  return !stock.connected
+                    ? 'Chưa kết nối'
+                    : stock.linked
+                      ? stock.listed
+                      : 'Chưa liên kết';
+                }),
               ]),
             );
             this.toast.show(`Đã xuất ${items.length} SKU`);
@@ -591,6 +1565,7 @@ export class InventoryPage {
 
   private refresh(): void {
     this.view.reload();
+    this.loadAll();
     const { search, category, color, size } = this.query();
     this.loadFacets({ search, category, color, size });
   }

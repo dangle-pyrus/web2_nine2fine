@@ -4,7 +4,13 @@ import { catchError, map, Observable, shareReplay, tap, throwError } from 'rxjs'
 import { API_CONFIG } from '../../core/api-config';
 import { GUEST_ORDER_ACCESS } from '../../core/api-interceptor';
 import { ApiErrorCode, readApiError, StockIssue } from '../../core/api-error';
-import { Order, OrderInvoice, OrderPricing, OrderStatus } from '../orders/order-models';
+import {
+  CancelChoice,
+  Order,
+  OrderInvoice,
+  OrderPricing,
+  OrderStatus,
+} from '../orders/order-models';
 import { OrderDto, toOrder } from '../orders/order-mapper';
 import { Location } from '../account/data-access/account-models';
 import { CheckoutQuote, PaymentMethodId, VoucherCheckResult } from './checkout-models';
@@ -152,6 +158,7 @@ export type CheckoutErrorCode = Extract<
   | 'code-locked'
   | 'not-found'
   | 'not-cancellable'
+  | 'invalid-transition'
   | 'unauthenticated'
   | 'unavailable'
 >;
@@ -168,6 +175,7 @@ const CHECKOUT_ERROR_CODES: readonly string[] = [
   'code-locked',
   'not-found',
   'not-cancellable',
+  'invalid-transition',
   'unauthenticated',
 ];
 
@@ -222,7 +230,9 @@ export interface CheckoutApi {
   verifyLookup(request: LookupVerifyRequest): Observable<Order>;
   /** Guest view of an order after `verifyLookup` (cookie `n2f_oa`). */
   getOrder(orderCode: string): Observable<Order>;
-  cancel(orderCode: string, reason?: string): Observable<Order>;
+  cancel(orderCode: string, choice?: CancelChoice): Observable<Order>;
+  /** ORD-11: the shopper confirms the parcel arrived (`to_receive` -> `completed`). */
+  confirmReceived(orderCode: string): Observable<Order>;
   paymentSession(orderCode: string): Observable<PaymentSession>;
   /** HTTP demo mode only (see `PaymentSession.simulated`). */
   simulateServerPayment?(orderCode: string, action: SimulateAction): Observable<PaymentSession>;
@@ -371,11 +381,21 @@ export class HttpCheckoutApi implements CheckoutApi {
       .pipe(map(toOrder), catchError(toCheckoutError));
   }
 
-  cancel(orderCode: string, reason?: string): Observable<Order> {
+  cancel(orderCode: string, choice?: CancelChoice): Observable<Order> {
     return this.http
       .post<OrderDto>(
         `${this.baseUrl}/orders/${encodeURIComponent(orderCode)}/cancel`,
-        reason ? { reason } : {},
+        choice ?? {},
+        { context: this.guest },
+      )
+      .pipe(map(toOrder), catchError(toCheckoutError));
+  }
+
+  confirmReceived(orderCode: string): Observable<Order> {
+    return this.http
+      .post<OrderDto>(
+        `${this.baseUrl}/orders/${encodeURIComponent(orderCode)}/received`,
+        {},
         { context: this.guest },
       )
       .pipe(map(toOrder), catchError(toCheckoutError));

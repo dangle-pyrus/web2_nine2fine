@@ -41,6 +41,8 @@ export interface OrderDto {
   cancelledAt?: string;
   cancelReason?: string;
   canCancel: boolean;
+  /** COMMON-01.9 / ORD-06: khách được bấm "Đã nhận hàng" (đơn đang `to_receive`). */
+  canConfirmReceived: boolean;
   /** Slice 9: máy chủ tính (đủ điều kiện + còn hạn + chưa có yêu cầu sống; `withReturn` chỉnh theo yêu cầu). */
   canReturn: boolean;
   returnDeadline?: string;
@@ -69,7 +71,7 @@ export function kindOf(e: Pick<OrderEvent, 'kind' | 'fromStatus' | 'toStatus'>):
 /** Chỉ các lần đổi trạng thái khách cần thấy (BR-ADM-12): không có lần gọi, xác nhận, ghi chú, hàng hoàn. */
 const CUSTOMER_KINDS: ReadonlySet<order_event_kind> = new Set<order_event_kind>([
   'placed', 'payment_received', 'shipped', 'delivered', 'cancel_requested', 'cancel_approved', 'cancel_rejected', 'cancelled',
-  'return_requested', 'return_approved', 'return_rejected', 'return_received', 'return_refunded', 'return_cancelled',
+  'return_requested', 'return_approved', 'return_rejected', 'return_received', 'return_refunded', 'return_cancelled', 'refunded',
 ]);
 
 function timelineTitle(kind: order_event_kind, e: OrderEvent): string {
@@ -99,6 +101,8 @@ function timelineTitle(kind: order_event_kind, e: OrderEvent): string {
       return 'Đã hoàn tiền';
     case 'return_cancelled':
       return 'Đã huỷ yêu cầu trả hàng';
+    case 'refunded':
+      return 'Đã hoàn tiền';
     default:
       return 'Đã huỷ đơn';
   }
@@ -153,6 +157,7 @@ export function toOrderDto(o: OrderRow): OrderDto {
     shippingAddress: { street: o.street, ward: o.wardName, province: o.provinceName },
     estimatedDelivery: { from: isoDate(o.estimatedFrom), to: isoDate(o.estimatedTo) },
     canCancel: false,
+    canConfirmReceived: o.status === 'to_receive',
     canReturn: false,
     timeline: events.map(({ e, kind }) => ({
       at: e.at.toISOString(),

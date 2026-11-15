@@ -7,13 +7,14 @@
  */
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable, InjectionToken } from '@angular/core';
-import { catchError, Observable, throwError } from 'rxjs';
+import { catchError, map, Observable, throwError } from 'rxjs';
 import { API_CONFIG } from '../../core/api-config';
 import { ApiErrorCode, readApiError } from '../../core/api-error';
 import { defaultMessage, toParams } from './http-support';
 import { AdminApiError, AdminErrorCode } from './models';
 import type {
   DeskCommand,
+  DeskExportQuery,
   DeskOrder,
   DeskOrderCounts,
   DeskOrderFilter,
@@ -34,6 +35,8 @@ export interface AdminOrderDeskApi {
    * Errors are `DeskApiError`.
    */
   perform(orderCode: string, command: DeskCommand, idempotencyKey: string): Observable<DeskOrder>;
+  /** ADM-ORD-18 (admin only): the CSV file and its server-given name. */
+  exportCsv(query: DeskExportQuery): Observable<{ blob: Blob; filename: string }>;
 }
 
 export const ADMIN_ORDER_DESK_API = new InjectionToken<AdminOrderDeskApi>('ADMIN_ORDER_DESK_API');
@@ -98,6 +101,12 @@ export function deskError(error: unknown): DeskApiError {
   );
 }
 
+/** `don-hang-YYYY-MM-DD.csv` with the date in Vietnam (UTC+7). */
+export function csvFileName(at: Date = new Date()): string {
+  const vn = new Date(at.getTime() + 7 * 3600_000);
+  return `don-hang-${vn.toISOString().slice(0, 10)}.csv`;
+}
+
 function failDesk<T>() {
   return catchError<T, Observable<never>>((error: unknown) => throwError(() => deskError(error)));
 }
@@ -112,6 +121,7 @@ const WRITE_PATHS = {
   'approve-cancel': 'cancel-request/approve',
   'reject-cancel': 'cancel-request/reject',
   'add-note': 'notes',
+  'confirm-refund': 'refund-confirmed',
 } as const;
 
 @Injectable({ providedIn: 'root' })
@@ -138,6 +148,29 @@ export class HttpAdminOrderDeskApi implements AdminOrderDeskApi {
     return this.http
       .get<DeskOrder>(`${this.base}/${encodeURIComponent(orderCode)}`)
       .pipe(failDesk());
+  }
+
+  exportCsv(query: DeskExportQuery): Observable<{ blob: Blob; filename: string }> {
+    const { view, codes, ...rest } = query;
+    return this.http
+      .get(`${this.base}/export`, {
+        params: toParams({
+          ...rest,
+          view: view === 'all' ? '' : view,
+          codes: codes?.length ? codes.join(',') : '',
+        }),
+        observe: 'response',
+        responseType: 'blob',
+      })
+      .pipe(
+        map((res) => ({
+          blob: res.body ?? new Blob([], { type: 'text/csv' }),
+          filename:
+            /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ??
+            csvFileName(),
+        })),
+        failDesk(),
+      );
   }
 
   perform(orderCode: string, command: DeskCommand, idempotencyKey: string): Observable<DeskOrder> {

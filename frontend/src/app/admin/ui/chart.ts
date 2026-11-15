@@ -36,7 +36,8 @@ Chart.register(
 
 export interface ChartSeries {
   label: string;
-  data: number[];
+  /** `null` leaves a gap (an hour not reached yet, a day the compare month lacks). */
+  data: (number | null)[];
   /** Comparison period: light grey, dashed (3.10 Biểu đồ). */
   comparison?: boolean;
 }
@@ -125,13 +126,14 @@ export class AdmChart {
         },
         plugins: {
           legend: { display: false },
+          // Dark tooltip (2026-11-15 refresh): this period and the comparison period together.
           tooltip: {
-            backgroundColor: '#ffffff',
-            titleColor: INK,
-            bodyColor: '#595959',
-            borderColor: '#e6e6e6',
-            borderWidth: 1,
-            cornerRadius: 16,
+            backgroundColor: '#111111',
+            titleColor: '#ffffff',
+            bodyColor: '#e5e5e5',
+            borderColor: '#111111',
+            borderWidth: 0,
+            cornerRadius: 12,
             padding: 12,
             boxPadding: 4,
             usePointStyle: true,

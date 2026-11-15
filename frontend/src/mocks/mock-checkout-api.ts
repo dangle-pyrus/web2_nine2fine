@@ -19,7 +19,13 @@ import {
   VoucherRejection,
 } from '../app/features/checkout/checkout-api';
 import { Location } from '../app/features/account/data-access/account-models';
-import { Order, OrderItem, OrderPricing } from '../app/features/orders/order-models';
+import {
+  CancelChoice,
+  cancelChoiceText,
+  Order,
+  OrderItem,
+  OrderPricing,
+} from '../app/features/orders/order-models';
 import { withCancel } from '../app/features/account/data-access/orders-api';
 import { AuthSession } from '../app/features/auth/auth-session';
 import { PROVINCES, WARDS } from './locations';
@@ -177,12 +183,23 @@ export class MockCheckoutApi implements CheckoutApi, PaymentSimulator {
     return respond(this.present(found.order, found.contact.email));
   }
 
-  cancel(orderCode: string, reason?: string): Observable<Order> {
+  confirmReceived(orderCode: string): Observable<Order> {
     const id = normalizeOrderCode(orderCode);
     const found = this.store.findOrder(id);
     if (!found) return failWith('not-found');
     if (!this.verified.has(id)) return failWith('unauthenticated');
-    const result = this.store.cancelOrder(id, reason);
+    const result = this.store.confirmReceived(id);
+    return typeof result === 'string'
+      ? failWith(result)
+      : respond(this.present(result, found.contact.email));
+  }
+
+  cancel(orderCode: string, choice?: CancelChoice): Observable<Order> {
+    const id = normalizeOrderCode(orderCode);
+    const found = this.store.findOrder(id);
+    if (!found) return failWith('not-found');
+    if (!this.verified.has(id)) return failWith('unauthenticated');
+    const result = this.store.cancelOrder(id, cancelChoiceText(choice));
     return typeof result === 'string'
       ? failWith(result)
       : respond(this.present(result, found.contact.email));

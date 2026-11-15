@@ -113,7 +113,6 @@
         @if (showError('type'); as error) {
         <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
         }
-        <p class="hint">Hiện dưới tên sản phẩm trên trang chi tiết.</p>
       </div>
       <div class="field">
         <label for="p-desc">Mô tả</label>
@@ -213,7 +212,7 @@
       <header><h2 id="price-title">Giá</h2></header>
       <div class="form-grid">
         <div class="field">
-          <label class="req" for="p-price">Giá bán</label>
+          <label class="req" for="p-price">Giá bán (gốc)</label>
           <div class="affix">
             <input
               id="p-price"
@@ -233,8 +232,59 @@
           <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
           }
         </div>
+        @if (contract && (canSale || hasSale())) {
         <div class="field">
-          <label for="p-compare">Giá gốc (trước giảm)</label>
+          <div class="label-row">
+            <label for="p-sale-price">Giá bán (sau giảm)</label>
+            @if (canSale) {
+            <button
+              type="button"
+              class="adm-btn adm-btn--sm adm-btn--icon"
+              aria-label="Đặt thời hạn giảm giá"
+              title="Đặt thời hạn giảm giá"
+              (click)="editSale()"
+            >
+              <adm-icon name="reiconCalendar" [size]="16" />
+            </button>
+            }
+          </div>
+          <div class="affix">
+            <input
+              id="p-sale-price"
+              class="input num-input"
+              type="number"
+              min="0"
+              step="1000"
+              inputmode="numeric"
+              [disabled]="!canSale"
+              [value]="draft().salePrice ?? ''"
+              (input)="patch({ salePrice: numberOrNull($any($event.target).value) })"
+              (blur)="touch('salePrice')"
+              [attr.aria-invalid]="!!showError('salePrice')"
+            />
+            <span class="suffix">₫</span>
+          </div>
+          @if (showError('salePrice'); as error) {
+          <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+          } @else if (showError('saleStartsAt') || showError('saleEndsAt'); as error) {
+          <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
+          } @else if (hasSale()) {
+          <p class="hint sale-hint">
+            @if (draft().saleState === 'running') {
+            <adm-badge label="Đang giảm giá" tone="success" />
+            } @else if (draft().saleState === 'upcoming') {
+            <adm-badge label="Sắp diễn ra" tone="info" />
+            } @else if (draft().saleState === 'ended') {
+            <adm-badge label="Đã kết thúc" tone="neutral" />
+            } @if (draft().saleStartsAt && draft().saleEndsAt) { {{ dmy(draft().saleStartsAt) }} –
+            {{ dmy(draft().saleEndsAt) }} } @if (saleDiscount() !== null) { · giảm {{ saleDiscount()
+            }}% }
+          </p>
+          }
+        </div>
+        }
+        <div class="field">
+          <label for="p-compare">Giá niêm yết (gạch ngang)</label>
           <div class="affix">
             <input
               id="p-compare"
@@ -255,7 +305,7 @@
           } @else if (discount(); as value) {
           <p class="hint">Khách thấy giá gạch ngang, giảm {{ percent(value) }}.</p>
           } @else {
-          <p class="hint">Để trống nếu không giảm giá.</p>
+          <p class="hint">Để trống nếu không dùng.</p>
           }
         </div>
         @if (canSeeCost) {
@@ -285,86 +335,6 @@
         </div>
         }
       </div>
-      @if (contract && (canSale || hasSale())) {
-      <div class="sale" role="group" aria-labelledby="sale-title">
-        <h3 id="sale-title">
-          Giá giảm có hạn @if (draft().saleState === 'running') {
-          <adm-badge label="Đang giảm giá" tone="success" />
-          } @else if (draft().saleState === 'upcoming') {
-          <adm-badge label="Sắp diễn ra" tone="info" />
-          } @else if (draft().saleState === 'ended') {
-          <adm-badge label="Đã kết thúc" tone="neutral" />
-          }
-        </h3>
-        <p class="hint">
-          Trong đợt, khách thấy giá giảm và giá gốc gạch ngang. Hết hạn tự quay về giá bán, không
-          cần làm gì thêm.
-        </p>
-        <div class="form-grid">
-          <div class="field">
-            <label for="p-sale-price">Giá giảm</label>
-            <div class="affix">
-              <input
-                id="p-sale-price"
-                class="input num-input"
-                type="number"
-                min="0"
-                step="1000"
-                inputmode="numeric"
-                [disabled]="!canSale"
-                [value]="draft().salePrice ?? ''"
-                (input)="patch({ salePrice: numberOrNull($any($event.target).value) })"
-                (blur)="touch('salePrice')"
-                [attr.aria-invalid]="!!showError('salePrice')"
-              />
-              <span class="suffix">₫</span>
-            </div>
-            @if (showError('salePrice'); as error) {
-            <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
-            } @else if (saleDiscount() !== null) {
-            <p class="hint">Giảm {{ saleDiscount() }}% so với giá bán.</p>
-            }
-          </div>
-          <div class="field">
-            <label for="p-sale-start">Từ ngày</label>
-            <input
-              id="p-sale-start"
-              class="input"
-              type="date"
-              [disabled]="!canSale"
-              [value]="draft().saleStartsAt ?? ''"
-              (input)="patch({ saleStartsAt: $any($event.target).value || null })"
-              (blur)="touch('saleStartsAt')"
-              [attr.aria-invalid]="!!showError('saleStartsAt')"
-            />
-            @if (showError('saleStartsAt'); as error) {
-            <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
-            }
-          </div>
-          <div class="field">
-            <label for="p-sale-end">Đến hết ngày</label>
-            <input
-              id="p-sale-end"
-              class="input"
-              type="date"
-              [disabled]="!canSale"
-              [value]="draft().saleEndsAt ?? ''"
-              (input)="patch({ saleEndsAt: $any($event.target).value || null })"
-              (blur)="touch('saleEndsAt')"
-              [attr.aria-invalid]="!!showError('saleEndsAt')"
-            />
-            @if (showError('saleEndsAt'); as error) {
-            <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
-            }
-          </div>
-        </div>
-        @if (canSale && hasSale()) {
-        <button type="button" class="adm-btn adm-btn--sm adm-btn--ghost" (click)="removeSale()">
-          Gỡ đợt giảm giá
-        </button>
-        }
-      </div>
-      }
     </section>
 
     <!-- Options and variants -->
@@ -380,55 +350,34 @@
       }
 
       <div class="option">
-        <span class="field-label">Màu</span>
-        <div class="chips">
+        <div class="option-head">
+          <span class="field-label">Màu</span>
+          @if (canEdit) {
+          <button type="button" class="adm-btn adm-btn--sm" (click)="pickColors()">
+            <adm-icon name="reiconPlus" [size]="14" /> Thêm màu
+          </button>
+          }
+        </div>
+        <ul class="colors" role="list">
           @for (color of draft().colors; track color.name) {
-          <span class="chip" [class.chip--static]="!canEdit"
-            ><span class="swatch" [style.background]="color.hex"></span>{{ color.name }} @if
-            (canEdit) {<button
+          <li class="color-item">
+            <span class="color-dot" [attr.title]="color.name"
+              ><span [style.background]="color.hex"></span
+            ></span>
+            <span class="color-name">{{ color.name }}</span>
+            @if (canEdit) {
+            <button
               type="button"
+              class="color-remove"
               [attr.aria-label]="'Bỏ màu ' + color.name"
               (click)="removeColor(color.name)"
             >
-              <adm-icon name="reiconX" [size]="12" /></button
-            >}
-          </span>
+              <adm-icon name="reiconX" [size]="12" />
+            </button>
+            }
+          </li>
           }
-        </div>
-        @if (canEdit) {
-        <div class="add-color">
-          <div class="chips">
-            @for (color of presetColors; track color.name) { @if (!hasColor(color.name)) {
-            <button type="button" class="chip chip--static chip--add" (click)="addColor(color)">
-              <adm-icon name="reiconPlus" [size]="12" /><span
-                class="swatch"
-                [style.background]="color.hex"
-              ></span
-              >{{ color.name }}
-            </button>
-            } }
-          </div>
-          <form class="row" (submit)="$event.preventDefault(); addColor(newColor())">
-            <input
-              type="color"
-              class="color-input"
-              aria-label="Mã màu"
-              [value]="newColor().hex"
-              (input)="newColor.set({ name: newColor().name, hex: $any($event.target).value })"
-            />
-            <input
-              class="input input--sm"
-              aria-label="Tên màu mới"
-              placeholder="Màu khác, ví dụ Xanh rêu"
-              [value]="newColor().name"
-              (input)="newColor.set({ name: $any($event.target).value, hex: newColor().hex })"
-            />
-            <button type="submit" class="adm-btn adm-btn--sm" [disabled]="!newColor().name.trim()">
-              Thêm màu
-            </button>
-          </form>
-        </div>
-        }
+        </ul>
       </div>
 
       <div class="option">
@@ -442,160 +391,38 @@
             [attr.aria-pressed]="draft().sizes.includes(size)"
             (click)="toggleSize(size, !draft().sizes.includes(size))"
           >
-            {{ size }}
+            @if (draft().sizes.includes(size)) {<adm-icon name="reiconCheck" [size]="14" />} {{ size
+            }}
           </button>
           }
         </div>
       </div>
 
       @if (draft().variants.length) {
-      <div class="variant-head row">
-        <span class="small secondary">Nhóm theo</span>
-        <div class="segmented" role="group" aria-label="Nhóm biến thể theo">
-          <button
-            type="button"
-            [class.is-active]="groupBy() === 'color'"
-            (click)="groupBy.set('color')"
-          >
-            Màu
-          </button>
-          <button
-            type="button"
-            [class.is-active]="groupBy() === 'size'"
-            (click)="groupBy.set('size')"
-          >
-            Size
-          </button>
-        </div>
-      </div>
-
-      @if (selectedVariants().size && canEdit) {
-      <div class="bulkbar" role="region" aria-label="Sửa hàng loạt biến thể">
-        <span>Đã chọn {{ selectedVariants().size }}</span>
-        <span class="spacer"></span>
-        @if (!contract) {
-        <input
-          class="input input--sm bulk-input"
-          type="number"
-          min="0"
-          placeholder="Giá ₫"
-          aria-label="Giá cho biến thể đã chọn"
-          [value]="bulkPrice() ?? ''"
-          (input)="bulkPrice.set(numberOrNull($any($event.target).value))"
-        />
-        } @if (bulkStockAllowed()) {
-        <input
-          class="input input--sm bulk-input"
-          type="number"
-          min="0"
-          placeholder="Tồn kho"
-          aria-label="Tồn kho cho biến thể đã chọn"
-          [value]="bulkStock() ?? ''"
-          (input)="bulkStock.set(numberOrNull($any($event.target).value))"
-        />
-        }
-        <button
-          type="button"
-          class="adm-btn adm-btn--sm"
-          [disabled]="bulkPrice() === null && bulkStock() === null"
-          (click)="applyBulk()"
-        >
-          Áp dụng
-        </button>
-        <button
-          type="button"
-          class="adm-btn adm-btn--sm adm-btn--icon"
-          aria-label="Bỏ chọn"
-          (click)="clearSelection()"
-        >
-          <adm-icon name="reiconX" [size]="16" />
-        </button>
-      </div>
-      }
-
       <div class="table-wrap">
-        <table class="table variants">
+        <table class="table matrix">
           <thead>
             <tr>
-              @if (canEdit) {
-              <th class="w-check"></th>
+              <th>Tồn kho</th>
+              @for (size of draft().sizes; track size) {
+              <th class="num">{{ size }}</th>
               }
-              <th>Biến thể</th>
-              <th>SKU</th>
-              @if (!contract) {
-              <th class="num">Giá</th>
-              }
-              <th class="num">Tồn kho</th>
             </tr>
           </thead>
-          @for (group of groups(); track group.key) {
           <tbody>
-            <tr class="group-row">
-              @if (canEdit) {
-              <td class="w-check">
-                <label class="check"
-                  ><input
-                    type="checkbox"
-                    [attr.aria-label]="'Chọn nhóm ' + group.label"
-                    [checked]="groupChecked(group.rows)"
-                    (change)="toggleGroup(group.rows, $any($event.target).checked)"
-                /></label>
-              </td>
-              }
-              <td [attr.colspan]="contract ? 2 : 3">
-                @if (group.hex) {<span class="swatch" [style.background]="group.hex"></span>}
-                <strong>{{ group.label }}</strong>
-                <span class="small tertiary">({{ group.rows.length }} biến thể)</span>
-              </td>
-              <td class="num secondary">{{ group.stock | admNum }}</td>
-            </tr>
-            @for (variant of group.rows; track variant.id) {
-            <tr [class.is-selected]="selectedVariants().has(variant.id)">
-              @if (canEdit) {
-              <td class="w-check">
-                <label class="check"
-                  ><input
-                    type="checkbox"
-                    [attr.aria-label]="'Chọn ' + variant.color.name + ' ' + variant.size"
-                    [checked]="selectedVariants().has(variant.id)"
-                    (change)="toggleVariant(variant.id, $any($event.target).checked)"
-                /></label>
-              </td>
-              }
-              <td class="variant-name">
-                {{ groupBy() === 'color' ? 'Size ' + variant.size : variant.color.name }}
-              </td>
-              <td>
-                <input
-                  class="input input--sm mono cell-input"
-                  [attr.aria-label]="'SKU ' + variant.color.name + ' ' + variant.size"
-                  [value]="variant.sku"
-                  [disabled]="!!variant.hasOrders"
-                  [attr.title]="variant.hasOrders ? 'SKU đã có đơn hàng, không đổi được' : null"
-                  (change)="updateVariant(variant.id, { sku: $any($event.target).value.trim().toUpperCase() })"
-                />
-              </td>
-              @if (!contract) {
+            @for (color of draft().colors; track color.name) {
+            <tr>
+              <th scope="row">
+                <span class="swatch" [style.background]="color.hex"></span> {{ color.name }}
+              </th>
+              @for (size of draft().sizes; track size) {
               <td class="num">
-                <input
-                  class="input input--sm num-input cell-input price-input"
-                  type="number"
-                  min="0"
-                  step="1000"
-                  [placeholder]="money(draft().price)"
-                  [attr.aria-label]="'Giá ' + variant.color.name + ' ' + variant.size"
-                  [value]="variant.price ?? ''"
-                  (change)="updateVariant(variant.id, { price: numberOrNull($any($event.target).value) })"
-                />
-              </td>
-              }
-              <td class="num">
-                @if (stockLocked(variant)) {
+                @if (variantAt(color.name, size); as variant) { @if (stockLocked(variant)) {
                 <button
                   type="button"
                   class="stock-link"
                   [class.is-zero]="variant.inventory <= 0"
-                  [attr.aria-label]="'Tồn kho ' + variant.color.name + ' ' + variant.size + ': ' + variant.inventory + (canAdjustStock ? '. Điều chỉnh' : '. Xem lịch sử')"
+                  [attr.aria-label]="'Tồn kho ' + color.name + ' ' + size + ': ' + variant.inventory + (canAdjustStock ? '. Điều chỉnh' : '. Xem lịch sử')"
                   [title]="canAdjustStock ? 'Điều chỉnh tồn kho có lý do' : 'Xem lịch sử tồn kho'"
                   (click)="adjustStock(variant)"
                 >
@@ -604,26 +431,28 @@
                 </button>
                 } @else {
                 <input
-                  class="input input--sm num-input cell-input stock-input"
+                  class="input input--sm num-input stock-input"
                   type="number"
                   min="0"
                   step="1"
                   [class.is-zero]="variant.inventory <= 0"
-                  [attr.aria-label]="'Tồn kho ' + variant.color.name + ' ' + variant.size"
+                  [attr.aria-label]="'Tồn kho ' + color.name + ' ' + size"
                   [value]="variant.inventory"
                   (change)="updateVariant(variant.id, { inventory: stockValue($any($event.target).value) })"
                 />
+                } } @else {
+                <span class="tertiary">—</span>
                 }
               </td>
+              }
             </tr>
             }
           </tbody>
-          }
         </table>
       </div>
       <p class="hint table-hint">
-        @if (!contract) { Để trống giá biến thể để dùng giá sản phẩm. } Tồn kho của biến thể đã lưu
-        chỉ đổi qua "Điều chỉnh" (có lý do, có lịch sử): bấm vào số tồn để mở.
+        Tồn kho của biến thể đã lưu chỉ đổi qua "Điều chỉnh" (có lý do, có lịch sử): bấm vào số tồn
+        để mở.
       </p>
       }
     </section>
@@ -665,37 +494,7 @@
       </div>
     </section>
 
-    @if (contract) {
-    <section class="section stack" aria-labelledby="slug-title">
-      <header><h2 id="slug-title">Đường dẫn</h2></header>
-      <div class="field">
-        <label for="p-slug-input">Đường dẫn sản phẩm</label>
-        <div class="row slug-row">
-          <span class="secondary small slug-prefix">{{ slugPrefix }}</span>
-          <input
-            id="p-slug-input"
-            class="input mono"
-            [value]="draft().slug"
-            [disabled]="!!product()?.slugLocked"
-            [attr.aria-invalid]="!!showError('slug')"
-            (input)="patch({ slug: $any($event.target).value.trim().toLowerCase() })"
-            placeholder="ten-san-pham"
-          />
-        </div>
-        @if (showError('slug'); as error) {
-        <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
-        } @else if (product()?.slugLocked) {
-        <p class="hint">Không đổi đường dẫn của sản phẩm đã từng hiển thị.</p>
-        } @else if (isNew()) {
-        <p class="hint">
-          Để trống để tự tạo từ tên sản phẩm. Chữ thường không dấu, số, gạch ngang.
-        </p>
-        } @else {
-        <p class="hint">Đổi được cho đến lần đầu sản phẩm được chuyển sang Đang bán.</p>
-        }
-      </div>
-    </section>
-    } @else {
+    @if (!contract) {
     <!-- SEO -->
     <section class="section stack" aria-labelledby="seo-title">
       <header><h2 id="seo-title">Hiển thị trên Google</h2></header>
@@ -742,33 +541,30 @@
         }
       </div>
     </section>
-    } @if (!isNew() && canDelete) {
-    <div class="danger-zone">
-      <button type="button" class="adm-btn adm-btn--danger" (click)="remove()">
-        <adm-icon name="reiconTrash" [size]="16" /> Xóa sản phẩm
-      </button>
-    </div>
+    } @if (!isNew() && id()) {
+    <adm-product-reviews [productId]="id()!" />
     }
   </div>
 
   <div class="col-side">
     <section class="section stack" aria-labelledby="status-title">
       <header><h2 id="status-title">Trạng thái</h2></header>
-      <div class="field">
-        <select
-          class="select"
-          aria-labelledby="status-title"
-          [value]="draft().status"
-          (change)="patch({ status: $any($event.target).value })"
+      <div class="status-options" role="radiogroup" aria-labelledby="status-title">
+        @for (option of statusOptions; track option.value) {
+        <button
+          type="button"
+          role="radio"
+          class="status-option"
+          [attr.data-status]="option.value"
+          [class.is-on]="draft().status === option.value"
+          [attr.aria-checked]="draft().status === option.value"
+          (click)="patch({ status: option.value })"
         >
-          @for (option of statusOptions; track option.value) {
-          <option [value]="option.value" [selected]="draft().status === option.value">
-            {{ option.label }}
-          </option>
-          }
-        </select>
-        <p class="hint">{{ statusHelp() }}</p>
+          <span class="status-dot"></span>{{ option.label }}
+        </button>
+        }
       </div>
+      <p class="hint">{{ statusHelp() }}</p>
     </section>
 
     <section class="section stack" aria-labelledby="class-title">

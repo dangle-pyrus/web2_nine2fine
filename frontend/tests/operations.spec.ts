@@ -10,7 +10,7 @@ async function signIn(page: Page, returnUrl: string, email = member.email): Prom
   await page.goto(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`);
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).not.toHaveURL(/\/auth\//);
 }
@@ -25,10 +25,9 @@ async function addToCart(page: Page, slug: string, size = 'M'): Promise<void> {
 /** `to_ship` orders are cancelled by request: open the dialog and send it. */
 async function requestCancel(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Gửi yêu cầu huỷ' }).click();
-  await page
-    .getByRole('dialog', { name: 'Gửi yêu cầu huỷ đơn' })
-    .getByRole('button', { name: 'Gửi yêu cầu huỷ' })
-    .click();
+  const dialog = page.getByRole('dialog', { name: 'Gửi yêu cầu huỷ đơn' });
+  await dialog.getByRole('radio', { name: 'Tôi không còn nhu cầu mua nữa' }).check();
+  await dialog.getByRole('button', { name: 'Gửi yêu cầu huỷ' }).click();
 }
 
 test('policies, help page and seller identity are published', async ({ page }) => {
@@ -90,7 +89,7 @@ test('guest checkout keeps note and VAT invoice, then cancels after email verifi
   await page.getByRole('link', { name: 'Theo dõi đơn hàng' }).click();
   await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('hoa@example.com');
   await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác minh (8 số)' }).fill('12345678');
+  await page.getByRole('textbox', { name: 'Mã xác minh (6 số)' }).fill('123456');
   await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByText('Giao giờ hành chính')).toBeVisible();
   await expect(page.getByText('Công ty TNHH Hoa Lê')).toBeVisible();

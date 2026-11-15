@@ -1,4 +1,5 @@
 import { Prisma, user_role } from '@prisma/client';
+import { OTP_POLICY } from '../../config/assumptions';
 import prisma from '../../config/prisma';
 import { getConfig } from '../../config/env';
 import { addMs, HOUR, MINUTE, now, secondsUntil } from '../../lib/clock';
@@ -32,7 +33,7 @@ export interface ClientInfo {
   userAgent?: string;
 }
 
-const RESEND_SECONDS = 60;
+const RESEND_SECONDS = OTP_POLICY.resendSeconds;
 
 export async function lookupEmail(email: string, ip: string): Promise<{ registered: boolean }> {
   const byIp = await hitWindow(keys.lookupIp(ip), 20, 15 * MINUTE);
@@ -56,10 +57,10 @@ export async function requestCode(
   const cooldownSec = await getLockSeconds(keys.codeSendCooldown(email, purpose));
   if (cooldownSec > 0) return { resendAfterSeconds: Math.min(cooldownSec, RESEND_SECONDS) };
 
-  // (c) 30 lần / giờ / IP, (b) 5 lần / 30 phút / email / mục đích.
-  const byIp = await hitWindow(keys.codeSendIp(ip), 30, HOUR);
+  // (c) 10 lần / giờ / IP, (b) 5 lần / 30 phút / email / mục đích (OTP_POLICY).
+  const byIp = await hitWindow(keys.codeSendIp(ip), OTP_POLICY.sendPerIpMax, OTP_POLICY.sendPerIpWindowMs);
   if (!byIp.allowed) throw Errors.rateLimited(byIp.retryAfterSeconds);
-  const byEmail = await hitWindow(keys.codeSendEmail(email, purpose), 5, 30 * MINUTE);
+  const byEmail = await hitWindow(keys.codeSendEmail(email, purpose), OTP_POLICY.sendPerEmailMax, OTP_POLICY.sendPerEmailWindowMs);
   if (!byEmail.allowed) throw Errors.rateLimited(byEmail.retryAfterSeconds);
 
   const t = now();

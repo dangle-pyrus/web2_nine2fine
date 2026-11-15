@@ -211,7 +211,7 @@ export class MockAuthApi implements AuthApi {
 
   private checkEmailAndCode(address: string, code: string): Observable<never> | null {
     if (!validEmail(address)) return failWith('validation', { field: 'email' });
-    return /^\d{8}$/.test(code.replace(/[\s-]/g, ''))
+    return /^\d{6}$/.test(code.replace(/[\s-]/g, ''))
       ? null
       : failWith('validation', { field: 'code' });
   }

@@ -1,7 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { DialogRef } from '@angular/cdk/dialog';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime, distinctUntilChanged, map } from 'rxjs';
 import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import type { BadgeSpec } from '../../core/status';
@@ -20,12 +28,14 @@ import {
   returnDeskErrorMessage,
 } from '../../data-access/returns-api';
 import { AdmBadge } from '../../ui/badge';
+import { AdminDialogs } from '../../ui/dialogs';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
 import { loader } from '../../ui/list-state';
 import { AdmPageHeader } from '../../ui/page-header';
 import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
+import { ReturnDetailDrawer } from './return-detail-drawer';
 
 const TAB_VALUES = RETURN_TABS.map((tab) => tab.value);
 const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
@@ -39,13 +49,13 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
 
 /**
  * `/admin/returns` (Slice 9, BR-RET-31, 42): tabs with counts, search, sort, page + limit, all in the
- * URL. A row opens the request, where staff approve, reject, receive and (admin) confirm the refund.
+ * URL. A row opens the request in a drawer (`?return=<id>`), where staff approve, reject, receive and
+ * (admin) confirm the refund.
  */
 @Component({
   selector: 'adm-return-desk-list-page',
   imports: [
     FormsModule,
-    RouterLink,
     AdmPageHeader,
     AdmBadge,
     AdmIcon,
@@ -137,7 +147,7 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
         </adm-empty>
       } @else {
         <div class="table-wrap" [class.is-refreshing]="view.state().refreshing" aria-live="polite">
-          <table class="table table--cards">
+          <table class="table table--cards table--orders">
             <thead>
               <tr>
                 <th>Đơn</th>
@@ -154,16 +164,14 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
             } @else {
               <tbody>
                 @for (row of page()?.items ?? []; track row.id) {
-                  <tr>
+                  <tr class="is-clickable" (click)="open(row.id)">
                     <td>
-                      <a class="cell-title mono" [routerLink]="['/admin/returns', row.id]"
+                      <a
+                        class="cell-title mono"
+                        [href]="'/admin/returns?return=' + row.id"
+                        (click)="$event.preventDefault()"
                         >#{{ row.orderCode }}</a
                       >
-                      @if (row.overdue) {
-                        <div class="cell-sub">
-                          <span class="chip chip--static">Quá hạn xử lý</span>
-                        </div>
-                      }
                     </td>
                     <td data-label="Gửi lúc" class="secondary">
                       {{ row.requestedAt | admDateTime }}
@@ -209,6 +217,8 @@ export class ReturnDeskListPage {
   private readonly api = inject(ADMIN_RETURN_DESK_API);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(AdminDialogs);
+  private drawerRef: DialogRef<boolean> | null = null;
 
   protected readonly tabs = RETURN_TABS;
   protected readonly limits = RETURN_LIMITS;
@@ -232,6 +242,11 @@ export class ReturnDeskListPage {
     ),
     { requireSync: true },
   );
+  /** `?return=<id>`: the drawer is open on that request (old `/admin/returns/<id>` links land here). */
+  private readonly openId = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('return') ?? '')),
+    { requireSync: true },
+  );
   protected readonly view = loader(
     this.query,
     (query) => this.api.list(query),
@@ -242,6 +257,10 @@ export class ReturnDeskListPage {
   protected readonly search = signal(this.query().q);
 
   constructor() {
+    toObservable(this.openId)
+      .pipe(takeUntilDestroyed())
+      .subscribe((id) => (id ? this.showDrawer(id) : this.drawerRef?.close()));
+    inject(DestroyRef).onDestroy(() => this.drawerRef?.close());
     toObservable(this.search)
       .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
       .subscribe((value) => {
@@ -263,10 +282,34 @@ export class ReturnDeskListPage {
       queryParams: {
         state: next.state === 'all' ? null : next.state,
         q: next.q || null,
+        return: this.openId() || null,
         sort: next.sort === 'requestedAt' ? null : next.sort,
         page: next.page === 1 ? null : next.page,
         limit: next.limit === RETURN_DEFAULT_LIMIT ? null : next.limit,
       },
+    });
+  }
+
+  open(id: string): void {
+    this.setOpen(id);
+  }
+
+  private setOpen(id: string | null): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { return: id },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private showDrawer(id: string): void {
+    if (this.drawerRef) return;
+    const ref = this.dialogs.drawer<{ id: string }, boolean>(ReturnDetailDrawer, { id }, true);
+    this.drawerRef = ref;
+    ref.closed.subscribe((changed) => {
+      this.drawerRef = null;
+      if (changed) this.view.reload();
+      if (this.openId()) this.setOpen(null);
     });
   }
 

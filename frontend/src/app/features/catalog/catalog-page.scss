@@ -260,3 +260,39 @@ aside {
   font-size: 13px;
   color: var(--required);
 }
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.chip:hover,
+.chip:focus-visible {
+  border-color: var(--ink);
+}
+.bestsellers {
+  margin-top: 40px;
+  h2 {
+    margin: 0 0 20px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+}

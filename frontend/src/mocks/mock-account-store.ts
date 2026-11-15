@@ -139,6 +139,33 @@ export class MockAccountStore {
     }))!;
   }
 
+  /** ORD-11: the shopper presses "Đã nhận hàng" while the parcel is on its way. */
+  confirmReceived(id: string): Order | 'not-found' | 'invalid-transition' {
+    const found = this.findOrder(id);
+    if (!found) return 'not-found';
+    if (found.order.status !== 'shipping' && found.order.status !== 'delivering') {
+      return 'invalid-transition';
+    }
+    const now = new Date().toISOString();
+    return this.updateOrder(id, (order) => ({
+      ...order,
+      status: 'completed',
+      payment: order.payment.paid
+        ? order.payment
+        : { ...order.payment, paid: true, label: 'Đã thanh toán · Thanh toán khi nhận hàng' },
+      delivery: order.delivery && { ...order.delivery, deliveredAt: now },
+      timeline: order.timeline && [
+        ...order.timeline,
+        {
+          at: now,
+          title: 'Giao hàng thành công',
+          detail: 'Bạn đã xác nhận đã nhận hàng.',
+          actor: 'customer',
+        },
+      ],
+    }))!;
+  }
+
   requestReturn(
     id: string,
     request: Omit<ReturnRequest, 'requestedAt'>,

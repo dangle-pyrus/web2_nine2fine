@@ -8,7 +8,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { Router, RouterLink } from '@angular/router';
+import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
+import { Router } from '@angular/router';
 import { catchError, map, of, switchMap, tap } from 'rxjs';
 import { API_CONFIG } from '../../../core/api-config';
 import { AdminSession } from '../../core/admin-session';
@@ -18,7 +19,6 @@ import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import {
   ACTION_LABELS,
   actorLabel,
-  CANCEL_ACTION_REASON,
   CANCEL_REASON_LABELS,
   DESK_TABS,
   entryStatusLabel,
@@ -34,17 +34,15 @@ import { ADMIN_ORDER_DESK_API } from '../../data-access/order-desk-api';
 import type { DeskAction, DeskOrder, DeskStaffRef } from '../../data-access/order-desk-models';
 import { AdminDialogs } from '../../ui/dialogs';
 import { AdmBadge } from '../../ui/badge';
-import { AdmCopyButton } from '../../ui/copy-button';
-import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
-import { AdmPageHeader } from '../../ui/page-header';
 import {
+  actionKindOf,
   DeskActionDialog,
   type DeskActionDialogData,
   type DeskActionKind,
   type DeskActionOutcome,
 } from './order-action-dialog';
-import { routeParam } from '../../ui/route-param';
+import { mediaSrc } from '../content/media-picker';
 
 type LoadState =
   | { kind: 'loading' }
@@ -52,54 +50,36 @@ type LoadState =
   | { kind: 'not-found' }
   | { kind: 'error'; message: string };
 
-function kindOf(action: DeskAction): DeskActionKind | null {
-  if (action in CANCEL_ACTION_REASON) return 'cancel';
-  switch (action) {
-    case 'call-attempt':
-    case 'confirm':
-    case 'ship':
-    case 'deliver':
-    case 'restock':
-    case 'write-off':
-    case 'approve-cancel':
-    case 'reject-cancel':
-    case 'add-note':
-      return action;
-    default:
-      return null;
-  }
-}
-
 /**
- * Order detail of the orders desk (Slice 4, BR-ADM-09, 10): customer, shipping and payment blocks,
- * the history newest first, and the buttons the server allows right now (`allowedActions`).
- * Lát 4.3-4.6 act on them (call attempt, confirm, ship, deliver, cancel, returned stock, approve or
- * reject a cancel request, internal note); "In phiếu giao" opens the print view of the slip.
+ * Order detail of the orders desk (Slice 4, BR-ADM-09, 10) as a right-hand drawer over the list:
+ * recipient, items, payment, shipping, the history newest first, and a footer with the buttons the
+ * server allows right now (`allowedActions`). The list keeps its filters and scroll; it closes with
+ * `true` when something changed so the list reloads. "In phiếu giao" opens the print view.
  */
 @Component({
-  selector: 'adm-order-desk-detail-page',
+  selector: 'adm-order-detail-drawer',
   imports: [
-    RouterLink,
-    AdmPageHeader,
     AdmBadge,
     AdmIcon,
-    AdmCopyButton,
-    AdmEmptyState,
     ReturnPanel,
     MoneyPipe,
     NumPipe,
     DateTimePipe,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './order-desk-detail-page.html',
-  styleUrl: './order-desk-detail-page.scss',
+  host: { class: 'adm' },
+  templateUrl: './order-detail-drawer.html',
+  styleUrl: './order-detail-drawer.scss',
 })
-export class OrderDeskDetailPage {
+export class OrderDetailDrawer {
   private readonly api = inject(ADMIN_ORDER_DESK_API);
   protected readonly session = inject(AdminSession);
   private readonly dialogs = inject(AdminDialogs);
   private readonly router = inject(Router);
-  private readonly code = routeParam('id');
+  protected readonly id = inject<{ id: string }>(DIALOG_DATA).id;
+  private readonly ref = inject<DialogRef<boolean>>(DialogRef);
+  private changed = false;
+  protected readonly src = mediaSrc;
   private readonly tick = signal(0);
   /** Slice 9: the order shows its return request and the buttons to handle it. */
   protected readonly returnsOn = inject(API_CONFIG).returnsMode === 'http';
@@ -132,13 +112,20 @@ export class OrderDeskDetailPage {
     const seen = new Set<DeskActionKind>();
     const live: { action: DeskAction; kind: DeskActionKind }[] = [];
     for (const action of this.actions()) {
-      const kind = kindOf(action);
+      const kind = actionKindOf(action);
       if (kind && !seen.has(kind)) {
         seen.add(kind);
         live.push({ action, kind });
       }
     }
     return { live };
+  });
+  /** Footer: one black primary (the step the order waits for), everything else outlined. */
+  protected readonly footer = computed(() => {
+    const quiet: DeskActionKind[] = ['cancel', 'write-off', 'reject-cancel', 'add-note'];
+    const live = this.buttons().live;
+    const primary = live.find((button) => !quiet.includes(button.kind)) ?? null;
+    return { primary, secondary: live.filter((button) => button !== primary) };
   });
   /** BR-ADM-39: only when the server lists `print-slip` (`to_ship` / `to_receive`). */
   protected readonly canPrint = computed(() => this.actions().includes('print-slip'));
@@ -147,7 +134,7 @@ export class OrderDeskDetailPage {
   private readonly live = viewChild<ElementRef<HTMLElement>>('live');
 
   constructor() {
-    toObservable(computed(() => ({ code: this.code(), tick: this.tick() })))
+    toObservable(computed(() => ({ code: this.id, tick: this.tick() })))
       .pipe(
         tap(() => this.state.set({ kind: 'loading' })),
         switchMap(({ code }) =>
@@ -178,15 +165,22 @@ export class OrderDeskDetailPage {
 
   printSlip(): void {
     const order = this.order();
-    if (order) void this.router.navigate(['/admin/orders', order.id, 'slip']);
+    if (!order) return;
+    this.close();
+    void this.router.navigate(['/admin/orders', order.id, 'slip']);
+  }
+
+  close(): void {
+    this.ref.close(this.changed);
   }
 
   /** A return step changed the request (and maybe `paymentStatus`): show it, then reload the order. */
   onReturnUpdated(ret: AdminReturn): void {
+    this.changed = true;
     const order = this.order();
     if (order) this.state.set({ kind: 'ready', order: { ...order, return: ret } });
     this.api
-      .get(this.code())
+      .get(this.id)
       .pipe(catchError(() => of(null)))
       .subscribe((fresh) => {
         if (fresh) this.state.set({ kind: 'ready', order: fresh });
@@ -200,6 +194,7 @@ export class OrderDeskDetailPage {
   /** The page changes only with the server's answer (BR-ADM-15); then it tells where the order went. */
   private settle(outcome: DeskActionOutcome | undefined): void {
     if (!outcome) return;
+    this.changed = true;
     if (outcome.kind === 'done') {
       this.state.set({ kind: 'ready', order: outcome.order });
       // A note changes no status, so there is no tab to announce.

@@ -144,12 +144,12 @@ describe('catalog đọc (dữ liệu seed, chỉ đọc)', () => {
     expect(slugs(await g('/api/products?sort=price-desc'))).toEqual([...asc].reverse());
   });
 
-  it('T-CAT-20/21 bestselling, newest, featured mặc định', async () => {
+  it('T-CAT-20/21 bestselling, featured; newest mặc định (PLP-07)', async () => {
     expect(slugs(await g('/api/products?sort=bestselling'))[0]).toBe('nine-to-fine-shirt');
-    expect(slugs(await g('/api/products?sort=newest'))[0]).toBe('the-straight-trousers');
+    expect(slugs(await g('/api/products?sort=featured'))[0]).toBe('the-everyday-blazer');
     const def = slugs(await g('/api/products'));
-    expect(def[0]).toBe('the-everyday-blazer');
-    expect(slugs(await g('/api/products?sort=featured'))).toEqual(def);
+    expect(def[0]).toBe('the-straight-trousers');
+    expect(slugs(await g('/api/products?sort=newest'))).toEqual(def);
     const bad = await g('/api/products?sort=hot');
     expect(bad.status).toBe(422);
     expect(bad.body.error.field).toBe('sort');

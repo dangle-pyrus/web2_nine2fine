@@ -20,6 +20,7 @@ import { BuyAgain } from './buy-again';
 import { OrderStatusBadge } from '../../orders/order-status-badge';
 import { OrderView } from '../../orders/order-view';
 import { OrderCancellation } from './order-cancellation';
+import { OrderReceipt } from './order-receipt';
 
 /** Figma `detail-order` (193:2518) with ProgressStep (226:94) and StatusBadge (226:95). */
 @Component({
@@ -69,6 +70,21 @@ import { OrderCancellation } from './order-cancellation';
             >
               {{ busy() ? labels(current).busy : labels(current).idle }}
             </button>
+          </div>
+        } @else if (current.canConfirmReceived) {
+          <div class="actions" actions>
+            <button
+              type="button"
+              class="pill"
+              data-testid="confirm-received"
+              [disabled]="busy()"
+              (click)="received(current)"
+            >
+              {{ busy() ? 'Đang xác nhận…' : 'Đã nhận hàng' }}
+            </button>
+            <p class="hint">
+              Đơn sẽ tự chuyển sang Hoàn thành sau 7 ngày kể từ khi giao cho đơn vị vận chuyển.
+            </p>
           </div>
         } @else if (rebuyable(current)) {
           <div class="actions" actions>
@@ -184,6 +200,7 @@ export class OrderDetailPage {
   private readonly returnsEnabled = returnsEnabled(inject(API_CONFIG));
   private readonly api = inject(ORDERS_API);
   private readonly cancellation = inject(OrderCancellation);
+  private readonly receipt = inject(OrderReceipt);
   private readonly buyer = inject(BuyAgain);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
@@ -243,6 +260,31 @@ export class OrderDetailPage {
       .get(id)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: (fresh) => this.order.set(fresh), error: () => undefined });
+  }
+
+  received(order: Order): void {
+    this.notice.set('');
+    this.receipt
+      .ask(order)
+      .pipe(
+        switchMap(() => {
+          this.busy.set(true);
+          return this.api.confirmReceived(order.id).pipe(finalize(() => this.busy.set(false)));
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (updated) => {
+          this.order.set(updated);
+          this.error.set('');
+          this.notice.set(`Cảm ơn bạn! Đơn #${updated.id} đã hoàn thành.`);
+          this.toast.show({ title: 'Đã xác nhận nhận hàng', detail: `Đơn #${updated.id}` });
+        },
+        error: (error: unknown) => {
+          this.error.set(orderErrorMessage(error));
+          this.reload(order.id);
+        },
+      });
   }
 
   cancel(order: Order): void {

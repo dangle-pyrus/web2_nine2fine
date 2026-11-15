@@ -78,48 +78,45 @@
     <span class="label">Tìm kiếm</span>
     <kbd class="trail">Ctrl K</kbd>
   </button>
-  }
-
-  <p class="group">Menu</p>
-  <ul class="menu-list">
-    @for (item of items(); track item.link) {
-    <li>
-      <a
-        class="item"
-        [routerLink]="item.link"
-        [class.active]="item.exact ? url().split('?')[0] === item.link : isSection(item.link) && !item.children"
-        [class.parent-active]="!!item.children && isSection(item.link)"
-        [attr.aria-current]="(item.exact ? url().split('?')[0] === item.link : isSection(item.link)) ? 'page' : null"
-        [attr.title]="collapsed() && !compact() ? item.label : null"
-      >
-        <adm-icon [name]="item.icon" />
-        <span class="label">{{ item.label }}</span>
-        @if (item.count && counts()[item.count]) {
-        <span class="count">{{ counts()[item.count] }}</span>
-        }
-      </a>
-      @if (item.children && isSection(item.link) && (!collapsed() || compact())) {
-      <ul class="sub">
-        @for (child of item.children; track child.link) {
-        <li>
-          <a
-            class="item"
-            [routerLink]="child.link"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: false }"
+  } @for (group of groups(); track group.key) {
+  <div class="nav-group" [class.is-folded]="folded().has(group.key)">
+    <button
+      type="button"
+      class="group"
+      [attr.aria-expanded]="!folded().has(group.key)"
+      [attr.aria-controls]="'nav-' + group.key"
+      [attr.tabindex]="collapsed() && !compact() ? -1 : null"
+      [attr.aria-hidden]="collapsed() && !compact() ? 'true' : null"
+      (click)="toggleGroup(group.key)"
+    >
+      <span class="group-label">{{ group.label }}</span>
+      <adm-icon class="group-chevron" name="reiconChevronDown" [size]="14" />
+    </button>
+    @if (!folded().has(group.key) || (collapsed() && !compact())) {
+    <ul class="menu-list" [id]="'nav-' + group.key">
+      @for (item of group.items; track item.link) {
+      <li>
+        <a
+          class="item"
+          [routerLink]="item.link"
+          [class.active]="isActive(item)"
+          [attr.aria-current]="isActive(item) ? 'page' : null"
+          [attr.title]="collapsed() && !compact() ? item.label : null"
+        >
+          <adm-icon [name]="item.icon" />
+          <span class="label">{{ item.label }}</span>
+          @if (item.count && counts()[item.count]) {
+          <span class="count" [attr.data-testid]="'nav-count-' + item.count"
+            >{{ counts()[item.count] }}</span
           >
-            <span class="label">{{ child.label }}</span>
-            @if (child.count && counts()[child.count]) {
-            <span class="count">{{ counts()[child.count] }}</span>
-            }
-          </a>
-        </li>
-        }
-      </ul>
+          }
+        </a>
+      </li>
       }
-    </li>
+    </ul>
     }
-  </ul>
+  </div>
+  }
 
   <div class="bottom">
     @if (session.user(); as user) {

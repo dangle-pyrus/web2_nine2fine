@@ -37,7 +37,7 @@ test('member checkout: saved address, voucher rules, QR payment, account order',
   await page.goto('/auth/login?returnUrl=%2Fcheckout');
   await page.getByLabel('Email').fill(member.email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page).toHaveURL(/\/checkout$/);
 
@@ -88,7 +88,7 @@ test('guest tracking verifies the email with a code and shows a new COD order', 
   await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
   // The same answer whether or not the order matches (AC-CHK-31).
   await expect(page.getByRole('status').filter({ hasText: 'Nếu thông tin khớp' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Mã xác minh (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác minh (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByRole('alert')).toContainText('Không tìm thấy đơn hàng phù hợp.');
   await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('khach.demo@example.com');
@@ -121,7 +121,7 @@ test('guest tracking verifies the email with a code and shows a new COD order', 
   await expect(page.getByRole('textbox', { name: 'Mã đơn hàng' })).toHaveValue(/^N2F/);
   await page.getByRole('textbox', { name: 'Email đặt hàng' }).fill('BINH@example.com');
   await page.getByRole('button', { name: 'Gửi mã xác minh' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác minh (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác minh (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Xem đơn hàng' }).click();
   await expect(page.getByText('Đang chuẩn bị hàng').first()).toBeVisible();
   await expect(

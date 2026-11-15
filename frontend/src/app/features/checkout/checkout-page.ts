@@ -62,6 +62,8 @@ const PHONE_PATTERN = /^(?:0|\+84)[35789]\d{8}$/;
 /** Vietnamese tax code: 10 digits, or 10 + "-" + 3 for a branch. */
 const TAX_CODE_PATTERN = /^\d{10}(?:-\d{3})?$/;
 const NEW_ADDRESS = 'new';
+/** Address book size (backend ACCOUNT_ASSUMPTIONS.maxAddresses). */
+const MAX_SAVED_ADDRESSES = 10;
 const DRAFT_KEY = 'n2f.checkout.draft.v1';
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const IDEM_KEY = 'n2f.checkout.idem';
@@ -142,6 +144,8 @@ export class CheckoutPage {
     wardCode: ['', Validators.required],
     street: ['', [Validators.required, trimmedLength(5, 200)]],
     note: ['', Validators.maxLength(250)],
+    /** Member typing a new address: also keep it in the address book after the order. */
+    saveAddress: [true],
     paymentMethod: ['cod' as CheckoutPaymentMethod],
     wantsInvoice: [false],
     companyName: [''],
@@ -185,6 +189,8 @@ export class CheckoutPage {
   readonly wardsLoading = signal(false);
   readonly wardsFailed = signal(false);
   readonly savedAddresses = signal<Address[]>([]);
+  /** The address book answered (so an empty list really means no saved address). */
+  readonly addressBookLoaded = signal(false);
   readonly memberVouchers = signal<Voucher[]>([]);
   readonly quote = signal<CheckoutQuote | null>(null);
   readonly quoteFailed = signal(false);
@@ -409,6 +415,16 @@ export class CheckoutPage {
     return this.form.controls.savedAddress.value !== NEW_ADDRESS;
   }
 
+  /** Offer "save to address book" to a member typing a new address while the book has room. */
+  canSaveAddress(): boolean {
+    return (
+      this.session.signedIn() &&
+      this.addressBookLoaded() &&
+      !this.usingSavedAddress() &&
+      this.savedAddresses().length < MAX_SAVED_ADDRESSES
+    );
+  }
+
   /** Where a code goes: the box it was typed in is only the place its error shows. */
   discountChip(): VoucherApplied | undefined {
     return this.quote()?.vouchers.find((voucher) => voucher.kind === 'discount');
@@ -563,6 +579,7 @@ export class CheckoutPage {
           this.checkoutSession.remember(receipt);
           this.clearIdempotency();
           this.clearDraft();
+          this.saveAddressToBook(request);
           this.cart.clearCheckedOut();
           // Bank transfer continues on the QR page; Back must not return to the form.
           void this.router.navigate(
@@ -901,11 +918,38 @@ export class CheckoutPage {
           phone: controls.phone.value || (member.profile.phone ?? ''),
         });
         this.savedAddresses.set(member.addresses);
+        this.addressBookLoaded.set(true);
         this.memberVouchers.set(member.vouchers);
         const preferred =
           member.addresses.find((address) => address.isDefault) ?? member.addresses[0];
         if (preferred && !typedAddress) this.form.controls.savedAddress.setValue(preferred.id);
       });
+  }
+
+  /**
+   * After a member's order to a new address, keep that address in the address book (first one
+   * becomes the default). Not tied to this page's lifetime: the page navigates away right after.
+   * Skips an address already in the book; a failure only means it was not saved.
+   */
+  private saveAddressToBook(request: CheckoutRequest): void {
+    if (!this.canSaveAddress() || !this.form.controls.saveAddress.value) return;
+    const same = (address: Address) =>
+      address.province.code === request.address.provinceCode &&
+      address.ward.code === request.address.wardCode &&
+      address.street.trim().toLowerCase() === request.address.street.toLowerCase() &&
+      address.phone === request.contact.phone;
+    if (this.savedAddresses().some(same)) return;
+    this.account
+      .createAddress({
+        recipient: request.contact.name,
+        phone: request.contact.phone,
+        provinceCode: request.address.provinceCode,
+        wardCode: request.address.wardCode,
+        street: request.address.street,
+        isDefault: this.savedAddresses().length === 0,
+        isReturn: false,
+      })
+      .subscribe({ error: () => undefined });
   }
 
   private useSavedAddress(id: string): void {

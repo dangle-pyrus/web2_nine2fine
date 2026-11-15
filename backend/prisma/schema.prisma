@@ -318,6 +318,7 @@ enum order_event_kind {
   return_received
   return_refunded
   return_cancelled
+  refunded
 }
 
 enum order_status {

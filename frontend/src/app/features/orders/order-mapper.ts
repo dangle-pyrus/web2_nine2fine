@@ -45,6 +45,7 @@ export interface OrderDto {
   cancelledAt?: string;
   cancelReason?: string;
   canCancel?: boolean;
+  canConfirmReceived?: boolean;
   cancelMode?: CancelMode;
   cancelRequest?: OrderCancelRequest;
   willCallToConfirm?: boolean;
@@ -60,6 +61,11 @@ const PAYMENT_LABELS: Record<string, string> = {
   'bank-transfer:pending': 'Chưa thanh toán · Chuyển khoản QR',
   'bank-transfer:paid': 'Đã thanh toán · Chuyển khoản QR',
   'bank-transfer:failed': 'Thanh toán chưa thành công · Chuyển khoản QR',
+  // ORD-08: đơn đã hoàn tiền hiện rõ trạng thái hoàn thay vì "Đã thanh toán".
+  'cod:refunded': 'Đã hoàn tiền · Thanh toán khi nhận hàng',
+  'cod:partially_refunded': 'Đã hoàn một phần · Thanh toán khi nhận hàng',
+  'bank-transfer:refunded': 'Đã hoàn tiền · Chuyển khoản QR',
+  'bank-transfer:partially_refunded': 'Đã hoàn một phần · Chuyển khoản QR',
 };
 
 /** API order -> FE order (status mapping, payment label, address and voucher shape). */
@@ -136,6 +142,7 @@ export function toOrder(dto: OrderDto): Order {
     invoice: dto.invoice,
     timeline,
     canCancel: dto.canCancel ?? false,
+    canConfirmReceived: dto.canConfirmReceived ?? false,
     cancelMode: dto.canCancel ? dto.cancelMode : undefined,
     cancelRequest: dto.cancelRequest,
     willCallToConfirm: dto.willCallToConfirm,

@@ -363,7 +363,7 @@ test.describe('lát 4.6: notes never reach the storefront', () => {
     await page.goto('/auth/login?returnUrl=%2Faccount%2Forders%2FN2F261002001');
     await page.getByLabel('Email').fill(member.email);
     await page.getByRole('button', { name: 'Tiếp tục' }).click();
-    await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+    await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
     await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Đơn #N2F261002001' })).toBeVisible();
     for (const url of ['/account/orders/N2F261002001', '/account/orders']) {

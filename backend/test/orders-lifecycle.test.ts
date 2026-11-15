@@ -22,7 +22,7 @@ beforeEach(async () => {
 });
 
 const it1 = (variantId: string, quantity = 1) => ({ variantId, quantity });
-const cancel = (code: string, cookie?: string, body: unknown = {}) =>
+const cancel = (code: string, cookie?: string, body: unknown = { reasonCode: 'changed_mind' }) =>
   post(`/api/orders/${code}/cancel`, body, { cookie, ip: freshIp() });
 const memberOrder = async (m: Awaited<ReturnType<typeof loginMember>>, items = [it1(top)], extra: Record<string, unknown> = {}) => {
   const res = await submitOrder(await orderBody(items, { cookie: m.cookie, email: m.email, ...extra }), { cookie: m.cookie });
@@ -201,7 +201,7 @@ describe('T-LKP tra cứu đơn khách bằng OTP (AC-CHK-31)', () => {
     await flushMail();
     expect(mails).toHaveLength(1);
     expect(mails[0].to).toBe(GUEST);
-    expect(lastCode(GUEST)).toMatch(/^\d{8}$/);
+    expect(lastCode(GUEST)).toMatch(/^\d{6}$/);
     // trong 60 giây gửi lại: không thêm thư, trả số giây còn lại
     const again = await codes(code, GUEST);
     expect(again.body.resendAfterSeconds).toBeLessThanOrEqual(60);
@@ -219,7 +219,7 @@ describe('T-LKP tra cứu đơn khách bằng OTP (AC-CHK-31)', () => {
     await codes(code, GUEST);
     await flushMail();
     const otp = lastCode(GUEST)!;
-    const wrong = await verify(code, GUEST, otp === '00000000' ? '11111111' : '00000000');
+    const wrong = await verify(code, GUEST, otp === '000000' ? '111111' : '000000');
     expect(wrong.status).toBe(404);
     expect(wrong.body.error).toMatchObject({ code: 'not-found', message: 'Không tìm thấy đơn hàng phù hợp.' });
     const wrongOrder = await verify('N2F0000000000', GUEST, otp);
@@ -244,7 +244,7 @@ describe('T-LKP tra cứu đơn khách bằng OTP (AC-CHK-31)', () => {
     await codes(code, GUEST);
     await flushMail();
     const otp = lastCode(GUEST)!;
-    const bad = otp === '00000000' ? '11111111' : '00000000';
+    const bad = otp === '000000' ? '111111' : '000000';
     const ip = freshIp();
     for (let i = 0; i < 4; i++) expect((await verify(code, GUEST, bad, ip)).status).toBe(404);
     const locked = await verify(code, GUEST, bad, ip);
@@ -286,7 +286,7 @@ describe('T-LKP tra cứu đơn khách bằng OTP (AC-CHK-31)', () => {
     const res = await codes('N2F0000000000', 'x11@example.com', ip);
     expect(res.status).toBe(429);
     expect(res.body.error.retryAfterSeconds).toBeGreaterThanOrEqual(1);
-    expect((await verify('N2F0000000000', 'x@example.com', '12345678', ip)).status).toBe(429); // verify chung bộ đếm
+    expect((await verify('N2F0000000000', 'x@example.com', '123456', ip)).status).toBe(429); // verify chung bộ đếm
   });
 
   it('email sai dạng -> 422 validation field email', async () => {

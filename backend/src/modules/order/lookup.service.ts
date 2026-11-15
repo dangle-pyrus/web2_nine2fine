@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 import prisma from '../../config/prisma';
-import { ASSUMPTIONS } from '../../config/assumptions';
+import { ASSUMPTIONS, OTP_POLICY } from '../../config/assumptions';
 import { getConfig } from '../../config/env';
 import { addMs, MINUTE, now as clockNow, secondsUntil } from '../../lib/clock';
 import { generateOtp, generateSessionToken, hashOtp, hashSessionToken } from '../../lib/crypto';
@@ -19,9 +19,9 @@ import { toOrderDtosWithReturn, viewerOf } from './order-return';
 
 const PURPOSE = 'guest_order_lookup' as const;
 export const GRANT_COOKIE = 'n2f_oa';
-const OTP_TTL_MS = 10 * MINUTE;
-const MAX_WRONG = 5;
-const LOCK_MS = 15 * MINUTE;
+const OTP_TTL_MS = OTP_POLICY.ttlMs;
+const MAX_WRONG = OTP_POLICY.maxWrong;
+const LOCK_MS = OTP_POLICY.lockMs;
 const IP_FAIL_LIMIT = 30;
 
 const K = {
@@ -51,9 +51,9 @@ export async function requestLookupCode(
   const wait = await getLockSeconds(cooldownKey);
   if (wait > 0) return { resendAfterSeconds: Math.min(wait, resend) };
 
-  const byIp = await hitWindow(K.sendIp(ip), 30, 60 * MINUTE);
+  const byIp = await hitWindow(K.sendIp(ip), OTP_POLICY.sendPerIpMax, OTP_POLICY.sendPerIpWindowMs);
   if (!byIp.allowed) throw Errors.rateLimited(byIp.retryAfterSeconds);
-  const byEmail = await hitWindow(K.sendEmail(email), 5, 30 * MINUTE);
+  const byEmail = await hitWindow(K.sendEmail(email), OTP_POLICY.sendPerEmailMax, OTP_POLICY.sendPerEmailWindowMs);
   if (!byEmail.allowed) throw Errors.rateLimited(byEmail.retryAfterSeconds);
   await setLock(cooldownKey, addMs(clockNow(), resend * 1000));
 

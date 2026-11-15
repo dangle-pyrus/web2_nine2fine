@@ -1,4 +1,4 @@
-import type { order_status, user_role } from '@prisma/client';
+import type { order_status, payment_status, user_role } from '@prisma/client';
 import { ADMIN_ASSUMPTIONS } from '../../config/assumptions';
 import type { AdminBucket } from './order-admin.schemas';
 
@@ -9,7 +9,7 @@ import type { AdminBucket } from './order-admin.schemas';
 export type AdminAction =
   | 'call-attempt' | 'confirm' | 'ship' | 'deliver'
   | 'cancel-unreachable' | 'cancel-declined-on-call' | 'cancel-customer-request' | 'cancel-refused' | 'cancel-undeliverable' | 'cancel-other'
-  | 'restock' | 'write-off' | 'approve-cancel' | 'reject-cancel' | 'add-note' | 'print-slip';
+  | 'restock' | 'write-off' | 'approve-cancel' | 'reject-cancel' | 'add-note' | 'print-slip' | 'confirm-refund';
 
 export interface StateOrder {
   status: order_status;
@@ -19,6 +19,8 @@ export interface StateOrder {
   returnedFromTransit: boolean;
   returnHandledAt: Date | null;
   stockRestoredAt: Date | null;
+  /** COMMON-02.4: cần cho `confirm-refund` (đơn đã huỷ nhưng còn `paid`). */
+  paymentStatus?: payment_status;
 }
 
 export interface CallStats {
@@ -89,6 +91,8 @@ export const TRANSITIONS: readonly Row[] = [
   { action: 'write-off', from: ['cancelled'], who: 'staff', when: returnPending },
   { action: 'approve-cancel', from: ['cancel_requested'], who: 'staff' },
   { action: 'reject-cancel', from: ['cancel_requested'], who: 'staff' },
+  // COMMON-02.4 / ORD-CC-06: đơn đã thanh toán bị huỷ, kế toán hoàn tay xong thì admin ghi nhận -> `refunded`.
+  { action: 'confirm-refund', from: ['cancelled'], who: 'admin', when: (o) => o.paymentStatus === 'paid' },
 ];
 
 export type TransitionVerdict =

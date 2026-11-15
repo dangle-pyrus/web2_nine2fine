@@ -1,4 +1,18 @@
-<adm-page-header heading="Đơn hàng" />
+<adm-page-header heading="Đơn hàng">
+  <ng-container actions>
+    @if (canExport) {
+    <button
+      type="button"
+      class="adm-btn adm-btn--lg"
+      data-testid="export-csv"
+      [disabled]="exporting()"
+      (click)="exportCsv()"
+    >
+      <adm-icon name="reiconDownload" [size]="16" /> {{ exporting() ? 'Đang xuất…' : 'Xuất CSV' }}
+    </button>
+    }
+  </ng-container>
+</adm-page-header>
 
 <div class="page-body page-body--wide">
   <nav class="tabs" aria-label="Chế độ xem đơn hàng">
@@ -42,33 +56,83 @@
       <option [value]="method.value">{{ method.label }}</option>
       }
     </select>
-    <label class="row small">
-      <span class="secondary">Từ ngày</span>
-      <input
-        class="input input--sm"
-        type="date"
-        name="from"
-        aria-label="Đặt từ ngày"
-        [ngModel]="query().from"
-        (ngModelChange)="update({ from: $event })"
-      />
-    </label>
-    <label class="row small">
-      <span class="secondary">Đến ngày</span>
-      <input
-        class="input input--sm"
-        type="date"
-        name="to"
-        aria-label="Đặt đến ngày"
-        [ngModel]="query().to"
-        (ngModelChange)="update({ to: $event })"
-      />
-    </label>
-    @if (filtered()) {
-    <button type="button" class="link small" (click)="clearFilters()">Xóa bộ lọc</button>
+    <select
+      class="select select--sm"
+      name="range"
+      aria-label="Lọc theo ngày đặt"
+      [ngModel]="rangeValue()"
+      (ngModelChange)="setRangeChoice($event)"
+    >
+      @for (preset of presets; track preset.value) {
+      <option [value]="preset.value">
+        {{ preset.value ? 'Ngày đặt: ' + preset.label : 'Ngày đặt: mọi lúc' }}
+      </option>
+      }
+      <option value="custom">Ngày đặt: tuỳ chọn…</option>
+    </select>
+    @if (rangeValue() === 'custom') {
+    <input
+      class="input input--sm"
+      type="date"
+      name="from"
+      aria-label="Đặt từ ngày"
+      [ngModel]="query().from"
+      (ngModelChange)="update({ from: $event })"
+    />
+    <input
+      class="input input--sm"
+      type="date"
+      name="to"
+      aria-label="Đặt đến ngày"
+      [ngModel]="query().to"
+      (ngModelChange)="update({ to: $event })"
+    />
     }
+    <select
+      class="select select--sm"
+      name="sort"
+      aria-label="Sắp xếp đơn hàng"
+      [ngModel]="query().sort"
+      (ngModelChange)="update({ sort: $event })"
+    >
+      @for (option of sorts; track option.value) {
+      <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
   </form>
-  @if (rangeInvalid()) {
+  @if (filtered()) {
+  <div class="chips filter-chips" aria-label="Bộ lọc đang áp dụng">
+    @if (query().q) {
+    <span class="chip"
+      >Tìm: “{{ query().q }}”<button
+        type="button"
+        aria-label="Bỏ từ khóa"
+        (click)="search.set(''); update({ q: '' })"
+      >
+        <adm-icon name="reiconX" [size]="12" /></button
+    ></span>
+    } @if (query().payment) {
+    <span class="chip"
+      >Thanh toán: {{ paymentLabel(query().payment) }}<button
+        type="button"
+        aria-label="Bỏ lọc thanh toán"
+        (click)="update({ payment: '' })"
+      >
+        <adm-icon name="reiconX" [size]="12" /></button
+    ></span>
+    } @if (query().from || query().to) {
+    <span class="chip"
+      >Ngày đặt: {{ query().from || '…' }} → {{ query().to || '…' }}<button
+        type="button"
+        aria-label="Bỏ lọc ngày"
+        (click)="update({ from: '', to: '' })"
+      >
+        <adm-icon name="reiconX" [size]="12" /></button
+    ></span>
+    }
+    <button type="button" class="link small" (click)="clearFilters()">Xóa bộ lọc</button>
+  </div>
+  } @if (rangeInvalid()) {
   <p class="small" role="alert">Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.</p>
   } @if (view.state().error && !page()) {
   <adm-empty
@@ -98,16 +162,25 @@
   </adm-empty>
   } @else {
   <div class="table-wrap" [class.is-refreshing]="view.state().refreshing" aria-live="polite">
-    <table class="table table--cards">
+    <table class="table table--cards table--orders">
       <thead>
         <tr>
+          <th class="w-check">
+            <label class="check"
+              ><input
+                type="checkbox"
+                aria-label="Chọn tất cả đơn trên trang"
+                [checked]="selection.allOf(ids())"
+                [indeterminate]="selection.someOf(ids())"
+                (change)="selection.setAll(ids(), $any($event.target).checked)"
+            /></label>
+          </th>
           <th>Mã đơn</th>
-          <th>Ngày đặt</th>
-          <th>Người nhận</th>
-          <th>Thanh toán</th>
-          <th>Trạng thái</th>
-          <th class="num">Số SP</th>
+          <th>Khách hàng</th>
+          <th>Sản phẩm</th>
           <th class="num">Tổng tiền</th>
+          <th>Trạng thái</th>
+          <th><span class="sr-only">Thao tác nhanh</span></th>
         </tr>
       </thead>
       @if (view.state().loading) {
@@ -115,15 +188,35 @@
       } @else {
       <tbody>
         @for (order of page()?.items ?? []; track order.id) {
-        <tr>
+        <tr
+          class="is-clickable"
+          [class.is-selected]="selection.has(order.id)"
+          (click)="openQuick(order, $event)"
+        >
+          <td class="w-check">
+            <label class="check"
+              ><input
+                type="checkbox"
+                [attr.aria-label]="'Chọn đơn ' + order.id"
+                [checked]="selection.has(order.id)"
+                (change)="selection.toggle(order.id)"
+            /></label>
+          </td>
           <td>
             <a class="cell-title mono" [routerLink]="['/admin/orders', order.id]"
               >#{{ order.id }}</a
             >
+            @if (order.note) {
+            <adm-icon
+              class="note-icon"
+              name="reiconNote"
+              [size]="14"
+              [attr.title]="'Khách nhắn: ' + order.note"
+            />
+            }
+            <div class="cell-sub">{{ order.placedAt | admDateTime }}</div>
             <div class="cell-sub">
-              @if (order.needsCall) {
-              <span class="chip chip--static">Cần gọi</span>
-              } @if (order.returnPending) {
+              @if (order.returnPending) {
               <span class="chip chip--static" data-testid="return-pending"
                 >Có yêu cầu trả hàng</span
               >
@@ -134,12 +227,54 @@
               }
             </div>
           </td>
-          <td data-label="Ngày đặt" class="secondary">{{ order.placedAt | admDateTime }}</td>
-          <td data-label="Người nhận">{{ order.recipientName }}</td>
-          <td><adm-badge [spec]="paymentBadge(paymentState(order))" /></td>
-          <td><adm-badge [spec]="statusBadge(order)" /></td>
-          <td class="num hide-sm">{{ order.itemCount | admNum }}</td>
-          <td class="num" data-label="Tổng">{{ order.total | admMoney }}</td>
+          <td data-label="Khách">
+            <div class="cell-title">{{ order.recipientName }}</div>
+            @if (order.recipientPhone) {
+            <div class="cell-sub">
+              {{ order.recipientPhone }}
+              <adm-copy [value]="order.recipientPhone" label="số điện thoại" />
+            </div>
+            }
+          </td>
+          <td class="hide-sm">
+            @if (order.firstItem; as item) {
+            <div class="cell-media" [attr.title]="item.name + ' · ' + item.color + ' / ' + item.size">
+              <img class="thumb" [src]="src(item.mediaId)" alt="" />
+              <div>
+                <div class="cell-title">{{ item.name }}</div>
+                <div class="cell-sub">
+                  {{ item.color }} / {{ item.size }}
+                  @if (order.itemCount > 1) { · +{{ order.itemCount - 1 | admNum }} SP khác }
+                </div>
+              </div>
+            </div>
+            } @else { {{ order.itemCount | admNum }} SP }
+          </td>
+          <td class="num" data-label="Tổng">
+            <div class="cell-title">{{ order.total | admMoney }}</div>
+            <adm-badge [spec]="paymentBadge(paymentState(order))" />
+          </td>
+          <td>
+            <adm-badge [spec]="statusBadge(order)" />
+            @if (order.trackingNumber) {
+            <div class="cell-sub">
+              {{ order.carrier }} · {{ order.trackingNumber }}
+              <adm-copy [value]="order.trackingNumber" label="mã vận đơn" />
+            </div>
+            }
+          </td>
+          <td class="w-quick">
+            @if (quickOf(order); as quick) {
+            <button
+              type="button"
+              class="adm-btn adm-btn--sm adm-btn--primary"
+              [attr.data-testid]="'quick-' + quick.action"
+              (click)="quickRun(order, quick.action)"
+            >
+              {{ quick.label }}
+            </button>
+            }
+          </td>
         </tr>
         }
       </tbody>
@@ -156,4 +291,31 @@
     (sizeChange)="update({ limit: $event })"
   />
   } }
+  @if (selection.count()) {
+  <div class="bulkbar bulkbar--float" role="region" aria-label="Thao tác hàng loạt">
+    <span>Đã chọn {{ selection.count() }} đơn</span>
+    <span class="spacer"></span>
+    <button
+      type="button"
+      class="adm-btn adm-btn--sm adm-btn--primary"
+      data-testid="bulk-ship"
+      [disabled]="!canBulkShip()"
+      [attr.title]="canBulkShip() ? null : 'Chỉ bàn giao hàng loạt khi mọi đơn đã chọn đang chờ giao và không cần gọi xác nhận'"
+      (click)="bulkShip()"
+    >
+      Bàn giao hàng loạt
+    </button>
+    @if (canExport) {
+    <button type="button" class="adm-btn adm-btn--sm" (click)="exportCsv()">Xuất CSV</button>
+    }
+    <button
+      type="button"
+      class="adm-btn adm-btn--sm adm-btn--icon"
+      aria-label="Bỏ chọn"
+      (click)="selection.clear()"
+    >
+      <adm-icon name="reiconX" [size]="16" />
+    </button>
+  </div>
+  }
 </div>

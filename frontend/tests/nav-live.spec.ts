@@ -22,7 +22,7 @@ test('order detail: only lines with canReview link to the review form, which ope
   await page.goto(`/auth/login?returnUrl=${encodeURIComponent('/account/orders/N2F260920003')}`);
   await page.getByLabel('Email').fill(member.email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Đơn #N2F260920003' })).toBeVisible();
   const links = page.getByRole('link', { name: /Viết đánh giá/ });

@@ -57,9 +57,10 @@
             type="button"
             class="color-option"
             [class.active]="color() === option.name"
-            [attr.aria-label]="option.name"
+            [class.sold-out]="colorSoldOut(option.name)"
+            [attr.aria-label]="option.name + (colorSoldOut(option.name) ? ' - hết hàng' : '')"
             [attr.aria-pressed]="color() === option.name"
-            [title]="option.name"
+            [title]="option.name + (colorSoldOut(option.name) ? ' (hết hàng)' : '')"
             (click)="chooseColor(option.name)"
           >
             <span [style.background]="option.hex"></span>
@@ -98,8 +99,33 @@
       <p class="field-error" id="size-error" role="alert">{{ error() }}</p>
       } @if (stockAlertEnabled && soldOut().length) {
       <n2f-stock-alert [soldOut]="soldOut()" />
+      } @if (!allSoldOut()) {
+      <div class="quantity-field">
+        <span id="qty-label">Số lượng</span>
+        <div class="stepper" role="group" aria-labelledby="qty-label">
+          <button
+            type="button"
+            aria-label="Giảm số lượng"
+            [disabled]="quantity() <= 1"
+            (click)="setQuantity(quantity() - 1)"
+          >
+            −
+          </button>
+          <output aria-live="polite" data-testid="pdp-quantity">{{ quantity() }}</output>
+          <button
+            type="button"
+            aria-label="Tăng số lượng"
+            [disabled]="quantity() >= maxQuantity()"
+            (click)="setQuantity(quantity() + 1)"
+          >
+            +
+          </button>
+        </div>
+        @if (selected() && quantity() >= maxQuantity()) {
+        <span class="qty-hint">Tối đa {{ maxQuantity() }} sản phẩm</span>
+        }
+      </div>
       }
-
       <div class="purchase">
         <button #addButton type="button" class="add" [disabled]="allSoldOut()" (click)="add()">
           {{ allSoldOut() ? 'Hết hàng' : 'Thêm vào giỏ' }}

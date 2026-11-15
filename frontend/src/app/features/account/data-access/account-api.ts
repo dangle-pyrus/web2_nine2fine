@@ -39,6 +39,7 @@ export type AccountErrorCode =
   | 'not-found'
   | 'invalid-password'
   | 'not-cancellable'
+  | 'invalid-transition'
   | 'not-returnable'
   | 'invalid-address'
   | 'file-too-large'

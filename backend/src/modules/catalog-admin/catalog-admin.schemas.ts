@@ -203,6 +203,11 @@ export const productListQuerySchema = z.object({
     z.enum(['all', 'active', 'draft', 'hidden', 'out-of-stock'], { error: 'Tab không hợp lệ.' }).optional().default('all'),
   ),
   category: z.preprocess(single, z.string().optional()),
+  /** ADM-PRD-13: Mới cập nhật (mặc định), Mới tạo, Tên A–Z, Tồn kho thấp nhất. */
+  sort: z.preprocess(
+    single,
+    z.enum(['updated', 'created', 'name', 'stock-asc'], { error: 'Cách sắp xếp không hợp lệ.' }).optional().default('updated'),
+  ),
   page: z.preprocess(single, intQuery('Trang phải là số nguyên từ 1 trở lên.', 1, 1_000_000, 1)),
   limit: z.preprocess(single, intQuery('Số dòng mỗi trang từ 1 đến 100.', 1, 100, 20)),
 });

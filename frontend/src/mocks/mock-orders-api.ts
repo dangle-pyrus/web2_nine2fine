@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { OrderPage, OrdersApi, withCancel } from '../app/features/account/data-access/orders-api';
-import { Order } from '../app/features/orders/order-models';
+import { CancelChoice, cancelChoiceText, Order } from '../app/features/orders/order-models';
 import { MockAccountApi } from './mock-account-api';
 
 /** Completed orders: every line but the last can be reviewed (the last stands for "already reviewed"). */
@@ -36,7 +36,10 @@ export class MockOrdersApi implements OrdersApi {
   get(orderCode: string): Observable<Order> {
     return this.account.getOrder(orderCode).pipe(map(withCancel), map(withReviewable));
   }
-  cancel(orderCode: string, reason?: string): Observable<Order> {
-    return this.account.cancelOrder(orderCode, reason).pipe(map(withCancel));
+  cancel(orderCode: string, choice?: CancelChoice): Observable<Order> {
+    return this.account.cancelOrder(orderCode, cancelChoiceText(choice)).pipe(map(withCancel));
+  }
+  confirmReceived(orderCode: string): Observable<Order> {
+    return this.account.confirmReceived(orderCode).pipe(map(withCancel));
   }
 }

@@ -779,6 +779,9 @@ export class MockAdminReturnsApi implements AdminReturnsApi {
 
 // ---------- Products ----------
 
+/** Shop default low-stock threshold the mock uses for "Sắp hết". */
+const MOCK_LOW_STOCK = 5;
+
 export function toProductSummary(product: AdminProduct): AdminProductSummary {
   return {
     id: product.id,
@@ -790,6 +793,11 @@ export function toProductSummary(product: AdminProduct): AdminProductSummary {
     compareAtPrice: product.compareAtPrice,
     inventory: product.variants.reduce((sum, variant) => sum + variant.inventory, 0),
     variantCount: product.variants.length,
+    outOfStockVariants: product.variants.filter((variant) => variant.inventory <= 0).length,
+    lowStockVariants: product.variants.filter(
+      (variant) => variant.inventory > 0 && variant.inventory <= MOCK_LOW_STOCK,
+    ).length,
+    createdAt: product.createdAt,
     updatedAt: product.updatedAt,
   };
 }
@@ -823,6 +831,7 @@ export class MockAdminProductsApi implements AdminProductsApi {
         query,
         {
           updatedAt: (p) => p.updatedAt,
+          createdAt: (p) => p.createdAt ?? '',
           name: (p) => p.name,
           price: (p) => p.price,
           inventory: (p) => p.inventory,

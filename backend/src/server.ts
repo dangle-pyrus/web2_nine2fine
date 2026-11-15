@@ -46,9 +46,10 @@ async function main(): Promise<void> {
   );
   timer.unref();
 
-  // Việc nền mỗi 60 giây (BR-CHK-21): huỷ đơn QR quá hạn (<= 2 phút sau hạn), gửi lại email xác nhận, dọn dữ liệu hết hạn.
+  // Việc nền mỗi 60 giây (BR-CHK-21): huỷ đơn QR quá hạn (<= 2 phút sau hạn), tự hoàn thành đơn đang giao quá 7 ngày (COMMON-01.9), gửi lại email xác nhận, dọn dữ liệu hết hạn.
   // Không đặt trong createApp để test gọi hàm trực tiếp; nhiều instance an toàn nhờ SKIP LOCKED + dấu idempotent.
   const { expireDueOrders, purgeExpired } = await import('./modules/order/expiry.job');
+  const { autoCompleteDelivered } = await import('./modules/order/receive-order.service');
   const { retryPendingEmails, retryPendingEventEmails } = await import('./modules/order/order-email.service');
   let running = false;
   const jobs = setInterval(() => {
@@ -57,6 +58,7 @@ async function main(): Promise<void> {
     void (async () => {
       try {
         await expireDueOrders();
+        await autoCompleteDelivered();
         await retryPendingEmails();
         await retryPendingEventEmails();
         await purgeExpired();

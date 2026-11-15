@@ -43,8 +43,8 @@ test.describe('admin customers on the API (Slice 7)', () => {
     await signIn(page, ADMIN);
     await expect(page.locator('nav.sidebar .menu-list a')).toHaveText([
       /Đơn hàng/,
-      /Sản phẩm/,
       /Tồn kho/,
+      /Sản phẩm/,
       /Khách hàng/,
       /Khuyến mãi/,
     ]);

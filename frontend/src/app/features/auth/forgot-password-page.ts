@@ -61,7 +61,11 @@ import { PasswordField } from './ui/password-field';
         }
         <div class="actions">
           <a class="pill outline" routerLink="/auth/login">Hủy bỏ</a>
-          <button class="pill" type="submit" [disabled]="!formValid() || busy()">
+          <button
+            class="pill"
+            type="submit"
+            [disabled]="!formValid() || busy() || codeField?.locked()"
+          >
             {{ busy() ? 'Đang cập nhật…' : 'Đổi mật khẩu' }}
           </button>
         </div>
@@ -88,7 +92,7 @@ export class ForgotPasswordPage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
-  private readonly codeField = viewChild<VerificationCodeField>('codeField');
+  protected readonly codeField = viewChild<VerificationCodeField>('codeField');
   private readonly builder = inject(FormBuilder).nonNullable;
   private readonly newPassword = this.builder.control('', [
     Validators.required,
@@ -149,7 +153,7 @@ export class ForgotPasswordPage {
         failure?.code === 'code-locked' ||
         (failure?.code === 'validation' && failure.field === 'code'))
     ) {
-      code.fail(message);
+      code.fail(message, error);
       code.focus();
     } else {
       this.error.set(message);

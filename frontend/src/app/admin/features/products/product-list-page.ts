@@ -136,21 +136,22 @@ const VIEWS: { value: ProductView; label: string }[] = [
               </button></span
             >
           }
-          @if (!contract) {
-            <select
-              class="select select--sm"
-              name="sort"
-              aria-label="Sắp xếp"
-              [ngModel]="query().sort + ':' + query().dir"
-              (ngModelChange)="sort($event)"
-            >
-              <option value="updatedAt:desc">Mới cập nhật</option>
-              <option value="name:asc">Tên A–Z</option>
+          <select
+            class="select select--sm"
+            name="sort"
+            aria-label="Sắp xếp"
+            [ngModel]="query().sort + ':' + query().dir"
+            (ngModelChange)="sort($event)"
+          >
+            <option value="updatedAt:desc">Mới cập nhật</option>
+            <option value="createdAt:desc">Mới tạo</option>
+            <option value="name:asc">Tên A–Z</option>
+            <option value="inventory:asc">Tồn kho thấp nhất</option>
+            @if (!contract) {
               <option value="price:asc">Giá tăng dần</option>
               <option value="price:desc">Giá giảm dần</option>
-              <option value="inventory:asc">Tồn kho ít nhất</option>
-            </select>
-          }
+            }
+          </select>
         </form>
         @if (query().search || query().category) {
           <div class="chips filter-chips">
@@ -229,14 +230,13 @@ const VIEWS: { value: ProductView; label: string }[] = [
                 }
                 <th>Sản phẩm</th>
                 <th>Trạng thái</th>
-                <th>Tồn kho</th>
                 <th>Danh mục</th>
                 <th>Cập nhật</th>
                 <th class="num">Giá</th>
               </tr>
             </thead>
             @if (view.state().loading) {
-              <tbody [admSkeleton]="8" [columns]="7"></tbody>
+              <tbody [admSkeleton]="8" [columns]="6"></tbody>
             } @else {
               <tbody>
                 @for (product of page()?.items ?? []; track product.id) {
@@ -265,9 +265,6 @@ const VIEWS: { value: ProductView; label: string }[] = [
                       </div>
                     </td>
                     <td><adm-badge [spec]="badge(product.status)" /></td>
-                    <td data-label="Tồn kho" [class.danger-text]="product.inventory <= 0">
-                      {{ product.inventory | admNum }} trong {{ product.variantCount }} biến thể
-                    </td>
                     <td data-label="Danh mục" class="secondary">
                       {{ categoryLabel(product.category) }}
                     </td>
@@ -305,7 +302,6 @@ const VIEWS: { value: ProductView; label: string }[] = [
       }
     </div>
   `,
-  styles: '.danger-text { color: var(--adm-danger); }',
 })
 export class ProductListPage {
   private readonly api = inject(ADMIN_PRODUCTS_API);
@@ -364,8 +360,30 @@ export class ProductListPage {
     void this.router.navigate(['/admin/products', product.id]);
   }
 
-  /** Reversible, so no confirmation: the toast offers "Hoàn tác" instead (5.8). */
+  /**
+   * Reversible: the toast offers "Hoàn tác" (5.8). Hiding takes products off the shop at once, so it
+   * asks first (ADM-PRD-10).
+   */
   bulkStatus(status: ProductStatus): void {
+    if (status !== 'hidden') {
+      this.applyStatus(status);
+      return;
+    }
+    const count = this.selection.count();
+    this.dialogs
+      .confirm({
+        title: `Ẩn ${count} sản phẩm?`,
+        message:
+          'Sản phẩm đã ẩn không hiện trên cửa hàng và khách không mua được nữa. Bạn có thể chuyển lại "Đang bán" bất cứ lúc nào.',
+        confirmLabel: 'Ẩn sản phẩm',
+        danger: true,
+      })
+      .subscribe((ok) => {
+        if (ok) this.applyStatus(status);
+      });
+  }
+
+  private applyStatus(status: ProductStatus): void {
     const ids = [...this.selection.ids()];
     const previous = new Map(
       this.page()

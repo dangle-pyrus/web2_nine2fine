@@ -13,6 +13,8 @@
     "seed:catalog": "tsx prisma/seed-catalog.ts",
     "seed:checkout": "tsx prisma/seed-checkout.ts",
     "seed:home": "tsx prisma/seed-home-content.ts",
+    "seed:demo": "tsx scripts/seed-demo-analytics.ts",
+    "seed:demo:remove": "tsx scripts/seed-demo-analytics.ts --remove",
     "prisma:generate": "prisma generate"
   },
   "keywords": [],

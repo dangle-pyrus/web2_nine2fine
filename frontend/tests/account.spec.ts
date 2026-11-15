@@ -9,7 +9,7 @@ async function signIn(page: Page, returnUrl: string, email = member.email): Prom
   await expect(page).toHaveURL(/\/auth\/login\?returnUrl=/);
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 }
 
@@ -99,21 +99,14 @@ test('orders: status tabs in URL, cancel pending order, detail progress', async 
   const tabCount = async (name: RegExp) =>
     Number((await tabs.getByRole('link', { name }).locator('.count').allTextContents())[0] ?? 0);
   await expect(cards.first()).toBeVisible();
-  // Every tab is named like the badge of the orders it holds.
-  for (const name of [
-    /Chờ thanh toán/,
-    /Đang chuẩn bị/,
-    /Đang vận chuyển/,
-    /Đang giao hàng/,
-    /^Hoàn thành/,
-    /Đã hủy/,
-    /Trả hàng/,
-  ]) {
+  // ORD-02: five tabs, one per status group.
+  for (const name of [/Chờ thanh toán/, /Chờ giao hàng/, /Đang giao/, /^Hoàn thành/, /Đã hủy/]) {
     await expect(tabs.getByRole('link', { name })).toBeVisible();
   }
+  await expect(tabs.getByRole('link')).toHaveCount(6);
 
-  const shipping = await tabCount(/Đang vận chuyển/);
-  await tabs.getByRole('link', { name: /Đang vận chuyển/ }).click();
+  const shipping = await tabCount(/Đang giao/);
+  await tabs.getByRole('link', { name: /Đang giao/ }).click();
   await expect(page).toHaveURL(/status=shipping/);
   await expect(cards).toHaveCount(shipping);
   const card = cards.filter({ hasText: 'N2F260930004' });
@@ -124,10 +117,12 @@ test('orders: status tabs in URL, cancel pending order, detail progress', async 
   const pending = await tabCount(/Chờ thanh toán/);
   await tabs.getByRole('link', { name: /Chờ thanh toán/ }).click();
   await cards.filter({ hasText: 'N2F261002001' }).getByRole('button', { name: 'Hủy đơn' }).click();
-  await page
-    .getByRole('dialog', { name: 'Hủy đơn hàng?' })
-    .getByRole('button', { name: 'Hủy đơn' })
-    .click();
+  const dialog = page.getByRole('dialog', { name: 'Hủy đơn hàng?' });
+  // COMMON-01.5: a reason from the list is required.
+  await dialog.getByRole('button', { name: 'Hủy đơn' }).click();
+  await expect(dialog.getByText('Vui lòng chọn lý do huỷ đơn.')).toBeVisible();
+  await dialog.getByRole('radio', { name: 'Tôi không còn nhu cầu mua nữa' }).check();
+  await dialog.getByRole('button', { name: 'Hủy đơn' }).click();
   await expect(page.getByRole('status').filter({ hasText: /Đã hủy đơn/ })).toBeVisible();
   await expect(cards).toHaveCount(pending - 1);
   if (pending === 1) {
@@ -152,7 +147,7 @@ test('new member sees Figma empty states and creates a first password', async ({
   await page.goto('/auth/login?returnUrl=%2Faccount%2Fvouchers');
   await page.getByLabel('Email').fill('first.timer@example.com');
   await page.getByRole('button', { name: 'Tiếp tục' }).click();
-  await page.getByRole('textbox', { name: 'Mã xác thực (8 số)' }).fill(DEMO_VERIFICATION_CODE);
+  await page.getByRole('textbox', { name: 'Mã xác thực (6 số)' }).fill(DEMO_VERIFICATION_CODE);
   await page.getByRole('textbox', { name: 'Tên', exact: true }).fill('Lan');
   await page.getByRole('textbox', { name: 'Họ', exact: true }).fill('Phạm');
   await page.getByRole('checkbox', { name: /Tôi đồng ý/ }).check();
