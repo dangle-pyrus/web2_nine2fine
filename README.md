@@ -16,6 +16,41 @@ Website thương mại điện tử cho thương hiệu thời trang nine2fine (
 
 Không cần tài khoản Supabase: dự án chạy hoàn toàn trên PostgreSQL cục bộ, ảnh lưu ra đĩa.
 
+## Chạy nhanh bằng Docker (khuyến nghị)
+
+Cần Docker Desktop (hoặc Docker Engine + Compose v2). Không cần cài Node hay PostgreSQL.
+
+```bash
+git clone https://github.com/dangle-pyrus/web2_nine2fine.git
+cd web2_nine2fine
+cp backend/.env.example backend/.env      # Windows PowerShell: Copy-Item backend/.env.example backend/.env
+```
+
+Điền `backend/.env` (hoặc dán file `.env` được gửi riêng). Với Docker chỉ cần các biến sau, còn `DATABASE_URL`, `DIRECT_URL`, `CORS_ALLOWED_ORIGINS` được compose tự ghi đè:
+
+- `OTP_HMAC_SECRET` (từ 32 ký tự), `RETURN_ACCOUNT_KEY` (`openssl rand -base64 32`)
+- `SEED_ADMIN_*`, `SEED_STAFF_*`, `SEED_MEMBER_*` (email + mật khẩu 8–64 ký tự, có chữ in hoa và chữ số)
+
+```bash
+docker compose up --build
+```
+
+Lần đầu mất vài phút. Container backend tự chạy `prisma migrate deploy` và các lệnh seed (an toàn khi chạy lại), rồi mở API. Khi thấy log `Server is running`, mở:
+
+- Cửa hàng: http://localhost:4200
+- Quản trị: http://localhost:4200/admin/login (đăng nhập bằng tài khoản `SEED_*`)
+- API: http://localhost:4000/health
+
+Ghi chú:
+
+- PostgreSQL trong Docker mở ra máy bạn ở cổng `5433` (user `postgres`, mật khẩu `nine2fine_dev`, DB `nine2fine`), dữ liệu nằm trong volume `n2f_pgdata`. Đổi cổng khi bị trùng: `DB_PORT=5434 BACKEND_PORT=4001 FRONTEND_PORT=4201 docker compose up`.
+- Mặc định thư được ghi thành file chứ không gửi thật; đọc mã OTP bằng `docker compose exec backend ls dev-outbox`. Muốn gửi thật: đặt `DOCKER_MAIL_MODE=smtp` và điền `SMTP_*` trong `backend/.env`.
+- Frontend chạy dạng dev server trong container; sửa code xong chạy lại `docker compose up --build`.
+- Nạp dữ liệu demo cho báo cáo: `docker compose exec backend npm run seed:demo`.
+- Dừng: `docker compose down`; xoá luôn dữ liệu: `docker compose down -v`.
+
+Nếu không dùng Docker, làm theo các bước 1–4 dưới đây.
+
 ## 1. Lấy mã nguồn
 
 ```bash

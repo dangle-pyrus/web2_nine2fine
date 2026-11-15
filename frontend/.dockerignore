@@ -1,0 +1,9 @@
+node_modules
+dist
+.angular
+test-results
+reference
+svg
+.env
+.env.*
+*.log

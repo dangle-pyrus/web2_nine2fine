@@ -1,0 +1,8 @@
+node_modules
+dist
+dev-outbox
+.env
+.env.*
+.media
+.media-private
+*.log

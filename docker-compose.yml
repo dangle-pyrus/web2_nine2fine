@@ -1,0 +1,58 @@
+# Chạy cả hệ thống: docker compose up --build
+# Cần có backend/.env (xem backend/.env.example). Trong Docker, DATABASE_URL / DIRECT_URL / CORS được ghi đè
+# để trỏ vào container db, nên giá trị trong .env cho các biến đó không ảnh hưởng.
+name: nine2fine
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: nine2fine_dev
+      POSTGRES_DB: nine2fine
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - n2f_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nine2fine"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      DATABASE_URL: postgresql://postgres:nine2fine_dev@db:5432/nine2fine?schema=public
+      DIRECT_URL: postgresql://postgres:nine2fine_dev@db:5432/nine2fine?schema=public
+      CORS_ALLOWED_ORIGINS: http://localhost:${FRONTEND_PORT:-4200}
+      # Mặc định ghi thư ra file thay vì gửi thật; đặt DOCKER_MAIL_MODE=smtp (kèm SMTP_* trong .env) để gửi thật.
+      MAIL_MODE: ${DOCKER_MAIL_MODE:-dev-outbox}
+      MAIL_OUTBOX_DIR: /app/dev-outbox
+      MEDIA_LOCAL_DIR: /app/.media
+      RETURN_PHOTO_LOCAL_DIR: /app/.media-private
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - n2f_media:/app/.media
+      - n2f_media_private:/app/.media-private
+      - n2f_outbox:/app/dev-outbox
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-4200}:4200"
+
+volumes:
+  n2f_pgdata:
+  n2f_media:
+  n2f_media_private:
+  n2f_outbox:
