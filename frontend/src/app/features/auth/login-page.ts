@@ -16,7 +16,14 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, Observable } from 'rxjs';
 import { AUTH_API, AuthError, AuthUser } from './data-access/auth-api';
 import { AuthFlowState, AuthSession, redirectWhenSignedIn } from './auth-session';
-import { AuthMessage, authMessage, CODE_PATTERN, emailValidator } from './auth-messages';
+import {
+  AuthMessage,
+  authMessage,
+  CODE_PATTERN,
+  emailValidator,
+  OTP_DIGITS,
+  OTP_TTL_MINUTES,
+} from './auth-messages';
 import { AuthMessageText } from './ui/auth-message';
 import { VerificationCodeField } from './ui/verification-code-field';
 import { PasswordField } from './ui/password-field';
@@ -30,7 +37,7 @@ interface LoginNavigationState {
 
 const HEADINGS: Record<LoginStep, string> = {
   email: 'Nhập email của bạn để tham gia hoặc đăng nhập.',
-  code: 'Nhập mã 6 số chúng tôi vừa gửi qua email của bạn. Mã có hiệu lực 5 phút.',
+  code: `Nhập mã ${OTP_DIGITS} số chúng tôi vừa gửi qua email của bạn. Mã có hiệu lực ${OTP_TTL_MINUTES} phút.`,
   password: 'Nhập mật khẩu của bạn để đăng nhập vào tài khoản.',
 };
 

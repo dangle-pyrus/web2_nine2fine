@@ -56,6 +56,7 @@ import {
 import { AdmBadge } from '../../ui/badge';
 import { AdmCopyButton } from '../../ui/copy-button';
 import { mediaSrc } from '../content/media-picker';
+import { CHANNELS } from '../../data-access/marketplace-demo';
 import { OrderDetailDrawer } from './order-detail-drawer';
 import { AdmEmptyState } from '../../ui/empty-state';
 import { AdmIcon } from '../../ui/icon';
@@ -95,6 +96,21 @@ const QUICK_ACTIONS: Partial<Record<DeskBucket, { action: DeskAction; label: str
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './order-desk-list-page.html',
+  styles: `
+    .w-platform {
+      width: 112px;
+    }
+    .platform-logo {
+      display: block;
+      height: 16px;
+      width: auto;
+      max-width: 96px;
+    }
+    /* The nine2fine wordmark is solid and wide: smaller so it weighs like the marketplace logos. */
+    .platform-logo--website {
+      height: 11px;
+    }
+  `,
 })
 export class OrderDeskListPage {
   private readonly api = inject(ADMIN_ORDER_DESK_API);
@@ -120,6 +136,10 @@ export class OrderDeskListPage {
   protected readonly statusBadge = statusBadge;
   protected readonly paymentBadge = paymentBadge;
   protected readonly paymentState = paymentState;
+  /** Cột "Nền tảng": logo của kênh bán (đơn từ API hiện đều là Website nine2fine). */
+  protected platformOf(order: DeskOrderSummary) {
+    return CHANNELS.find((channel) => channel.key === (order.channel ?? 'website')) ?? null;
+  }
 
   protected readonly query = toSignal(
     this.route.queryParamMap.pipe(

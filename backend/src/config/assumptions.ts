@@ -218,7 +218,8 @@ export const STORE_SETTINGS_SEED = {
     cutoffHour: 16,
   },
   cart: {
-    maxPerVariant: 5,
+    /** Giỏ khách: tối đa 10 / sản phẩm (biến thể) — đổi từ 5 ngày 2026-11-17; khớp mặc định DB `store_settings.max_per_variant`. */
+    maxPerVariant: 10,
     maxItemsPerOrder: 20,
     maxCartLines: 30,
     cartRetentionDays: 30,
@@ -228,6 +229,9 @@ export const STORE_SETTINGS_SEED = {
   },
   lowStockDefault: 5,
 } as const;
+
+/** Trần số lượng mỗi sản phẩm trong giỏ / đơn của khách (DTO giỏ + đặt hàng). Một nguồn duy nhất. */
+export const CART_MAX_PER_VARIANT: number = STORE_SETTINGS_SEED.cart.maxPerVariant;
 
 /**
  * GIẢ ĐỊNH Slice 9 (S9-Q1..Q14, mặc định PO; Orchestrator duyệt plan 2026-11-12).

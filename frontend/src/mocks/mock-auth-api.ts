@@ -19,6 +19,7 @@ import {
   normalizeName,
   todayInVietnam,
 } from '../app/features/auth/auth-validation';
+import { CODE_PATTERN } from '../app/features/auth/auth-messages';
 import {
   DEMO_VERIFICATION_CODE,
   MOCK_OFFLINE_EMAIL,
@@ -211,7 +212,7 @@ export class MockAuthApi implements AuthApi {
 
   private checkEmailAndCode(address: string, code: string): Observable<never> | null {
     if (!validEmail(address)) return failWith('validation', { field: 'email' });
-    return /^\d{6}$/.test(code.replace(/[\s-]/g, ''))
+    return CODE_PATTERN.test(code.replace(/[\s-]/g, ''))
       ? null
       : failWith('validation', { field: 'code' });
   }

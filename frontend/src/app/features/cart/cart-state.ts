@@ -717,7 +717,10 @@ export class CartState {
       this.merge(pending.lines, pending.key, userId, true);
     } else if (delta.length) {
       this.merge(
-        delta.map((line) => ({ ...line, quantity: Math.min(line.quantity, 5) })),
+        delta.map((line) => ({
+          ...line,
+          quantity: Math.min(line.quantity, this.policy().maxPerVariant),
+        })),
         createKey(),
         userId,
         true,

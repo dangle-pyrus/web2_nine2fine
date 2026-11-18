@@ -28,7 +28,7 @@ Mọi bước: `h1` (`tabindex="-1"`) → (tuỳ) `.notice` → nội dung bư�
 | Bước | Thành phần từ trên xuống |
 | --- | --- |
 | Email | `h1` "Nhập email của bạn để tham gia hoặc đăng nhập." · `.field` Email (nhãn nổi, `*`) · `.field-error` · `.legal` (link Chính sách bảo mật, Điều khoản sử dụng) · `.form-error` · `.actions` với 1 `.pill` "Tiếp tục" |
-| Mã xác thực | `h1` "Nhập mã 8 số chúng tôi vừa gửi qua email của bạn." · `.email-row` (email + link "Chỉnh sửa Email") · `n2f-verification-code-field` (ô mã + nút `reiconRefresh` + hint đếm ngược) · `.form-error` · `.stack`: `.pill.wide` "Đăng nhập" / `.divider` "hoặc" / `.pill.wide.outline` "Sử dụng mật khẩu" |
+| Mã xác thực | `h1` "Nhập mã 6 số chúng tôi vừa gửi qua email của bạn." · `.email-row` (email + link "Chỉnh sửa Email") · `n2f-verification-code-field` (ô mã + nút `reiconRefresh` + hint đếm ngược) · `.form-error` · `.stack`: `.pill.wide` "Đăng nhập" / `.divider` "hoặc" / `.pill.wide.outline` "Sử dụng mật khẩu" |
 | Mật khẩu | `h1` "Nhập mật khẩu của bạn để đăng nhập vào tài khoản." · `.email-row` · `n2f-password-field` (`current-password`, nút hiện/ẩn) · link "Quên mật khẩu" (căn phải) · `.form-error` · `.stack`: `.pill.wide` "Đăng nhập" / "hoặc" / `.pill.wide.outline` "Sử dụng mã xác thực" |
 
 CTA primary duy nhất mỗi bước (pill đen); hành động phụ là outline. Đạt checklist "không có quá nhiều CTA ngang cấp".
@@ -58,7 +58,7 @@ CTA primary duy nhất mỗi bước (pill đen); hành động phụ là outlin
 | Gửi lại thành công | Đếm ngược mới; trình đọc màn hình nghe "Đã gửi mã xác thực." | |
 | Gửi lại bị chặn (5 lần/30 phút/email hoặc 30 lần/giờ/IP) | Dưới ô mã: "Bạn thao tác quá nhanh. Vui lòng thử lại sau N phút." Nút gửi lại bật lại để thử sau | AC-AUTH-15, 16 |
 | Gửi mã khi email bị khoá mã | Dưới ô mã: "Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau N phút." | AC-AUTH-20 |
-| Lỗi nhập (FE, không gửi) | Dưới ô mã: "Nhập đủ 8 chữ số của mã xác thực." Áp cho <8 số hoặc có chữ. Không tính lần sai | AC-AUTH-23 |
+| Lỗi nhập (FE, không gửi) | Dưới ô mã: "Nhập đủ 6 chữ số của mã xác thực." Áp cho <6 số hoặc có chữ. Không tính lần sai | AC-AUTH-23 |
 | Loading đăng nhập | Nút "Đang đăng nhập…" `disabled`; ô mã giữ nguyên | BR-AUTH-38 |
 | Sai / hết hạn / đã dùng / đã bị thay | Dưới ô mã (focus về ô mã): "Mã xác thực không đúng hoặc đã hết hạn." Cùng một câu cho mọi nguyên nhân; không hiện số lần còn lại. Lần 1–4 đều giống nhau | AC-AUTH-12, 17, 19, 21 |
 | Sai lần 5 (khoá xác thực mã 15 phút) | Dưới ô mã: "Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau N phút." Mã đúng nhập sau đó vẫn nhận câu này. Nút "Sử dụng mật khẩu" vẫn dùng được (đường thay thế duy nhất đang mở) | AC-AUTH-20, 21, 22 |
@@ -126,7 +126,7 @@ Visual (bố cục, màu, kích thước, thứ tự thành phần) **không đ�
 4. Thêm thông báo tài khoản tạm khóa kèm email hỗ trợ dạng link `mailto:` (cần `.form-error` chứa liên kết, hiện chỉ là chuỗi thuần); BR-AUTH-19.
 5. Lỗi liên quan ô mã (sai/hết hạn/khoá/gửi lại bị chặn) hiện **dưới ô mã** thay vì `.form-error` cuối form; sau khi báo lỗi focus về ô mã (checklist "error nằm gần field").
 6. Đếm ngược: bỏ `aria-live` cho từng giây; thêm vùng `.sr-only` thông báo theo mốc. Phản hồi "chờ gửi lại" từ máy chủ xử lý như thành công (đếm ngược), không phải lỗi (AC-AUTH-14).
-7. Đổi chữ cho thống nhất thuật ngữ: nhãn ô "Mã số (8 số)" → "Mã xác thực (8 số)"; nút "Sử dụng mã xác thực 1 lần" → "Sử dụng mã xác thực".
+7. Đổi chữ cho thống nhất thuật ngữ: nhãn ô "Mã số (6 số)" → "Mã xác thực (6 số)"; nút "Sử dụng mã xác thực 1 lần" → "Sử dụng mã xác thực".
 8. `aria-describedby` của ô mã nối thêm id lỗi; thêm `autocapitalize="off"` `spellcheck="false"` cho ô email.
 9. Link pháp lý mở tab mới.
 10. Trạng thái "đang khôi phục phiên" (xem 3.4) và chuyển ngay nếu đã đăng nhập (BR-AUTH-25, 30).

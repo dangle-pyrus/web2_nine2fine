@@ -30,7 +30,7 @@ Breakpoint storefront: 1100px, 800px. Reduced motion đã được xử lý toà
 | Thành phần | Đường dẫn | Ghi chú |
 | --- | --- | --- |
 | Kiểu form auth (`.field` nhãn nổi, `.field-error`, `.form-error`, `.notice`, `.hint`, `.legal`, `.pill`, `.pill.outline`, `.pill.wide`, `.actions`, `.stack`, `.divider`, `.email-row`, `.link`, `.lead`) | `frontend/src/app/features/auth/ui/auth-form.scss` | Đo từ Figma 12:41, 43:1134, 47:1197, 43:1058, 50:53 |
-| Ô mã xác thực 8 số + gửi lại + đếm ngược | `features/auth/ui/verification-code-field.ts` (`n2f-verification-code-field`) | Tự gửi mã khi hiện; `autocomplete="one-time-code"`, `inputmode="numeric"` |
+| Ô mã xác thực 6 số (`OTP_DIGITS`) + gửi lại + đếm ngược | `features/auth/ui/verification-code-field.ts` (`n2f-verification-code-field`) | Tự gửi mã khi hiện; `autocomplete="one-time-code"`, `inputmode="numeric"` |
 | Ô mật khẩu + nút hiện/ẩn + danh sách quy tắc | `features/auth/ui/password-field.ts` (`n2f-password-field`) | `autocomplete` `current-password` / `new-password` |
 | Thông báo lỗi, quy tắc mật khẩu, mẫu kiểm tra | `features/auth/auth-messages.ts` | Bảng chữ lỗi tập trung một chỗ |
 | Trạng thái luồng (email, returnUrl) | `features/auth/auth-session.ts` (`AuthFlowState`, `AuthSession`) | Email không lên URL |
@@ -46,7 +46,7 @@ Admin là bundle riêng, mọi rule dưới `.adm`, token tiền tố `--adm-` (
 
 | Dùng | Không dùng | Ghi chú |
 | --- | --- | --- |
-| **mã xác thực** | OTP, mã số, mã 1 lần, mã xác minh | Nhãn ô: "Mã xác thực (8 số)". PRD cũng dùng "mã xác thực" trong thông báo lỗi. |
+| **mã xác thực** | OTP, mã số, mã 1 lần, mã xác minh | Nhãn ô: "Mã xác thực (6 số)". PRD cũng dùng "mã xác thực" trong thông báo lỗi. |
 | **đăng nhập** / **đăng ký** | login, sign in, tham gia (trừ tiêu đề bước email đã có từ Figma) | |
 | **mật khẩu** | pass, password | |
 | **Tên** (tên gọi) / **Họ** (họ và tên đệm) | | Nhãn giữ "Tên", "Họ" (Figma); xem câu hỏi trong `auth-register.md`. |

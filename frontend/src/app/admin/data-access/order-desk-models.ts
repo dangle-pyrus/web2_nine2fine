@@ -118,6 +118,8 @@ export interface DeskOrderSummary {
   carrier?: string;
   trackingNumber?: string;
   firstItem?: { name: string; color: string; size: string; mediaId: string };
+  /** Sales platform (cột "Nền tảng"). The API only knows the website today, so absent = website. */
+  channel?: 'website' | 'shopee' | 'tiktok' | 'lazada';
 }
 
 export interface DeskOrderPage {

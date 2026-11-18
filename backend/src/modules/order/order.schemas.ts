@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { CART_MAX_PER_VARIANT } from '../../config/assumptions';
 import { Errors } from '../../lib/errors';
-import { emailField, phoneField } from '../../lib/validate';
+import { emailField, otpCodeField, phoneField } from '../../lib/validate';
 import { itemsField, quoteAddressField, voucherCodesField } from '../checkout/checkout.schemas';
 
 /** Validate + chuẩn hoá `POST /orders` (BR-CHK-04..09). Trường lạ (kể cả `userId`) bị loại. */
@@ -59,7 +60,7 @@ const expectedSchema = z.object(
 );
 
 export const placeOrderSchema = z.object({
-  items: itemsField(5),
+  items: itemsField(CART_MAX_PER_VARIANT),
   voucherCodes: voucherCodesField,
   contact: z.object({ name: nameField, phone: phoneField, email: emailField }, { error: 'Thiếu thông tin liên hệ.' }),
   address: quoteAddressField.extend({ street: streetField }),
@@ -80,10 +81,7 @@ export const lookupCodesSchema = z.object({
 export const lookupVerifySchema = z.object({
   orderCode: z.string({ error: 'Nhập mã đơn hàng.' }).min(1, { error: 'Nhập mã đơn hàng.' }).max(20, { error: 'Nhập mã đơn hàng.' }),
   email: emailField,
-  code: z
-    .string({ error: 'Nhập đủ 8 chữ số của mã xác thực.' })
-    .transform((v) => v.replace(/[\s-]/g, ''))
-    .refine((v) => /^[0-9]{6}$/.test(v), { error: 'Nhập đủ 6 chữ số của mã xác thực.' }),
+  code: otpCodeField,
 });
 
 /**

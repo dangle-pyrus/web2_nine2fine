@@ -164,9 +164,11 @@ export class InsightsDashboardPage {
   protected readonly chart = computed(() => {
     const data = this.data();
     const series = data?.series;
-    if (!data || !series) return null;
+    if (!data || !series?.points) return null;
     const metric = this.chartMetric();
-    const kpi = metric === 'revenue' ? data.kpis.netRevenue! : data.kpis.orders;
+    const kpi = metric === 'revenue' ? data.kpis.netRevenue : data.kpis.orders;
+    if (!kpi) return null;
+    const previous = series.previous ?? [];
     const format = metric === 'revenue' ? shortMoney : (value: number) => num(value);
     const show = (value: number) => (metric === 'revenue' ? money(value) : `${num(value)} đơn`);
     return {
@@ -175,7 +177,7 @@ export class InsightsDashboardPage {
         { label: 'Kỳ này', data: series.points.map((point) => point[metric]) },
         {
           label: `Kỳ trước (${this.compareName()})`,
-          data: series.previous.map((point) => point[metric]),
+          data: previous.map((point) => point[metric]),
           comparison: true,
         },
       ],
@@ -308,13 +310,13 @@ export class InsightsDashboardPage {
       const at = Date.parse(order.createdAt);
       return at >= from && at < to;
     });
-    return [...data.recentOrders, ...samples]
+    return [...(data.recentOrders ?? []), ...samples]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 10)
       .map((order) => ({
         ...order,
         badge: statusBadge({ status: order.status, tab: 'to-fulfil' }),
-        logo: channelOf(order.channel),
+        logo: channelOf(order.channel ?? 'website') ?? channelOf('website'),
         when: dateTime(order.createdAt),
       }));
   });

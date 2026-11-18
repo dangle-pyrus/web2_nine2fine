@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { z } from 'zod';
+import { CART_MAX_PER_VARIANT } from '../../config/assumptions';
 import { Errors } from '../../lib/errors';
 import { parseBody, parseIdempotencyKey, uuidField, UUID_RE } from '../../lib/validate';
 import { requireAuth } from '../../middleware/auth';

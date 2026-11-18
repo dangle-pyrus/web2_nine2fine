@@ -606,11 +606,35 @@
 }
 
 /* ---------- Tables (3.10 Bảng dữ liệu, 4.1) ---------- */
+/*
+ * Sticky column headers. `overflow-x: auto` makes the wrap a scroll container, so a sticky <th>
+ * can only stick inside the wrap, never to the page. The wrap therefore scrolls on both axes and is
+ * capped to the viewport left under the sticky page header (+ mobile bar on compact, set by
+ * AdminShell via --adm-chrome-h): once the list is in view, rows scroll under a fixed header row.
+ */
 .adm .table-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: max(320px, calc(100dvh - var(--adm-chrome-h, 77px) - 24px));
+  overscroll-behavior-y: auto;
+  scrollbar-width: thin;
   transition: opacity 120ms ease-out;
   &.is-refreshing {
     opacity: 0.55;
+  }
+  > .table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--adm-raised);
+    /* border-collapse borders scroll away from sticky cells; draw the rule as a shadow instead. */
+    border-bottom: 0;
+    box-shadow: inset 0 -1px 0 var(--adm-divider);
+  }
+  > .table thead th.sticky-col {
+    z-index: 3;
+  }
+  > .table tbody .sticky-col {
+    z-index: 1;
   }
 }
 .adm .table {
@@ -1150,6 +1174,10 @@
   }
   .adm .table .row-actions {
     opacity: 1;
+  }
+  /* Card lists have no header row to pin: let the page scroll them. */
+  .adm .table-wrap:has(> .table--cards) {
+    max-height: none;
   }
   /* Tables become card lists on phones (8.3). */
   .adm .table--cards {

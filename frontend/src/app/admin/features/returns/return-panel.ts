@@ -7,6 +7,7 @@ import {
   output,
   signal,
 } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { DateTimePipe, MoneyPipe } from '../../core/format.pipes';
 import type { BadgeSpec } from '../../core/status';
 import {
@@ -19,6 +20,7 @@ import {
 import { AdminDialogs } from '../../ui/dialogs';
 import { mediaSrc } from '../content/media-picker';
 import { AdmBadge } from '../../ui/badge';
+import { AdmCopyButton } from '../../ui/copy-button';
 import { AdmIcon } from '../../ui/icon';
 import {
   ReturnActionDialog,
@@ -58,7 +60,7 @@ const HISTORY_LABELS: Record<string, string> = {
  */
 @Component({
   selector: 'adm-return-panel',
-  imports: [AdmBadge, AdmIcon, MoneyPipe, DateTimePipe],
+  imports: [RouterLink, AdmBadge, AdmCopyButton, AdmIcon, MoneyPipe, DateTimePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let r = ret();
@@ -197,27 +199,19 @@ const HISTORY_LABELS: Record<string, string> = {
               <strong>{{ r.refundedAmount ?? r.amount.amount | admMoney }}</strong>
             </dd>
           </div>
-          <div>
-            <dt>Hoàn về</dt>
-            <dd data-testid="return-refund-to">
-              @if (r.refundTo.type === 'account') {
-                {{ r.refundTo.bank }} ·
-                @if (r.refundTo.accountNumber) {
-                  <span data-testid="return-account-number">{{ r.refundTo.accountNumber }}</span>
+          @if (r.refundTo.type !== 'account') {
+            <div>
+              <dt>Hoàn về</dt>
+              <dd data-testid="return-refund-to">
+                @if (r.paymentMethod === 'cod') {
+                  Khách chưa khai tài khoản nhận hoàn tiền
+                  <div class="cell-sub">Liên hệ khách qua {{ r.recipient.phone }} để lấy số tài khoản.</div>
                 } @else {
-                  ****{{ r.refundTo.last4 }}
+                  Tài khoản đã chuyển khoản thanh toán đơn
                 }
-                · {{ r.refundTo.accountName }}
-              } @else {
-                Tài khoản đã thanh toán đơn
-              }
-              @if (r.state === 'received' && !canRefund() && r.refundTo.type === 'account') {
-                <div class="cell-sub" data-testid="admin-only-note">
-                  Chỉ quản trị viên chuyển tiền.
-                </div>
-              }
-            </dd>
-          </div>
+              </dd>
+            </div>
+          }
           @if (r.refundReference) {
             <div>
               <dt>Mã giao dịch</dt>
@@ -226,6 +220,55 @@ const HISTORY_LABELS: Record<string, string> = {
           }
         </dl>
       </section>
+
+      @if (r.refundTo.type === 'account') {
+        <section class="part" aria-labelledby="rp-account">
+          <h3 id="rp-account">Tài khoản nhận hoàn tiền</h3>
+          <dl class="info frame" data-testid="return-refund-to">
+            <div>
+              <dt>Ngân hàng</dt>
+              <dd>{{ r.refundTo.bank }}</dd>
+            </div>
+            <div>
+              <dt>Số tài khoản</dt>
+              <dd>
+                @if (r.refundTo.accountNumber) {
+                  <span class="mono" data-testid="return-account-number">{{
+                    r.refundTo.accountNumber
+                  }}</span>
+                  <adm-copy [value]="r.refundTo.accountNumber" label="số tài khoản" />
+                } @else {
+                  <span class="mono">****{{ r.refundTo.last4 }}</span>
+                }
+              </dd>
+            </div>
+            <div>
+              <dt>Chủ tài khoản</dt>
+              <dd>
+                {{ r.refundTo.accountName }}
+                @if (r.refundTo.accountName) {
+                  <adm-copy [value]="r.refundTo.accountName" label="tên chủ tài khoản" />
+                }
+              </dd>
+            </div>
+          </dl>
+          @if (!r.refundTo.accountNumber) {
+            <p class="cell-sub" data-testid="admin-only-note">
+              @if (r.state === 'refunded') {
+                Đã hoàn tiền: số tài khoản đầy đủ đã được xoá.
+              } @else if (!sticky()) {
+                Số đầy đủ xem ở
+                <a class="link" routerLink="/admin/returns" [queryParams]="{ return: r.id }"
+                  >màn Trả hàng</a
+                > (quản
+                trị viên).
+              } @else {
+                Chỉ quản trị viên xem số đầy đủ và chuyển tiền.
+              }
+            </p>
+          }
+        </section>
+      }
 
       @if (r.photos.length) {
         <section class="part" aria-labelledby="rp-photos">

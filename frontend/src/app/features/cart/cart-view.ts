@@ -323,7 +323,7 @@ import { getMedia } from '../../../media/media-manifest';
             </div>
           </div>
 
-          <aside class="summary" aria-label="Tóm tắt đơn hàng">
+          <aside class="summary" aria-label="Tóm tắt đơn hàng" data-float-avoid>
             @if (!dialog) {
               <h2>
                 Tóm tắt đơn hàng <span>{{ summaryCount() }} sản phẩm</span>

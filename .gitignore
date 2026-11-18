@@ -41,3 +41,6 @@ scratchpad_dummy
 .idea/
 .DS_Store
 Thumbs.db
+
+# Bản sao tạm cục bộ (có chứa bản sao backend/.env), không commit
+.claude-tmp/

@@ -184,7 +184,7 @@ export const isOverdue = (state: string, requestedAt: Date, at: Date): boolean =
   state === 'requested' && at.getTime() - requestedAt.getTime() > RETURNS_ASSUMPTIONS.overdueHours * 3_600_000;
 
 /**
- * `AdminReturn` (cũng là `AdminOrder.return`). Số tài khoản đầy đủ CHỈ khi người xem là admin VÀ `state = received` VÀ đơn COD VÀ còn bản mã:
+ * `AdminReturn` (cũng là `AdminOrder.return`). Số tài khoản đầy đủ CHỈ khi người xem là admin VÀ đơn COD VÀ còn bản mã:
  * giải mã tại đây (không từ truy vấn); mọi trường hợp khác chỉ bản che. Trả null nếu không có yêu cầu.
  */
 export async function buildAdminReturn(db: Db, returnId: string, role: 'staff' | 'admin', showAccountNumber = true): Promise<AdminReturnDto | null> {
@@ -204,7 +204,9 @@ export async function buildAdminReturn(db: Db, returnId: string, role: 'staff' |
   void _i;
   const state = r.state as ReturnState;
   const refundTo: AdminReturnDto['refundTo'] = { ...base.refundTo };
-  if (showAccountNumber && role === 'admin' && state === 'received' && order.paymentMethod === 'cod') {
+  // 2026-11-17: admin thấy số đầy đủ ngay từ khi khách gửi yêu cầu (không chờ `received`) để chuẩn bị chuyển khoản hoàn tiền;
+  // sau khi hoàn tiền bản mã bị xoá nên chỉ còn bản che. Nhân viên vẫn chỉ thấy bản che.
+  if (showAccountNumber && role === 'admin' && order.paymentMethod === 'cod') {
     const enc = await loadAccountCipher(db, returnId);
     if (enc) {
       try {

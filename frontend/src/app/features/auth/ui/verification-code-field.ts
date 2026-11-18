@@ -17,7 +17,7 @@ import { finalize } from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { demoVerificationCode } from '../../../core/storefront-adapters';
 import { AUTH_API, AuthError, VerificationPurpose } from '../data-access/auth-api';
-import { AuthMessage, authMessage, cleanCode } from '../auth-messages';
+import { AuthMessage, authMessage, cleanCode, CODE_MESSAGE, OTP_DIGITS } from '../auth-messages';
 import { AuthMessageText } from './auth-message';
 
 /**
@@ -45,7 +45,7 @@ import { AuthMessageText } from './auth-message';
         (input)="onInput()"
       />
       <label [for]="fieldId()"
-        >Mã xác thực (6 số)<span class="req" aria-hidden="true">*</span></label
+        >Mã xác thực ({{ digits }} số)<span class="req" aria-hidden="true">*</span></label
       >
       <button
         type="button"
@@ -68,7 +68,7 @@ import { AuthMessageText } from './auth-message';
       </p>
     } @else if (showError()) {
       <p class="field-error" role="alert" [id]="fieldId() + '-error'">
-        Nhập đủ 6 chữ số của mã xác thực.
+        {{ codeMessage }}
       </p>
     }
     <p class="hint end" [id]="fieldId() + '-hint'" aria-hidden="true">
@@ -98,6 +98,8 @@ export class VerificationCodeField implements OnInit {
 
   /** Set only in the mock (e2e) build; the normal build has no demo code in its bundle. */
   readonly demoCode = demoVerificationCode;
+  readonly digits = OTP_DIGITS;
+  readonly codeMessage = CODE_MESSAGE;
   readonly secondsLeft = signal(0);
   readonly sending = signal(false);
   readonly showError = signal(false);
@@ -181,7 +183,7 @@ export class VerificationCodeField implements OnInit {
   }
 
   onInput(): void {
-    // Paste "123 456" or "123-456": keep the digits only, at most 6.
+    // Paste "123 456" or "123-456": keep the digits only, at most OTP_DIGITS.
     const element = this.box().nativeElement;
     const clean = cleanCode(element.value);
     if (clean !== element.value) element.value = clean;

@@ -201,7 +201,7 @@
     </div>
   </section>
   } @if (showStickyBar() && !allSoldOut()) {
-  <div class="sticky-bar" role="region" aria-label="Mua nhanh">
+  <div class="sticky-bar" role="region" aria-label="Mua nhanh" data-float-avoid>
     <div>
       <strong>{{ item.name }}</strong>
       <span>{{ item.price | vnd }}{{ size() ? ' · Size ' + size() : '' }}</span>

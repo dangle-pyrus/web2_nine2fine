@@ -150,14 +150,16 @@ describe('T-RET-30 AC-RET-31: danh sách', () => {
 });
 
 describe('T-RET-31 AC-RET-32: chi tiết', () => {
-  it('approved / received: người nhận đủ; số đầy đủ CHỈ admin + received; id lạ 404; AdminOrder.return che số', async () => {
+  it('approved / received: người nhận đủ; số đầy đủ CHỈ admin (mọi trạng thái còn mở); id lạ 404; AdminOrder.return che số', async () => {
     const a = await insertReturn({ orderId: F.R.R1.id, state: 'approved', account: ACCT });
     const d1 = await aGet(`/returns/${a.id}`, A.cookie);
     expect(d1.status).toBe(200);
     expect(d1.body.recipient).toEqual({ name: 'Nguyễn Văn A', phone: '0912345678', email: 'khach@example.com' });
-    expect(d1.body.refundTo).toEqual({ type: 'account', bank: 'Vietcombank', last4: '7890', accountName: 'NGUYEN VAN A' });
+    expect(d1.body.refundTo).toEqual({ type: 'account', bank: 'Vietcombank', last4: '7890', accountName: 'NGUYEN VAN A', accountNumber: SEED_ACCOUNT.accountNumber });
     expect(d1.body.allowedActions).toEqual(['reject', 'receive']);
-    assertNoAccountSecrets(d1);
+    const d1s = await aGet(`/returns/${a.id}`, S.cookie);
+    expect(d1s.body.refundTo.accountNumber).toBeUndefined();
+    assertNoAccountSecrets(d1s);
     await prisma.$executeRawUnsafe(`UPDATE order_returns SET state = 'received', received_at = now(), amount_final = true WHERE return_id = '${a.id}'`);
     const ra = await aGet(`/returns/${a.id}`, A.cookie);
     expect(ra.body.refundTo.accountNumber).toBe(SEED_ACCOUNT.accountNumber);
@@ -404,9 +406,10 @@ describe('T-RET-39 / 41 AC-RET-17, 40, 41: số tài khoản không lộ; log; t
       expect(c.status).toBe(201);
       const id = c.body.id as string;
       const seeFull = async (cookie: string) => (await aGet(`/returns/${id}`, cookie)).body.refundTo.accountNumber;
-      expect(await seeFull(A.cookie)).toBeUndefined();
+      expect(await seeFull(A.cookie)).toBe(SEED_ACCOUNT.accountNumber);
+      expect(await seeFull(S.cookie)).toBeUndefined();
       await act(id, 'approve', { note: 'Ghi mã đơn lên hộp, ghi chú-ABC' });
-      expect(await seeFull(A.cookie)).toBeUndefined();
+      expect(await seeFull(A.cookie)).toBe(SEED_ACCOUNT.accountNumber);
       expect((await receiveAll(id)).status).toBe(200);
       expect(await seeFull(A.cookie)).toBe(SEED_ACCOUNT.accountNumber);
       expect(await seeFull(S.cookie)).toBeUndefined();

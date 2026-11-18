@@ -14,7 +14,14 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import 'dotenv/config';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { encryptAccountNumber, last4Of } from '../src/modules/returns/account-secret';
+
+const DEMO_BANKS = ['Vietcombank', 'Techcombank', 'MB Bank', 'ACB', 'VPBank', 'BIDV', 'VietinBank', 'TPBank'];
+/** "Nguyễn Văn An" -> "NGUYEN VAN AN" (tên chủ tài khoản ngân hàng viết hoa không dấu). */
+const toAccountName = (name: string): string =>
+  name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toUpperCase().slice(0, 50);
 
 const prisma = new PrismaClient();
 const DOMAIN = 'demo.nine2fine.local';
@@ -521,6 +528,28 @@ async function seedDemo(): Promise<Record<string, number>> {
         items: { create: [{ orderItemId: line.id, quantity: 1, goodsAmount: goods, ...(amountFinal ? { acceptedQuantity: 1, disposition: 'restock' } : {}) }] },
       },
     });
+    // Đơn COD: khách khai tài khoản nhận hoàn (như form thật) để màn Trả hàng có ngân hàng / số TK / chủ TK.
+    // Số đầy đủ được mã hoá bằng RETURN_ACCOUNT_KEY; đã hoàn tiền / từ chối thì không có bản mã, chỉ giữ 4 số cuối (như luồng thật).
+    if (o.method === 'cod') {
+      const holder = (await prisma.order.findUniqueOrThrow({ where: { order_id: o.id }, select: { recipientName: true } })).recipientName;
+      // Math.random (không dùng `rand`) để không làm lệch chuỗi ngẫu nhiên cố định của phần dữ liệu phía sau.
+      const digit = () => Math.floor(Math.random() * 10);
+      const bank = DEMO_BANKS[Math.floor(Math.random() * DEMO_BANKS.length)];
+      const number = `${1 + Math.floor(Math.random() * 9)}${Array.from({ length: 9 + Math.floor(Math.random() * 4) }, digit).join('')}`;
+      let accountNumberEnc: string | null = null;
+      // chk_returns_account: bản mã chỉ tồn tại khi yêu cầu còn mở (requested / approved / received).
+      if (finalState === 'requested' || finalState === 'approved' || finalState === 'received') {
+        try {
+          accountNumberEnc = encryptAccountNumber(number, ret.return_id);
+        } catch {
+          // Thiếu RETURN_ACCOUNT_KEY / cấu hình: chỉ lưu bản che.
+        }
+      }
+      await prisma.orderReturn.update({
+        where: { return_id: ret.return_id },
+        data: { bankName: bank, accountLast4: last4Of(number), accountName: toAccountName(holder), accountNumberEnc },
+      });
+    }
     if (amountFinal) line.variant.stock += 1;
     if (finalState === 'refunded') await prisma.order.update({ where: { order_id: o.id }, data: { paymentStatus: 'partially_refunded' } });
     await prisma.orderEvent.create({ data: { orderId: o.id, at: requestedAt, fromStatus: 'completed', toStatus: 'completed', paymentStatus: 'paid', actor: 'customer', kind: 'return_requested', returnId: ret.return_id } });

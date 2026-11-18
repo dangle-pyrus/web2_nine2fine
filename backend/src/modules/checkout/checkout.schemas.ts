@@ -3,7 +3,7 @@ import { emailField, phoneField, uuidField } from '../../lib/validate';
 
 const ITEMS_MSG = 'Danh sách sản phẩm chưa hợp lệ.';
 
-/** Mỗi `variantId` tối đa một lần, tối đa 30 dòng; `quantity` nguyên 1..max (quote: 99, đặt hàng: 5). */
+/** Mỗi `variantId` tối đa một lần, tối đa 30 dòng; `quantity` nguyên 1..max (quote: 99, đặt hàng: `CART_MAX_PER_VARIANT` = 10). */
 export const itemsField = (maxQuantity: number) =>
   z
     .array(

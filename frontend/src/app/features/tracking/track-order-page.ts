@@ -15,7 +15,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, switchMap } from 'rxjs';
 import { CHECKOUT_API, CheckoutError } from '../checkout/checkout-api';
 import { API_CONFIG } from '../../core/api-config';
-import { CODE_PATTERN, cleanCode } from '../auth/auth-messages';
+import { CODE_PATTERN, cleanCode, OTP_DIGITS, OTP_TTL_MINUTES } from '../auth/auth-messages';
 import { orderCanCancel } from '../orders/order-status-map';
 import { Order } from '../orders/order-models';
 import { canPay, cancelLabels, formatDate } from '../orders/order-status';
@@ -89,22 +89,26 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           } @else {
             <div class="field code">
               <label for="track-code"
-                >Mã xác minh (6 số)<span class="req" aria-hidden="true">*</span></label
+                >Mã xác minh ({{ otpDigits }} số)<span class="req" aria-hidden="true"
+                  >*</span
+                ></label
               >
               <input
                 id="track-code"
                 formControlName="code"
                 inputmode="numeric"
                 autocomplete="one-time-code"
-                maxlength="6"
+                [attr.maxlength]="otpDigits"
                 aria-required="true"
                 [attr.aria-invalid]="invalid('code')"
                 [attr.aria-describedby]="invalid('code') ? 'track-code-error' : null"
               />
               @if (invalid('code')) {
-                <p class="field-error" id="track-code-error">Nhập đủ 6 chữ số của mã xác minh.</p>
+                <p class="field-error" id="track-code-error">
+                  Nhập đủ {{ otpDigits }} chữ số của mã xác minh.
+                </p>
               }
-              <p class="hint">Mã có hiệu lực 5 phút.</p>
+              <p class="hint">Mã có hiệu lực {{ otpTtlMinutes }} phút.</p>
             </div>
             <div class="verify-actions">
               <button class="pill" type="submit" [disabled]="busy() || lockSeconds() > 0">
@@ -388,6 +392,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TrackOrderPage {
+  protected readonly otpDigits = OTP_DIGITS;
+  protected readonly otpTtlMinutes = OTP_TTL_MINUTES;
   readonly order = signal<Order | null>(null);
   readonly step = signal<'request' | 'verify' | 'result'>('request');
   readonly busy = signal(false);

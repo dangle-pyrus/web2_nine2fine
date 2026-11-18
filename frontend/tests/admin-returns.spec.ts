@@ -330,7 +330,7 @@ test.describe('admin returns on the API (Slice 9)', () => {
     });
     // Staff: no refund button, the masked account and the admin-only line.
     await expect(page.locator('[data-action="refund"]')).toHaveCount(0);
-    await expect(page.getByTestId('admin-only-note')).toHaveText('Chỉ quản trị viên chuyển tiền.');
+    await expect(page.getByTestId('admin-only-note')).toHaveText('Chỉ quản trị viên xem số đầy đủ và chuyển tiền.');
     await expect(page.getByTestId('return-refund-to')).toContainText('****6789');
     await expect(page.getByTestId('return-refund-to')).not.toContainText('0123456789');
   });

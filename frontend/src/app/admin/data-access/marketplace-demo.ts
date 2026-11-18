@@ -4,7 +4,9 @@
  * nine2fine chưa kết nối thật với Shopee, TikTok Shop hay Lazada. Mọi con số "trên sàn" ở màn Tồn
  * kho và các dòng đơn sàn ở Tổng quan đều được SINH TẤT ĐỊNH tại trình duyệt từ SKU (hàm băm) và
  * số "Có thể bán" thật của Website, để trình diễn giao diện đa kênh. File này không gọi API ngoài,
- * không ghi gì lên máy chủ; quy tắc phân bổ chỉ lưu trong localStorage của trình duyệt.
+ * không ghi gì lên máy chủ; cấu hình kết nối kênh chỉ lưu trong localStorage của trình duyệt.
+ *
+ * Mọi kênh bán từ đúng một số "Có thể bán" (không chia tỉ lệ, không tồn đệm, 2026-11-17).
  *
  * Khi có kết nối thật, thay file này bằng một adapter gọi API của từng sàn (cùng các kiểu bên
  * dưới) là màn hình dùng được ngay.
@@ -69,48 +71,6 @@ export function channelOf(key: ChannelKey): SalesChannel {
   return CHANNELS.find((channel) => channel.key === key)!;
 }
 
-// ---------- Allocation rules (localStorage) ----------
-
-export interface AllocationRules {
-  /** `shared`: every channel sells from the same available stock; `split`: a share per channel. */
-  mode: 'shared' | 'split';
-  /** Percent of the available stock per channel when `mode` is `split` (sums to 100). */
-  split: Record<ChannelKey, number>;
-  /** Units kept back from each channel so two channels cannot sell the last unit twice. */
-  buffer: Record<ChannelKey, number>;
-}
-
-export const DEFAULT_RULES: AllocationRules = {
-  mode: 'shared',
-  split: { website: 40, shopee: 30, tiktok: 20, lazada: 10 },
-  buffer: { website: 0, shopee: 1, tiktok: 1, lazada: 2 },
-};
-
-const RULES_KEY = 'n2f.admin.marketplace.rules';
-
-export function readRules(): AllocationRules {
-  try {
-    const raw = localStorage.getItem(RULES_KEY);
-    if (!raw) return structuredClone(DEFAULT_RULES);
-    const value = JSON.parse(raw) as Partial<AllocationRules>;
-    return {
-      mode: value.mode === 'split' ? 'split' : 'shared',
-      split: { ...DEFAULT_RULES.split, ...(value.split ?? {}) },
-      buffer: { ...DEFAULT_RULES.buffer, ...(value.buffer ?? {}) },
-    };
-  } catch {
-    return structuredClone(DEFAULT_RULES);
-  }
-}
-
-export function saveRules(rules: AllocationRules): void {
-  try {
-    localStorage.setItem(RULES_KEY, JSON.stringify(rules));
-  } catch {
-    /* Storage unavailable: the rules last for this page only. */
-  }
-}
-
 // ---------- Channel setup (localStorage, demo) ----------
 
 /** What the "cấu hình kênh" page keeps per marketplace: the connection and the SKU links. */
@@ -173,7 +133,7 @@ export function hash(text: string): number {
 }
 
 export interface ChannelStock {
-  /** Units this channel should show under the rules (from the real available stock). */
+  /** Units this channel should show: the real "Có thể bán", the same on every channel. */
   expected: number;
   /** Units the channel shows now; differs from `expected` when a push is pending or failed. */
   listed: number;
@@ -189,14 +149,10 @@ export function channelStock(
   sku: string,
   available: number,
   channel: ChannelKey,
-  rules: AllocationRules,
   setup?: ChannelSetup,
 ): ChannelStock {
-  const share =
-    rules.mode === 'split'
-      ? Math.floor((available * (rules.split[channel] ?? 0)) / 100)
-      : available;
-  const expected = Math.max(0, share - (rules.buffer[channel] ?? 0));
+  // One stock for every channel: each shows the same "Có thể bán".
+  const expected = Math.max(0, available);
   if (channel === 'website')
     return { expected, listed: expected, state: 'synced', linked: true, connected: true };
   if (setup && !setup.connected)
@@ -224,7 +180,25 @@ export function channelStock(
   return { expected, listed: expected, state: 'synced', linked: true, connected: true };
 }
 
-/** True when a marketplace shows another number than the rules ask for (lệch tồn). */
+/**
+ * Units held by unshipped orders of one channel. The website figure is the real `reserved`; the
+ * marketplace figures are sample numbers, kept small enough that the SKU's status does not change.
+ */
+export function channelHeld(
+  sku: string,
+  channel: ChannelKey,
+  item: { reserved: number; available: number; lowStockThreshold: number },
+  setup?: ChannelSetup,
+): number {
+  if (channel === 'website') return item.reserved;
+  if (setup && !setup.connected) return 0;
+  const h = hash(`${sku}|${channel}|held`);
+  if (h % 4 !== 0) return 0;
+  const held = 1 + (h % 3);
+  return item.available - held > item.lowStockThreshold ? held : 0;
+}
+
+/** True when a marketplace shows another number than "Có thể bán" (lệch tồn). */
 export function isMismatch(stock: ChannelStock): boolean {
   return stock.linked && stock.listed !== stock.expected;
 }

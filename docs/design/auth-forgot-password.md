@@ -15,7 +15,7 @@ Trang hiện: tự gửi mã mục đích đặt lại (cho dù email không có
   |-- "Chỉnh sửa Email" --> /auth/login bước email
 ```
 
-Dữ liệu màn hình cần: email (từ bước 1), mã 8 số, mật khẩu mới, nhập lại, số giây chờ gửi lại; lỗi theo trường và lỗi ổn định. Mật khẩu chỉ gửi một lần khi nộp; không bao giờ hiển thị lại sau khi lưu.
+Dữ liệu màn hình cần: email (từ bước 1), mã 6 số (OTP_POLICY.digits), mật khẩu mới, nhập lại, số giây chờ gửi lại; lỗi theo trường và lỗi ổn định. Mật khẩu chỉ gửi một lần khi nộp; không bao giờ hiển thị lại sau khi lưu.
 
 ## 2. Bố cục
 
@@ -44,10 +44,10 @@ Mỗi dòng đọc kèm `.sr-only` " Đã đạt." / " Chưa đạt." (đã có)
 | --- | --- | --- |
 | Vào trang | Focus `h1`; tự gửi mã; hint "Đang gửi mã…" → "Gửi lại mã trong N giây"; nút "Đổi mật khẩu" khoá; các quy tắc ở trạng thái chưa đạt | AC-AUTH-57 |
 | Chưa có email trong bộ nhớ | Không render form; chuyển `/auth/login` | |
-| Lỗi mã (FE) | Dưới ô mã: "Nhập đủ 8 chữ số của mã xác thực." | AC-AUTH-23 |
+| Lỗi mã (FE) | Dưới ô mã: "Nhập đủ 6 chữ số của mã xác thực." | AC-AUTH-23 |
 | Quy tắc chưa đạt | Dòng quy tắc tương ứng ở trạng thái "Chưa đạt" khi gõ (ví dụ `Abc1234` 7 ký tự, `abcdefg1` thiếu in hoa, `ABCDEFGH` thiếu số, 65 ký tự, trùng email như `MINH1@EXAMPLE.COM`); nút "Đổi mật khẩu" khoá | AC-AUTH-51, 51b |
 | Nhập lại không khớp | Dưới ô nhập lại: "Mật khẩu nhập lại chưa khớp."; nút khoá. Kiểm lại cả khi sửa ô mật khẩu mới (đã có) | AC-AUTH-52 |
-| Hợp lệ | Mọi quy tắc "Đã đạt", khớp, mã đủ 8 số → nút bật. 64 ký tự đúng vẫn hợp lệ | AC-AUTH-54 |
+| Hợp lệ | Mọi quy tắc "Đã đạt", khớp, mã đủ 6 số → nút bật. 64 ký tự đúng vẫn hợp lệ | AC-AUTH-54 |
 | Loading | Nút "Đang cập nhật…" `disabled`; mọi ô giữ nguyên; bấm/Enter lặp lại không gửi thêm | BR-AUTH-38 |
 | Mã sai / hết hạn / đã dùng (kể cả dùng lại mã vừa đặt lại) | Dưới ô mã, focus ô mã: "Mã xác thực không đúng hoặc đã hết hạn." | AC-AUTH-59 |
 | Khoá mã (sai 5 lần) | Dưới ô mã: "Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau N phút." | AC-AUTH-20 |
@@ -69,7 +69,7 @@ Mỗi dòng đọc kèm `.sr-only` " Đã đạt." / " Chưa đạt." (đã có)
 
 ## 5. Accessibility
 
-- **Nhãn:** "Mã xác thực (8 số)", "Mật khẩu mới", "Nhập lại mật khẩu mới"; mỗi ô `<label for>`; nút hiện/ẩn có `aria-label` + `aria-pressed`.
+- **Nhãn:** "Mã xác thực (6 số)", "Mật khẩu mới", "Nhập lại mật khẩu mới"; mỗi ô `<label for>`; nút hiện/ẩn có `aria-label` + `aria-pressed`.
 - **autocomplete:** mã `one-time-code`; cả hai ô mật khẩu `new-password` (trình quản lý mật khẩu đề xuất mật khẩu mạnh, không điền mật khẩu cũ).
 - **Quy tắc mật khẩu:** danh sách `<ul>` nối vào ô bằng `aria-describedby`; trạng thái đạt/chưa đạt có chữ cho trình đọc màn hình, không chỉ icon/màu. Không dùng `aria-live` mỗi lần gõ (gây ồn); trình đọc đọc danh sách khi ô nhận focus.
 - **Lỗi:** lỗi dưới ô có id nối `aria-describedby`; `aria-invalid="true"` khi có lỗi; lỗi mã `role="alert"`; `.form-error` `role="alert"`.
@@ -88,7 +88,7 @@ Visual **không đổi** (cùng bố cục, nút khoá theo Figma). Chỉ:
 4. Lỗi liên quan ô mã (sai, khoá, gửi lại bị chặn) hiện dưới ô mã; thêm thông báo khoá mã 15 phút và gửi lại bị chặn (AC-AUTH-20).
 5. Thêm lỗi dưới ô mật khẩu mới khi máy chủ từ chối (AC-AUTH-53).
 6. `h1` thêm `tabindex="-1"` và focus khi vào trang (khớp trang đăng nhập).
-7. Thuật ngữ: "Chúng tôi đã gửi mã số đến" → "Chúng tôi đã gửi mã xác thực đến"; nhãn ô "Mã số (8 số)" → "Mã xác thực (8 số)".
+7. Thuật ngữ: "Chúng tôi đã gửi mã số đến" → "Chúng tôi đã gửi mã xác thực đến"; nhãn ô "Mã số (6 số)" → "Mã xác thực (6 số)".
 8. Đếm ngược `aria-live` theo mốc (như `auth-login.md`).
 9. Giữ nguyên: nút "Hủy bỏ", "Đổi mật khẩu", thông báo thành công, hành vi không tự đăng nhập, ô nhập lại và câu "Mật khẩu nhập lại chưa khớp.".
 

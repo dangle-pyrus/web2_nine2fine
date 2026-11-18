@@ -69,8 +69,9 @@ describe('T-QUO báo giá (AC-CHK-10, AC-CHK-24)', () => {
     await setStock(top, 5);
     const d = await quote({ items: [{ variantId: top, quantity: 1 }] });
     expect(d.body.lines[0].unitPrice).toBe(400000);
-    const e = await quote({ items: [{ variantId: blazer, quantity: 9 }] });
-    expect(e.body.lines[0]).toMatchObject({ effectiveQuantity: 5, limitedBy: 'per-variant-limit' });
+    await setStock(blazer, 20);
+    const e = await quote({ items: [{ variantId: blazer, quantity: 12 }] });
+    expect(e.body.lines[0]).toMatchObject({ effectiveQuantity: 10, maxQuantity: 10, limitedBy: 'per-variant-limit' });
   });
 
   it('T-QUO-03: hạn mức cấu trúc', async () => {

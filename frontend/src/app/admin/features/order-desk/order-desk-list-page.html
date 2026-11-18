@@ -176,6 +176,7 @@
             /></label>
           </th>
           <th>Mã đơn</th>
+          <th class="w-platform">Nền tảng</th>
           <th>Khách hàng</th>
           <th>Sản phẩm</th>
           <th class="num">Tổng tiền</th>
@@ -184,7 +185,7 @@
         </tr>
       </thead>
       @if (view.state().loading) {
-      <tbody [admSkeleton]="8" [columns]="7"></tbody>
+      <tbody [admSkeleton]="8" [columns]="8"></tbody>
       } @else {
       <tbody>
         @for (order of page()?.items ?? []; track order.id) {
@@ -226,6 +227,18 @@
               <span class="chip chip--static">{{ overdueLabels[flag] }}</span>
               }
             </div>
+          </td>
+          <td class="w-platform" data-label="Nền tảng">
+            @if (platformOf(order); as platform) {
+            <img
+              class="platform-logo"
+              [class.platform-logo--website]="platform.key === 'website'"
+              [src]="platform.logo"
+              [alt]="platform.name"
+              [title]="platform.name"
+              [attr.data-testid]="'platform-' + platform.key"
+            />
+            }
           </td>
           <td data-label="Khách">
             <div class="cell-title">{{ order.recipientName }}</div>

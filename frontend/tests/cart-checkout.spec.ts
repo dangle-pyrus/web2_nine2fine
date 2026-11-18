@@ -40,13 +40,18 @@ async function openSummary(page: Page, isMobile: boolean): Promise<void> {
   }
 }
 
-test('AC-CART-02/04: "+" stops at 5 with the per-variant sentence', async ({ page }) => {
+test('AC-CART-02/04: "+" stops at 10 with the per-variant sentence', async ({ page }) => {
+  // Demo stock tops out at 6, so give the blazer M enough stock for the per-variant limit (10) to bite.
+  await page.goto('/');
+  await page.evaluate((id) => {
+    sessionStorage.setItem('n2f.mock.v3', JSON.stringify({ inventory: { [id]: 12 } }));
+  }, BLAZER_M);
   await addBlazer(page);
   await page.goto('/cart');
   const plus = page.getByRole('button', { name: /Tăng số lượng/ });
-  for (let i = 0; i < 4; i++) await plus.click();
+  for (let i = 0; i < 9; i++) await plus.click();
   await expect(plus).toBeDisabled();
-  await expect(page.getByText(/Mỗi đơn mua tối đa 5 sản phẩm cùng màu, size/)).toBeVisible();
+  await expect(page.getByText(/Mỗi đơn mua tối đa 10 sản phẩm cùng màu, size/)).toBeVisible();
 });
 
 test('AC-CART-08: a price that moved shows "from X to Y"', async ({ page }) => {

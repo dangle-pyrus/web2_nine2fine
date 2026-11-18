@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import { z } from 'zod';
+import { OTP_POLICY } from '../config/assumptions';
 import { Errors } from './errors';
 
 /** Validate đầu vào Slice 3: trường lạ bị loại, lỗi đầu tiên -> 422 validation kèm `field` (tên trường trong body). */
@@ -8,6 +9,14 @@ export const BODY_MSG = 'Dữ liệu gửi lên không hợp lệ.';
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const uuidField = (msg = BODY_MSG) => z.string({ error: msg }).regex(UUID_RE, { error: msg });
+
+/** Mã OTP qua email (mọi luồng): đúng `OTP_POLICY.digits` chữ số; bỏ khoảng trắng / gạch nối khi dán "123 456". */
+export const OTP_CODE_MSG = `Nhập đủ ${OTP_POLICY.digits} chữ số của mã xác thực.`;
+const OTP_CODE_RE = new RegExp(`^[0-9]{${OTP_POLICY.digits}}$`);
+export const otpCodeField = z
+  .string({ error: OTP_CODE_MSG })
+  .transform((v) => v.replace(/[\s-]/g, ''))
+  .refine((v) => OTP_CODE_RE.test(v), { error: OTP_CODE_MSG });
 
 const PHONE_MSG = 'Số điện thoại chưa hợp lệ.';
 /** Trim, bỏ khoảng trắng, `+84` -> `0`; di động VN 10 số đầu 03/05/07/08/09 (BR-CHK-04). */

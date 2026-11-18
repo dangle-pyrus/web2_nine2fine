@@ -357,7 +357,7 @@ enum voucher_kind {
 
 model StoreSetting {
   id                    Int       @id @default(1)
-  maxPerVariant         Int       @default(5) @map("max_per_variant")
+  maxPerVariant         Int       @default(10) @map("max_per_variant")
   maxItemsPerOrder      Int       @default(20) @map("max_items_per_order")
   maxCartLines          Int       @default(30) @map("max_cart_lines")
   cartRetentionDays     Int       @default(30) @map("cart_retention_days")

@@ -15,7 +15,7 @@ Tự gửi mã mục đích đăng ký khi trang hiện.
 Không thu mật khẩu khi đăng ký (tạo mật khẩu qua "Quên mật khẩu").
 ```
 
-Dữ liệu màn hình cần: email (từ bước 1), mã 8 số, Tên, Họ, ngày sinh (ngày/tháng/năm, tuỳ chọn), cờ nhận email marketing, cờ đồng ý điều khoản; số giây chờ gửi lại; hồ sơ sau đăng ký; lỗi theo trường và lỗi ổn định (Backend chốt hợp đồng). Tên/Họ gửi dạng đã bỏ khoảng trắng thừa.
+Dữ liệu màn hình cần: email (từ bước 1), mã 6 số, Tên, Họ, ngày sinh (ngày/tháng/năm, tuỳ chọn), cờ nhận email marketing, cờ đồng ý điều khoản; số giây chờ gửi lại; hồ sơ sau đăng ký; lỗi theo trường và lỗi ổn định (Backend chốt hợp đồng). Tên/Họ gửi dạng đã bỏ khoảng trắng thừa.
 
 ## 2. Bố cục
 
@@ -38,7 +38,7 @@ Nút "Tạo tài khoản" luôn bật (không khoá theo hợp lệ); bấm khi 
 | Vào trang | Focus `h1`; tự gửi mã; hint "Đang gửi mã…" rồi "Gửi lại mã trong N giây"; checkbox marketing chưa tick | AC-AUTH-35 |
 | Chưa có email trong bộ nhớ | Không render form; chuyển `/auth/login` | AC-AUTH-30 |
 | Empty (mới vào) | Mọi ô trống; ngày sinh trống là hợp lệ | AC-AUTH-31 |
-| Lỗi mã (FE) | Dưới ô mã: "Nhập đủ 8 chữ số của mã xác thực." | AC-AUTH-23 |
+| Lỗi mã (FE) | Dưới ô mã: "Nhập đủ 6 chữ số của mã xác thực." | AC-AUTH-23 |
 | Lỗi Tên trống/chỉ khoảng trắng | "Nhập tên của bạn." | AC-AUTH-27, 28 |
 | Lỗi Họ trống/chỉ khoảng trắng | "Nhập họ của bạn." | AC-AUTH-27, 28 |
 | Tên/Họ chứa ký tự không cho phép (số, `<`, `>`, ký hiệu) | "Tên chỉ gồm chữ cái, dấu cách, dấu ' và dấu -." / "Họ chỉ gồm chữ cái, dấu cách, dấu ' và dấu -." (đề xuất câu chữ, xem Câu hỏi 3) | AC-AUTH-28 |
@@ -88,7 +88,7 @@ Visual **không đổi**. Chỉ:
 4. "Email này đã có tài khoản. Vui lòng đăng nhập." kèm link "Đăng nhập" (AC-AUTH-37).
 5. Giữ trạng thái "Đang tạo tài khoản…" đến khi điều hướng xong (hiện `finalize` mở nút lại ngay sau khi gọi API thành công, có thể bấm thêm lần nữa), AC-AUTH-96.
 6. Thêm `tabindex="-1"` cho `h1` và focus khi vào trang; focus ô lỗi đầu tiên khi bấm gửi; `aria-describedby` nối id lỗi cho ô ngày sinh và mã.
-7. Thuật ngữ: `.lead` "Chúng tôi đã gửi mã số đến" → "Chúng tôi đã gửi mã xác thực đến"; nhãn ô "Mã số (8 số)" → "Mã xác thực (8 số)" (ô dùng chung).
+7. Thuật ngữ: `.lead` "Chúng tôi đã gửi mã số đến" → "Chúng tôi đã gửi mã xác thực đến"; nhãn ô "Mã số (6 số)" → "Mã xác thực (6 số)" (ô dùng chung).
 8. Link pháp lý trong checkbox mở tab mới.
 9. Đếm ngược/aria-live như `auth-login.md`.
 

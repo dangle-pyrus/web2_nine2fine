@@ -47,6 +47,8 @@ export interface AdjustStockData {
     /** How the figure follows from "Có thể bán", e.g. "30% của 5 − 1 tồn đệm". */
     note: string;
   }[];
+  /** Units held by marketplace orders (sample figures), shown on top of the real `reserved`. */
+  marketHeld?: number;
   /** Opens the threshold dialog for this SKU; the drawer closes first. */
   editThreshold: () => void;
 }
@@ -113,13 +115,15 @@ export interface AdjustStockData {
               </li>
               <li>
                 <adm-icon name="reiconLock" [size]="18" />
-                <span>Đang giữ cho đơn chưa giao</span>
-                <strong class="num push">{{ item().reserved }}</strong>
+                <span>Đang giữ cho đơn chưa giao (mọi kênh)</span>
+                <strong class="num push">{{ item().reserved + (data.marketHeld ?? 0) }}</strong>
               </li>
               <li>
                 <adm-icon name="reiconCheckCircle" [size]="18" />
                 <span>Có thể bán</span>
-                <strong class="num push">{{ item().available }}</strong>
+                <strong class="num push">{{
+                  Math.max(0, item().available - (data.marketHeld ?? 0))
+                }}</strong>
               </li>
               <li>
                 <adm-icon name="reiconAlertTriangle" [size]="18" />
@@ -447,6 +451,7 @@ export class AdjustStockDrawer {
   /** One key per intent (BR-INV-33): kept on a retry, renewed when the person edits the form. */
   private idempotencyKey = newIdempotencyKey();
   protected readonly labels = MOVEMENT_LABELS;
+  protected readonly Math = Math;
   readonly mode = signal<'delta' | 'set'>('delta');
   readonly quantity = signal<number | null>(null);
   readonly reason = signal<AdjustmentReason>('received');

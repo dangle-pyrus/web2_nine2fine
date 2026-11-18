@@ -1,3 +1,4 @@
+import { OTP_POLICY } from '../config/assumptions';
 import { MailMessage } from './mailer';
 
 export type CodePurposeApi = 'login' | 'register' | 'reset-password';
@@ -85,7 +86,7 @@ export function staffInviteMail(to: string, name: string, role: 'staff' | 'admin
       'Tài khoản chưa có mật khẩu. Để đặt mật khẩu:',
       `1. Mở ${appBaseUrl}/auth/login và nhập đúng địa chỉ email này.`,
       '2. Chọn "Sử dụng mật khẩu", rồi "Quên mật khẩu".',
-      '3. Nhập mã xác thực 6 chữ số nhận bằng thư (hiệu lực 5 phút, có thể xin lại) rồi đặt mật khẩu mới.',
+      `3. Nhập mã xác thực ${OTP_POLICY.digits} chữ số nhận bằng thư (hiệu lực ${OTP_POLICY.ttlMs / 60_000} phút, có thể xin lại) rồi đặt mật khẩu mới.`,
       `Sau đó đăng nhập tại ${appBaseUrl}/admin/login`,
       '',
       'Nếu bạn không biết về việc này, hãy bỏ qua thư.',

@@ -19,7 +19,8 @@ export interface CommercePolicy {
  * what the server says (assumption Q2: false until SePay exists).
  */
 export const MOCK_POLICY: Readonly<CommercePolicy> = {
-  maxPerVariant: 5,
+  /** Customer cart: at most 10 per product (variant); matches the backend `CART_MAX_PER_VARIANT`. */
+  maxPerVariant: 10,
   maxItemsPerOrder: 20,
   maxCartLines: 30,
   shippingFee: STORE_POLICY.shippingFee,

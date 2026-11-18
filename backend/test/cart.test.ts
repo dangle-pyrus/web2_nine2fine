@@ -30,17 +30,18 @@ describe('T-CART-01 thao tác giỏ', () => {
     expect((await post('/api/cart/lines', { variantId: top, quantity: 1 })).body.error.code).toBe('unauthenticated');
   });
 
-  it('thêm: cộng dồn, cắt 5, không có notice khi đủ', async () => {
-    const a = await add(blackS, 2);
+  it('thêm: cộng dồn, cắt 10, không có notice khi đủ', async () => {
+    await setStock(blackS, 20); // tồn đủ để chạm hạn mức mỗi sản phẩm (10) chứ không phải tồn kho
+    const a = await add(blackS, 4);
     expect(a.status).toBe(200);
     expect(a.headers['cache-control']).toBe('no-store');
     expect(a.body.notice).toBeNull();
-    expect(qtyOf(a.body, blackS)).toBe(2);
-    const b = await add(blackS, 2);
-    expect(qtyOf(b.body, blackS)).toBe(4);
+    expect(qtyOf(a.body, blackS)).toBe(4);
+    const b = await add(blackS, 4);
+    expect(qtyOf(b.body, blackS)).toBe(8);
     const cut = await add(blackS, 3);
-    expect(qtyOf(cut.body, blackS)).toBe(5);
-    expect(cut.body.notice).toEqual({ code: 'per-variant-limit', variantId: blackS, adjustedTo: 5 });
+    expect(qtyOf(cut.body, blackS)).toBe(10);
+    expect(cut.body.notice).toEqual({ code: 'per-variant-limit', variantId: blackS, adjustedTo: 10 });
     expect(cut.body.cart.policy).toMatchObject({ maxCartLines: 30, cartRetentionDays: 30 });
   });
 
@@ -55,7 +56,7 @@ describe('T-CART-01 thao tác giỏ', () => {
     expect(b.body.error).toMatchObject({ code: 'stock-changed', stockIssues: [{ variantId: top, available: 0 }] });
     expect((await add('11111111-1111-4111-8111-111111111111', 1)).status).toBe(409);
     expect((await post('/api/cart/lines', { variantId: 'abc', quantity: 1 }, c())).body.error.field).toBe('variantId');
-    expect((await post('/api/cart/lines', { variantId: top, quantity: 6 }, c())).status).toBe(422);
+    expect((await post('/api/cart/lines', { variantId: top, quantity: 11 }, c())).status).toBe(422);
   });
 
   it('đặt số lượng, 404 khi dòng không có, xoá idempotent', async () => {
@@ -220,14 +221,14 @@ describe('T-CART-05..07 merge', () => {
     expect(line.quantity).toBe(2);
   });
 
-  it('validation: thiếu / sai Idempotency-Key, lines rỗng, trùng, quá 5', async () => {
+  it('validation: thiếu / sai Idempotency-Key, lines rỗng, trùng, quá 10', async () => {
     const bad = await post('/api/cart/merge', { lines: [{ variantId: top, quantity: 1 }] }, { ...c(), headers: { 'Idempotency-Key': 'ngan' } });
     expect(bad.status).toBe(422);
     expect(bad.body.error.field).toBe('Idempotency-Key');
     expect((await post('/api/cart/merge', { lines: [{ variantId: top, quantity: 1 }] }, c())).body.error.field).toBe('Idempotency-Key');
     expect((await merge([])).status).toBe(422);
     expect((await merge([{ variantId: top, quantity: 1 }, { variantId: top, quantity: 1 }])).status).toBe(422);
-    expect((await merge([{ variantId: top, quantity: 6 }])).status).toBe(422);
+    expect((await merge([{ variantId: top, quantity: 11 }])).status).toBe(422);
   });
 
   it('dòng hết hàng vẫn mang sang khi gộp (không cắt theo tồn)', async () => {

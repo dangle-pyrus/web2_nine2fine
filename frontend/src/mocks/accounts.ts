@@ -1,6 +1,7 @@
 import { AuthRole, AuthUser } from '../app/features/auth/data-access/auth-api';
 
 /** Demo-only values for the mock adapter; never real customer data or credentials. */
+/** Demo email code; its length must equal `OTP_DIGITS` (features/auth/auth-messages.ts). */
 export const DEMO_VERIFICATION_CODE = '123456';
 
 export interface MockAccount extends Omit<AuthUser, 'role'> {

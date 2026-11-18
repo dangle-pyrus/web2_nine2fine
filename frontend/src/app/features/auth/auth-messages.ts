@@ -19,9 +19,17 @@ export function formatWait(seconds: number | undefined): string {
   return seconds < 60 ? `${Math.ceil(seconds)} giây` : `${Math.ceil(seconds / 60)} phút`;
 }
 
+/** Email codes (sign-in, sign-up, password reset, order lookup): one length everywhere, valid 5 minutes.
+ * Must match the backend `OTP_POLICY.digits` (backend/src/config/assumptions.ts). */
+export const OTP_DIGITS = 6;
+export const OTP_TTL_MINUTES = 5;
+export const CODE_PATTERN = new RegExp(`^\\d{${OTP_DIGITS}}$`);
+/** Same text as the backend validation message. */
+export const CODE_MESSAGE = `Nhập đủ ${OTP_DIGITS} chữ số của mã xác thực.`;
+
 const FIELD_MESSAGES: Record<string, string> = {
   email: 'Nhập địa chỉ email hợp lệ.',
-  code: 'Nhập đủ 6 chữ số của mã xác thực.',
+  code: CODE_MESSAGE,
   firstName: "Tên chỉ gồm chữ cái, dấu cách, dấu ' và dấu -.",
   lastName: "Họ chỉ gồm chữ cái, dấu cách, dấu ' và dấu -.",
   birthDate: 'Ngày sinh chưa hợp lệ.',
@@ -70,12 +78,7 @@ export function authMessage(error: unknown): AuthMessage {
   }
 }
 
-/** Email codes (sign-in, sign-up, password reset, order lookup): 6 digits, valid 5 minutes. */
-export const OTP_DIGITS = 6;
-export const OTP_TTL_MINUTES = 5;
-export const CODE_PATTERN = /^\d{6}$/;
-
-/** Keeps the digits of a typed or pasted code ("123 456", "123-456") and caps it at 6. */
+/** Keeps the digits of a typed or pasted code ("123 456", "123-456") and caps it at `OTP_DIGITS`. */
 export function cleanCode(raw: string): string {
   return raw.replace(/\D/g, '').slice(0, OTP_DIGITS);
 }

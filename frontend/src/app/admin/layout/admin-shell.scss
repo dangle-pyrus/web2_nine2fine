@@ -1,4 +1,6 @@
 :host {
+  /* Height of the sticky chrome above page content (page header 76px + 1px rule); tables use it. */
+  --adm-chrome-h: 77px;
   display: grid;
   grid-template-columns: 252px minmax(0, 1fr);
   min-height: 100dvh;
@@ -321,6 +323,9 @@
   inset: 0;
   z-index: 90;
   background: rgba(0, 0, 0, 0.4);
+}
+:host(.is-compact) {
+  --adm-chrome-h: 133px; /* + 56px mobile bar */
 }
 :host(.is-compact) .sidebar {
   position: fixed;

@@ -20,17 +20,13 @@ import { NumPipe } from '../../core/format.pipes';
 import { ADMIN_INVENTORY_API, ADMIN_PRODUCTS_API } from '../../data-access/admin-apis';
 import {
   CHANNELS,
+  channelHeld,
   channelStock,
-  DEFAULT_RULES,
   MARKETPLACES,
-  readRules,
   readSetups,
   sampleSyncLog,
-  saveRules,
-  type AllocationRules,
   type ChannelKey,
   type ChannelStock,
-  type MarketplaceKey,
 } from '../../data-access/marketplace-demo';
 import { errorMessage } from '../../data-access/http-support';
 import type {
@@ -53,6 +49,7 @@ import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
 import { AdminToastService } from '../../ui/toast';
 import { AdjustStockData, AdjustStockDrawer } from './adjust-stock-drawer';
+import { QuickReceiveData, QuickReceiveDialog, QuickReceiveResult } from './quick-receive-dialog';
 import {
   DefaultThresholdData,
   DefaultThresholdDialog,
@@ -113,6 +110,16 @@ const SORTS: { value: string; label: string }[] = [
   template: `
     <adm-page-header heading="Tồn kho">
       <ng-container actions>
+        @if (canAdjust) {
+          <button
+            type="button"
+            class="adm-btn adm-btn--lg adm-btn--primary"
+            data-testid="quick-receive"
+            (click)="quickReceive()"
+          >
+            <adm-icon name="reiconPlus" [size]="16" /> Nhập kho nhanh
+          </button>
+        }
         <button
           type="button"
           class="adm-btn adm-btn--lg"
@@ -180,17 +187,6 @@ const SORTS: { value: string; label: string }[] = [
           </button>
         </div>
       }
-      <div class="banner banner--info demo-banner" role="note" data-testid="marketplace-demo">
-        <adm-icon name="reiconInfoCircle" [size]="20" />
-        <div class="banner-body">
-          <p class="banner-title">Kết nối sàn đang ở chế độ demo</p>
-          <p class="small secondary">
-            Số liệu Shopee, TikTok Shop và Lazada là dữ liệu mẫu, sinh từ số "Có thể bán" thật của
-            Website. Website là số thật.
-          </p>
-        </div>
-      </div>
-
       <div class="channels" data-testid="channel-cards">
         @for (card of channelCards(); track card.key) {
           <a
@@ -232,131 +228,7 @@ const SORTS: { value: string; label: string }[] = [
             {{ zeroCount() }} SKU còn hàng nhưng về 0 trên kênh
           </button>
         }
-        <button
-          type="button"
-          class="adm-btn adm-btn--sm"
-          [attr.aria-expanded]="rulesOpen()"
-          aria-controls="alloc-rules"
-          (click)="rulesOpen.set(!rulesOpen())"
-        >
-          <adm-icon name="reiconSettings" [size]="14" /> Quy tắc phân bổ
-        </button>
       </div>
-
-      @if (rulesOpen()) {
-        <section class="rules" id="alloc-rules" aria-labelledby="rules-title">
-          <header>
-            <h2 id="rules-title">Quy tắc phân bổ tồn kho</h2>
-            <p class="small secondary">
-              Tồn đệm là số giữ lại, không đẩy lên kênh, để hai kênh không cùng bán chiếc cuối cùng.
-              @if (!canThresholds) {
-                Chỉ admin được đổi quy tắc.
-              }
-            </p>
-          </header>
-          <div class="rules-mode" role="radiogroup" aria-label="Cách phân bổ">
-            <label class="check">
-              <input
-                type="radio"
-                name="alloc-mode"
-                [checked]="draftRules().mode === 'shared'"
-                [disabled]="!canThresholds"
-                (change)="patchRules({ mode: 'shared' })"
-              />
-              <span>Dùng chung: mọi kênh bán từ cùng số Có thể bán</span>
-            </label>
-            <label class="check">
-              <input
-                type="radio"
-                name="alloc-mode"
-                [checked]="draftRules().mode === 'split'"
-                [disabled]="!canThresholds"
-                (change)="patchRules({ mode: 'split' })"
-              />
-              <span>Chia theo %: mỗi kênh một phần</span>
-            </label>
-          </div>
-          <div class="rules-grid" [class.rules-grid--shared]="draftRules().mode === 'shared'">
-            <div class="rules-row small tertiary" aria-hidden="true">
-              <span>Kênh</span>
-              @if (draftRules().mode === 'split') {
-                <span>Tỉ lệ</span>
-              }
-              <span>Tồn đệm</span>
-            </div>
-            @for (ch of channels; track ch.key) {
-              <div class="rules-row">
-                <span class="row"><img class="ch-logo" [src]="ch.logo" [alt]="ch.name" /></span>
-                @if (draftRules().mode === 'split') {
-                  <label class="affix">
-                    <span class="sr-only">Phần trăm cho {{ ch.name }}</span>
-                    <input
-                      class="input input--sm"
-                      type="number"
-                      min="0"
-                      max="100"
-                      [value]="draftRules().split[ch.key]"
-                      [disabled]="!canThresholds"
-                      (input)="setSplit(ch.key, $any($event.target).value)"
-                    />
-                    <span class="suffix">%</span>
-                  </label>
-                }
-                <label class="affix">
-                  <span class="sr-only">Tồn đệm cho {{ ch.name }}</span>
-                  <input
-                    class="input input--sm"
-                    type="number"
-                    min="0"
-                    max="99"
-                    [value]="draftRules().buffer[ch.key]"
-                    [disabled]="!canThresholds"
-                    (input)="setBuffer(ch.key, $any($event.target).value)"
-                  />
-                  <span class="suffix">cái</span>
-                </label>
-              </div>
-            }
-          </div>
-          <p class="small secondary" data-testid="rules-preview">
-            Ví dụ SKU có 10 có thể bán →
-            @for (ch of marketplaces; track ch.key) {
-              {{ ch.name }} {{ preview()[ch.key] }}{{ $last ? '' : ',' }}
-            }
-          </p>
-          @if (splitError(); as message) {
-            <p class="error" role="alert">{{ message }}</p>
-          }
-          <div class="row">
-            @if (canThresholds) {
-              <button
-                type="button"
-                class="adm-btn adm-btn--sm adm-btn--ghost"
-                (click)="resetRules()"
-              >
-                Về mặc định
-              </button>
-            }
-            <span class="spacer"></span>
-            @if (canThresholds) {
-              <span class="small tertiary">Chỉ áp dụng trên máy này (demo)</span>
-            }
-            <button type="button" class="adm-btn adm-btn--sm" (click)="rulesOpen.set(false)">
-              Đóng
-            </button>
-            @if (canThresholds) {
-              <button
-                type="button"
-                class="adm-btn adm-btn--sm adm-btn--primary"
-                [disabled]="!!splitError()"
-                (click)="applyRules()"
-              >
-                Lưu quy tắc
-              </button>
-            }
-          </div>
-        </section>
-      }
 
       <div class="kpis inv-kpis" data-testid="inventory-kpis">
         @for (kpi of kpis(); track kpi.key) {
@@ -528,7 +400,7 @@ const SORTS: { value: string; label: string }[] = [
             <thead>
               <tr>
                 @if (canThresholds) {
-                  <th class="w-check">
+                  <th class="w-check" rowspan="2">
                     <label class="check">
                       <input
                         type="checkbox"
@@ -540,17 +412,27 @@ const SORTS: { value: string; label: string }[] = [
                     </label>
                   </th>
                 }
-                <th>Sản phẩm</th>
-                <th>Trạng thái</th>
-                <th class="num">Trong kho</th>
-                <th class="num">Đang giữ</th>
-                <th class="num">Có thể bán</th>
-                <th class="num">Ngưỡng</th>
+                <th rowspan="2">Sản phẩm</th>
+                <th rowspan="2">Trạng thái</th>
+                <th rowspan="2" class="num">Trong kho</th>
+                <th
+                  class="held-group"
+                  scope="colgroup"
+                  [attr.colspan]="shownChannels().length"
+                  title="Giữ cho đơn chưa giao, theo kênh bán"
+                >
+                  Đang giữ
+                </th>
+                <th rowspan="2" class="num">Có thể bán</th>
+                <th rowspan="2" class="num">Ngưỡng</th>
+              </tr>
+              <tr class="held-row">
                 @for (ch of shownChannels(); track ch.key) {
                   <th
-                    class="num ch-col"
+                    class="ch-col"
+                    scope="col"
                     [class.ch-off]="!isConnected(ch.key)"
-                    [attr.title]="isConnected(ch.key) ? null : 'Chưa kết nối'"
+                    [attr.title]="isConnected(ch.key) ? ch.name : ch.name + ': chưa kết nối'"
                   >
                     <img class="ch-logo" [src]="ch.logo" [alt]="ch.name" />
                   </th>
@@ -560,7 +442,7 @@ const SORTS: { value: string; label: string }[] = [
             @if (view.state().loading) {
               <tbody
                 [admSkeleton]="10"
-                [columns]="(canThresholds ? 7 : 6) + shownChannels().length"
+                [columns]="(canThresholds ? 6 : 5) + shownChannels().length"
               ></tbody>
             } @else {
               <tbody>
@@ -602,40 +484,26 @@ const SORTS: { value: string; label: string }[] = [
                     </td>
                     <td data-label="Trạng thái"><adm-badge [spec]="status[item.status]" /></td>
                     <td class="num" data-label="Trong kho">{{ item.onHand | admNum }}</td>
-                    <td class="num secondary" data-label="Đang giữ" title="Giữ cho đơn chưa giao">
-                      {{ item.reserved | admNum }}
-                    </td>
-                    <td class="num strong" data-label="Có thể bán">
-                      {{ item.available | admNum }}
-                    </td>
-                    <td class="num" data-label="Ngưỡng">{{ item.lowStockThreshold | admNum }}</td>
                     @for (ch of shownChannels(); track ch.key) {
-                      @let stock = stockFor(item, ch.key);
-                      <td class="num ch-cell" [attr.data-label]="ch.name">
-                        @if (!stock.connected) {
-                          <span class="tertiary">—</span>
-                        } @else if (!stock.linked) {
-                          <span class="small tertiary">Chưa liên kết</span>
-                        } @else {
-                          <span class="ch-qty" [attr.title]="ch.demo ? syncTitle(stock) : null"
-                            >{{ stock.listed | admNum }}
-                            @if (ch.demo) {
-                              <i
-                                class="sync-dot"
-                                [attr.data-state]="stock.state"
-                                aria-hidden="true"
-                              ></i>
-                              @if (stock.state !== 'synced') {
-                                <span class="small" [class.bad]="stock.state === 'error'">{{
-                                  stock.state === 'error' ? 'Lệch' : 'Chờ'
-                                }}</span>
-                              }
-                              <span class="sr-only">{{ syncTitle(stock) }}</span>
-                            }
-                          </span>
-                        }
+                      @let held = heldFor(item, ch.key);
+                      <td
+                        class="ch-cell"
+                        [attr.data-label]="'Đang giữ · ' + ch.name"
+                        [class.tertiary]="!held"
+                      >
+                        {{ isConnected(ch.key) ? (held | admNum) : '—' }}
                       </td>
                     }
+                    <td class="num strong" data-label="Có thể bán">
+                      {{ sellable(item) | admNum }}
+                      @if (syncIssue(item); as issue) {
+                        <span class="sync-flag" [attr.title]="issue">
+                          <i class="sync-dot" data-state="error" aria-hidden="true"></i>
+                          <span class="sr-only">{{ issue }}</span>
+                        </span>
+                      }
+                    </td>
+                    <td class="num" data-label="Ngưỡng">{{ item.lowStockThreshold | admNum }}</td>
                   </tr>
                 }
               </tbody>
@@ -788,36 +656,6 @@ const SORTS: { value: string; label: string }[] = [
       gap: 8px;
       margin-bottom: 16px;
     }
-    .rules {
-      display: grid;
-      gap: 14px;
-      padding: 16px;
-      margin-bottom: 16px;
-      border-radius: 14px;
-      background: var(--adm-muted);
-      h2 {
-        font-size: 15px;
-        line-height: 22px;
-      }
-    }
-    .rules-mode {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 24px;
-    }
-    .rules-grid {
-      display: grid;
-      gap: 10px;
-    }
-    .rules-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 96px 96px;
-      align-items: center;
-      gap: 10px;
-    }
-    .rules-grid--shared .rules-row {
-      grid-template-columns: minmax(0, 1fr) 96px;
-    }
     .kpi-btn {
       width: 100%;
       border-style: solid;
@@ -847,6 +685,26 @@ const SORTS: { value: string; label: string }[] = [
     .ch-col,
     .ch-cell {
       white-space: nowrap;
+      text-align: center;
+    }
+    .held-group {
+      text-align: center;
+    }
+    /* Sticky header: the logo row sits under the 40px "Đang giữ" row. */
+    .table-wrap > .table thead tr.held-row th {
+      top: 40px;
+      height: 36px;
+    }
+    .ch-col .ch-logo {
+      display: block;
+      margin: 0 auto;
+      height: 16px;
+      max-width: 72px;
+    }
+    .sync-flag {
+      display: inline-flex;
+      margin-left: 6px;
+      vertical-align: middle;
     }
     .ch-qty {
       display: inline-flex;
@@ -996,9 +854,6 @@ export class InventoryPage {
     return CHANNELS.some((channel) => channel.key === key) ? (key as ChannelKey) : 'all';
   });
   protected readonly loadError = signal(false);
-  protected readonly rules = signal<AllocationRules>(readRules());
-  protected readonly draftRules = signal<AllocationRules>(this.rules());
-  protected readonly rulesOpen = signal(false);
   protected readonly logOpen = signal(false);
   protected readonly syncing = signal(false);
   /** Set after "Đồng bộ lại" in this visit: pending pushes are done (sample). */
@@ -1057,12 +912,35 @@ export class InventoryPage {
     );
   }
 
+  /** Units held by unshipped orders of one channel (marketplaces: sample figures). */
+  protected heldFor(item: InventoryItem, channel: ChannelKey): number {
+    return channelHeld(
+      item.sku,
+      channel,
+      item,
+      channel === 'website' ? undefined : this.setups()[channel],
+    );
+  }
+
+  /** One stock for every channel: on hand minus what every channel's orders hold. */
+  protected sellable(item: InventoryItem): number {
+    const held = MARKETPLACES.reduce((sum, ch) => sum + this.heldFor(item, ch.key), 0);
+    return Math.max(0, item.available - held);
+  }
+
+  /** A short note when a marketplace shows another number than "Có thể bán". */
+  protected syncIssue(item: InventoryItem): string {
+    const names = MARKETPLACES.filter((ch) => this.stockFor(item, ch.key).state === 'error').map(
+      (ch) => ch.name,
+    );
+    return names.length ? `Lệch số trên ${names.join(', ')}` : '';
+  }
+
   protected stockFor(item: InventoryItem, channel: ChannelKey): ChannelStock {
     const stock = channelStock(
       item.sku,
-      item.available,
+      this.sellable(item),
       channel,
-      this.rules(),
       channel === 'website' ? undefined : this.setups()[channel],
     );
     return stock.state === 'pending' && this.flushed()
@@ -1134,13 +1012,6 @@ export class InventoryPage {
     return null;
   });
 
-  protected readonly preview = computed(() => {
-    const rules = this.draftRules();
-    return Object.fromEntries(
-      MARKET_KEYS.map((key) => [key, channelStock('', 10, key, rules).expected]),
-    ) as Record<MarketplaceKey, number>;
-  });
-
   protected readonly kpis = computed<
     { key: string; label: string; value: string; bad: boolean; view?: InventoryView }[]
   >(() => {
@@ -1204,13 +1075,6 @@ export class InventoryPage {
     ),
   );
 
-  protected readonly splitError = computed(() => {
-    const rules = this.draftRules();
-    if (rules.mode !== 'split') return '';
-    const sum = CHANNELS.reduce((total, channel) => total + (rules.split[channel.key] || 0), 0);
-    return sum === 100 ? '' : `Tổng phần trăm các kênh phải bằng 100% (hiện ${sum}%).`;
-  });
-
   protected syncTitle(stock: ChannelStock): string {
     if (stock.state === 'error')
       return `Lỗi đồng bộ: sàn đang hiện ${stock.listed}, đúng ra là ${stock.expected} (mẫu)`;
@@ -1262,33 +1126,6 @@ export class InventoryPage {
     this.destroyRef.onDestroy(() => clearTimeout(timer));
   }
 
-  protected patchRules(patch: Partial<AllocationRules>): void {
-    this.draftRules.update((rules) => ({ ...rules, ...patch }));
-  }
-
-  protected setSplit(channel: ChannelKey, value: string): void {
-    const n = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-    this.draftRules.update((rules) => ({ ...rules, split: { ...rules.split, [channel]: n } }));
-  }
-
-  protected setBuffer(channel: ChannelKey, value: string): void {
-    const n = Math.max(0, Math.min(99, Math.round(Number(value) || 0)));
-    this.draftRules.update((rules) => ({ ...rules, buffer: { ...rules.buffer, [channel]: n } }));
-  }
-
-  protected resetRules(): void {
-    this.draftRules.set(structuredClone(DEFAULT_RULES));
-  }
-
-  protected applyRules(): void {
-    if (this.splitError()) return;
-    this.rules.set(this.draftRules());
-    this.view.reload();
-    saveRules(this.draftRules());
-    this.rulesOpen.set(false);
-    this.toast.show('Đã lưu quy tắc phân bổ (trên trình duyệt này)');
-  }
-
   private readonly destroyRef = inject(DestroyRef);
 
   protected loadAll(): void {
@@ -1330,7 +1167,6 @@ export class InventoryPage {
   }
 
   constructor() {
-    if (this.route.snapshot.queryParamMap.get('rules') === '1') this.rulesOpen.set(true);
     this.loadAll();
     this.loadPrices();
     this.destroyRef.onDestroy(() => {
@@ -1482,9 +1318,10 @@ export class InventoryPage {
             listed: stock.listed,
             expected: stock.expected,
             state: stock.state,
-            note: this.explain(item.available, channel.key),
+            note: this.explain(this.sellable(item)),
           };
         }),
+        marketHeld: item.available - this.sellable(item),
         editThreshold: () => this.editThreshold(item),
       },
       true,
@@ -1501,11 +1338,36 @@ export class InventoryPage {
     });
   }
 
-  /** How a channel's figure follows from "Có thể bán" under the allocation rules. */
-  private explain(available: number, key: ChannelKey): string {
-    const { mode, split, buffer } = this.rules();
-    const base = mode === 'split' ? `${split[key]}% của ${available}` : `= ${available} có thể bán`;
-    return buffer[key] ? `${base} − ${buffer[key]} tồn đệm` : base;
+  /** Every channel shows the same "Có thể bán". */
+  private explain(available: number): string {
+    return `= ${available} có thể bán`;
+  }
+
+  /** Nhập kho nhanh: many SKUs at once, by hand or from a CSV / Excel file. */
+  quickReceive(): void {
+    const items = this.allItems();
+    if (!items) {
+      this.toast.error('Đang tải danh sách SKU, thử lại sau giây lát');
+      return;
+    }
+    this.dialogs
+      .modal<QuickReceiveData, QuickReceiveResult>(QuickReceiveDialog, { items }, [
+        'adm-modal-panel',
+        'adm-modal-panel--wide',
+      ])
+      .closed.subscribe((result) => {
+        if (!result) return;
+        if (result.done) this.refresh();
+        const text = `Đã nhập ${result.units.toLocaleString('vi-VN')} sản phẩm vào ${result.done} SKU`;
+        if (result.failed.length)
+          this.toast.error(
+            `${text}. Lỗi ${result.failed.length} SKU: ${result.failed
+              .slice(0, 3)
+              .map((entry) => `${entry.label} (${entry.message})`)
+              .join('; ')}${result.failed.length > 3 ? '…' : ''}`,
+          );
+        else this.toast.show(text);
+      });
   }
 
   exportCsv(): void {
@@ -1531,10 +1393,9 @@ export class InventoryPage {
                 'Size',
                 'Trạng thái',
                 'Trong kho',
-                'Đang giữ',
+                ...CHANNELS.map((ch) => `Đang giữ (${ch.name})`),
                 'Có thể bán',
                 'Ngưỡng sắp hết',
-                ...CHANNELS.map((ch) => `Số hiện trên ${ch.name}`),
               ],
               items.map((item) => [
                 item.sku,
@@ -1543,17 +1404,9 @@ export class InventoryPage {
                 item.size,
                 STATUS[item.status].label,
                 item.onHand,
-                item.reserved,
-                item.available,
+                ...CHANNELS.map((ch) => this.heldFor(item, ch.key)),
+                this.sellable(item),
                 item.lowStockThreshold,
-                ...CHANNELS.map((ch) => {
-                  const stock = this.stockFor(item, ch.key);
-                  return !stock.connected
-                    ? 'Chưa kết nối'
-                    : stock.linked
-                      ? stock.listed
-                      : 'Chưa liên kết';
-                }),
               ]),
             );
             this.toast.show(`Đã xuất ${items.length} SKU`);

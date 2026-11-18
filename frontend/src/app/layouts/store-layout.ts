@@ -25,6 +25,7 @@ import { AuthSession } from '../features/auth/auth-session';
 import { OverlayService } from '../shared/ui/overlay.service';
 import { ToastHost } from '../shared/ui/toast';
 import { ChatButton } from '../shared/ui/chat-button';
+import { SupportButton } from '../shared/ui/support-button';
 import { IconComponent } from '../shared/ui/icon.component';
 import { PricePipe } from '../shared/commerce/price.pipe';
 import { storeSettings } from '../core/store-settings';
@@ -45,6 +46,7 @@ import { TOP_NAVIGATION, TopNavItem, UTILITY_LINKS } from './navigation/top-navi
     SearchPanel,
     ToastHost,
     ChatButton,
+    SupportButton,
   ],
   template: `
     <a class="skip-link" href="#main-content">Đến nội dung chính</a>
@@ -258,6 +260,7 @@ import { TOP_NAVIGATION, TopNavItem, UTILITY_LINKS } from './navigation/top-navi
     <main id="main-content" tabindex="-1"><router-outlet /></main>
     <n2f-toast-host />
     <n2f-chat-button />
+    <n2f-support-button />
     <footer class="site-footer">
       <div class="footer-main container">
         <div>

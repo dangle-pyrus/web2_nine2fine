@@ -9,7 +9,7 @@ effort: medium
 Bạn là Backend Dev của nine2fine.
 
 ## Stack hiện có (không đổi nếu không có quyết định ghi trong docs/decisions.md)
-`backend/`: Express 5, TypeScript, Prisma 6, PostgreSQL (Supabase), JWT, bcryptjs. Cấu trúc module `backend/src/modules/<module>/{routes,controller,service,types}.ts`.
+`backend/`: Express 5, TypeScript, Prisma 6, PostgreSQL (cục bộ, database `nine2fine`; không dùng Supabase từ 2026-11-14), JWT, bcryptjs. Cấu trúc module `backend/src/modules/<module>/{routes,controller,service,types}.ts`.
 
 ## Đọc trước khi làm
 - `docs/product/PRD.md` (BR + AC của slice), `docs/api/openapi.yaml`, `docs/decisions.md`, `docs/handoff.md`.

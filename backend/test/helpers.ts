@@ -574,7 +574,7 @@ export async function loginMemberAgain(email: string): Promise<string | undefine
 }
 
 const FORBIDDEN_IN_RESPONSE = ['password_hash', 'passwordHash', 'refresh_token_hash', 'tokenHash', 'ip_address', 'ipAddress', 'user_agent', 'userAgent', 'stack'];
-/** AC-USR-21 / T-USR-06: thân phản hồi không chứa trường bí mật, stack, SQL, mã OTP 8 số nhận qua thư. */
+/** AC-USR-21 / T-USR-06: thân phản hồi không chứa trường bí mật, stack, SQL, mã OTP 6 số (OTP_POLICY.digits) nhận qua thư. */
 export function assertNoSecrets(res: { text: string }): void {
   for (const k of FORBIDDEN_IN_RESPONSE) {
     if (res.text.includes(k)) throw new Error(`response contains forbidden token "${k}"`);

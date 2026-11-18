@@ -99,10 +99,12 @@ export function messengerUrl(facebook: string | null | undefined): string | null
     }
   `,
   styles: `
+    /* Sits above the CSKH Facebook button (n2f-support-button, 56px + 12px gap) and, like it,
+       above bottom bars via --n2f-float-lift. */
     .chat {
       position: fixed;
       right: 20px;
-      bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(88px + var(--n2f-float-lift, 0px) + env(safe-area-inset-bottom, 0px));
       z-index: 40;
       display: flex;
       flex-direction: column;
@@ -151,7 +153,7 @@ export function messengerUrl(facebook: string | null | undefined): string | null
     @media (max-width: 767px) {
       .chat {
         right: 16px;
-        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+        bottom: calc(80px + var(--n2f-float-lift, 0px) + env(safe-area-inset-bottom, 0px));
       }
       .bubble {
         width: 52px;

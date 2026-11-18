@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { AdminSession } from '../../core/admin-session';
 import { NumPipe } from '../../core/format.pipes';
 import { ADMIN_INVENTORY_API } from '../../data-access/admin-apis';
@@ -9,7 +9,6 @@ import {
   channelStock,
   INITIAL_SYNC_MINUTES,
   listingCode,
-  readRules,
   readSetups,
   saveSetups,
   type ChannelKey,
@@ -39,7 +38,6 @@ type LinkFilter = 'all' | 'unlinked' | 'error' | 'linked';
   selector: 'adm-channel-setup-page',
   imports: [
     FormsModule,
-    RouterLink,
     AdmPageHeader,
     AdmBadge,
     AdmIcon,
@@ -135,23 +133,7 @@ type LinkFilter = 'all' | 'unlinked' | 'error' | 'linked';
               </li>
               <li>
                 <adm-icon name="reiconLayers" [size]="18" />
-                <span>
-                  @if (rules.mode === 'split') {
-                    Chia theo phần trăm: {{ rules.split[ch.key] }}% số có thể bán
-                  } @else {
-                    Dùng chung số có thể bán với các kênh khác
-                  }
-                </span>
-              </li>
-              <li>
-                <adm-icon name="reiconLock" [size]="18" />
-                <span>Tồn đệm {{ rules.buffer[ch.key] }}</span>
-              </li>
-              <li>
-                <adm-icon name="reiconSettings" [size]="18" />
-                <a class="link" routerLink="/admin/inventory" [queryParams]="{ rules: 1 }"
-                  >Đổi quy tắc phân bổ</a
-                >
+                <span>Dùng chung một số lượng tồn kho với mọi kênh</span>
               </li>
             </ul>
           </div>
@@ -391,7 +373,6 @@ export class ChannelSetupPage {
   /** Connecting and linking are shop settings: admin only, like the thresholds. */
   protected readonly canManage = inject(AdminSession).can('inventory.thresholds');
   protected readonly placeholder = '/assets/illustrations/shopping_bags.svg';
-  protected readonly rules = readRules();
   private readonly key = routeParam('key');
   protected readonly setups = signal(readSetups());
   protected readonly items = signal<InventoryItem[] | null>(null);
@@ -424,7 +405,7 @@ export class ChannelSetupPage {
     const setup = this.setup();
     if (!key || !setup) return [];
     return (this.items() ?? []).map((item) => {
-      const stock = channelStock(item.sku, item.available, key, this.rules, setup);
+      const stock = channelStock(item.sku, item.available, key, setup);
       const badge: BadgeSpec = !stock.linked
         ? { label: 'Chưa liên kết', tone: 'neutral' }
         : stock.state === 'error'
