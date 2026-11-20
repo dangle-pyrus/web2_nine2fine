@@ -1,5 +1,5 @@
 import { inject, Injectable } from '@angular/core';
-import { filter, Observable, switchMap } from 'rxjs';
+import { filter, map, Observable, switchMap } from 'rxjs';
 import { OverlayService } from '../../../shared/ui/overlay.service';
 import { ORDERS_API } from '../data-access/orders-api';
 import { CancelChoice, Order } from '../../orders/order-models';
@@ -13,8 +13,9 @@ import {
 
 /**
  * Confirm-then-cancel flow shared by the order list, the order detail page and guest tracking.
- * `cancelMode` decides the dialog: "Hủy đơn" cancels now (`to_pay`); "Gửi yêu cầu huỷ" sends a request
- * the shop reviews (`to_ship`, Slice 4). Both need a reason from the list (COMMON-01.5).
+ * `cancelMode` decides the dialog: "Hủy đơn" cancels now (`to_pay`, reason optional, ORD-CC-01);
+ * "Gửi yêu cầu huỷ" sends a request the shop reviews (`to_ship`, Slice 4; reason required,
+ * COMMON-01.5).
  */
 @Injectable({ providedIn: 'root' })
 export class OrderCancellation {
@@ -22,10 +23,11 @@ export class OrderCancellation {
   private readonly api = inject(ORDERS_API);
 
   /**
-   * Asks the shopper for a reason from the list; emits it only when they go ahead. The caller sends
-   * it, so the guest page can use its own adapter.
+   * Asks the shopper to confirm (and for a reason when one is needed); emits only when they go
+   * ahead: the reason, or `undefined` for a `to_pay` cancel without one. The caller sends it, so
+   * the guest page can use its own adapter.
    */
-  ask(order: Order): Observable<CancelChoice> {
+  ask(order: Order): Observable<CancelChoice | undefined> {
     const request = cancelModeOf(order) === 'request';
     const data: CancelRequestDialogData = request
       ? { orderId: order.id, mode: 'request' }
@@ -38,7 +40,10 @@ export class OrderCancellation {
         };
     return this.overlay
       .open(CancelRequestDialog, request ? 'Gửi yêu cầu huỷ đơn' : 'Hủy đơn hàng?', 'modal', data)
-      .closed.pipe(filter((result): result is CancelRequestResult => !!result));
+      .closed.pipe(
+        filter((result): result is CancelRequestResult => !!result),
+        map((result) => result.choice ?? undefined),
+      );
   }
 
   /** Emits the updated order (cancelled, or `cancel-requested`) only when the shopper confirms. */

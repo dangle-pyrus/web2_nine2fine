@@ -193,6 +193,8 @@ export const receiveSchema = z.object({
         variantId: uuid,
         acceptedQuantity: z.number().int().min(0).max(99),
         disposition: z.enum(['restock', 'writeoff']).optional(),
+        /** ADM-RET-05/08: phần đạt nhập lại kho (0..acceptedQuantity). Vắng = theo `disposition` (cả phần đạt hoặc 0). */
+        restockQuantity: z.number().int().min(0).max(99).optional(),
       }),
       { error: MSG_ADMIN.lines },
     )
@@ -210,16 +212,18 @@ export type ReturnStateFilter = 'requested' | 'approved' | 'received' | 'refunde
 export interface ReturnListQuery {
   state?: ReturnStateFilter;
   q?: string;
-  sort: 'requestedAt' | 'amount';
+  sort: ReturnSort;
   page: number;
   limit: 20 | 50;
 }
+/** ADM-RET-01: mới nhất (mặc định), cũ nhất (xử lý hàng đợi), số tiền giảm dần. */
+export type ReturnSort = 'requestedAt' | 'oldest' | 'amount';
 
 const intStr = (msg: string) => z.string({ error: msg }).regex(/^[0-9]{1,9}$/, { error: msg }).transform(Number);
 export const listQuerySchema = z.object({
   state: z.enum(['requested', 'approved', 'received', 'refunded', 'closed'], { error: MSG_ADMIN.state }).optional(),
   q: z.string({ error: MSG_ADMIN.q }).transform(cleanText).refine((v) => v.length <= 100, { error: MSG_ADMIN.q }).optional(),
-  sort: z.enum(['requestedAt', 'amount'], { error: MSG_ADMIN.sort }).default('requestedAt'),
+  sort: z.enum(['requestedAt', 'oldest', 'amount'], { error: MSG_ADMIN.sort }).default('requestedAt'),
   page: intStr(MSG_ADMIN.page).refine((n) => n >= 1, { error: MSG_ADMIN.page }).default(1),
   limit: intStr(MSG_ADMIN.limit).refine((n) => n === 20 || n === 50, { error: MSG_ADMIN.limit }).default(20),
 });

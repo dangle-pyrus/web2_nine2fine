@@ -78,7 +78,8 @@ import { formatDate } from '../orders/order-status';
                 }
               </span>
               <h3>{{ review.title }}</h3>
-              @if (review.verified) {
+              <!-- Only when the server says so: the label is never inferred here. -->
+              @if (review.verified === true) {
                 <span class="verified">Đã mua hàng</span>
               }
             </div>

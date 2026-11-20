@@ -59,8 +59,9 @@ test.describe('admin', () => {
   test('adjusts stock with a reason', async ({ page }) => {
     await adminSignIn(page);
     await page.goto('/admin/inventory?view=out');
+    // Click the product name: the middle of the row now lands on a checkbox or channel cell.
     const row = page.locator('tbody tr').first();
-    await row.click();
+    await row.locator('.cell-title').click();
     await page.getByLabel('Số lượng thay đổi').fill('4');
     await page.getByRole('button', { name: 'Lưu điều chỉnh' }).click();
     await expect(page.getByText(/Đã cập nhật tồn kho .*: còn 4/)).toBeVisible();
@@ -112,8 +113,9 @@ test.describe('admin', () => {
   test('saved variant stock changes only through an adjustment', async ({ page }) => {
     await adminSignIn(page);
     await page.goto('/admin/products/p01');
-    await expect(page.locator('.variants .stock-input')).toHaveCount(0);
-    await page.locator('.variants .stock-link').first().click();
+    // Saved variants show their stock as a button that opens the adjustment, never an input.
+    await expect(page.locator('.stock-input')).toHaveCount(0);
+    await page.getByRole('button', { name: /^Tồn kho .+: \d+\. Điều chỉnh$/ }).first().click();
     await expect(page.getByLabel('Số lượng thay đổi')).toBeVisible();
   });
 

@@ -2,6 +2,7 @@ import {
   CancelMode,
   Order,
   OrderCancelRequest,
+  OrderRefund,
   ReturnCase,
   OrderEvent,
   OrderItem,
@@ -52,7 +53,75 @@ export interface OrderDto {
   canReturn?: boolean;
   returnDeadline?: string;
   return?: ReturnCase;
-  timeline?: { at: string; title: string; detail?: string; actor?: 'customer' | 'nine2fine' }[];
+  /** `system` is accepted too, should the server start telling automatic steps apart. */
+  timeline?: {
+    at: string;
+    title: string;
+    detail?: string;
+    actor?: 'customer' | 'nine2fine' | 'system';
+  }[];
+}
+
+/** Timeline steps that run on their own (payment hold expiry, auto-completion). */
+const SYSTEM_STEP = /tự động|tự huỷ|tự hủy|hết thời gian|quá hạn thanh toán|hết hạn thanh toán/i;
+const CANCEL_STEP = /hu[ỷy]/i;
+const REFUND_STEP = /hoàn tiền/i;
+
+/** ORD-09: customer = "Bạn", staff = "Cửa hàng", automatic steps = "Hệ thống". */
+function actorOf(
+  entry: NonNullable<OrderDto['timeline']>[number],
+  dto: OrderDto,
+): OrderEvent['actor'] {
+  if (entry.actor === 'customer') return 'customer';
+  if (entry.actor === 'system') return 'system';
+  const text = `${entry.title} ${entry.detail ?? ''}`;
+  if (SYSTEM_STEP.test(text)) return 'system';
+  if (dto.cancelledBy === 'system' && CANCEL_STEP.test(entry.title)) return 'system';
+  return entry.actor ? 'nine2fine' : undefined;
+}
+
+/**
+ * ORD-13 / ORD-CC-06: the refund the server reports. Refunded (with its date) only when the server
+ * says so: `paymentStatus` `refunded` / `partially_refunded`, or a return in state `refunded`.
+ * A paid order that was cancelled and not refunded yet shows the refund as pending.
+ */
+function refundOf(dto: OrderDto, method: PaymentMethod): OrderRefund | undefined {
+  const destination = method === 'cod' ? 'Tài khoản ngân hàng bạn cung cấp' : 'Tài khoản đã thanh toán';
+  const ret = dto.return;
+  if (ret?.state === 'refunded') {
+    const to = ret.refundTo;
+    return {
+      amount: ret.refundedAmount ?? ret.amount.amount,
+      destination:
+        to.type === 'account' && to.bank
+          ? `${to.bank}${to.last4 ? ' · •••• ' + to.last4 : ''}`
+          : 'Phương thức đã thanh toán',
+      reason: 'Hoàn tiền trả hàng',
+      refundedAt: ret.refundedAt,
+      confirmed: true,
+    };
+  }
+  const refundedAt = [...(dto.timeline ?? [])]
+    .reverse()
+    .find((entry) => REFUND_STEP.test(entry.title))?.at;
+  if (dto.paymentStatus === 'refunded') {
+    return {
+      amount: dto.pricing.total,
+      destination,
+      reason: dto.cancelReason ?? 'Hoàn tiền đơn hàng',
+      refundedAt,
+      confirmed: true,
+    };
+  }
+  // A partial refund without a settled return: the amount is not in the payload, so no figure.
+  if (dto.status === 'cancelled' && dto.paymentStatus === 'paid') {
+    return {
+      amount: dto.pricing.total,
+      destination,
+      reason: dto.cancelReason ?? 'Đơn đã huỷ',
+    };
+  }
+  return undefined;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -115,7 +184,7 @@ export function toOrder(dto: OrderDto): Order {
     at: entry.at,
     title: entry.title,
     detail: entry.detail,
-    actor: entry.actor,
+    actor: actorOf(entry, dto),
   }));
   return {
     id: dto.id,
@@ -134,6 +203,7 @@ export function toOrder(dto: OrderDto): Order {
       province: dto.shippingAddress.province,
     },
     payment: { method, label, paid },
+    refund: refundOf(dto, method),
     cancelledBy: mapCancelledBy(dto.cancelledBy),
     cancelledAt: dto.cancelledAt,
     cancelReason: dto.cancelReason,

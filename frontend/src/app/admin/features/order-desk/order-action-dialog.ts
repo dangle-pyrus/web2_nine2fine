@@ -79,6 +79,16 @@ export type DeskActionOutcome =
   /** The server's order is shown; `order` is missing when the page must load it again. */
   | { kind: 'refresh'; order?: DeskOrder; message: string };
 
+/** Today's date in giờ VN as `YYYY-MM-DD`. */
+function vnToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+}
+
+/** The later of two `YYYY-MM-DD` dates (an empty one loses). */
+function maxDate(a: string, b: string): string {
+  return a > b ? a : b;
+}
+
 const RECENT_CARRIERS_KEY = 'n2f.admin.recentCarriers';
 const KEY_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -233,6 +243,30 @@ function refuseMessage(code: string, kind: DeskActionKind): string {
               <p class="error" id="desk-tracking-error">{{ message }}</p>
             }
           </div>
+          <!-- ADM-ORD-04: when the carrier expects to deliver; shown to the shopper. -->
+          <div class="field">
+            <label for="desk-eta" class="req">Ngày giao dự kiến</label>
+            <input
+              id="desk-eta"
+              class="input"
+              type="date"
+              name="estimatedDeliveryDate"
+              [min]="today"
+              [ngModel]="eta()"
+              (ngModelChange)="eta.set($event)"
+              [disabled]="busy()"
+              [attr.aria-invalid]="!!errors()['estimatedDeliveryDate']"
+              [attr.aria-describedby]="
+                errors()['estimatedDeliveryDate'] ? 'desk-eta-error' : 'desk-eta-hint'
+              "
+            />
+            <p class="hint" id="desk-eta-hint">
+              Mặc định theo dự kiến lúc đặt đơn; sửa theo thông tin của đơn vị vận chuyển.
+            </p>
+            @if (errors()['estimatedDeliveryDate']; as message) {
+              <p class="error" id="desk-eta-error">{{ message }}</p>
+            }
+          </div>
         }
         @if (kind === 'confirm-refund') {
           <div class="field">
@@ -359,6 +393,12 @@ export class DeskActionDialog {
   protected readonly reason = signal<DeskCancelReasonCode | ''>('');
   protected readonly carrier = signal('');
   protected readonly tracking = signal('');
+  /** Today in giờ VN (`YYYY-MM-DD`): the earliest delivery date that can be picked. */
+  protected readonly today = vnToday();
+  /** ADM-ORD-04: starts on the order's own estimate (never before today). */
+  protected readonly eta = signal(
+    maxDate(this.data.order.estimatedDelivery?.to ?? '', this.today),
+  );
   protected readonly note = signal('');
   protected readonly reference = signal('');
   protected readonly refMin = DESK_REFUND_REF_MIN;
@@ -483,7 +523,6 @@ export class DeskActionDialog {
     const expectedStatus = this.order.status;
     const note = this.note().trim();
     const range = `Nhập ghi chú từ ${DESK_NOTE_MIN} đến ${DESK_NOTE_MAX} ký tự.`;
-    const reasonRange = `Nhập lý do từ ${DESK_NOTE_MIN} đến ${DESK_NOTE_MAX} ký tự.`;
     let command: DeskCommand | null = null;
     switch (this.kind) {
       case 'call-attempt':
@@ -515,7 +554,12 @@ export class DeskActionDialog {
         )
           errors['trackingNumber'] =
             `Mã vận đơn từ ${DESK_TRACKING_MIN} đến ${DESK_TRACKING_MAX} ký tự, chỉ gồm chữ, số và dấu gạch ngang.`;
-        command = { action: 'ship', expectedStatus, carrier, trackingNumber };
+        const estimatedDeliveryDate = this.eta();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(estimatedDeliveryDate))
+          errors['estimatedDeliveryDate'] = 'Chọn ngày giao dự kiến.';
+        else if (estimatedDeliveryDate < this.today)
+          errors['estimatedDeliveryDate'] = 'Ngày giao dự kiến không được trước hôm nay.';
+        command = { action: 'ship', expectedStatus, carrier, trackingNumber, estimatedDeliveryDate };
         break;
       }
       case 'cancel': {
@@ -551,8 +595,12 @@ export class DeskActionDialog {
         break;
       }
       case 'reject-cancel':
-        if (note.length < DESK_NOTE_MIN || note.length > DESK_NOTE_MAX)
-          errors['note'] = reasonRange;
+        // ADM-ORD-05: a missing reason and a reason of the wrong length are told apart.
+        if (!note.length) errors['note'] = 'Nhập lý do từ chối yêu cầu huỷ (khách sẽ thấy lý do này).';
+        else if (note.length < DESK_NOTE_MIN)
+          errors['note'] = `Lý do quá ngắn: cần ít nhất ${DESK_NOTE_MIN} ký tự (đang có ${note.length}).`;
+        else if (note.length > DESK_NOTE_MAX)
+          errors['note'] = `Lý do quá dài: tối đa ${DESK_NOTE_MAX} ký tự (đang có ${note.length}).`;
         command = { action: 'reject-cancel', expectedStatus, reason: note };
         break;
       case 'restock':
@@ -656,15 +704,17 @@ export class DeskActionDialog {
         });
         return;
       }
+      // ADM-ORD-09 (409): the data changed under us; close and load the latest order.
       case 'invalid-transition':
       case 'condition-not-met':
         this.ref.close({ kind: 'refresh', message: refuseMessage(code, this.kind) });
         return;
+      // ADM-ORD-09 (403): a permission problem, not stale data. The order did not change, so the
+      // dialog stays open with the message and nothing is reloaded.
       case 'forbidden':
-        this.ref.close({
-          kind: 'refresh',
-          message: 'Tài khoản của bạn không có quyền thực hiện thao tác này.',
-        });
+        this.failure.set(
+          'Tài khoản của bạn không có quyền thực hiện thao tác này. Liên hệ quản trị viên nếu cần cấp quyền.',
+        );
         return;
       case 'not-found':
         this.ref.close({ kind: 'refresh', message: 'Không tìm thấy đơn hàng.' });

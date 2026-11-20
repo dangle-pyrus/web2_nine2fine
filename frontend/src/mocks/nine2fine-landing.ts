@@ -68,32 +68,7 @@ export const NINE2FINE_LANDING: LandingContent = {
       'uniqlo-campaign-02',
       'uniqlo-campaign-02-mobile',
     ),
-    edit('work-edit', 'Mặc gì sáng mai?', [
-      {
-        title: 'Khoác vào là đi',
-        caption: 'Xem áo khoác',
-        href: '/shop/outerwear',
-        mediaId: 'uniqlo-product-1-1-09',
-      },
-      {
-        title: 'Quần mặc cả tuần',
-        caption: 'Xem quần & chân váy',
-        href: '/shop/bottoms',
-        mediaId: 'uniqlo-product-1-2-65',
-      },
-      {
-        title: 'Sơ mi cho họp sáng',
-        caption: 'Xem áo sơ mi',
-        href: '/shop/tops',
-        mediaId: 'uniqlo-product-1-3-00',
-      },
-      {
-        title: 'Thêm chút màu cho tuần làm',
-        caption: 'Mặc đi làm',
-        href: '/shop-by-moment/work',
-        mediaId: 'uniqlo-product-1-4-55',
-      },
-    ]),
+    shop('new-in-products', 'Sản phẩm mới', 'newest', '/new-in'),
     campaign(
       'everyday-foundations',
       'Tủ đồ mỗi ngày',
@@ -197,7 +172,6 @@ export const NINE2FINE_LANDING: LandingContent = {
       'uniqlo-campaign-08',
       'uniqlo-campaign-08-mobile',
     ),
-    shop('new-in-products', 'Hàng mới về', 'newest', '/new-in'),
     {
       ...campaign(
         'after-five-club',

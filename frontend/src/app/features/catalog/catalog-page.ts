@@ -69,8 +69,16 @@ export class CatalogPage {
   private readonly wishlist = inject(WishlistState);
   readonly categories = CATEGORIES;
   readonly moments = MOMENTS;
-  readonly sorts = SORT_OPTIONS;
   readonly query = signal<CatalogQuery>(DEFAULT_QUERY);
+  /**
+   * "Nổi bật" is no longer offered; it only shows when an old `?sort=featured` link is open, so the
+   * select is never blank.
+   */
+  readonly sorts = computed(() =>
+    SORT_OPTIONS.filter(
+      (option) => option.value !== 'featured' || this.query().sort === 'featured',
+    ),
+  );
   readonly result = signal<CatalogResult>({ status: 'loading', page: EMPTY_PAGE });
   private readonly overlay = inject(OverlayService);
   readonly isWishlist = signal(false);

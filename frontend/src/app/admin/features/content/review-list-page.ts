@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { catchError, of, throwError } from 'rxjs';
 import { AdminSession } from '../../core/admin-session';
 import { DatePipe, DateTimePipe, NumPipe } from '../../core/format.pipes';
 import {
@@ -470,16 +471,27 @@ export class ReviewListPage {
       });
       return;
     }
-    const data: ReasonDialogData<AdminReview> = {
+    const data: ReasonDialogData<AdminReview | null> = {
       title: 'Ẩn đánh giá này khỏi cửa hàng?',
       message: 'Đánh giá biến khỏi trang sản phẩm và điểm trung bình. Bạn có thể hiện lại sau.',
       confirmLabel: 'Ẩn đánh giá',
       danger: true,
       required: true,
-      run: (reason) => this.api.hide(review.id, reason, review.updatedAt),
+      // REV-07: reason 5–250 (the dialog checks it). A 409 means the review changed meanwhile:
+      // close, say so and read the list again instead of writing over the newer data.
+      run: (reason) =>
+        this.api.hide(review.id, reason, review.updatedAt).pipe(
+          catchError((error: unknown) => {
+            if (error instanceof AdminApiError && error.code === 'version-conflict') {
+              this.conflict();
+              return of(null);
+            }
+            return throwError(() => error);
+          }),
+        ),
     };
     this.dialogs
-      .modal<ReasonDialogData<AdminReview>, AdminReview>(ReasonDialog, data)
+      .modal<ReasonDialogData<AdminReview | null>, AdminReview | null>(ReasonDialog, data)
       .closed.subscribe((updated) => {
         if (!updated) return;
         this.replace(updated);
@@ -510,12 +522,17 @@ export class ReviewListPage {
     this.view.reload();
   }
 
+  /** The review changed under us (409): never overwrite, read the list again. */
+  private conflict(): void {
+    this.editing.set(null);
+    this.toast.error('Đánh giá vừa được người khác cập nhật. Danh sách đã được tải lại.');
+    this.view.reload();
+  }
+
   private failed(error: unknown): void {
     this.busy.set(false);
     if (error instanceof AdminApiError && error.code === 'version-conflict') {
-      this.editing.set(null);
-      this.toast.error('Đánh giá vừa được người khác cập nhật. Danh sách đã được tải lại.');
-      this.view.reload();
+      this.conflict();
       return;
     }
     if (this.editing() && error instanceof AdminApiError && error.fields['body'])

@@ -4,14 +4,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { catchError, of, startWith, Subject, switchMap, tap } from 'rxjs';
 import { MediaImageComponent } from '../../shared/ui/media-image.component';
 import { IconComponent } from '../../shared/ui/icon.component';
-import { PricePipe } from '../../shared/commerce/price.pipe';
-import { storeSettings } from '../../core/store-settings';
 import { AuthSession } from '../auth/auth-session';
 import { HOME_CONTENT_API, HOME_CONTENT_PROVIDERS } from './data-access/home-content-api';
 import { hrefFragment, hrefPath, hrefQuery } from './home-href';
 import { LandingContent } from './landing-content';
 import { HomeCampaign } from './home-campaign';
-import { HomeMoments } from './home-moments';
 import { HomeProductRail } from './home-product-rail';
 import { HomeShopRail } from './home-shop-rail';
 
@@ -21,9 +18,7 @@ import { HomeShopRail } from './home-shop-rail';
     RouterLink,
     MediaImageComponent,
     IconComponent,
-    PricePipe,
     HomeCampaign,
-    HomeMoments,
     HomeProductRail,
     HomeShopRail,
   ],
@@ -63,9 +58,6 @@ export class HomePage {
   readonly content = computed<LandingContent>(
     () => this.loaded() ?? { categories: [], moments: [], blocks: [] },
   );
-  get policy() {
-    return storeSettings().policy;
-  }
   /** Signed-in shoppers see member copy instead of a sign-up invitation; switched-off blocks hide. */
   readonly blocks = computed(() => {
     const signedIn = this.session.signedIn();

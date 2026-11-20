@@ -214,6 +214,8 @@ export class PromotionListPage {
           ...page,
           items: page.items.map((item) => (item.id === updated.id ? updated : item)),
         }));
+        // ADM-PROMO-08: state and tab counts come from the server, so read the list again.
+        this.view.reload();
         this.toast.show(`${enabled ? 'Đã bật' : 'Đã tắt'} mã ${promo.code}`, {
           undo: () => this.toggle(updated, !enabled),
         });

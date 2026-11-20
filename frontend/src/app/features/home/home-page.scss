@@ -10,29 +10,6 @@
 .hero-block {
   margin-top: 0;
 }
-.audience-nav {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 40px;
-  height: 56px;
-  background: linear-gradient(transparent, #0005);
-}
-.audience-nav a {
-  display: flex;
-  align-items: center;
-  color: white;
-  padding: 0 12px;
-  border-bottom: 3px solid transparent;
-  font-size: 15px;
-  text-transform: uppercase;
-}
-.audience-nav a[aria-current] {
-  border-bottom-color: white;
-}
 .reference-categories {
   max-width: var(--page-width);
   margin: 0 auto;
@@ -93,38 +70,6 @@ h2 {
   .category-grid n2f-media-image {
     width: 56px;
     height: 56px;
-  }
-  .audience-nav {
-    gap: 4px;
-  }
-  .audience-nav a {
-    font-size: 13px;
-    padding: 0 16px;
-  }
-}
-.service-strip {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px 32px;
-  margin: 0;
-  padding: 14px var(--page-gutter);
-  list-style: none;
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-}
-.service-strip a {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-@media (max-width: 959px) {
-  .service-strip {
-    gap: 4px 16px;
-    padding: 10px var(--page-gutter);
-    font-size: 12px;
   }
 }
 .home-error {

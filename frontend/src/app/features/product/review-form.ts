@@ -71,7 +71,7 @@ import { AuthSession } from '../auth/auth-session';
                   }
                 </div>
                 @if (invalid('rating')) {
-                  <p class="field-error">Chọn số sao.</p>
+                  <p class="field-error">Chọn số sao từ 1 đến 5.</p>
                 }
                 @if (serverError('rating'); as text) {
                   <p class="field-error" role="alert">{{ text }}</p>
@@ -106,8 +106,11 @@ import { AuthSession } from '../auth/auth-session';
                     formControlName="height"
                     maxlength="20"
                     placeholder="VD: 165 cm"
-                    [attr.aria-invalid]="!!serverError('height')"
+                    [attr.aria-invalid]="invalid('height') || !!serverError('height')"
                   />
+                  @if (invalid('height')) {
+                    <p class="field-error">Chiều cao tối đa 20 ký tự.</p>
+                  }
                   @if (serverError('height'); as text) {
                     <p class="field-error" role="alert">{{ text }}</p>
                   }
@@ -340,10 +343,11 @@ export class ReviewForm {
   ] as const;
   private checking?: { unsubscribe(): void };
   readonly form = inject(FormBuilder).nonNullable.group({
-    rating: [0, Validators.min(1)],
+    // REV-03: 1–5 stars, title 2–80, body 20–1,000, height at most 20 (all trimmed, like the server).
+    rating: [0, [Validators.min(1), Validators.max(5)]],
     fit: [0 as -1 | 0 | 1],
     sizeBought: [''],
-    height: [''],
+    height: ['', trimmedLength(0, 20)],
     title: ['', [Validators.required, Validators.pattern(/\S.{1,}/), trimmedLength(2, 80)]],
     body: ['', [Validators.required, trimmedLength(20, 1000)]],
   });

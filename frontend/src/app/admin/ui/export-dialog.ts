@@ -26,7 +26,7 @@ export interface ExportDialogData {
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'adm adm-dialog' },
   template: `
-    <form class="dialog" (ngSubmit)="ref.close(scope)">
+    <form class="dialog" (ngSubmit)="rowCount() && ref.close(scope)">
       <h2>Xuất file CSV</h2>
       <p class="dialog-desc">File mở được bằng Excel hoặc Google Sheets.</p>
       <div class="dialog-body">
@@ -40,7 +40,13 @@ export interface ExportDialogData {
             ></label
           >
           <label class="check"
-            ><input type="radio" name="scope" value="page" [(ngModel)]="scope" /><span
+            ><input
+              type="radio"
+              name="scope"
+              value="page"
+              [disabled]="!data.pageCount"
+              [(ngModel)]="scope"
+            /><span
               >Trang hiện tại<span class="check-desc"
                 >{{ data.pageCount | admNum }} {{ data.noun }} đang hiển thị.</span
               ></span
@@ -54,10 +60,15 @@ export interface ExportDialogData {
             >
           }
         </fieldset>
+        @if (!rowCount()) {
+          <p class="dialog-desc" role="alert">Phạm vi này không có {{ data.noun }} nào để xuất.</p>
+        }
       </div>
       <div class="dialog-actions">
         <button type="button" class="adm-btn" (click)="ref.close()">Hủy bỏ</button>
-        <button type="submit" class="adm-btn adm-btn--primary">Xuất file</button>
+        <button type="submit" class="adm-btn adm-btn--primary" [disabled]="!rowCount()">
+          Xuất file
+        </button>
       </div>
     </form>
   `,
@@ -76,4 +87,13 @@ export class ExportDialog {
   readonly ref = inject<DialogRef<ExportScope>>(DialogRef);
   readonly data = inject<ExportDialogData>(DIALOG_DATA);
   scope: ExportScope = this.data.selectedCount ? 'selected' : 'all';
+
+  /** Rows the chosen scope holds; 0 blocks the export. */
+  rowCount(): number {
+    return this.scope === 'page'
+      ? this.data.pageCount
+      : this.scope === 'selected'
+        ? (this.data.selectedCount ?? 0)
+        : this.data.total;
+  }
 }

@@ -26,12 +26,13 @@ export type ReturnActionOutcome =
   | { kind: 'done'; ret: AdminReturn; message: string }
   | { kind: 'stale'; ret: AdminReturn | null; message: string };
 
+/** ADM-RET-05/08: per line, how many units pass and how many of those go back into stock. */
 interface ReceiveRow {
   variantId: string;
   label: string;
   quantity: number;
   accepted: number;
-  disposition: ReturnDisposition | '';
+  restock: number;
 }
 
 const TITLES: Record<AdminReturnAction, string> = {
@@ -131,16 +132,18 @@ const TITLES: Record<AdminReturnAction, string> = {
           }
           @case ('receive') {
             <p class="dialog-desc">
-              Kiểm từng dòng. Hàng nhập lại kho được cộng vào tồn; hàng hỏng không cộng. Số tiền
-              hoàn do hệ thống tính theo số lượng đạt, không sửa tay.
+              Kiểm từng dòng: nhập số lượng đạt (0 đến số khách trả), rồi chia phần đạt thành phần
+              nhập lại kho bán và phần không nhập kho (hỏng, bẩn…). Chỉ phần nhập lại kho được cộng
+              vào tồn. Số tiền hoàn do hệ thống tính theo số lượng đạt, không sửa tay.
             </p>
-            <table class="table">
+            <table class="table" data-testid="receive-lines">
               <thead>
                 <tr>
                   <th>Sản phẩm</th>
                   <th class="num">Khách trả</th>
                   <th>Số lượng đạt</th>
-                  <th>Hướng xử lý</th>
+                  <th>Nhập lại kho</th>
+                  <th class="num">Không nhập kho</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,21 +166,23 @@ const TITLES: Record<AdminReturnAction, string> = {
                     </td>
                     <td>
                       @if (row.accepted > 0) {
-                        <select
-                          class="select select--sm"
-                          [attr.aria-label]="'Hướng xử lý: ' + row.label"
+                        <input
+                          class="input input--sm"
+                          type="number"
+                          min="0"
+                          [max]="row.accepted"
+                          [attr.aria-label]="'Nhập lại kho: ' + row.label"
                           [disabled]="busy()"
-                          [ngModel]="row.disposition"
-                          [name]="'disposition' + i"
-                          (ngModelChange)="setDisposition(i, $event)"
-                        >
-                          <option value="">Chọn…</option>
-                          <option value="restock">Nhập lại kho bán</option>
-                          <option value="writeoff">Hỏng, không nhập</option>
-                        </select>
+                          [ngModel]="row.restock"
+                          [name]="'restock' + i"
+                          (ngModelChange)="setRestock(i, $event)"
+                        />
                       } @else {
                         <span class="secondary">—</span>
                       }
+                    </td>
+                    <td class="num" [attr.data-testid]="'writeoff-' + i">
+                      {{ row.accepted > 0 ? writeOff(row) : '—' }}
                     </td>
                   </tr>
                 }
@@ -221,8 +226,20 @@ const TITLES: Record<AdminReturnAction, string> = {
             </p>
             <dl class="refund-info" data-testid="refund-info">
               <div>
-                <dt>Số tiền</dt>
-                <dd data-testid="refund-amount">{{ ret.amount.amount | admMoney }}</dd>
+                <dt>Số tiền đã chốt</dt>
+                <dd data-testid="refund-amount">
+                  {{ ret.amount.amount | admMoney }}
+                  <span class="small secondary">
+                    (tiền hàng {{ ret.amount.goodsAmount | admMoney }}
+                    @if (ret.amount.shippingRefund) {
+                      + phí giao {{ ret.amount.shippingRefund | admMoney }}
+                    }
+                    @if (ret.amount.returnShippingFee) {
+                      − phí gửi trả {{ ret.amount.returnShippingFee | admMoney }}
+                    }
+                    )
+                  </span>
+                </dd>
               </div>
               @if (ret.refundTo.type === 'account') {
                 <div>
@@ -270,8 +287,12 @@ const TITLES: Record<AdminReturnAction, string> = {
                 [ngModel]="confirmed()"
                 (ngModelChange)="confirmed.set($event)"
               />
-              Tôi đã chuyển đủ số tiền trên cho khách.
+              Tôi đã chuyển đủ {{ ret.amount.amount | admMoney }} cho khách.
             </label>
+            <p class="hint">
+              Số tiền do hệ thống chốt sau kiểm hàng, không sửa được. Nếu số này đã đổi, hệ thống
+              sẽ từ chối và tải lại bản mới nhất.
+            </p>
             @if (tried() && !confirmed()) {
               <p class="error">Xác nhận bạn đã chuyển khoản.</p>
             }
@@ -350,7 +371,7 @@ export class ReturnActionDialog {
       label: `${line.name} (${line.color} / ${line.size})`,
       quantity: line.quantity,
       accepted: line.quantity,
-      disposition: 'restock' as const,
+      restock: line.quantity,
     })),
   );
 
@@ -370,7 +391,11 @@ export class ReturnActionDialog {
     for (const row of this.rows()) {
       if (!Number.isInteger(row.accepted) || row.accepted < 0 || row.accepted > row.quantity)
         return `Số lượng đạt của "${row.label}" từ 0 đến ${row.quantity}.`;
-      if (row.accepted > 0 && !row.disposition) return `Chọn hướng xử lý cho "${row.label}".`;
+      if (
+        row.accepted > 0 &&
+        (!Number.isInteger(row.restock) || row.restock < 0 || row.restock > row.accepted)
+      )
+        return `Số nhập lại kho của "${row.label}" từ 0 đến ${row.accepted}.`;
     }
     return '';
   });
@@ -381,14 +406,24 @@ export class ReturnActionDialog {
       : '';
   });
 
+  /** A new accepted count keeps the restock part inside it (all accepted units by default). */
   setAccepted(index: number, value: number | string): void {
     const accepted = Number(value);
-    this.rows.update((rows) => rows.map((row, i) => (i === index ? { ...row, accepted } : row)));
-  }
-  setDisposition(index: number, value: ReturnDisposition | ''): void {
     this.rows.update((rows) =>
-      rows.map((row, i) => (i === index ? { ...row, disposition: value } : row)),
+      rows.map((row, i) => {
+        if (i !== index) return row;
+        const restock =
+          row.restock === row.accepted ? accepted : Math.min(row.restock, Math.max(0, accepted));
+        return { ...row, accepted, restock };
+      }),
     );
+  }
+  setRestock(index: number, value: number | string): void {
+    const restock = Number(value);
+    this.rows.update((rows) => rows.map((row, i) => (i === index ? { ...row, restock } : row)));
+  }
+  protected writeOff(row: ReceiveRow): number {
+    return Math.max(0, row.accepted - (Number.isInteger(row.restock) ? row.restock : 0));
   }
 
   submit(): void {
@@ -416,7 +451,13 @@ export class ReturnActionDialog {
           lines: this.rows().map((row) => ({
             variantId: row.variantId,
             acceptedQuantity: row.accepted,
-            ...(row.accepted > 0 && row.disposition ? { disposition: row.disposition } : {}),
+            ...(row.accepted > 0
+              ? {
+                  // `disposition` for older servers; `restockQuantity` is the exact split.
+                  disposition: (row.restock > 0 ? 'restock' : 'writeoff') as ReturnDisposition,
+                  restockQuantity: row.restock,
+                }
+              : {}),
           })),
           ...(this.note().trim() ? { note: this.note().trim() } : {}),
         });
@@ -442,10 +483,18 @@ export class ReturnActionDialog {
         return 'Đã duyệt yêu cầu. Khách sẽ nhận hướng dẫn gửi hàng.';
       case 'reject':
         return 'Đã từ chối yêu cầu.';
-      case 'receive':
-        return ret.state === 'rejected'
-          ? 'Không có hàng đạt: yêu cầu đã được đóng, không hoàn tiền.'
-          : 'Đã nhận hàng trả về. Yêu cầu chuyển sang chờ hoàn tiền.';
+      case 'receive': {
+        if (ret.state === 'rejected')
+          return 'Không có hàng đạt: yêu cầu đã được đóng, không hoàn tiền.';
+        // ADM-RET-08: say what changed in stock (the inventory screens read it fresh).
+        const restocked = this.rows().reduce(
+          (sum, row) => sum + (row.accepted > 0 ? row.restock : 0),
+          0,
+        );
+        return restocked
+          ? `Đã nhận hàng trả về, nhập lại kho ${restocked} sản phẩm. Yêu cầu chuyển sang chờ hoàn tiền.`
+          : 'Đã nhận hàng trả về, không nhập lại kho sản phẩm nào. Yêu cầu chuyển sang chờ hoàn tiền.';
+      }
       case 'refund':
         return 'Đã ghi nhận hoàn tiền.';
     }

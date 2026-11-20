@@ -570,10 +570,11 @@ test.describe('admin catalog on the API (Slice 6)', () => {
     await dialog.getByRole('button', { name: 'Lưu' }).click();
     await expect(toast(page)).toContainText('Ngưỡng sắp hết mặc định giờ là 8');
     expect(api.find('PUT', /thresholds$/)[0].body).toEqual({ defaultThreshold: 8 });
-    // One SKU: its own threshold goes as `items`.
-    await rows(page)
-      .first()
-      .getByRole('button', { name: /Đổi ngưỡng sắp hết của BLZ-D-S/ })
+    // One SKU: tick it, then "Đặt ngưỡng sắp hết" in the bulk bar; its threshold goes as `items`.
+    await rows(page).first().getByRole('checkbox', { name: 'Chọn BLZ-D-S' }).check();
+    await page
+      .getByRole('region', { name: 'Thao tác hàng loạt' })
+      .getByRole('button', { name: 'Đặt ngưỡng sắp hết' })
       .click();
     await page.getByRole('dialog').getByRole('radio').last().check();
     await page.getByRole('dialog').getByRole('spinbutton').fill('2');

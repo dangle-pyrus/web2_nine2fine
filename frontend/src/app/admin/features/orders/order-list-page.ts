@@ -241,8 +241,14 @@ export class OrderListPage {
         selectedCount: this.selection.count(),
       })
       .closed.subscribe((scope) => {
-        if (scope === 'page') this.exportCsv(page.items);
-        else if (scope === 'selected') this.exportCsv(this.selectedOrders());
+        const rows =
+          scope === 'page' ? page.items : scope === 'selected' ? this.selectedOrders() : null;
+        // ADM-ORD-18: an empty page / selection is never widened to every order.
+        if (rows && !rows.length) {
+          this.toast.error('Không có đơn nào trong phạm vi đã chọn để xuất.');
+          return;
+        }
+        if (rows) this.exportCsv(rows);
         else if (scope === 'all') {
           fetchAllPages((index, pageSize) =>
             this.api.list({ ...this.apiQuery(), page: index, pageSize }),

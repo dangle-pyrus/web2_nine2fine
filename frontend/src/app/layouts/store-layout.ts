@@ -27,7 +27,6 @@ import { ToastHost } from '../shared/ui/toast';
 import { ChatButton } from '../shared/ui/chat-button';
 import { SupportButton } from '../shared/ui/support-button';
 import { IconComponent } from '../shared/ui/icon.component';
-import { PricePipe } from '../shared/commerce/price.pipe';
 import { storeSettings } from '../core/store-settings';
 import { formatDate } from '../features/orders/order-status';
 import { MegaMenu } from './navigation/mega-menu';
@@ -40,7 +39,6 @@ import { TOP_NAVIGATION, TopNavItem, UTILITY_LINKS } from './navigation/top-navi
     RouterOutlet,
     RouterLink,
     IconComponent,
-    PricePipe,
     MegaMenu,
     MobileDrawer,
     SearchPanel,
@@ -227,20 +225,6 @@ import { TOP_NAVIGATION, TopNavItem, UTILITY_LINKS } from './navigation/top-navi
       aria-hidden="true"
       (click)="closeMega()"
     ></div>
-    @if (showPromo()) {
-      <p class="promo-strip">
-        <span class="promo-long"
-          >Miễn phí giao hàng cho đơn từ {{ policy.freeShippingFrom | vnd }} · Trả hàng trong
-          {{ policy.returnDays }} ngày</span
-        ><span class="promo-short"
-          >Giao miễn phí từ {{ policy.freeShippingFrom | vnd }} · Trả hàng
-          {{ policy.returnDays }} ngày</span
-        >
-        @if (!session.signedIn()) {
-          <a routerLink="/auth/login" [queryParams]="{ returnUrl: currentUrl() }">Tham gia ngay</a>
-        }
-      </p>
-    }
     @if (searchOpen()) {
       @defer {
         <n2f-search-panel [origin]="searchOrigin()" (closed)="closeSearch($event)" />
@@ -338,9 +322,6 @@ export class StoreLayout {
   readonly wishlist = inject(WishlistState);
   readonly session = inject(AuthSession);
   /** Live store settings (a change shows up without reload). */
-  get policy() {
-    return storeSettings().policy;
-  }
   get info() {
     return storeSettings().info;
   }
@@ -367,13 +348,8 @@ export class StoreLayout {
   );
   readonly activeMenuId = computed(() => {
     const path = this.currentUrl().split(/[?#]/)[0];
-    if (path.startsWith('/shop-by-moment')) return 'moments';
     return this.menus.find((menu) => menu.path === path)?.id ?? null;
   });
-  /** Nike-style promo strip; kept out of the hero overlay and the checkout transaction zone. */
-  readonly showPromo = computed(
-    () => !this.overlayRoute() && !this.currentUrl().startsWith('/checkout'),
-  );
   private readonly overlay = inject(OverlayService);
   private readonly router = inject(Router);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);

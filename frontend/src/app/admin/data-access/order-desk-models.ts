@@ -221,7 +221,17 @@ export interface DeskOrder {
 export type DeskCommand =
   | { action: 'call-attempt'; expectedStatus: DeskOrderStatus; note?: string }
   | { action: 'confirm'; expectedStatus: DeskOrderStatus }
-  | { action: 'ship'; expectedStatus: DeskOrderStatus; carrier: string; trackingNumber: string }
+  | {
+      action: 'ship';
+      expectedStatus: DeskOrderStatus;
+      carrier: string;
+      trackingNumber: string;
+      /**
+       * ADM-ORD-04: `YYYY-MM-DD` the carrier expects to deliver (giờ VN). Sent with the handover;
+       * a server that does not know the field yet ignores it.
+       */
+      estimatedDeliveryDate?: string;
+    }
   | { action: 'deliver'; expectedStatus: DeskOrderStatus }
   | {
       action: 'cancel';
@@ -268,6 +278,8 @@ export interface DeskOrderQuery extends DeskOrderFilter {
   page: number;
   limit: number;
   sort?: DeskSort;
+  /** DASH-05: only in-transit orders past their latest estimated delivery day (`late=1`). */
+  late?: boolean;
 }
 
 /** ADM-ORD-18: CSV of the given codes, or of every order matching the filters when `codes` is absent. */

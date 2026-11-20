@@ -12,7 +12,7 @@ export type InsightsRange = 'today' | '7d' | '30d';
 
 export interface DashboardKpi {
   value: number;
-  /** Same figure for the compare period (yesterday / previous Mon–Sun week / previous month). */
+  /** Same figure for the compare period (yesterday / the 7 or 30 days right before). */
   previous: number;
   /** (value - previous) / previous; `null` when `previous` is 0. */
   change: number | null;

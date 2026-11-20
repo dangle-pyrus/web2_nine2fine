@@ -72,9 +72,15 @@ import { RETURNS_API, ReturnAudience, returnErrorMessage } from './returns-api';
             </dt>
             <dd data-testid="return-amount">
               {{ r.refundedAmount ?? r.amount.amount | vnd }}
-              @if (r.amount.returnShippingFee) {
-                <small>(đã trừ phí gửi trả {{ r.amount.returnShippingFee | vnd }})</small>
-              }
+              <small data-testid="return-amount-breakdown">
+                Tiền hàng {{ r.amount.goodsAmount | vnd }}
+                @if (r.amount.shippingRefund) {
+                  · hoàn phí giao ban đầu +{{ r.amount.shippingRefund | vnd }}
+                }
+                @if (r.amount.returnShippingFee) {
+                  · phí gửi trả −{{ r.amount.returnShippingFee | vnd }}
+                }
+              </small>
               @if (!r.amount.final) {
                 <small>Dự kiến, chốt sau khi nine2fine kiểm hàng.</small>
               }
@@ -113,7 +119,8 @@ import { RETURNS_API, ReturnAudience, returnErrorMessage } from './returns-api';
           }
         </ul>
       }
-      @if (r.canCancel) {
+      <!-- RET-08: cancel only while the shop has not acted yet (state requested). -->
+      @if (r.canCancel && r.state === 'requested') {
         @if (confirming()) {
           <p class="note" role="status">
             Huỷ yêu cầu trả hàng này? Bạn có thể gửi lại nếu còn hạn.
@@ -133,8 +140,13 @@ import { RETURNS_API, ReturnAudience, returnErrorMessage } from './returns-api';
           </div>
         } @else {
           <div class="actions">
-            <button type="button" class="pill outline" (click)="confirming.set(true)">
-              Huỷ yêu cầu
+            <button
+              type="button"
+              class="pill outline"
+              data-testid="return-cancel"
+              (click)="confirming.set(true)"
+            >
+              Huỷ yêu cầu trả hàng
             </button>
           </div>
         }

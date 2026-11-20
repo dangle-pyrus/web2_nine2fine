@@ -5,9 +5,9 @@ import { Page, Route } from '@playwright/test';
  * `/api/store/settings` (docs/api/openapi.yaml, Slice 8) for the Playwright specs. The e2e build
  * keeps the earlier mock back office by default; `useInsightsApi` switches it to the real HTTP
  * adapters (`adminInsightsMode = http`) and answers the requests here, so the specs exercise the
- * adapters, the mapping and the error handling. Like the server it sends staff only `todo`,
- * `orders` and `generatedAt`, refuses staff on everything else, validates the way the contract
- * says and keeps every total equal (BR-INS-09).
+ * adapters, the mapping and the error handling. Like the server it sends staff no money on the
+ * dashboard (DASH-07), refuses staff on everything else, validates the way the contract says and
+ * keeps every total equal (BR-INS-09).
  */
 export const INSIGHTS_MODE_KEY = 'n2f.e2e.adminInsightsMode';
 export const ORDERS_MODE_KEY = 'n2f.e2e.adminOrdersMode';
@@ -130,17 +130,23 @@ const LINES: Line[] = [
   },
 ];
 
+/** `todo` of Tổng quan v2 (docs/api/openapi.yaml AdminDashboardTodo): the current state, not the range. */
 const TODO = {
   toConfirm: 1,
   pendingPayment: 1,
   toFulfil: 1,
-  inTransit: 1,
   cancelRequests: 1,
-  returning: 0,
   lateDelivery: 1,
+  returnRequested: 0,
+  returnApproved: 0,
+  returnReceived: 0,
   lowStock: 2,
   outOfStock: 1,
 };
+
+/** Start of a Vietnam day (`YYYY-MM-DD`) as an ISO instant. */
+const vnStart = (day: string) => new Date(`${day}T00:00:00+07:00`).toISOString();
+const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
 
 const INITIAL_SETTINGS = {
   info: {
@@ -294,59 +300,140 @@ export class InsightsApi {
 
   // ---------- Dashboard ----------
 
+  /**
+   * Tổng quan v2 (docs/api/openapi.yaml adminGetDashboard, 2026-11-20): the period and the period
+   * right before it (yesterday / the 7 or 30 days before), `kpis`, `series`, `todo`,
+   * `recentOrders`, `topProducts` by revenue. Staff get no money: `kpis.orders`, `todo`,
+   * `recentOrders` and `topProducts` by units without `revenue` / `share` / `previousRank`.
+   */
   private dashboard(route: Route, url: URL) {
     const range = url.searchParams.get('range') ?? 'today';
     if (!['today', '7d', '30d'].includes(range))
       return this.error(route, 422, 'validation', 'range', { field: 'range' });
-    const todo = { ...TODO };
-    const generatedAt = new Date().toISOString();
-    const kpi = (value: number, change: number | null) => ({ value, change });
-    if (this.role === 'staff')
-      return this.reply(route, 200, { generatedAt, orders: kpi(2, null), todo });
-    const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
+    const now = new Date();
+    const generatedAt = now.toISOString();
     const today = todayVn();
-    const inRange = (line: Line) => line.ago < days;
-    const lines = this.empty ? [] : LINES.filter(inRange);
-    const revenue = lines.reduce((sum, line) => sum + line.revenue, 0);
-    const orders = new Set(lines.map((line) => line.order)).size;
-    const topProducts = Object.entries(PRODUCTS)
-      .map(([key, product]) => {
-        const own = lines.filter((line) => line.product === key);
-        return {
-          productId: product.id,
-          name: product.name,
-          image: null,
-          units: own.reduce((sum, line) => sum + line.qty, 0),
-          revenue: own.reduce((sum, line) => sum + line.revenue, 0),
-        };
-      })
-      .filter((row) => row.units > 0)
-      .sort((a, b) => b.units - a.units || b.revenue - a.revenue)
-      .slice(0, 5);
-    const series = Array.from({ length: 30 }, (_, index) => {
-      const ago = 29 - index;
-      const sum = (this.empty ? [] : LINES)
-        .filter((line) => line.ago === ago)
-        .reduce((total, line) => total + line.revenue, 0);
-      return { date: shift(today, -ago), revenue: sum, previous: 0 };
+    const days = range === 'today' ? 1 : range === '7d' ? 7 : 30;
+    const all = this.empty ? [] : LINES;
+    const cur = all.filter((line) => line.ago < days);
+    const prev = all.filter((line) => line.ago >= days && line.ago < 2 * days);
+    const sum = (lines: Line[]) => lines.reduce((total, line) => total + line.revenue, 0);
+    const count = (lines: Line[]) => new Set(lines.map((line) => line.order)).size;
+    const kpi = (value: number, previous: number) => ({
+      value,
+      previous,
+      change: previous ? round4((value - previous) / previous) : null,
     });
-    return this.reply(route, 200, {
+    const aov = (lines: Line[]) => (count(lines) ? Math.round(sum(lines) / count(lines)) : 0);
+    const first = shift(today, -(days - 1));
+    const period = {
+      from: vnStart(first),
+      to: range === 'today' ? generatedAt : vnStart(shift(today, 1)),
+    };
+    const comparePeriod = { from: vnStart(shift(first, -days)), to: vnStart(first) };
+    const orders = kpi(count(cur), count(prev));
+    const recentOrders = this.empty
+      ? []
+      : [
+          {
+            id: '20000000-0000-4000-8000-000000000001',
+            code: 'N2F2611200001',
+            createdAt: generatedAt,
+            customerName: 'Nguyễn An',
+            total: 930_000,
+            status: 'to_ship',
+            paymentStatus: 'pending',
+            channel: 'website',
+          },
+        ];
+    const products = (lines: Line[]) =>
+      Object.entries(PRODUCTS)
+        .map(([key, product]) => {
+          const own = lines.filter((line) => line.product === key);
+          return {
+            productId: product.id,
+            name: product.name,
+            image: null,
+            category: product.cat,
+            units: own.reduce((total, line) => total + line.qty, 0),
+            revenue: sum(own),
+          };
+        })
+        .filter((row) => row.units > 0);
+    const base = {
       generatedAt,
       range,
-      period: {
-        from: generatedAt,
-        to: generatedAt,
-        previousFrom: generatedAt,
-        previousTo: generatedAt,
+      period,
+      comparePeriod,
+      todo: { ...TODO },
+      recentOrders,
+    };
+    if (this.role === 'staff') {
+      const byUnits = products(cur).sort((a, b) => b.units - a.units);
+      return this.reply(route, 200, {
+        ...base,
+        kpis: { orders },
+        topProducts: byUnits.map((row, index) => ({
+          rank: index + 1,
+          productId: row.productId,
+          name: row.name,
+          image: row.image,
+          category: row.category,
+          units: row.units,
+        })),
+      });
+    }
+    const revenue = sum(cur);
+    const ranked = products(cur).sort((a, b) => b.revenue - a.revenue || b.units - a.units);
+    const prevRanked = products(prev).sort((a, b) => b.revenue - a.revenue);
+    const point = (key: string, label: string, lines: Line[]) => ({
+      key,
+      label,
+      revenue: sum(lines),
+      orders: count(lines),
+    });
+    const series =
+      range === 'today'
+        ? {
+            unit: 'hour',
+            points: Array.from({ length: 24 }, (_, h) =>
+              point(String(h), `${h}h`, h === 9 ? cur : []),
+            ),
+            previous: Array.from({ length: 24 }, (_, h) =>
+              point(String(h), `${h}h`, h === 9 ? prev : []),
+            ),
+          }
+        : {
+            unit: 'day',
+            points: Array.from({ length: days }, (_, i) => {
+              const ago = days - 1 - i;
+              const day = shift(today, -ago);
+              return point(day, day.slice(5), cur.filter((line) => line.ago === ago));
+            }),
+            previous: Array.from({ length: days }, (_, i) => {
+              const ago = 2 * days - 1 - i;
+              const day = shift(today, -ago);
+              return point(day, day.slice(5), prev.filter((line) => line.ago === ago));
+            }),
+          };
+    return this.reply(route, 200, {
+      ...base,
+      kpis: {
+        netRevenue: kpi(revenue, sum(prev)),
+        orders,
+        averageOrderValue: kpi(aov(cur), aov(prev)),
+        returnRate: { value: 0, previous: 0, change: null },
       },
-      orders: kpi(this.empty ? 0 : orders + 2, this.empty ? null : 0.5),
-      todo,
-      revenue: kpi(revenue, this.empty ? null : 0.1),
-      completedOrders: kpi(orders, this.empty ? null : 0),
-      averageOrderValue: kpi(orders ? Math.round(revenue / orders) : 0, this.empty ? null : -0.25),
-      newCustomers: kpi(this.empty ? 0 : 2, null),
-      revenueSeries: series,
-      topProducts,
+      series,
+      topProducts: ranked.slice(0, 5).map((row, index) => {
+        const before = prevRanked.findIndex((item) => item.productId === row.productId);
+        return {
+          rank: index + 1,
+          previousRank: before < 0 ? null : before + 1,
+          ...row,
+          share: revenue ? round4(row.revenue / revenue) : 0,
+        };
+      }),
     });
   }
 

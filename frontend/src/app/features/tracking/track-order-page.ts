@@ -4,21 +4,24 @@ import {
   DestroyRef,
   ElementRef,
   afterNextRender,
+  effect,
   inject,
   Injector,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize, switchMap } from 'rxjs';
-import { CHECKOUT_API, CheckoutError } from '../checkout/checkout-api';
+import { CHECKOUT_API, CheckoutError, isOrderStateChanged } from '../checkout/checkout-api';
 import { API_CONFIG } from '../../core/api-config';
 import { CODE_PATTERN, cleanCode, OTP_DIGITS, OTP_TTL_MINUTES } from '../auth/auth-messages';
 import { orderCanCancel } from '../orders/order-status-map';
 import { Order } from '../orders/order-models';
-import { canPay, cancelLabels, formatDate } from '../orders/order-status';
+import { cancelLabels, formatDate, orderActions } from '../orders/order-status';
+import { injectNow } from '../../shared/ui/now';
 import { canRequestReturn, returnDeadline } from '../orders/order-returns';
 import { storeSettings } from '../../core/store-settings';
 import { OrderCancellation } from '../account/orders/order-cancellation';
@@ -415,6 +418,7 @@ export class TrackOrderPage {
   readonly returnsOnServer = inject(API_CONFIG).returnsMode === 'http';
   private readonly returnsEnabled = inject(API_CONFIG).checkoutMode === 'mock';
   private readonly guestView = inject(GuestOrderView);
+  private readonly now = injectNow();
   private readonly api = inject(CHECKOUT_API);
   private readonly cancellation = inject(OrderCancellation);
   private readonly receipt = inject(OrderReceipt);
@@ -448,6 +452,13 @@ export class TrackOrderPage {
       clearInterval(this.timer);
       clearInterval(this.lockTimer);
     });
+    // ORD-LK-04: once the 30-minute grant is over the order leaves the screen and the OTP is
+    // asked again, even if the shopper does nothing (the server would answer 401 anyway).
+    effect(() => {
+      const now = this.now();
+      if (this.step() !== 'result' || !this.order()) return;
+      if (this.guestView.expired(now)) untracked(() => this.expireView());
+    });
   }
 
   invalid(key: 'orderCode' | 'email' | 'code'): boolean {
@@ -459,8 +470,9 @@ export class TrackOrderPage {
     return formatDate(iso);
   }
 
+  /** ORD-06 / ORD-10: the shared action rule, on a clock that ticks while the page is open. */
   payable(order: Order): boolean {
-    return canPay(order);
+    return orderActions(order, this.now()).pay;
   }
 
   labels(order: Order): { idle: string; busy: string } {
@@ -468,7 +480,8 @@ export class TrackOrderPage {
   }
 
   cancellable(order: Order): boolean {
-    return orderCanCancel(order);
+    // Guests follow the server's flag only (as before); the clock still hides it once overdue.
+    return orderCanCancel(order) && orderActions(order, this.now()).cancel;
   }
 
   returnable(order: Order): boolean {
@@ -561,7 +574,11 @@ export class TrackOrderPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (order) => this.show(order),
+        next: (order) => {
+          // ORD-LK-04: the 30-minute grant starts now, with the OTP check.
+          this.guestView.start(order);
+          this.show(order);
+        },
         error: (error: unknown) => this.onError(error),
       });
   }
@@ -631,17 +648,29 @@ export class TrackOrderPage {
 
   private onCancelError(error: unknown, orderCode: string): void {
     const code = error instanceof CheckoutError ? error.code : 'unavailable';
-    if (code === 'not-cancellable' || code === 'invalid-transition') {
+    if (isOrderStateChanged(error)) {
       this.error.set(
         code === 'invalid-transition'
           ? 'Đơn hàng không ở trạng thái đang giao. Đã cập nhật lại đơn.'
-          : 'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
+          : code === 'order-state-changed'
+            ? 'Trạng thái đơn hàng vừa thay đổi nên chưa thực hiện được. Đã tải lại thông tin mới nhất của đơn.'
+            : 'Đơn hàng này không huỷ được trực tuyến nữa (đã bàn giao vận chuyển, đã có yêu cầu huỷ hoặc đã huỷ). Đã cập nhật lại đơn; cần hỗ trợ vui lòng gọi hotline.',
       );
-      // Show where the order is now (the 30-minute view is still open).
+      // ORD-CC-04: show where the order is now (the 30-minute view is still open).
       this.api
         .getOrder(orderCode)
         .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({ next: (fresh) => this.order.set(fresh), error: () => undefined });
+        .subscribe({
+          next: (fresh) => {
+            this.order.set(fresh);
+            this.guestView.set(fresh);
+          },
+          error: (failure: unknown) => {
+            if (failure instanceof CheckoutError && failure.code === 'unauthenticated') {
+              this.expireView();
+            }
+          },
+        });
     } else if (code === 'unauthenticated') {
       this.expireView();
     } else {

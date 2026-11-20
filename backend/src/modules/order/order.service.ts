@@ -1,5 +1,7 @@
 import type { Request } from 'express';
+import type { order_status, Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
+import type { OrderListTab } from './order.schemas';
 import { ASSUMPTIONS } from '../../config/assumptions';
 import { now as clockNow } from '../../lib/clock';
 import { Errors } from '../../lib/errors';
@@ -45,20 +47,61 @@ export async function getOrderDto(req: Request, rawCode: string): Promise<OrderD
   return (await toOrderDtosWithReturn([order], viewerOf(order, owner)))[0];
 }
 
+/** ORD-02: tab Lịch sử mua hàng -> trạng thái đơn (COMMON-01.1). */
+const TAB_STATUSES: Record<OrderListTab, order_status[]> = {
+  'pending-payment': ['to_pay'],
+  processing: ['to_ship', 'cancel_requested'],
+  shipping: ['to_receive'],
+  completed: ['completed'],
+  cancelled: ['cancelled'],
+};
+
+/** ORD-04: mã đơn (có / không `#`, không phân biệt hoa thường, khớp một phần) hoặc tên sản phẩm trong đơn. */
+function searchWhere(q: string | undefined): Prisma.OrderWhereInput | undefined {
+  const text = (q ?? '').trim();
+  if (!text) return undefined;
+  const code = text.replace(/^#/, '').toUpperCase();
+  return {
+    OR: [
+      { code: { contains: code } },
+      { items: { some: { name: { contains: text, mode: 'insensitive' } } } },
+    ],
+  };
+}
+
+export interface MyOrderPage {
+  items: OrderDto[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  /** Số đơn mỗi tab theo cùng từ khoá `q` (không theo tab đang chọn). */
+  counts: Record<OrderListTab, number>;
+}
+
 export async function listMyOrders(
   userId: string,
   page: number,
   limit: number,
-): Promise<{ items: OrderDto[]; total: number; page: number; limit: number }> {
-  const [total, rows] = await Promise.all([
-    prisma.order.count({ where: { userId } }),
+  filter: { status?: OrderListTab; q?: string } = {},
+): Promise<MyOrderPage> {
+  const search = searchWhere(filter.q);
+  const base: Prisma.OrderWhereInput = { userId, ...(search ? { AND: [search] } : {}) };
+  const where: Prisma.OrderWhereInput = filter.status ? { ...base, status: { in: TAB_STATUSES[filter.status] } } : base;
+  const [total, rows, grouped] = await Promise.all([
+    prisma.order.count({ where }),
     prisma.order.findMany({
-      where: { userId },
+      where,
       include: ORDER_INCLUDE,
       orderBy: [{ createdAt: 'desc' }, { code: 'desc' }],
       skip: (page - 1) * limit,
       take: limit,
     }),
+    prisma.order.groupBy({ by: ['status'], where: base, _count: { _all: true } }),
   ]);
-  return { items: await toOrderDtosWithReturn(rows, 'owner'), total, page, limit };
+  const byStatus = new Map(grouped.map((g) => [g.status, g._count._all]));
+  const counts = Object.fromEntries(
+    (Object.keys(TAB_STATUSES) as OrderListTab[]).map((tab) => [tab, TAB_STATUSES[tab].reduce((n, s) => n + (byStatus.get(s) ?? 0), 0)]),
+  ) as Record<OrderListTab, number>;
+  return { items: await toOrderDtosWithReturn(rows, 'owner'), total, page, limit, hasMore: page * limit < total, counts };
 }

@@ -42,9 +42,13 @@ async function openSummary(page: Page, isMobile: boolean): Promise<void> {
 
 test('AC-CART-02/04: "+" stops at 10 with the per-variant sentence', async ({ page }) => {
   // Demo stock tops out at 6, so give the blazer M enough stock for the per-variant limit (10) to bite.
-  await page.goto('/');
-  await page.evaluate((id) => {
-    sessionStorage.setItem('n2f.mock.v3', JSON.stringify({ inventory: { [id]: 12 } }));
+  // Written before the app starts on every load: the mock saves its own stock when a page is left,
+  // so a value set from a running page would be overwritten by the next navigation.
+  await page.addInitScript((id) => {
+    const key = 'n2f.mock.v3';
+    const state = JSON.parse(sessionStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    const inventory = (state['inventory'] ?? {}) as Record<string, number>;
+    sessionStorage.setItem(key, JSON.stringify({ ...state, inventory: { ...inventory, [id]: 12 } }));
   }, BLAZER_M);
   await addBlazer(page);
   await page.goto('/cart');

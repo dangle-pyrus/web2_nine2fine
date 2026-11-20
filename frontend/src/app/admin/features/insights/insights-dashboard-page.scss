@@ -98,13 +98,23 @@
 }
 .kpi-text {
   display: grid;
-  grid-template-rows: auto auto 20px;
+  grid-template-rows: auto auto auto 20px;
   gap: 4px;
   min-width: 0;
 }
 .kpi-label {
   font-size: 13px;
   color: var(--adm-text-tertiary);
+}
+/* DASH-01/02: what the figure counts. */
+.kpi-hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--adm-text-tertiary);
+}
+/* DASH-03/08: selected period, compare period and update time. */
+.dash-meta {
+  margin-top: 2px;
 }
 .kpi-value {
   font-size: 24px;

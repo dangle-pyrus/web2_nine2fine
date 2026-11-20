@@ -169,7 +169,8 @@ export interface AdminReturnDto extends Omit<ReturnRequestDto, 'lines' | 'photos
   source: 'member' | 'guest';
   recipient: { name: string; phone: string; email: string };
   paymentMethod: 'cod' | 'bank-transfer';
-  lines: Array<ReturnLineDto & { disposition?: 'restock' | 'writeoff' }>;
+  /** `restockQuantity` (ADM-RET-05/08): phần đạt đã nhập lại kho; phần đạt còn lại không nhập kho. */
+  lines: Array<ReturnLineDto & { disposition?: 'restock' | 'writeoff'; restockQuantity?: number }>;
   photos: ReturnPhotoDto[];
   receiveNote?: string;
   refundReference?: string;
@@ -222,7 +223,13 @@ export async function buildAdminReturn(db: Db, returnId: string, role: 'staff' |
     source: r.requestedVia === 'guest' ? 'guest' : 'member',
     recipient: { name: order.recipientName, phone: order.recipientPhone, email: order.email },
     paymentMethod: order.paymentMethod === 'bank_transfer' ? 'bank-transfer' : 'cod',
-    lines: r.items.map((i) => ({ ...toLineDto(i), ...(i.disposition ? { disposition: i.disposition as 'restock' | 'writeoff' } : {}) })),
+    lines: r.items.map((i) => ({
+      ...toLineDto(i),
+      ...(i.disposition ? { disposition: i.disposition as 'restock' | 'writeoff' } : {}),
+      ...(i.acceptedQuantity !== null && i.acceptedQuantity > 0
+        ? { restockQuantity: i.restockQuantity ?? (i.disposition === 'restock' ? i.acceptedQuantity : 0) }
+        : {}),
+    })),
     refundTo,
     history: events.map((e) => ({
       at: iso(e.at),

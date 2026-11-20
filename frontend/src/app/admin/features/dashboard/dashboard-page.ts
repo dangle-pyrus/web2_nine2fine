@@ -130,6 +130,14 @@ export class DashboardPage {
     ].filter((item) => item.show && item.count > 0);
   });
 
+  /** Best sellers: admins keep the summary's order; staff get them by units sold (DASH-07). */
+  protected readonly topProducts = computed(() => {
+    const rows = this.summary()?.topProducts ?? [];
+    return this.session.can('dashboard.revenue')
+      ? rows
+      : [...rows].sort((a, b) => b.units - a.units);
+  });
+
   protected readonly chart = computed(() => {
     const series = this.summary()?.revenueSeries ?? [];
     return {

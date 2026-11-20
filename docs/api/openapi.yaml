@@ -1114,6 +1114,8 @@ paths:
       parameters:
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+        - { name: status, in: query, schema: { type: string, enum: [pending-payment, processing, shipping, completed, cancelled] }, description: 'ORD-02 (2026-11-20): tab Lịch sử mua hàng. `pending-payment` = to_pay; `processing` = to_ship + cancel_requested; `shipping` = to_receive; `completed`; `cancelled`. Vắng = tất cả. Phản hồi có thêm `hasMore` và `counts` (số đơn mỗi tab theo cùng `q`, không theo `status`).' }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: 'ORD-04: mã đơn (có / không `#`, khớp một phần, không phân biệt hoa thường) hoặc tên sản phẩm trong đơn.' }
       responses:
         '200':
           description: Một trang đơn (sắp `placedAt` giảm dần, hoà bằng mã đơn).
@@ -1381,6 +1383,7 @@ paths:
         - { name: to, in: query, schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 }, description: 'Ngoài khoảng 1..50 -> `422 validation`, `field: limit`.' }
+        - { name: late, in: query, schema: { type: string, enum: ['1', 'true', '0', 'false'] }, description: 'DASH-05 (2026-11-20): `1` = chỉ đơn `to_receive` có `estimatedTo` sớm hơn hôm nay (VN), cùng định nghĩa `todo.lateDelivery`. Không áp vào `/admin/orders/counts`.' }
       responses:
         '200':
           description: Một trang đơn (mới nhất trước).
@@ -2858,15 +2861,15 @@ paths:
         Quyền: staff, admin (`dashboard.view`); phần tiền chỉ admin (`dashboard.revenue`), lọc Ở MÁY CHỦ (BR-DSH-07). Chỉ đọc.
         `range` in `today` (mặc định) | `7d` | `30d`; giá trị khác -> `422 validation`, `field: range`. Kỳ (`period`) và kỳ so sánh (`comparePeriod`), nửa mở, giờ VN:
         - `today`: [00:00 hôm nay, lúc gọi) so với NGUYÊN ngày hôm qua [00:00, 24:00).
-        - `7d`: 7 ngày gần nhất gồm hôm nay so với NGUYÊN tuần lịch liền trước tuần hiện tại (Thứ Hai 00:00 đến hết Chủ nhật). Hai khoảng có thể chồng nhau vài ngày (cố ý).
-        - `30d`: 30 ngày gần nhất gồm hôm nay so với NGUYÊN tháng lịch trước (ngày 1 đến ngày cuối tháng).
+        - `7d`: 7 ngày gần nhất gồm hôm nay so với 7 ngày LIỀN TRƯỚC (DASH-03/06, đổi 2026-11-20; trước đây so với tuần lịch trước). `series.previous[i]` = ngày `points[i]` lùi 7 ngày.
+        - `30d`: 30 ngày gần nhất gồm hôm nay so với 30 ngày LIỀN TRƯỚC (đổi 2026-11-20; trước đây so với tháng lịch trước). `series.previous[i]` = ngày `points[i]` lùi 30 ngày.
         Hai kỳ có thể khác độ dài (cố ý). `change` = (value - previous) / previous, 4 chữ số thập phân, `null` khi `previous` = 0.
         `kpis`: `netRevenue` (doanh thu thuần, cùng định nghĩa Slice 8/9: đơn `completed` + đã thanh toán theo `delivered_at`, trừ hàng hoàn, không gồm ship); `orders` (đơn ĐẶT trong kỳ, không tính đơn huỷ); `averageOrderValue` (= `netRevenue` / số đơn tính doanh thu); `returnRate` (yêu cầu trả/đổi tạo trong kỳ, trừ đã huỷ, chia số đơn đã giao trong kỳ; 0..1; tăng là xấu).
         `series`: `points` (kỳ này) và `previous` (kỳ so sánh) cùng độ dài, khớp theo CHỈ SỐ. `today`: 24 điểm theo giờ 0h..23h, giờ chưa tới = `null`, `previous[i]` = cùng giờ hôm qua. `7d`: 7 điểm theo ngày (cũ trước), `previous[i]` = ngày CÙNG THỨ của tuần so sánh. `30d`: 30 điểm theo ngày, `previous[i]` = ngày CÙNG NGÀY TRONG THÁNG của tháng so sánh (tháng đó không có ngày ấy -> `revenue`, `orders` = `null`, `key` = ''). `revenue` theo `delivered_at`, `orders` theo `created_at` (cùng định nghĩa KPI).
         `todo`: trạng thái HIỆN TẠI, không theo `range`: `toConfirm`, `pendingPayment`, `toFulfil`, `cancelRequests` = số tab cùng tên của `GET /admin/orders/counts`; `returnRequested` / `returnApproved` / `returnReceived` = tab của `GET /admin/returns`; `lowStock`, `outOfStock` = tab Tồn kho; `lateDelivery` = đơn `to_receive` có `estimatedTo` sớm hơn hôm nay (VN).
         `recentOrders`: tối đa 10 đơn ĐẶT trong kỳ, mới trước; máy chủ chỉ trả `channel: website`. Dòng Shopee / TikTok Shop / Lazada trên màn hình hiện là DỮ LIỆU DEMO do frontend trộn vào (`frontend/src/app/admin/data-access/marketplace-demo.ts`).
         `topProducts`: tối đa 5 sản phẩm theo doanh thu trong kỳ (hoà: `units` giảm rồi `productId` tăng); `previousRank` = hạng theo doanh thu trong kỳ so sánh (xét 100 hạng đầu), `null` = không có hạng ("Mới"); `share` = `revenue` / `kpis.netRevenue.value` (0..1).
-        **staff** nhận `generatedAt`, `range`, `period`, `comparePeriod`, `kpis` (chỉ `orders`), `todo`, `recentOrders`; không có `netRevenue`, `averageOrderValue`, `returnRate`, `series`, `topProducts` (khoá vắng, không phải `null`).
+        **staff** nhận `generatedAt`, `range`, `period`, `comparePeriod`, `kpis` (chỉ `orders`), `todo`, `recentOrders`, và (DASH-07, 2026-11-20) `topProducts` xếp theo SỐ LƯỢNG bán với `rank`, `productId`, `name`, `image`, `category`, `units` (không có `revenue`, `share`, `previousRank`); không có `netRevenue`, `averageOrderValue`, `returnRate`, `series` (khoá vắng, không phải `null`).
       security:
         - adminSession: []
       parameters:
@@ -3391,7 +3394,7 @@ paths:
       parameters:
         - { name: state, in: query, schema: { $ref: '#/components/schemas/ReturnStateFilter' } }
         - { name: q, in: query, schema: { type: string, maxLength: 100 } }
-        - { name: sort, in: query, schema: { type: string, enum: [requestedAt, amount], default: requestedAt } }
+        - { name: sort, in: query, schema: { type: string, enum: [requestedAt, oldest, amount], default: requestedAt }, description: '`requestedAt` mới nhất trước; `oldest` cũ nhất trước (2026-11-20, ADM-RET-01); `amount` số tiền giảm dần.' }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: limit, in: query, schema: { type: integer, enum: [20, 50], default: 20 } }
       responses:
@@ -5313,7 +5316,7 @@ components:
         at: { type: string, format: date-time }
         title: { type: string }
         detail: { type: string, description: 'Slice 4: lý do đã được làm sạch cho khách (câu chuẩn hoặc lý do do chính khách nhập); đơn `to_receive` kèm đơn vị + mã vận đơn.' }
-        actor: { type: string, enum: [customer, nine2fine], description: 'Slice 4. Người thực hiện: `customer` hiện "Khách", `nine2fine` cho nhân viên và hệ thống (không lộ tên nhân viên, BR-ADM-12). Dòng cũ (Slice 3) cũng được điền theo `actor` của sự kiện.' }
+        actor: { type: string, enum: [customer, nine2fine, system], description: 'Slice 4; `system` thêm 2026-11-20 (ORD-09). Người thực hiện: `customer` hiện "Bạn", `nine2fine` cho nhân viên (không lộ tên nhân viên, BR-ADM-12), `system` cho việc tự động (hết hạn thanh toán, tiền về, tự hoàn thành). Dòng cũ (Slice 3) cũng được điền theo `actor` của sự kiện.' }
     Order:
       type: object
       required: [id, placedAt, status, paymentStatus, paymentMethod, items, pricing, vouchers, recipient, shippingAddress, estimatedDelivery, canCancel, canReturn, timeline]
@@ -5705,6 +5708,7 @@ components:
         expectedStatus: { $ref: '#/components/schemas/OrderStatus' }
         carrier: { type: string, minLength: 2, maxLength: 50, description: 'Đơn vị vận chuyển (trim); nhập tự do (S4-Q5).', examples: ['GHTK'] }
         trackingNumber: { type: string, minLength: 4, maxLength: 40, pattern: '^[A-Za-z0-9-]+$', description: 'Server trim, lưu chữ hoa.', examples: ['ghtk-12345'] }
+        estimatedDeliveryDate: { type: string, format: date, description: 'ADM-ORD-04 (2026-11-20): ngày giao dự kiến (giờ VN), từ hôm nay đến 60 ngày tới, ngoài khoảng -> 422 `estimatedDeliveryDate`. Ghi vào `estimatedTo` (và `estimatedFrom` không sau nó). Vắng = giữ ngày tính lúc đặt.' }
     AdminCancelReason:
       type: string
       enum: [unreachable, declined_on_call, customer_request, refused, undeliverable, other]
@@ -6933,6 +6937,7 @@ components:
         acceptedQuantity: { type: integer, minimum: 0 }
         goodsAmount: { type: integer, minimum: 0 }
         disposition: { $ref: '#/components/schemas/ReturnDisposition' }
+        restockQuantity: { type: integer, minimum: 0, description: 'ADM-RET-05/08: phần đạt đã nhập lại kho (có khi `acceptedQuantity > 0`); `acceptedQuantity - restockQuantity` không nhập kho. `disposition` = restock khi `restockQuantity > 0`.' }
     AdminReturnRefundTo:
       type: object
       required: [type]
@@ -7059,6 +7064,7 @@ components:
               variantId: { type: string, format: uuid }
               acceptedQuantity: { type: integer, minimum: 0, maximum: 99 }
               disposition: { $ref: '#/components/schemas/ReturnDisposition' }
+              restockQuantity: { type: integer, minimum: 0, maximum: 99, description: 'ADM-RET-05/08 (2026-11-20): phần đạt nhập lại kho (0..acceptedQuantity); phần đạt còn lại không nhập kho. Có thì thắng `disposition`; vắng thì theo `disposition` (restock = toàn bộ phần đạt, writeoff = 0). Dòng có hàng đạt phải có một trong hai, vượt `acceptedQuantity` -> 422 `lines`.' }
         note: { type: string, maxLength: 250, description: 'Bắt buộc 5..250 khi có dòng đạt < yêu cầu.' }
     AdminReturnRefundInput:
       type: object

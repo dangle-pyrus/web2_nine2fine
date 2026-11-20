@@ -65,7 +65,9 @@ import { hrefFragment, hrefPath, hrefQuery } from './home-href';
         [fragment]="fragment(content().href)"
       >
         <div class="campaign-copy">
-          <p class="eyebrow">{{ content().eyebrow }}</p>
+          @if (content().eyebrow) {
+            <p class="eyebrow">{{ content().eyebrow }}</p>
+          }
           @if (hero()) {
             <h1 [id]="content().id + '-title'" [attr.lang]="content().titleLang ?? null">
               {{ content().title }}

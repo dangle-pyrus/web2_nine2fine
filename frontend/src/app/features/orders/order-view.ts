@@ -10,7 +10,7 @@ import {
 import { storeSettings } from '../../core/store-settings';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { PricePipe } from '../../shared/commerce/price.pipe';
-import { Order, ReturnReason } from './order-models';
+import { Order, ORDER_ACTOR_LABEL, ReturnReason } from './order-models';
 import { returnReason } from './order-returns';
 import {
   carrierTrackingUrl,
@@ -24,6 +24,7 @@ import {
   refundState,
 } from './order-status';
 import { OrderItems } from './order-items';
+import { injectNow } from '../../shared/ui/now';
 
 /**
  * Order body from Figma `detail-order` (193:2518): status headline, ProgressStep (226:94),
@@ -74,11 +75,16 @@ import { OrderItems } from './order-items';
             <dt>Hoàn về</dt>
             <dd>{{ refund.destination }}</dd>
           </div>
+          <!-- ORD-CC-06: "Đã hoàn" only when the server confirmed the refund. -->
           @if (refundInfo(); as state) {
             <div>
-              <dt>{{ state.done ? 'Đã hoàn ngày' : 'Dự kiến nhận' }}</dt>
-              <dd [class.accent]="!state.done">
-                {{ state.done ? date(state.date) : 'Trước ' + date(state.date) }}
+              <dt>Trạng thái</dt>
+              <dd [class.accent]="!state.done" data-testid="refund-state">
+                @if (state.done) {
+                  Đã hoàn tiền{{ state.date ? ' ngày ' + date(state.date) : '' }}
+                } @else {
+                  Đang xử lý hoàn tiền{{ state.date ? ', dự kiến trước ' + date(state.date) : '' }}
+                }
               </dd>
             </div>
           }
@@ -286,7 +292,7 @@ import { OrderItems } from './order-items';
                 <strong>{{ event.title }}</strong>
                 @if (event.actor) {
                   <span class="actor">{{
-                    event.actor === 'customer' ? 'Khách' : 'nine2fine'
+                    actorLabel[event.actor]
                   }}</span>
                 }
                 @if (event.detail) {
@@ -643,13 +649,16 @@ import { OrderItems } from './order-items';
 })
 export class OrderView {
   readonly order = input.required<Order>();
-  readonly headline = computed(() => orderHeadline(this.order()));
+  readonly actorLabel = ORDER_ACTOR_LABEL;
+  /** ORD-10: the "còn X phút" headline and "Quá hạn thanh toán" follow the clock. */
+  private readonly now = injectNow();
+  readonly headline = computed(() => orderHeadline(this.order(), this.now()));
   readonly info = computed(() => storeSettings().info);
   readonly steps = computed(() => orderProgress(this.order()));
   readonly events = computed(() => orderTimeline(this.order()));
   readonly refundInfo = computed(() => refundState(this.order()));
   readonly methodLabel = computed(() => paymentMethodLabel(this.order()));
-  readonly stateLabel = computed(() => paymentStateLabel(this.order()));
+  readonly stateLabel = computed(() => paymentStateLabel(this.order(), this.now()));
   readonly totalLabel = computed(() => {
     const order = this.order();
     if (order.payment.paid) return 'Đã thanh toán';

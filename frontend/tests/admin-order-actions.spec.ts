@@ -57,7 +57,12 @@ const stock = (page: Page) =>
     STOCK_KEY,
   );
 
-const dialog = (page: Page) => page.getByRole('dialog');
+/**
+ * The action dialog. The order detail itself is a drawer (also `role="dialog"`, 2026-11-15), so the
+ * dialog is told apart by its `.adm-dialog` content.
+ */
+const dialog = (page: Page) =>
+  page.getByRole('dialog').filter({ has: page.locator('.adm-dialog') });
 const carrierIn = (page: Page) => page.locator('#desk-carrier');
 const trackingIn = (page: Page) => page.locator('#desk-tracking');
 const notice = (page: Page) => page.getByTestId('order-notice');
@@ -337,7 +342,7 @@ test.describe('lát 4.3: call attempts, confirm, cancel', () => {
     }
   });
 
-  test('AC-ADM-04: a 403 on a write shows the message, closes the dialog and keeps the order', async ({
+  test('AC-ADM-04, ADM-ORD-09: a 403 on a write keeps the dialog with the message and keeps the order', async ({
     page,
   }) => {
     await signIn(page, STAFF);
@@ -345,7 +350,10 @@ test.describe('lát 4.3: call attempts, confirm, cancel', () => {
     await flag(page, 'forbidden-once');
     await trigger(page, 'confirm').click();
     await submitIn(page, 'Xác nhận').click();
-    await expect(page.getByRole('alert')).toContainText('không có quyền thực hiện thao tác này');
+    // 2026-11-20 (ADM-ORD-09): no permission is not a stale order, so nothing is reloaded or closed.
+    await expect(dialog(page)).toContainText('không có quyền thực hiện thao tác này');
+    await expect(dialog(page)).toBeVisible();
+    await dialog(page).getByRole('button', { name: 'Đóng', exact: true }).click();
     await expect(dialog(page)).toHaveCount(0);
     await expect(page.getByText('Gọi khách xác nhận đơn COD')).toBeVisible();
   });
@@ -710,11 +718,12 @@ test.describe('lát 4.4: ship, deliver, returned stock', () => {
     await page.keyboard.press('Escape');
     await expect(dialog(page)).toHaveCount(0);
     await expect(button).toBeFocused();
-    await expect(page.locator('.notice-live')).toHaveAttribute('aria-live', 'polite');
     await button.click();
     await submitIn(page, 'Ghi nhận').click();
     await expect(notice(page)).toBeVisible();
     await expect(notice(page)).toHaveAttribute('role', 'status');
+    // The drawer adds the polite live region with the notice it announces.
+    await expect(page.locator('.notice-live')).toHaveAttribute('aria-live', 'polite');
     await expect(page.locator('.notice-live')).toBeFocused();
   });
 });
@@ -785,10 +794,15 @@ test.describe('lát 4.5: duyệt / từ chối yêu cầu huỷ', () => {
     await openOrder(page, REQUEST);
     await trigger(page, 'reject-cancel').click();
     await expect(dialog(page)).toContainText('Khách sẽ thấy lý do này');
-    for (const bad of ['', 'abcd', 'x'.repeat(251)]) {
+    // ADM-ORD-05 (2026-11-20): missing, too short and too long each say what is wrong.
+    for (const [bad, message] of [
+      ['', 'Nhập lý do từ chối yêu cầu huỷ'],
+      ['abcd', 'Lý do quá ngắn: cần ít nhất 5 ký tự (đang có 4).'],
+      ['x'.repeat(251), 'Lý do quá dài: tối đa 250 ký tự (đang có 251).'],
+    ] as const) {
       await reasonIn(page).fill(bad);
       await submitIn(page, 'Từ chối huỷ').click();
-      await expect(dialog(page).getByText('Nhập lý do từ 5 đến 250 ký tự.')).toBeVisible();
+      await expect(dialog(page).getByText(message)).toBeVisible();
     }
     expect(await calls(page)).toHaveLength(0);
     await reasonIn(page).fill('Đơn đã đóng gói xong, sắp bàn giao');

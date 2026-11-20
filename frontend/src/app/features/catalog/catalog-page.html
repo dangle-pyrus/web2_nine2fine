@@ -31,7 +31,7 @@
           [ngModel]="query().sort"
           (ngModelChange)="update('sort', $event)"
         >
-          @for (sort of sorts; track sort.value) {
+          @for (sort of sorts(); track sort.value) {
           <option [value]="sort.value">{{ sort.label }}</option>
           }
         </select>
@@ -71,11 +71,6 @@
         (filtersChanged)="update($event.key, $event.value)"
         (filtersCleared)="clear()"
       />
-      <div class="sidebar-note">
-        <span>09:00 — 21:00</span>
-        <p>One wardrobe.<br />More possibilities.</p>
-        <span>FROM NINE TO FINE.</span>
-      </div>
     </aside>
     <div class="catalog-results" [attr.aria-busy]="result().status === 'loading'">
       @if (query().q) {

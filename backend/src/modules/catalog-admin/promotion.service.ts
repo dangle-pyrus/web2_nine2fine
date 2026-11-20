@@ -41,6 +41,7 @@ interface Locked {
   used_count: number;
   is_active: boolean;
   starts_at: Date | null;
+  ends_at: Date | null;
   version_ms: number;
 }
 
@@ -48,7 +49,7 @@ interface Locked {
 async function lockVoucher(tx: Db, id: string): Promise<Locked> {
   if (!UUID_RE.test(id)) throw Errors.notFound('Không tìm thấy khuyến mãi.');
   const rows = await tx.$queryRaw<Locked[]>(Prisma.sql`
-    SELECT code, kind::text AS kind, value, max_discount, used_count, is_active, starts_at,
+    SELECT code, kind::text AS kind, value, max_discount, used_count, is_active, starts_at, ends_at,
            floor(extract(epoch FROM COALESCE(admin_updated_at, created_at)) * 1000)::float8 AS version_ms
     FROM vouchers WHERE voucher_id = ${id}::uuid FOR UPDATE`);
   if (!rows[0]) throw Errors.notFound('Không tìm thấy khuyến mãi.');
@@ -131,6 +132,11 @@ export async function updatePromotion(actor: Actor, id: string, input: Promotion
     const effectiveStart = startsAt === undefined ? cur.starts_at : startsAt;
     if (input.endsAt && effectiveStart && input.endsAt.getTime() <= effectiveStart.getTime()) {
       throw Errors.validation('Thời điểm kết thúc phải sau thời điểm bắt đầu.', 'endsAt');
+    }
+    // ADM-PROMO-07: một thời điểm kết thúc MỚI phải sau bây giờ. Giữ nguyên ngày đã qua (sửa tên mã hết hạn) vẫn được.
+    const endChanged = input.endsAt !== undefined && (input.endsAt?.getTime() ?? null) !== (cur.ends_at?.getTime() ?? null);
+    if (endChanged && input.endsAt && input.endsAt.getTime() <= at.getTime()) {
+      throw Errors.validation('Thời điểm kết thúc phải sau bây giờ.', 'endsAt');
     }
     const categoryId = input.categories === undefined ? undefined : await categoryIdOf(tx, input.categories);
 

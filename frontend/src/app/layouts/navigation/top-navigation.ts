@@ -26,7 +26,6 @@ export const TOP_NAVIGATION: TopNavItem[] = [
   { id: 'new', label: 'Sản phẩm mới', path: '/new-in' },
   { id: 'nu', label: 'Nữ', path: '/shop/nu' },
   { id: 'nam', label: 'Nam', path: '/shop/nam' },
-  { id: 'moments', label: 'Khoảnh khắc', path: '/shop-by-moment/work', menuOnly: true },
 ];
 
 /** Nike-style utility bar; only routes that exist today. Wishlist is a heart icon in the main bar. */

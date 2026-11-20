@@ -177,9 +177,10 @@ function withRefund(
 ): OrderEvent[] {
   const refund = order.refund;
   if (!refund) return events;
-  const at = refund.refundedAt ?? refund.expectedBy;
-  if (Date.parse(at) <= now) {
-    events.push({ at, title: 'Đã hoàn tiền', detail: refund.destination });
+  // ORD-CC-06: only a confirmed refund (`refundedAt`) reads as refunded.
+  const at = refund.refundedAt;
+  if (at && Date.parse(at) <= now) {
+    events.push({ at, title: 'Đã hoàn tiền', detail: refund.destination, actor: 'nine2fine' });
   } else {
     events.push({
       at: new Date(now - HOUR).toISOString(),

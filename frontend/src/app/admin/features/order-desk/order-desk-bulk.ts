@@ -1,7 +1,7 @@
 import { DIALOG_DATA, DialogRef } from '@angular/cdk/dialog';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { concatMap, from, Observable, of, catchError, map, finalize } from 'rxjs';
+import { concatMap, from, Observable, of, catchError, map, finalize, switchMap } from 'rxjs';
 import { AdminApiError } from '../../data-access/models';
 import { ADMIN_ORDER_DESK_API } from '../../data-access/order-desk-api';
 import {
@@ -30,7 +30,13 @@ export interface BulkShipResult {
   failed: number;
 }
 
-type RowState = { status: 'idle' | 'busy' | 'done' } | { status: 'failed'; message: string };
+/**
+ * `uncertain`: the answer was lost (network, 5xx, 429), so the order may have been handed over
+ * already. The next try re-reads it before sending anything (ADM-ORD-19).
+ */
+type RowState =
+  | { status: 'idle' | 'busy' | 'done' }
+  | { status: 'failed'; message: string; uncertain?: boolean };
 
 /**
  * ADM-ORD-19: hand over several `to_ship` orders at once. One carrier for the batch, one tracking
@@ -68,6 +74,24 @@ type RowState = { status: 'idle' | 'busy' | 'done' } | { status: 'failed'; messa
             }
           </datalist>
           @if (carrierError(); as message) {
+            <p class="error">{{ message }}</p>
+          }
+        </div>
+        <!-- ADM-ORD-04: one expected delivery date for the batch. -->
+        <div class="field">
+          <label for="bulk-eta" class="req">Ngày giao dự kiến</label>
+          <input
+            id="bulk-eta"
+            class="input"
+            type="date"
+            name="estimatedDeliveryDate"
+            [min]="today"
+            [ngModel]="eta()"
+            (ngModelChange)="eta.set($event)"
+            [disabled]="busy()"
+            [attr.aria-invalid]="!!etaError()"
+          />
+          @if (etaError(); as message) {
             <p class="error">{{ message }}</p>
           }
         </div>
@@ -151,12 +175,25 @@ export class BulkShipDialog {
   protected readonly max = DESK_TRACKING_MAX;
 
   protected readonly carrier = signal('');
+  /** Today in giờ VN (`YYYY-MM-DD`). */
+  protected readonly today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+  }).format(new Date());
+  /** Starts two days out, like a standard domestic delivery. */
+  protected readonly eta = signal(
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(
+      new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+    ),
+  );
+  protected readonly etaError = signal('');
   protected readonly tracking = signal<string[]>(this.orders.map(() => ''));
   protected readonly rows = signal<RowState[]>(this.orders.map(() => ({ status: 'idle' })));
   protected readonly busy = signal(false);
   protected readonly carrierError = signal('');
   protected readonly trackingErrors = signal<string[]>(this.orders.map(() => ''));
   private readonly keys = this.orders.map(() => newKey());
+  /** Carrier + tracking last sent for each row, to tell a replay from a changed body. */
+  private readonly sentBodies: string[] = this.orders.map(() => '');
 
   protected readonly pending = computed(
     () => this.rows().filter((row) => row.status !== 'done').length,
@@ -200,24 +237,81 @@ export class BulkShipDialog {
   }
 
   private shipOne(order: DeskOrderSummary, index: number, carrier: string): Observable<void> {
+    const before = this.rows()[index];
     this.setRow(index, { status: 'busy' });
     const trackingNumber = this.tracking()[index].trim();
+    // ADM-ORD-19: after a lost answer, look at the order first; never hand it over twice.
+    if (before.status === 'failed' && before.uncertain) {
+      return this.api.get(order.id).pipe(
+        switchMap((fresh) => {
+          if (fresh.status === 'to_ship' && fresh.allowedActions.includes('ship')) {
+            return this.sendShip(order, index, carrier, trackingNumber);
+          }
+          if (fresh.status === 'to_receive' && fresh.shipment) {
+            this.setRow(index, { status: 'done' });
+          } else {
+            this.setRow(index, {
+              status: 'failed',
+              message: 'Đơn đã đổi trạng thái trong lúc mất kết nối; không gửi lại.',
+            });
+          }
+          return of(undefined);
+        }),
+        catchError((error: unknown) => {
+          this.setRow(index, {
+            status: 'failed',
+            message: isUncertain(error)
+              ? 'Vẫn chưa kết nối được máy chủ để kiểm tra đơn. Bấm lại để thử.'
+              : shipRefusal((error as AdminApiError).code, (error as AdminApiError).message),
+            uncertain: isUncertain(error),
+          });
+          return of(undefined);
+        }),
+      );
+    }
+    return this.sendShip(order, index, carrier, trackingNumber);
+  }
+
+  private sendShip(
+    order: DeskOrderSummary,
+    index: number,
+    carrier: string,
+    trackingNumber: string,
+  ): Observable<void> {
+    // A key belongs to one body: edited input after a lost answer (the order was just checked and
+    // is still waiting) is a new intention with a new key.
+    const estimatedDeliveryDate = this.eta();
+    const body = `${carrier}\n${trackingNumber}\n${estimatedDeliveryDate}`;
+    if (this.sentBodies[index] && this.sentBodies[index] !== body) this.keys[index] = newKey();
+    this.sentBodies[index] = body;
     return this.api
       .perform(
         order.id,
-        { action: 'ship', expectedStatus: 'to_ship', carrier, trackingNumber },
+        {
+          action: 'ship',
+          expectedStatus: 'to_ship',
+          carrier,
+          trackingNumber,
+          estimatedDeliveryDate,
+        },
         this.keys[index],
       )
       .pipe(
         map(() => this.setRow(index, { status: 'done' })),
         catchError((error: unknown) => {
-          // A refused body needs a new key when it is sent again with other content.
-          this.keys[index] = newKey();
-          const message =
-            error instanceof AdminApiError
+          const uncertain = isUncertain(error);
+          // A lost answer keeps its key (the same intention, replayed safely); a refused body gets
+          // a new one, since it is sent again with other content.
+          if (!uncertain) {
+            this.keys[index] = newKey();
+            this.sentBodies[index] = '';
+          }
+          const message = uncertain
+            ? 'Không kết nối được máy chủ nên chưa biết đơn đã bàn giao chưa. Bấm lại: đơn sẽ được kiểm tra trước, không gửi trùng.'
+            : error instanceof AdminApiError
               ? (Object.values(error.fields)[0] ?? shipRefusal(error.code, error.message))
-              : 'Không kết nối được máy chủ.';
-          this.setRow(index, { status: 'failed', message });
+              : 'Chưa bàn giao được đơn này.';
+          this.setRow(index, { status: 'failed', message, uncertain });
           return of(undefined);
         }),
       );
@@ -247,8 +341,22 @@ export class BulkShipDialog {
       return '';
     });
     this.trackingErrors.set(errors);
-    return !this.carrierError() && errors.every((error) => !error);
+    const eta = this.eta();
+    this.etaError.set(
+      !/^\d{4}-\d{2}-\d{2}$/.test(eta)
+        ? 'Chọn ngày giao dự kiến.'
+        : eta < this.today
+          ? 'Ngày giao dự kiến không được trước hôm nay.'
+          : '',
+    );
+    return !this.carrierError() && !this.etaError() && errors.every((error) => !error);
   }
+}
+
+/** No usable answer from the server: the write may or may not have happened. */
+function isUncertain(error: unknown): boolean {
+  if (!(error instanceof AdminApiError)) return true;
+  return error.code === 'unavailable' || error.code === 'rate-limited';
 }
 
 function shipRefusal(code: string, message: string): string {
@@ -284,7 +392,7 @@ export interface ExportDialogData {
       class="dialog"
       role="group"
       aria-labelledby="export-title"
-      (ngSubmit)="ref.close(scope())"
+      (ngSubmit)="rowCount() && ref.close(scope())"
     >
       <h2 id="export-title">Xuất danh sách đơn (CSV)</h2>
       <div class="dialog-body">
@@ -295,6 +403,7 @@ export interface ExportDialogData {
               type="radio"
               name="scope"
               value="page"
+              [disabled]="!data.pageCount"
               [checked]="scope() === 'page'"
               (change)="scope.set('page')"
             />
@@ -316,6 +425,7 @@ export interface ExportDialogData {
               type="radio"
               name="scope"
               value="all"
+              [disabled]="!data.matchingCount"
               [checked]="scope() === 'all'"
               (change)="scope.set('all')"
             />
@@ -326,11 +436,16 @@ export interface ExportDialogData {
             >
           </label>
         </fieldset>
+        @if (!rowCount()) {
+          <p class="hint" role="alert">Phạm vi này không có đơn nào để xuất.</p>
+        }
         <p class="hint">Tệp UTF-8, mở được bằng Excel; tên tệp theo ngày xuất.</p>
       </div>
       <div class="dialog-actions">
         <button type="button" class="adm-btn" (click)="ref.close()">Đóng</button>
-        <button type="submit" class="adm-btn adm-btn--primary">Xuất CSV</button>
+        <button type="submit" class="adm-btn adm-btn--primary" [disabled]="!rowCount()">
+          Xuất CSV
+        </button>
       </div>
     </form>
   `,
@@ -347,5 +462,17 @@ export interface ExportDialogData {
 export class ExportDialog {
   protected readonly ref = inject<DialogRef<ExportScope>>(DialogRef);
   protected readonly data = inject<ExportDialogData>(DIALOG_DATA);
-  protected readonly scope = signal<ExportScope>(this.data.selectedCount ? 'selected' : 'page');
+  /** Starts on a scope that has rows: ticked orders, else this page, else every match. */
+  protected readonly scope = signal<ExportScope>(
+    this.data.selectedCount ? 'selected' : this.data.pageCount ? 'page' : 'all',
+  );
+  /** Rows the chosen scope holds; 0 blocks the export (an empty list must never mean "all"). */
+  protected readonly rowCount = computed(() => {
+    const scope = this.scope();
+    return scope === 'page'
+      ? this.data.pageCount
+      : scope === 'selected'
+        ? this.data.selectedCount
+        : this.data.matchingCount;
+  });
 }

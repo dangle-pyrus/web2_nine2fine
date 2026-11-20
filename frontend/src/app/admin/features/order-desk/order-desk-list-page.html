@@ -102,7 +102,16 @@
   </form>
   @if (filtered()) {
   <div class="chips filter-chips" aria-label="Bộ lọc đang áp dụng">
-    @if (query().q) {
+    @if (late()) {
+    <span class="chip" data-testid="late-filter"
+      >Chỉ đơn giao trễ<button
+        type="button"
+        aria-label="Bỏ lọc giao trễ"
+        (click)="update({}, { late: false })"
+      >
+        <adm-icon name="reiconX" [size]="12" /></button
+    ></span>
+    } @if (query().q) {
     <span class="chip"
       >Tìm: “{{ query().q }}”<button
         type="button"
@@ -133,8 +142,9 @@
     <button type="button" class="link small" (click)="clearFilters()">Xóa bộ lọc</button>
   </div>
   } @if (rangeInvalid()) {
+  <!-- ADM-ORD-01/02: no request with this range, so no list or counts either. -->
   <p class="small" role="alert">Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.</p>
-  } @if (view.state().error && !page()) {
+  } @else if (view.state().error && !page()) {
   <adm-empty
     kind="error"
     heading="Không tải được danh sách đơn hàng"

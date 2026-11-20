@@ -10,7 +10,17 @@ import {
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
+import {
+  catchError,
+  debounceTime,
+  distinctUntilChanged,
+  EMPTY,
+  map,
+  Observable,
+  of,
+  switchMap,
+  tap,
+} from 'rxjs';
 import { DateTimePipe, MoneyPipe, NumPipe } from '../../core/format.pipes';
 import {
   DESK_PAYMENT_METHODS,
@@ -44,6 +54,7 @@ import {
   DESK_LIMITS,
   DESK_MAX_SEARCH,
   DESK_SORTS,
+  type DeskOrderPage,
   type DeskOrderSummary,
   type DeskSort,
   type DeskOrderCounts,
@@ -66,6 +77,11 @@ import { AdmPager } from '../../ui/pager';
 import { AdmSkeletonRows } from '../../ui/skeleton';
 
 const TAB_VALUES = DESK_TABS.map((tab) => tab.value);
+
+/** "Từ ngày" after "Đến ngày": the filter is shown as invalid and no request is made. */
+function invalidRange(query: { from: string; to: string }): boolean {
+  return !!query.from && !!query.to && query.from > query.to;
+}
 const SORT_VALUES = DESK_SORTS.map((sort) => sort.value);
 /** One-click button of a row: the first step the order's tab waits for (the server still decides). */
 const QUICK_ACTIONS: Partial<Record<DeskBucket, { action: DeskAction; label: string }>> = {
@@ -167,14 +183,26 @@ export class OrderDeskListPage {
     this.route.queryParamMap.pipe(map((params) => params.get('order') ?? '')),
     { requireSync: true },
   );
-  protected readonly view = loader(this.query, (query) => this.api.list(query));
+  /**
+   * DASH-05 `?late=1` ("Giao trễ" on Tổng quan): only "Đang vận chuyển" orders past their latest
+   * estimated delivery day, filtered and paged by the server (`GET /admin/orders?late=1`).
+   */
+  protected readonly late = toSignal(
+    this.route.queryParamMap.pipe(map((params) => params.get('late') === '1')),
+    { requireSync: true },
+  );
+  private readonly listQuery = computed(() => ({ ...this.query(), late: this.late() }));
+  /** ADM-ORD-01/02: a range that ends before it starts is never sent to the API. */
+  protected readonly view = loader(this.listQuery, ({ late, ...query }) =>
+    invalidRange(query) ? EMPTY : late ? this.listLate(query) : this.api.list(query),
+  );
   protected readonly page = this.view.data;
   protected readonly counts = signal<DeskOrderCounts | null>(null);
   protected readonly search = signal(this.query().q);
 
   protected readonly filtered = computed(() => {
     const query = this.query();
-    return !!(query.q || query.payment || query.from || query.to);
+    return !!(query.q || query.payment || query.from || query.to || this.late());
   });
   protected readonly ids = computed(() => this.page()?.items.map((order) => order.id) ?? []);
   protected readonly selectedOrders = computed(() =>
@@ -200,13 +228,12 @@ export class OrderDeskListPage {
   });
   protected readonly paymentLabel = (value: string) =>
     DESK_PAYMENT_METHODS.find((method) => method.value === value)?.label ?? value;
-  protected readonly rangeInvalid = computed(() => {
-    const { from, to } = this.query();
-    return !!from && !!to && from > to;
-  });
+  protected readonly rangeInvalid = computed(() => invalidRange(this.query()));
 
   constructor() {
     // Counts follow the same filters as the list but not the tab or the page (BR-ADM-07).
+    // ADM-ORD-01/02: they are cleared at once when the filters change (never old numbers next to
+    // a new list), and not asked for at all while the date range is invalid.
     const filter = computed(() => {
       const { q, payment, from, to } = this.query();
       return { q, payment, from, to };
@@ -214,7 +241,10 @@ export class OrderDeskListPage {
     toObservable(filter)
       .pipe(
         distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
-        switchMap((value) => this.api.counts(value).pipe(catchError(() => of(null)))),
+        tap(() => this.counts.set(null)),
+        switchMap((value) =>
+          invalidRange(value) ? of(null) : this.api.counts(value).pipe(catchError(() => of(null))),
+        ),
         takeUntilDestroyed(),
       )
       .subscribe((counts) => this.counts.set(counts));
@@ -235,7 +265,12 @@ export class OrderDeskListPage {
   setTab(view: DeskTab): void {
     // ADM-ORD-19: a new tab starts with nothing selected.
     this.selection.clear();
-    this.update({ view });
+    this.update({ view }, { late: false });
+  }
+
+  /** DASH-05: the server filters "Đang vận chuyển" down to the late orders (`late=1`) and pages them. */
+  private listLate(query: DeskOrderQuery): Observable<DeskOrderPage> {
+    return this.api.list({ ...query, view: 'in-transit', late: true });
   }
 
   setRangeChoice(value: string): void {
@@ -331,6 +366,11 @@ export class OrderDeskListPage {
             : scope === 'selected'
               ? [...this.selection.ids()]
               : undefined;
+        // ADM-ORD-18: "Trang hiện tại" / "Đơn đã chọn" with no rows must not export everything.
+        if (codes && !codes.length) {
+          this.toast.error('Không có đơn nào trong phạm vi đã chọn để xuất.');
+          return;
+        }
         this.exporting.set(true);
         this.api.exportCsv({ q, payment, from, to, view, sort, codes }).subscribe({
           next: ({ blob, filename }) => {
@@ -350,14 +390,16 @@ export class OrderDeskListPage {
       });
   }
 
-  update(patch: Partial<DeskOrderQuery>): void {
+  update(patch: Partial<DeskOrderQuery>, options: { late?: boolean } = {}): void {
     const next = { ...this.query(), ...patch };
     if (!('page' in patch)) next.page = 1;
+    const late = options.late ?? this.late();
     void this.router.navigate([], {
       relativeTo: this.route,
       replaceUrl: true,
       queryParams: {
-        view: next.view === 'all' ? null : next.view,
+        late: late ? 1 : null,
+        view: late ? 'in-transit' : next.view === 'all' ? null : next.view,
         q: next.q || null,
         payment: next.payment || null,
         from: next.from || null,
@@ -378,12 +420,14 @@ export class OrderDeskListPage {
     this.search.set('');
     this.selection.clear();
     this.customRange.set(false);
-    this.update({ q: '', payment: '', from: '', to: '', view: 'all' });
+    this.update({ q: '', payment: '', from: '', to: '', view: 'all' }, { late: false });
   }
 
   retry(): void {
+    if (this.rangeInvalid()) return;
     this.view.reload();
-    this.api.counts(this.query()).subscribe({
+    const { q, payment, from, to } = this.query();
+    this.api.counts({ q, payment, from, to }).subscribe({
       next: (counts) => this.counts.set(counts),
       error: () => undefined,
     });

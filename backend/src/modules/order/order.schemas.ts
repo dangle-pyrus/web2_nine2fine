@@ -135,4 +135,16 @@ export const listQuerySchema = z.object({
     .min(1, { error: 'Số đơn mỗi trang không hợp lệ.' })
     .max(50, { error: 'Số đơn mỗi trang không hợp lệ.' })
     .default(10),
+  /** ORD-02 (2026-11-20): tab Lịch sử mua hàng; vắng hoặc rỗng = tất cả. */
+  status: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.enum(['pending-payment', 'processing', 'shipping', 'completed', 'cancelled'], { error: 'Tab đơn hàng không hợp lệ.' }).optional(),
+  ),
+  /** ORD-04: tìm theo mã đơn hoặc tên sản phẩm (trim, <= 100 ký tự). */
+  q: z
+    .string({ error: 'Từ khoá tìm kiếm không hợp lệ.' })
+    .transform((v) => v.trim())
+    .refine((v) => v.length <= 100, { error: 'Từ khoá tìm kiếm tối đa 100 ký tự.' })
+    .optional(),
 });
+export type OrderListTab = 'pending-payment' | 'processing' | 'shipping' | 'completed' | 'cancelled';

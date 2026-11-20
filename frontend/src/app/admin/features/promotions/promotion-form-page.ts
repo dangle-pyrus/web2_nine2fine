@@ -215,25 +215,27 @@ function emptyPromotion(): PromotionInput {
                   id="pr-code"
                   class="input mono upper"
                   maxlength="20"
-                  [disabled]="locked()"
+                  [disabled]="!isNew() || locked()"
                   placeholder="VD: CHAOTHU10"
                   [value]="draft().code"
                   (input)="patch({ code: $any($event.target).value.toUpperCase() })"
                   (blur)="touch('code')"
                   [attr.aria-invalid]="!!showError('code')"
                 />
-                @if (!locked()) {
+                @if (isNew()) {
                   <button type="button" class="adm-btn" (click)="generate()">Tạo ngẫu nhiên</button>
                 }
               </div>
               @if (showError('code'); as error) {
                 <p class="error"><adm-icon name="reiconAlertCircle" [size]="14" /> {{ error }}</p>
               } @else {
-                <p class="hint">
+                <p class="hint" data-testid="code-hint">
                   {{
                     locked()
-                      ? 'Mã đã được dùng nên không đổi được loại, giá trị và giảm tối đa. Hãy tạo mã mới.'
-                      : 'Khách nhập mã này khi thanh toán.'
+                      ? 'Mã đã được dùng nên không đổi được mã, loại, giá trị và giảm tối đa. Hãy tạo mã mới.'
+                      : isNew()
+                        ? '4–20 ký tự A–Z, 0–9, tự chuyển chữ hoa. Không đổi được sau khi tạo.'
+                        : 'Mã không đổi được sau khi tạo. Khách nhập mã này khi thanh toán.'
                   }}
                 </p>
               }
@@ -287,10 +289,16 @@ function emptyPromotion(): PromotionInput {
                         [disabled]="locked()"
                         [value]="draft().maxDiscount ?? ''"
                         (input)="patch({ maxDiscount: num($any($event.target).value) || null })"
+                        (blur)="touch('maxDiscount')"
+                        [attr.aria-invalid]="!!showError('maxDiscount')"
                       />
                       <span class="suffix">₫</span>
                     </div>
-                    <p class="hint">Để trống nếu không giới hạn.</p>
+                    @if (showError('maxDiscount'); as error) {
+                      <p class="error">{{ error }}</p>
+                    } @else {
+                      <p class="hint">1.000–10.000.000 ₫, để trống nếu không giới hạn.</p>
+                    }
                   </div>
                 }
               </div>
@@ -308,12 +316,18 @@ function emptyPromotion(): PromotionInput {
                   type="number"
                   min="0"
                   step="1000"
+                  max="100000000"
                   [value]="draft().minSubtotal || ''"
                   placeholder="0"
                   (input)="patch({ minSubtotal: num($any($event.target).value) ?? 0 })"
+                  (blur)="touch('minSubtotal')"
+                  [attr.aria-invalid]="!!showError('minSubtotal')"
                 />
                 <span class="suffix">₫</span>
               </div>
+              @if (showError('minSubtotal'); as error) {
+                <p class="error">{{ error }}</p>
+              }
             </div>
             @if (contract) {
               <div class="field">
@@ -390,13 +404,22 @@ function emptyPromotion(): PromotionInput {
                   class="input"
                   type="number"
                   min="1"
+                  max="1000000"
                   placeholder="Không giới hạn"
                   [value]="draft().usageLimit ?? ''"
                   (input)="patch({ usageLimit: num($any($event.target).value) || null })"
+                  (blur)="touch('usageLimit')"
                   [attr.aria-invalid]="!!showError('usageLimit')"
                 />
                 @if (showError('usageLimit'); as error) {
                   <p class="error">{{ error }}</p>
+                } @else {
+                  <p class="hint">
+                    1–1.000.000 lượt, để trống nếu không giới hạn.
+                    @if (saved()?.used) {
+                      Đã dùng {{ saved()!.used }} lượt.
+                    }
+                  </p>
                 }
               </div>
               <div class="field">
@@ -406,9 +429,17 @@ function emptyPromotion(): PromotionInput {
                   class="input"
                   type="number"
                   min="1"
+                  max="10"
                   [value]="draft().perCustomerLimit"
                   (input)="patch({ perCustomerLimit: num($any($event.target).value) || 1 })"
+                  (blur)="touch('perCustomerLimit')"
+                  [attr.aria-invalid]="!!showError('perCustomerLimit')"
                 />
+                @if (showError('perCustomerLimit'); as error) {
+                  <p class="error">{{ error }}</p>
+                } @else {
+                  <p class="hint">1–10 lần, mặc định 1.</p>
+                }
               </div>
             </div>
           </section>
@@ -797,6 +828,7 @@ export class PromotionFormPage implements HasUnsavedChanges {
   protected readonly types = TYPES;
   protected readonly categoryList = inject(AdminCategories);
   protected readonly categories = this.categoryList.items;
+  /** ADM-PROMO-06: only "Mọi khách" and "Chỉ thành viên"; tiers / named customers / private are not built. */
   protected readonly audiences = this.contract ? API_AUDIENCES : AUDIENCES;
   protected readonly tierOptions = TIERS;
   protected readonly tierBadge = tierBadge;
@@ -855,10 +887,21 @@ export class PromotionFormPage implements HasUnsavedChanges {
         !(draft.maxDiscount >= 1000 && draft.maxDiscount <= 10_000_000)
       )
         errors['maxDiscount'] = 'Giảm tối đa từ 1.000 đến 10.000.000 ₫.';
-      if (draft.usageLimit !== null && draft.usageLimit > 1_000_000)
-        errors['usageLimit'] = 'Tổng lượt tối đa 1.000.000.';
-      if (draft.perCustomerLimit > 10) errors['perCustomerLimit'] = 'Mỗi khách tối đa 10 lần.';
+      if (draft.usageLimit !== null && !(draft.usageLimit >= 1 && draft.usageLimit <= 1_000_000))
+        errors['usageLimit'] = 'Tổng lượt từ 1 đến 1.000.000, hoặc để trống.';
+      // ADM-PROMO-05: never below what was already used.
+      const used = this.saved()?.used ?? 0;
+      if (draft.usageLimit !== null && draft.usageLimit < used)
+        errors['usageLimit'] = `Tổng lượt không được thấp hơn ${used} lượt đã dùng.`;
+      if (!(draft.perCustomerLimit >= 1 && draft.perCustomerLimit <= 10))
+        errors['perCustomerLimit'] = 'Mỗi khách dùng từ 1 đến 10 lần.';
+      if (!(draft.minSubtotal >= 0 && draft.minSubtotal <= 100_000_000))
+        errors['minSubtotal'] = 'Đơn tối thiểu từ 0 đến 100.000.000 ₫.';
       if (draft.title.length > 100) errors['title'] = 'Tên chương trình tối đa 100 ký tự.';
+      // ADM-PROMO-07: an end, when set (or changed), must be later than now.
+      const endChanged = draft.endsAt !== (this.saved()?.endsAt ?? null);
+      if (draft.endsAt && (this.isNew() || endChanged) && Date.parse(draft.endsAt) <= Date.now())
+        errors['endsAt'] = 'Ngày kết thúc phải sau thời điểm hiện tại.';
     } else {
       if (!/^[A-Z0-9_-]{3,20}$/.test(draft.code.trim()))
         errors['code'] ??= 'Mã gồm 3–20 ký tự: chữ không dấu, số, gạch ngang.';
@@ -1031,7 +1074,16 @@ export class PromotionFormPage implements HasUnsavedChanges {
   }
 
   save(): void {
-    this.touched.set({ code: true, value: true, endsAt: true, audience: true, usageLimit: true });
+    this.touched.set({
+      code: true,
+      value: true,
+      maxDiscount: true,
+      minSubtotal: true,
+      endsAt: true,
+      audience: true,
+      usageLimit: true,
+      perCustomerLimit: true,
+    });
     const local = { ...this.errors() };
     for (const key of Object.keys(this.serverErrors())) delete local[key];
     if (Object.keys(local).length) {

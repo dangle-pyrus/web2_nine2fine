@@ -118,10 +118,8 @@ test('orders: status tabs in URL, cancel pending order, detail progress', async 
   await tabs.getByRole('link', { name: /Chờ thanh toán/ }).click();
   await cards.filter({ hasText: 'N2F261002001' }).getByRole('button', { name: 'Hủy đơn' }).click();
   const dialog = page.getByRole('dialog', { name: 'Hủy đơn hàng?' });
-  // COMMON-01.5: a reason from the list is required.
-  await dialog.getByRole('button', { name: 'Hủy đơn' }).click();
-  await expect(dialog.getByText('Vui lòng chọn lý do huỷ đơn.')).toBeVisible();
-  await dialog.getByRole('radio', { name: 'Tôi không còn nhu cầu mua nữa' }).check();
+  // ORD-CC-01: an unpaid (`to_pay`) order cancels on confirmation alone; the reason is optional.
+  await expect(dialog.getByText('(không bắt buộc)', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Hủy đơn' }).click();
   await expect(page.getByRole('status').filter({ hasText: /Đã hủy đơn/ })).toBeVisible();
   await expect(cards).toHaveCount(pending - 1);

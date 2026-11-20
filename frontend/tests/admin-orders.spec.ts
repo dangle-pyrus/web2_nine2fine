@@ -167,22 +167,25 @@ test.describe('admin orders desk (contract mock)', () => {
   }) => {
     await signIn(page);
     await page.goto('/admin/orders/n2f2611081801');
-    await expect(page.getByRole('heading', { name: '#N2F2611081801' })).toBeVisible();
-    await expect(page.getByText('Áo blazer dáng suông')).toBeVisible();
-    await expect(page.getByText('BLZ-DEN-S')).toBeVisible();
-    await expect(page.getByText(/2\.580\.000/).first()).toBeVisible();
-    await expect(page.getByText('12 Nguyễn Huệ')).toBeVisible();
-    await expect(page.getByText('Giao giờ hành chính')).toBeVisible();
-    await expect(page.getByText('0912345678').first()).toBeVisible();
-    await expect(page.getByText('a@x.vn')).toBeVisible();
-    await expect(page.getByText('Gọi khách xác nhận đơn COD')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Ghi không liên lạc được' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Bàn giao vận chuyển' })).toHaveCount(0);
+    // The detail opens in a drawer over the list (2026-11-15): read it inside the drawer, the list
+    // row behind repeats the product name and phone.
+    const detail = page.getByRole('dialog');
+    await expect(detail.getByRole('heading', { name: '#N2F2611081801' })).toBeVisible();
+    // The compact drawer shows the line (name, colour / size) without its SKU.
+    await expect(detail.getByText('Áo blazer dáng suông')).toBeVisible();
+    await expect(detail.getByText(/2\.580\.000/).first()).toBeVisible();
+    await expect(detail.getByText('12 Nguyễn Huệ')).toBeVisible();
+    await expect(detail.getByText('Giao giờ hành chính')).toBeVisible();
+    await expect(detail.getByText('0912345678').first()).toBeVisible();
+    await expect(detail.getByText('a@x.vn')).toBeVisible();
+    await expect(detail.getByText('Gọi khách xác nhận đơn COD')).toBeVisible();
+    await expect(detail.getByRole('button', { name: 'Ghi không liên lạc được' })).toBeVisible();
+    await expect(detail.getByRole('button', { name: 'Bàn giao vận chuyển' })).toHaveCount(0);
     await page.goto('/admin/orders/%23N2F2611081801');
     await expect(page.getByRole('heading', { name: '#N2F2611081801' })).toBeVisible();
     await page.goto('/admin/orders/N2F0000000000');
     await expect(
-      page.getByRole('heading', { name: 'Không tìm thấy đơn hàng' }).first(),
+      page.getByRole('dialog').getByText('Mã đơn không tồn tại hoặc sai dạng.'),
     ).toBeVisible();
   });
 
@@ -221,16 +224,23 @@ test.describe('admin orders desk states', () => {
     await signIn(page);
     await page.evaluate((key) => localStorage.setItem(key, 'detail-once'), FAIL_KEY);
     await page.getByRole('link', { name: /N2F2611081801/ }).click();
-    await expect(page.getByRole('heading', { name: 'Không tải được đơn hàng' })).toBeVisible();
-    await page.getByRole('button', { name: 'Thử lại' }).click();
-    await expect(page.getByRole('heading', { name: '#N2F2611081801' })).toBeVisible();
+    // The drawer keeps its header and shows the failure with a retry.
+    const detail = page.getByRole('dialog');
+    await expect(detail.getByRole('alert')).toBeVisible();
+    await detail.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(detail.getByText('Áo blazer dáng suông')).toBeVisible();
+    await expect(detail.getByRole('alert')).toHaveCount(0);
   });
 
   test('loading skeleton shows before the first page', async ({ page }) => {
     await useDesk(page);
     await signIn(page);
+    // The mock answers after a short delay; a paused clock holds the first load on screen so the
+    // skeleton is checked every run, not only on a slow machine.
+    await page.clock.install();
     await page.goto('/admin/orders?view=completed');
     await expect(page.locator('tbody tr[aria-hidden="true"]').first()).toBeVisible();
+    await page.clock.runFor(2_000);
     await expect(rows(page)).toHaveCount(20);
   });
 });

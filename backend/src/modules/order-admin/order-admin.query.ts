@@ -3,7 +3,8 @@ import prisma from '../../config/prisma';
 import { foldCol } from '../../lib/sql-fold';
 import { foldVi } from '../../lib/text';
 import { Db, ts } from '../../lib/sql';
-import { vnDayRange } from '../../lib/vn-time';
+import { now as clockNow } from '../../lib/clock';
+import { vnDateISO, vnDayRange } from '../../lib/vn-time';
 import type { AdminBucket, AdminOrderSort, AdminTab, OrderFilter as PublicOrderFilter } from './order-admin.schemas';
 
 /** Nội bộ: thêm `userId` (Slice 7, đơn của một khách); contract admin-orders không đổi. */
@@ -97,12 +98,16 @@ const ORDER_BY: Record<AdminOrderSort, Prisma.Sql> = {
   'code-asc': Prisma.sql`o."code" ASC`,
 };
 
+/** DASH-05: đơn đang giao đã quá ngày giao dự kiến muộn nhất (cùng định nghĩa `todo.lateDelivery` của Tổng quan và cờ `overdue: delivery`). */
+const LATE_SQL = (at: Date) => Prisma.sql`(o."status" = 'to_receive' AND o."estimated_to" < ${vnDateISO(at)}::date)`;
+
 export async function listOrders(
-  f: OrderFilter & { view: AdminTab; page: number; limit: number; sort?: AdminOrderSort; codes?: string[] },
+  f: OrderFilter & { view: AdminTab; page: number; limit: number; sort?: AdminOrderSort; codes?: string[]; late?: boolean },
   db: Db = prisma,
 ): Promise<{ rows: SummaryRow[]; total: number }> {
   const conds = filterConds(f);
   if (f.view !== 'all') conds.push(TAB_SQL[f.view]);
+  if (f.late) conds.push(LATE_SQL(clockNow()));
   if (f.codes) conds.push(f.codes.length ? Prisma.sql`o."code" IN (${Prisma.join(f.codes)})` : Prisma.sql`FALSE`);
   const where = whereOf(conds);
   const [rows, [cnt]] = await Promise.all([

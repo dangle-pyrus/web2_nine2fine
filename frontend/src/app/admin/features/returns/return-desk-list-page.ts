@@ -16,12 +16,14 @@ import type { BadgeSpec } from '../../core/status';
 import {
   ADMIN_RETURN_DESK_API,
   AdminReturnQuery,
+  AdminReturnSort,
   AdminReturnState,
   AdminReturnTab,
   RETURN_DEFAULT_LIMIT,
   RETURN_LIMITS,
   RETURN_MAX_SEARCH,
   RETURN_REASON_LABELS,
+  RETURN_SORTS,
   RETURN_SOURCE_LABELS,
   RETURN_STATE_LABELS,
   RETURN_TABS,
@@ -38,6 +40,7 @@ import { AdmSkeletonRows } from '../../ui/skeleton';
 import { ReturnDetailDrawer } from './return-detail-drawer';
 
 const TAB_VALUES = RETURN_TABS.map((tab) => tab.value);
+const SORT_VALUES = RETURN_SORTS.map((sort) => sort.value);
 const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
   requested: 'warning',
   approved: 'info',
@@ -109,8 +112,9 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
           [ngModel]="query().sort"
           (ngModelChange)="update({ sort: $event })"
         >
-          <option value="requestedAt">Mới nhất trước</option>
-          <option value="amount">Số tiền giảm dần</option>
+          @for (option of sorts; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
         </select>
         @if (query().q) {
           <button type="button" class="link small" (click)="clearSearch()">Xóa tìm kiếm</button>
@@ -155,12 +159,13 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
                 <th>Người nhận</th>
                 <th>Lý do</th>
                 <th>Trạng thái</th>
+                <th>Xử lý gần nhất</th>
                 <th class="num">Số SP</th>
                 <th class="num">Số tiền</th>
               </tr>
             </thead>
             @if (view.state().loading) {
-              <tbody [admSkeleton]="8" [columns]="7"></tbody>
+              <tbody [admSkeleton]="8" [columns]="8"></tbody>
             } @else {
               <tbody>
                 @for (row of page()?.items ?? []; track row.id) {
@@ -190,7 +195,33 @@ const TONES: Record<AdminReturnState, BadgeSpec['tone']> = {
                         {{ row.fault === 'shop' ? 'Lỗi của shop' : 'Lỗi của khách' }}
                       </div>
                     </td>
-                    <td><adm-badge [spec]="badge(row.state)" /></td>
+                    <td>
+                      <adm-badge [spec]="badge(row.state)" />
+                      @if (row.overdue) {
+                        <!-- ADM-RET-02: a warning only; nothing is approved or rejected by itself. -->
+                        <div class="cell-sub">
+                          <span
+                            class="chip chip--static"
+                            data-testid="return-overdue"
+                            title="Chờ duyệt quá 24 giờ"
+                            >Quá hạn xử lý</span
+                          >
+                        </div>
+                      }
+                    </td>
+                    <td data-label="Xử lý" class="secondary" data-testid="return-handled">
+                      @if (row.handledBy) {
+                        {{ row.handledBy.name }}
+                        <div class="cell-sub">
+                          {{ row.handledBy.role === 'admin' ? 'Quản trị viên' : 'Nhân viên' }}
+                          @if (row.handledAt) {
+                            · {{ row.handledAt | admDateTime }}
+                          }
+                        </div>
+                      } @else {
+                        —
+                      }
+                    </td>
                     <td class="num hide-sm">{{ row.itemCount | admNum }}</td>
                     <td class="num" data-label="Số tiền">{{ row.amount | admMoney }}</td>
                   </tr>
@@ -221,6 +252,7 @@ export class ReturnDeskListPage {
   private drawerRef: DialogRef<boolean> | null = null;
 
   protected readonly tabs = RETURN_TABS;
+  protected readonly sorts = RETURN_SORTS;
   protected readonly limits = RETURN_LIMITS;
   protected readonly maxSearch = RETURN_MAX_SEARCH;
   protected readonly reasons = RETURN_REASON_LABELS;
@@ -234,7 +266,9 @@ export class ReturnDeskListPage {
         return {
           state: TAB_VALUES.includes(state) ? state : 'all',
           q: params.get('q') ?? '',
-          sort: params.get('sort') === 'amount' ? 'amount' : 'requestedAt',
+          sort: SORT_VALUES.includes(params.get('sort') as AdminReturnSort)
+            ? (params.get('sort') as AdminReturnSort)
+            : 'requestedAt',
           page: Math.max(1, Math.floor(Number(params.get('page'))) || 1),
           limit: limit === 50 ? 50 : RETURN_DEFAULT_LIMIT,
         };

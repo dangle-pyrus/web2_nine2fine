@@ -58,7 +58,7 @@ export const routes: Routes = [
         path: 'shop',
         title: 'Shop | nine2fine',
         loadComponent: catalog,
-        data: { title: 'The everyday edit.' },
+        data: { title: 'Sản phẩm' },
       },
       {
         path: 'shop/nam',

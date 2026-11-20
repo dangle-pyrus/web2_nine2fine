@@ -1,18 +1,29 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { finalize, map, switchMap } from 'rxjs';
+import { catchError, distinctUntilChanged, finalize, map, of, switchMap, tap } from 'rxjs';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { API_CONFIG } from '../../../core/api-config';
 import { ORDERS_API, orderErrorMessage } from '../data-access/orders-api';
+import { isOrderStateChanged } from '../../checkout/checkout-api';
 import { Order } from '../../orders/order-models';
 import {
-  canBuyAgain,
-  canPay,
   cancelLabels,
   formatDate,
   formatDateTime,
+  isPaymentOverdue,
+  orderActions,
 } from '../../orders/order-status';
+import { injectNow } from '../../../shared/ui/now';
 import { canRequestReturn, returnDeadline, returnsEnabled } from '../../orders/order-returns';
 import { ReturnStatusSection } from '../../orders/return-status-section';
 import { ToastService } from '../../../shared/ui/toast';
@@ -45,11 +56,13 @@ import { OrderReceipt } from './order-receipt';
       @if (notice()) {
         <p class="notice" role="status">{{ notice() }}</p>
       }
+      <!-- ORD-06: same rule as the history card (orderActions); "Đã nhận hàng" only here. -->
+      @let can = actions();
       <n2f-order-view [order]="current">
-        @if (payable(current)) {
+        @if (can.pay) {
           <div class="actions" actions>
             <a class="pill" [routerLink]="['/payment', current.id]">Thanh toán ngay</a>
-            @if (current.canCancel) {
+            @if (can.cancel) {
               <button
                 type="button"
                 class="pill outline"
@@ -60,7 +73,7 @@ import { OrderReceipt } from './order-receipt';
               </button>
             }
           </div>
-        } @else if (current.canCancel) {
+        } @else if (can.cancel) {
           <div class="actions" actions>
             <button
               type="button"
@@ -71,7 +84,7 @@ import { OrderReceipt } from './order-receipt';
               {{ busy() ? labels(current).busy : labels(current).idle }}
             </button>
           </div>
-        } @else if (current.canConfirmReceived) {
+        } @else if (can.confirmReceived) {
           <div class="actions" actions>
             <button
               type="button"
@@ -86,7 +99,7 @@ import { OrderReceipt } from './order-receipt';
               Đơn sẽ tự chuyển sang Hoàn thành sau 7 ngày kể từ khi giao cho đơn vị vận chuyển.
             </p>
           </div>
-        } @else if (rebuyable(current)) {
+        } @else if (can.buyAgain) {
           <div class="actions" actions>
             @if (returnable(current)) {
               <a class="pill outline" [routerLink]="['/account/orders', current.id, 'return']"
@@ -205,17 +218,62 @@ export class OrderDetailPage {
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
 
+  /** Order code in the URL; answers for any other code are dropped (ORD-08). */
+  private currentId = '';
+  /** ORD-10: ticks while the page is open. */
+  private readonly now = injectNow();
+  /** ORD-06: the buttons this order offers, by the rule shared with the history card. */
+  readonly actions = computed(() => {
+    const order = this.order();
+    return order
+      ? orderActions(order, this.now())
+      : { pay: false, cancel: false, confirmReceived: false, track: false, buyAgain: false };
+  });
+  /** Order whose expired payment hold was already re-read, so it is fetched once only. */
+  private expiredReload = '';
+
   constructor() {
+    // ORD-10: when the transfer hold runs out on screen, re-read the order once; the server
+    // cancels it on read, so the page then shows the real outcome instead of a stale countdown.
+    effect(() => {
+      const order = this.order();
+      if (!order || !isPaymentOverdue(order, this.now())) return;
+      if (this.expiredReload === order.id) return;
+      this.expiredReload = order.id;
+      untracked(() => this.reload(order.id));
+    });
     inject(ActivatedRoute)
       .paramMap.pipe(
         map((params) => params.get('orderId') ?? ''),
-        switchMap((id) => this.api.get(id)),
+        distinctUntilChanged(),
+        tap((id) => {
+          // ORD-08: a new code never shows the previous order, even if its own request fails.
+          this.currentId = id;
+          this.order.set(null);
+          this.error.set('');
+          this.notice.set('');
+          this.busy.set(false);
+        }),
+        // ORD-07: "Đơn hàng của tôi" opens only the account's own orders, never a guest grant's.
+        switchMap((id) =>
+          this.api.getMine(id).pipe(
+            map((order) => ({ order, error: null as unknown })),
+            catchError((error: unknown) => of({ order: null, error })),
+          ),
+        ),
         takeUntilDestroyed(),
       )
-      .subscribe({
-        next: (order) => this.order.set(order),
-        error: (error: unknown) => this.error.set(orderErrorMessage(error)),
+      .subscribe(({ order, error }) => {
+        if (order) this.order.set(order);
+        else this.error.set(orderErrorMessage(error));
       });
+  }
+
+  /** Applies an answer only while it still belongs to the order in the URL. */
+  private show(order: Order): boolean {
+    if (order.id.toUpperCase() !== this.currentId.toUpperCase()) return false;
+    this.order.set(order);
+    return true;
   }
 
   date(iso: string): string {
@@ -224,14 +282,6 @@ export class OrderDetailPage {
 
   labels(order: Order): { idle: string; busy: string } {
     return cancelLabels(order);
-  }
-
-  payable(order: Order): boolean {
-    return canPay(order);
-  }
-
-  rebuyable(order: Order): boolean {
-    return canBuyAgain(order);
   }
 
   returnable(order: Order): boolean {
@@ -257,9 +307,9 @@ export class OrderDetailPage {
 
   reload(id: string): void {
     this.api
-      .get(id)
+      .getMine(id)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (fresh) => this.order.set(fresh), error: () => undefined });
+      .subscribe({ next: (fresh) => this.show(fresh), error: () => undefined });
   }
 
   received(order: Order): void {
@@ -275,7 +325,7 @@ export class OrderDetailPage {
       )
       .subscribe({
         next: (updated) => {
-          this.order.set(updated);
+          if (!this.show(updated)) return;
           this.error.set('');
           this.notice.set(`Cảm ơn bạn! Đơn #${updated.id} đã hoàn thành.`);
           this.toast.show({ title: 'Đã xác nhận nhận hàng', detail: `Đơn #${updated.id}` });
@@ -298,7 +348,7 @@ export class OrderDetailPage {
       )
       .subscribe({
         next: (updated) => {
-          this.order.set(updated);
+          if (!this.show(updated)) return;
           this.error.set('');
           if (updated.status === 'cancel-requested') {
             this.notice.set(
@@ -312,8 +362,8 @@ export class OrderDetailPage {
         },
         error: (error: unknown) => {
           this.error.set(orderErrorMessage(error));
-          // The order moved on (handed over, request already sent): show where it is now.
-          if ((error as { code?: string }).code === 'not-cancellable') this.reload(order.id);
+          // ORD-CC-04: the order moved on (handed over, request already sent): show where it is now.
+          if (isOrderStateChanged(error)) this.reload(order.id);
         },
       });
   }

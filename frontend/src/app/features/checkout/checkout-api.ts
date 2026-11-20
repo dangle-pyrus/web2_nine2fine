@@ -159,6 +159,7 @@ export type CheckoutErrorCode = Extract<
   | 'not-found'
   | 'not-cancellable'
   | 'invalid-transition'
+  | 'order-state-changed'
   | 'unauthenticated'
   | 'unavailable'
 >;
@@ -176,8 +177,20 @@ const CHECKOUT_ERROR_CODES: readonly string[] = [
   'not-found',
   'not-cancellable',
   'invalid-transition',
+  'order-state-changed',
   'unauthenticated',
 ];
+
+/**
+ * ORD-CC-04: the `409` answers meaning "the order moved on meanwhile" (handed over, already
+ * cancelled, a request already sent...). The screen says so and reads the order again.
+ */
+export function isOrderStateChanged(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code;
+  return (
+    code === 'not-cancellable' || code === 'invalid-transition' || code === 'order-state-changed'
+  );
+}
 
 export interface CheckoutErrorDetails {
   field?: string;

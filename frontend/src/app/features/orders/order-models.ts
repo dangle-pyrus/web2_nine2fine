@@ -57,10 +57,15 @@ export interface OrderRefund {
   amount: number;
   destination: string;
   reason: string;
-  /** ISO date the refund is expected to arrive. */
-  expectedBy: string;
-  /** ISO datetime the money was returned; absent while the refund is still processing. */
+  /** ISO date the refund is expected to arrive; absent when the server gives none. */
+  expectedBy?: string;
+  /**
+   * ISO datetime the money was returned. ORD-CC-06: set only once the server confirmed the refund
+   * (payment `refunded` / return `refunded`); a passed `expectedBy` never counts as refunded.
+   */
   refundedAt?: string;
+  /** The server confirmed the refund but sent no date. */
+  confirmed?: boolean;
   items?: number;
 }
 
@@ -196,9 +201,21 @@ export interface OrderEvent {
   at: string;
   title: string;
   detail?: string;
-  /** API orders (Slice 4): who acted; staff and system both read as `nine2fine`. */
-  actor?: 'customer' | 'nine2fine';
+  /**
+   * Who acted (ORD-09): `customer` = "Bạn", `nine2fine` = "Cửa hàng" (any staff member, never named),
+   * `system` = "Hệ thống" (automatic steps such as a payment hold running out).
+   */
+  actor?: OrderActor;
 }
+
+export type OrderActor = 'customer' | 'nine2fine' | 'system';
+
+/** ORD-09: the label shown for each actor; staff names are never shown to the shopper. */
+export const ORDER_ACTOR_LABEL: Record<OrderActor, string> = {
+  customer: 'Bạn',
+  nine2fine: 'Cửa hàng',
+  system: 'Hệ thống',
+};
 
 /** `cancelMode` of the API: cancel now (`to_pay`) or send a request the shop reviews (`to_ship`). */
 export type CancelMode = 'cancel' | 'request';

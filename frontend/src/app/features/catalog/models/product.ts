@@ -211,6 +211,7 @@ export const MOMENTS = [
   { value: 'weekend', label: 'Weekend' },
 ] as const;
 
+/** Every sort the URL accepts. `featured` is valid but not offered in the store menu. */
 export const SORT_OPTIONS = [
   { value: 'featured', label: 'Nổi bật' },
   { value: 'newest', label: 'Mới nhất' },

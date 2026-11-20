@@ -328,7 +328,10 @@ export class MockAdminOrderDeskApi implements AdminOrderDeskApi {
     const problem = this.check(query);
     if (problem) return fail(problem);
     const rows = sortDesk(
-      this.filtered(query).filter((order) => query.view === 'all' || order.tab === query.view),
+      this.filtered(query)
+        .filter((order) => query.view === 'all' || order.tab === query.view)
+        // DASH-05 `late=1`: in transit past the latest estimated delivery day.
+        .filter((order) => !query.late || summary(order).overdue.includes('delivery')),
       query.sort,
     );
     const start = (query.page - 1) * query.limit;

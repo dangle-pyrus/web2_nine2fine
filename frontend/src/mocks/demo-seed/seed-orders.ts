@@ -212,6 +212,7 @@ export function memberSeedOrders(): Order[] {
         destination: 'Tài khoản Ngân hàng Demo •••• 6789',
         reason: 'Sản phẩm tạm hết hàng tại kho, nine2fine đã hủy đơn và hoàn tiền.',
         expectedBy: at(-35 * DAY),
+        refundedAt: at(-36 * DAY),
       },
     }),
 

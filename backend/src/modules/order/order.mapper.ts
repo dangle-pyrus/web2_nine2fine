@@ -52,7 +52,8 @@ export interface OrderDto {
   shipment?: { carrier: string; trackingNumber: string; handedOverAt: string };
   deliveredAt?: string;
   willCallToConfirm?: boolean;
-  timeline: Array<{ at: string; title: string; detail?: string; actor: 'customer' | 'nine2fine' }>;
+  /** ORD-09 (2026-11-20): `system` = việc tự động (hết hạn thanh toán, tiền về, tự hoàn thành); không có tên nhân viên. */
+  timeline: Array<{ at: string; title: string; detail?: string; actor: 'customer' | 'nine2fine' | 'system' }>;
 }
 
 export type OrderRow = Order & { items: OrderItem[]; events: OrderEvent[] };
@@ -163,7 +164,7 @@ export function toOrderDto(o: OrderRow): OrderDto {
       at: e.at.toISOString(),
       title: timelineTitle(kind, e),
       ...(e.detail ? { detail: e.detail } : {}),
-      actor: e.actor === 'customer' ? ('customer' as const) : ('nine2fine' as const),
+      actor: e.actor === 'customer' ? ('customer' as const) : e.actor === 'system' ? ('system' as const) : ('nine2fine' as const),
     })),
   };
   if (o.status === 'to_pay' && o.paymentDueAt) dto.paymentDueAt = o.paymentDueAt.toISOString();

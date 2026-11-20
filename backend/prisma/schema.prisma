@@ -807,6 +807,8 @@ model OrderReturnItem {
   quantity         Int
   acceptedQuantity Int?        @map("accepted_quantity")
   disposition      String?     @db.VarChar(8)
+  /// ADM-RET-05/08: phần ĐẠT được nhập lại kho (0..accepted_quantity); phần còn lại không nhập kho. NULL = dòng cũ (theo `disposition`).
+  restockQuantity  Int?        @map("restock_quantity")
   goodsAmount      Int         @map("goods_amount")
   orderReturn      OrderReturn @relation(fields: [returnId], references: [return_id], onDelete: Cascade)
   orderItem        OrderItem   @relation(fields: [orderItemId], references: [order_item_id], onDelete: Cascade)

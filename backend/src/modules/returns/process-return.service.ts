@@ -151,11 +151,23 @@ export async function rejectReturn(actor: ReturnActor, returnId: string, input: 
 }
 
 export interface ReceiveInput {
-  lines: Array<{ variantId: string; acceptedQuantity: number; disposition?: 'restock' | 'writeoff' }>;
+  lines: Array<{ variantId: string; acceptedQuantity: number; disposition?: 'restock' | 'writeoff'; restockQuantity?: number }>;
   note?: string;
 }
 
 const BAD_LINES = 'Danh sách sản phẩm nhận chưa hợp lệ.';
+
+/**
+ * ADM-RET-05/08: phần đạt nhập lại kho của một dòng. `restockQuantity` thắng; vắng thì theo `disposition` (cả phần đạt hoặc 0).
+ * Trả `null` khi dòng có hàng đạt mà không nói rõ cách xử lý, hoặc số nhập kho vượt số đạt.
+ */
+export function restockOf(l: ReceiveInput['lines'][number]): number | null {
+  if (l.acceptedQuantity === 0) return l.restockQuantity === undefined || l.restockQuantity === 0 ? 0 : null;
+  if (l.restockQuantity !== undefined) return l.restockQuantity <= l.acceptedQuantity ? l.restockQuantity : null;
+  if (l.disposition === 'restock') return l.acceptedQuantity;
+  if (l.disposition === 'writeoff') return 0;
+  return null;
+}
 
 /**
  * Nhận hàng và kiểm (6.5). Số chốt theo số lượng ĐẠT. Tổng đạt = 0 hoặc `amount <= 0` -> đóng thẳng `approved -> rejected`
@@ -176,7 +188,7 @@ export async function receiveReturn(actor: ReturnActor, returnId: string, input:
     for (const l of input.lines) {
       const key = l.variantId.toLowerCase();
       const it = by.get(key);
-      if (!it || seen.has(key) || l.acceptedQuantity > it.quantity || (l.acceptedQuantity > 0 && !l.disposition)) throw Errors.validation(BAD_LINES, 'lines');
+      if (!it || seen.has(key) || l.acceptedQuantity > it.quantity || restockOf(l) === null) throw Errors.validation(BAD_LINES, 'lines');
       seen.add(key);
     }
     if (seen.size !== items.length) throw Errors.validation(BAD_LINES, 'lines');
@@ -195,7 +207,10 @@ export async function receiveReturn(actor: ReturnActor, returnId: string, input:
 
     if (sumAccepted === 0 || amt.amount <= 0) {
       for (const [orderItemId, l] of acc) {
-        await tx.orderReturnItem.update({ where: { returnId_orderItemId: { returnId, orderItemId } }, data: { acceptedQuantity: l.acceptedQuantity, disposition: null } });
+        await tx.orderReturnItem.update({
+          where: { returnId_orderItemId: { returnId, orderItemId } },
+          data: { acceptedQuantity: l.acceptedQuantity, disposition: null, restockQuantity: l.acceptedQuantity > 0 ? 0 : null },
+        });
       }
       const upd = await tx.$queryRaw<Array<{ x: number }>>(Prisma.sql`
         UPDATE "order_returns" SET "state" = 'rejected', "rejected_at" = ${ts(at)}, "rejected_by" = ${actor.id}::uuid, "reject_note" = ${note},
@@ -209,15 +224,22 @@ export async function receiveReturn(actor: ReturnActor, returnId: string, input:
     }
 
     for (const [orderItemId, l] of acc) {
+      const restock = restockOf(l)!;
       await tx.orderReturnItem.update({
         where: { returnId_orderItemId: { returnId, orderItemId } },
-        data: { acceptedQuantity: l.acceptedQuantity, disposition: l.acceptedQuantity > 0 ? l.disposition! : null, goodsAmount: amt.lines.get(orderItemId) ?? 0 },
+        data: {
+          acceptedQuantity: l.acceptedQuantity,
+          // `disposition` (CHECK cũ) = có phần nào nhập kho không; số chính xác ở `restock_quantity`.
+          disposition: l.acceptedQuantity > 0 ? (restock > 0 ? 'restock' : 'writeoff') : null,
+          restockQuantity: l.acceptedQuantity > 0 ? restock : null,
+          goodsAmount: amt.lines.get(orderItemId) ?? 0,
+        },
       });
     }
-    // Nhập kho theo variant_id tăng dần (thứ tự khoá toàn hệ thống), sau khi đã khoá dòng yêu cầu.
+    // Nhập kho theo variant_id tăng dần (thứ tự khoá toàn hệ thống), sau khi đã khoá dòng yêu cầu. Chỉ phần nhập lại kho.
     const restocks = [...acc]
-      .filter(([, l]) => l.acceptedQuantity > 0 && l.disposition === 'restock')
-      .map(([id, l]) => ({ v: orderRow.items.find((i) => i.order_item_id === id)!.variantId, q: l.acceptedQuantity }));
+      .map(([id, l]) => ({ v: orderRow.items.find((i) => i.order_item_id === id)!.variantId, q: restockOf(l)! }))
+      .filter((x) => x.q > 0);
     restocks.sort((a, b) => (a.v < b.v ? -1 : 1));
     for (const x of restocks) await restockVariantTx(tx, { variantId: x.v, qty: x.q, at, actor, note: `Trả hàng #${o.code}` });
 

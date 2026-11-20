@@ -13,13 +13,19 @@ export interface CancelRequestDialogData {
   message?: string;
 }
 
-/** What the dialog hands back when the shopper goes ahead. */
-export type CancelRequestResult = CancelChoice;
+/**
+ * What the dialog hands back when the shopper goes ahead; `choice` is null when they cancelled a
+ * `to_pay` order without giving a reason (ORD-CC-01). Closing the dialog hands back nothing.
+ */
+export interface CancelRequestResult {
+  choice: CancelChoice | null;
+}
 
 /**
- * Cancel dialog for both modes (COMMON-01.5, ORD-CC-02): the shopper must pick a reason from the
- * list; "Lý do khác" needs a note up to 250 characters. A `to_ship` order only sends a request
- * the shop reviews (Slice 4, BR-ADM-29). Open through OverlayService with the 'modal' panel.
+ * Cancel dialog for both modes. `request` (`to_ship`, COMMON-01.5, ORD-CC-02): a reason from the
+ * list is required; "Lý do khác" needs a note up to 250 characters; the shop reviews it (Slice 4,
+ * BR-ADM-29). `cancel` (`to_pay`, ORD-CC-01): confirming is enough, the reason is optional.
+ * Open through OverlayService with the 'modal' panel.
  */
 @Component({
   selector: 'n2f-cancel-request-dialog',
@@ -37,7 +43,14 @@ export type CancelRequestResult = CancelChoice;
         }
       </p>
       <fieldset [attr.aria-invalid]="showMissing()" aria-describedby="cancel-code-error">
-        <legend>Lý do huỷ đơn <span class="req">*</span></legend>
+        <legend>
+          Lý do huỷ đơn
+          @if (request) {
+            <span class="req">*</span>
+          } @else {
+            <span class="optional">(không bắt buộc)</span>
+          }
+        </legend>
         @for (option of reasons; track option.code) {
           <label class="option">
             <input
@@ -117,6 +130,10 @@ export type CancelRequestResult = CancelChoice;
     .req {
       color: var(--brand);
     }
+    .optional {
+      color: var(--muted);
+      font-weight: 400;
+    }
     label.option {
       display: flex;
       align-items: center;
@@ -192,7 +209,8 @@ export class CancelRequestDialog {
   private readonly submitted = signal(false);
   readonly length = computed(() => this.reason().trim().length);
   readonly tooLong = computed(() => this.length() > CANCEL_REASON_MAX);
-  readonly showMissing = computed(() => this.submitted() && !this.code());
+  /** Only a cancel request (`to_ship`) must have a reason; a `to_pay` cancel just confirms. */
+  readonly showMissing = computed(() => this.request && this.submitted() && !this.code());
   readonly noteMissing = computed(
     () => this.submitted() && this.code() === 'other' && this.length() === 0,
   );
@@ -200,8 +218,12 @@ export class CancelRequestDialog {
   send(): void {
     this.submitted.set(true);
     const code = this.code();
-    if (!code || this.tooLong() || this.noteMissing()) return;
+    if ((this.request && !code) || this.tooLong() || this.noteMissing()) return;
     const reason = this.reason().trim();
-    this.dialog.close(reason ? { reasonCode: code, reason } : { reasonCode: code });
+    if (!code) {
+      this.dialog.close({ choice: null });
+      return;
+    }
+    this.dialog.close({ choice: reason ? { reasonCode: code, reason } : { reasonCode: code } });
   }
 }

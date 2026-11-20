@@ -94,13 +94,8 @@ async function series(db: Db, range: DashboardRange, cur: Span, prev: Span, now:
   const today = vnDateISO(now);
   const days = range === '7d' ? 7 : 30;
   const curDays = Array.from({ length: days }, (_, i) => addCalendarDays(today, -(days - 1) + i));
-  const prevFrom = vnDateISO(prev.from);
-  const prevTo = addCalendarDays(vnDateISO(prev.to), -1);
-  const prevOf = (iso: string): string | null => {
-    if (range === '7d') return addCalendarDays(prevFrom, (weekdayOf(iso) + 6) % 7);
-    const candidate = `${prevFrom.slice(0, 8)}${iso.slice(8, 10)}`;
-    return candidate <= prevTo && vnDateISO(new Date(`${candidate}T12:00:00Z`)) === candidate ? candidate : null;
-  };
+  // DASH-03/06: `previous[i]` = ngày cùng vị trí của N ngày liền trước (ngày `i` của kỳ này lùi N ngày).
+  const prevOf = (iso: string): string | null => addCalendarDays(iso, -days);
   const [rc, rp, oc, op] = await Promise.all([revenueByDay(db, cur), revenueByDay(db, prev), placedBuckets(db, cur, 'day'), placedBuckets(db, prev, 'day')]);
   const label = (iso: string) => (range === '7d' ? `${WEEKDAY[weekdayOf(iso)]} ${dm(iso)}` : dm(iso));
   return {
@@ -166,7 +161,22 @@ export async function getDashboard(role: 'staff' | 'admin', range: DashboardRang
     },
     recentOrders: recent,
   };
-  if (!withMoney) return { ...base, kpis: { orders } };
+  if (!withMoney) {
+    // DASH-07 (2026-11-20): staff thấy sản phẩm bán chạy xếp theo SỐ LƯỢNG, không có tiền (revenue / share / hạng kỳ trước).
+    const byUnits = await topProducts(prisma, cur, 'units', INSIGHTS_ASSUMPTIONS.topDashboard);
+    return {
+      ...base,
+      kpis: { orders },
+      topProducts: byUnits.map((t, i) => ({
+        rank: i + 1,
+        productId: t.productId,
+        name: t.name,
+        image: t.image,
+        category: t.category,
+        units: t.units,
+      })),
+    };
+  }
 
   const [[k, kp], [rr, rrPrev], chart, top, prevTop] = await Promise.all([
     periodKpis(prisma, cur, prev),

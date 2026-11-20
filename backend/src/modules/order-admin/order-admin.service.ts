@@ -139,9 +139,13 @@ async function doShip(c: Ctx, b: ShipBody): Promise<Done> {
   if (dup.length > 0) throw duplicateTracking();
   let n: number;
   try {
+    // ADM-ORD-04: ngày giao dự kiến nhập lúc bàn giao thành `estimated_to` (ngày muộn nhất); `estimated_from` không sau nó.
+    const eta = b.estimatedDeliveryDate
+      ? Prisma.sql`, "estimated_to" = ${b.estimatedDeliveryDate}::date, "estimated_from" = LEAST("estimated_from", ${b.estimatedDeliveryDate}::date)`
+      : Prisma.empty;
     n = await c.tx.$executeRaw(Prisma.sql`
       UPDATE "orders" SET "status" = 'to_receive', "carrier" = ${b.carrier}, "tracking_number" = ${b.trackingNumber},
-        "active_tracking_number" = ${b.trackingNumber}, "handed_over_at" = ${ts(c.at)}, "handed_over_by" = ${c.user.id}::uuid
+        "active_tracking_number" = ${b.trackingNumber}, "handed_over_at" = ${ts(c.at)}, "handed_over_by" = ${c.user.id}::uuid ${eta}
       WHERE "order_id" = ${c.o.order_id}::uuid AND "status" = 'to_ship'`);
   } catch (err) {
     if (isUniqueViolation(err)) throw duplicateTracking();

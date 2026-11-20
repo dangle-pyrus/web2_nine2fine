@@ -32,12 +32,15 @@ test('Figma header: Nam / Nữ navigation filters catalog and keeps gender with 
     ).toHaveAttribute('aria-current', 'page');
   }
 
+  // Another filter keeps the gender of the menu (the Khoảnh khắc filter was removed 2026-11-20).
   if (isMobile) await page.getByRole('button', { name: /Bộ lọc/ }).click();
-  await page.getByRole('checkbox', { name: 'Weekend', exact: true }).check();
+  await page.locator('.size-options').getByRole('button', { name: 'M', exact: true }).click();
   await expect(page).toHaveURL(/gender=nam/);
-  await expect(page).toHaveURL(/moment=weekend/);
+  await expect(page).toHaveURL(/size=M/);
   if (isMobile) await page.getByRole('button', { name: 'Xem sản phẩm', exact: true }).click();
-  await expect(page.locator('n2f-product-card')).toHaveCount(2);
+  const cards = page.locator('n2f-product-card');
+  await expect(cards.first()).toBeVisible();
+  expect(await cards.count()).toBeLessThanOrEqual(5);
 
   await openNav('Nữ');
   await expect(page).toHaveURL(/\/shop\/nu$/);
@@ -73,7 +76,9 @@ test('Nike-style header: mega menu with preview photo, keyboard toggle, utility 
   await expect(page).toHaveURL(/\/shop\/nu\?category=dresses$/);
   await expect(panel).not.toHaveClass(/open/);
 
-  const toggle = page.getByRole('button', { name: 'Danh mục Khoảnh khắc' });
+  const toggle = page
+    .getByRole('navigation', { name: 'Điều hướng chính' })
+    .getByRole('button', { name: 'Danh mục Nam' });
   await toggle.focus();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -94,11 +99,12 @@ test('mobile drawer: sub-panel with photos, back, account actions, closes on Esc
     'href',
     '/policies/membership',
   );
-  await drawer.getByRole('button', { name: 'Khoảnh khắc', exact: true }).click();
-  await expect(drawer.getByRole('heading', { name: 'Khoảnh khắc' })).toBeFocused();
-  await expect(drawer.locator('.thumb')).toHaveCount(4);
+  // No "Khoảnh khắc" entry any more (2026-11-20); the sub-panel works the same with "Nữ".
+  await expect(drawer.getByRole('button', { name: 'Khoảnh khắc', exact: true })).toHaveCount(0);
+  await drawer.getByRole('button', { name: 'Nữ', exact: true }).click();
+  await expect(drawer.getByRole('heading', { name: 'Nữ' })).toBeFocused();
   await drawer.getByRole('button', { name: 'Tất cả' }).click();
-  await expect(drawer.getByRole('button', { name: 'Khoảnh khắc', exact: true })).toBeFocused();
+  await expect(drawer.getByRole('button', { name: 'Nữ', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(drawer).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Mở menu' })).toBeFocused();

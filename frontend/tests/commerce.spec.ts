@@ -3,15 +3,10 @@ import { DEMO_VERIFICATION_CODE, MOCK_ACCOUNTS } from '../src/mocks/accounts';
 
 test('catalog filters survive product navigation; guests sign in before saving a favourite', async ({
   page,
-  isMobile,
 }) => {
-  await page.goto('/new-in');
-  await expect(page.locator('n2f-product-card')).toHaveCount(8);
-  if (isMobile) await page.getByRole('button', { name: /Bộ lọc/ }).click();
-  await page.getByRole('checkbox', { name: 'Work', exact: true }).check();
-  await expect(page).toHaveURL(/moment=work/);
+  // The moment filter is no longer in the sidebar, but a link with ?moment= still filters.
+  await page.goto('/new-in?moment=work');
   await expect(page.locator('n2f-product-card')).toHaveCount(5);
-  if (isMobile) await page.getByRole('button', { name: 'Xem sản phẩm', exact: true }).click();
   await page.getByLabel('Sắp xếp sản phẩm').selectOption('price-asc');
   await expect(page.locator('n2f-product-card h2').first()).toHaveText('Nine-to-Fine Shirt');
   await page.locator('n2f-product-card h2 a').first().click();

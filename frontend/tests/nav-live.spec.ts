@@ -3,8 +3,9 @@ import { DEMO_VERIFICATION_CODE, MOCK_ACCOUNTS } from '../src/mocks/accounts';
 
 /**
  * Slice 10 storefront follow-ups: the order-line "Viết đánh giá" link (BR-REV-09, per `canReview`),
- * the "Khoảnh khắc" menu from `GET /content/home` (BR-MOM-02) and `/collections` + its menu link
- * (BR-CMS-07, Should), with `contentMode = http` answered here per docs/api/openapi.yaml.
+ * the menu with `GET /content/home` (the "Khoảnh khắc" menu was removed 2026-11-20) and
+ * `/collections` + its menu link (BR-CMS-07, Should), with `contentMode = http` answered here per
+ * docs/api/openapi.yaml.
  */
 const member = MOCK_ACCOUNTS[0];
 
@@ -53,7 +54,7 @@ async function httpContent(page: Page, collections: (route: Route) => Promise<vo
   await page.route('**/api/collections', (route) => collections(route));
 }
 
-test('menus: Moment cards come from content/home, "Bộ sưu tập" shows with an active collection', async ({
+test('menus: no "Khoảnh khắc" menu (2026-11-20), "Bộ sưu tập" shows with an active collection', async ({
   page,
   isMobile,
 }) => {
@@ -66,9 +67,9 @@ test('menus: Moment cards come from content/home, "Bộ sưu tập" shows with a
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
   const panel = page.locator('#mega-panel');
-  await nav.getByRole('button', { name: 'Danh mục Khoảnh khắc' }).hover();
-  await expect(panel.getByRole('link', { name: 'Tiệc cưới' })).toBeVisible();
-  await expect(panel.getByRole('link', { name: 'Work', exact: true })).toHaveCount(0);
+  // The API still sends moments; the menu no longer offers them.
+  await expect(nav.getByRole('button', { name: 'Danh mục Khoảnh khắc' })).toHaveCount(0);
+  await expect(nav.getByText('Khoảnh khắc')).toHaveCount(0);
   await nav.getByRole('link', { name: 'Sản phẩm mới' }).hover();
   await expect(panel.getByRole('link', { name: 'Bộ sưu tập' })).toHaveAttribute(
     'href',
@@ -76,7 +77,7 @@ test('menus: Moment cards come from content/home, "Bộ sưu tập" shows with a
   );
 });
 
-test('menus: a failing content/home keeps the static Moments, no collection hides the link', async ({
+test('menus: a failing content/home keeps the menu, no collection hides the link', async ({
   page,
   isMobile,
 }) => {
@@ -88,8 +89,7 @@ test('menus: a failing content/home keeps the static Moments, no collection hide
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
   const panel = page.locator('#mega-panel');
-  await nav.getByRole('button', { name: 'Danh mục Khoảnh khắc' }).hover();
-  await expect(panel.getByRole('link', { name: 'Work', exact: true })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Nữ', exact: true })).toBeVisible();
   await nav.getByRole('link', { name: 'Sản phẩm mới' }).hover();
   await expect(panel.getByRole('link', { name: 'Hàng mới về' })).toBeVisible();
   await expect(panel.getByRole('link', { name: 'Bộ sưu tập' })).toHaveCount(0);

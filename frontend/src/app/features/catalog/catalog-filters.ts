@@ -1,19 +1,30 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { API_CONFIG } from '../../core/api-config';
-import { CatalogQuery, GENDERS, MOMENTS, PRODUCT_COLORS } from './models/product';
+import { CatalogQuery, GENDERS, PRODUCT_COLORS } from './models/product';
 import { IconComponent } from '../../shared/ui/icon.component';
 
 const COLORS = PRODUCT_COLORS;
 
-const PRICES = [
-  { value: 500000, label: 'Đến 500.000 ₫' },
-  { value: 800000, label: 'Đến 800.000 ₫' },
-  { value: 1000000, label: 'Đến 1.000.000 ₫' },
-];
+/**
+ * Price slider bounds. The API only filters by an upper bound (`maxPrice`), so the slider has one
+ * thumb; dragging it to the far right means "every price" (`maxPrice` 0, no filter).
+ */
+const PRICE_MIN = 200000;
+const PRICE_MAX = 2000000;
+const PRICE_STEP = 50000;
+const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
 
 /**
  * Filter groups as collapsible accordions with an active count, following Nike's listing sidebar:
- * swatch grid for colour, size grid, single-choice price, availability toggle.
+ * swatch grid for colour, size grid, max-price slider, availability toggle.
  */
 @Component({
   selector: 'n2f-catalog-filters',
@@ -45,28 +56,6 @@ const PRICES = [
               [checked]="query().gender === gender.value"
               (change)="toggle('gender', gender.value)"
             />{{ gender.label }}</label
-          >
-        }
-      </fieldset>
-    </details>
-
-    <details open>
-      <summary>
-        Khoảnh khắc
-        @if (query().moment) {
-          <span class="selected-count">(1)</span>
-        }
-        <n2f-icon name="reiconChevronDown" size="18px" />
-      </summary>
-      <fieldset>
-        <legend class="sr-only">Khoảnh khắc</legend>
-        @for (moment of moments; track moment.value) {
-          <label class="choice"
-            ><input
-              type="checkbox"
-              [checked]="query().moment === moment.value"
-              (change)="toggle('moment', moment.value)"
-            />{{ moment.label }}</label
           >
         }
       </fieldset>
@@ -123,7 +112,7 @@ const PRICES = [
       </fieldset>
     </details>
 
-    <details>
+    <details open>
       <summary>
         Khoảng giá
         @if (query().maxPrice) {
@@ -133,24 +122,24 @@ const PRICES = [
       </summary>
       <fieldset>
         <legend class="sr-only">Khoảng giá</legend>
-        <label class="choice"
-          ><input
-            type="radio"
-            name="max-price"
-            [checked]="!query().maxPrice"
-            (change)="filtersChanged.emit({ key: 'maxPrice', value: 0 })"
-          />Tất cả mức giá</label
-        >
-        @for (price of prices; track price.value) {
-          <label class="choice"
-            ><input
-              type="radio"
-              name="max-price"
-              [checked]="query().maxPrice === price.value"
-              (change)="filtersChanged.emit({ key: 'maxPrice', value: price.value })"
-            />{{ price.label }}</label
-          >
-        }
+        <label class="price-value" for="price-range">{{ priceLabel() }}</label>
+        <input
+          id="price-range"
+          class="price-range"
+          type="range"
+          [min]="priceMin"
+          [max]="priceMax"
+          [step]="priceStep"
+          [value]="sliderValue()"
+          [style.--fill]="sliderFill()"
+          [attr.aria-valuetext]="priceLabel()"
+          (input)="draftPrice.set(+$any($event.target).value)"
+          (change)="commitPrice(+$any($event.target).value)"
+        />
+        <div class="price-bounds" aria-hidden="true">
+          <span>{{ formatPrice(priceMin) }}</span>
+          <span>{{ formatPrice(priceMax) }}+</span>
+        </div>
       </fieldset>
     </details>
 
@@ -303,6 +292,69 @@ const PRICES = [
         0 0 0 2px #fff,
         0 0 0 3px var(--ink);
     }
+    .price-value {
+      display: block;
+      margin-bottom: 12px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .price-range {
+      width: 100%;
+      height: 20px;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .price-range::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(
+        to right,
+        var(--ink) 0 var(--fill, 100%),
+        var(--line) var(--fill, 100%) 100%
+      );
+    }
+    .price-range::-moz-range-track {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--line);
+    }
+    .price-range::-moz-range-progress {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--ink);
+    }
+    .price-range::-webkit-slider-thumb {
+      width: 20px;
+      height: 20px;
+      margin-top: -8px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: var(--ink);
+      box-shadow: 0 0 0 1px var(--ink);
+      -webkit-appearance: none;
+    }
+    .price-range::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: var(--ink);
+      box-shadow: 0 0 0 1px var(--ink);
+    }
+    .price-range:focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 4px;
+    }
+    .price-bounds {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
     @media (prefers-reduced-motion: reduce) {
       summary n2f-icon {
         transition: none;
@@ -318,9 +370,37 @@ export class CatalogFilters {
   /** "Đang giảm giá" exists once `promotionsMode` is http (`sale=true`, BR-PROMO-07). */
   readonly saleFilter = inject(API_CONFIG).promotionsMode === 'http';
   readonly genders = GENDERS;
-  readonly moments = MOMENTS;
   readonly colors = COLORS;
-  readonly prices = PRICES;
+  readonly priceMin = PRICE_MIN;
+  readonly priceMax = PRICE_MAX;
+  readonly priceStep = PRICE_STEP;
+  /** Value while the thumb is being dragged; the filter is applied only on release. */
+  readonly draftPrice = signal<number | null>(null);
+  readonly sliderValue = computed(() => {
+    const draft = this.draftPrice();
+    if (draft !== null) return draft;
+    const max = this.query().maxPrice;
+    return max ? Math.min(Math.max(max, PRICE_MIN), PRICE_MAX) : PRICE_MAX;
+  });
+  readonly sliderFill = computed(
+    () => `${((this.sliderValue() - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 100}%`,
+  );
+  readonly priceLabel = computed(() => {
+    const draft = this.draftPrice();
+    const value = draft ?? this.query().maxPrice;
+    if (!value || value >= PRICE_MAX) return 'Tất cả mức giá';
+    return `Đến ${VND.format(value)}`;
+  });
+
+  formatPrice(value: number): string {
+    return VND.format(value);
+  }
+
+  commitPrice(value: number): void {
+    this.draftPrice.set(null);
+    this.filtersChanged.emit({ key: 'maxPrice', value: value >= PRICE_MAX ? 0 : value });
+  }
+
   readonly activeCount = computed(() => {
     const q = this.query();
     return [q.gender, q.moment, q.size, q.color, q.maxPrice, q.available, q.sale].filter(Boolean)

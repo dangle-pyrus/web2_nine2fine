@@ -135,7 +135,9 @@
       <div class="sk chart-sk"></div>
       }
     </section>
+    }
 
+    <!-- DASH-07: staff see best sellers by units sold, never the revenue column. -->
     <section class="section top" aria-labelledby="top-title">
       <header>
         <h2 id="top-title">Bán chạy 30 ngày</h2>
@@ -146,11 +148,13 @@
           <tr>
             <th>Sản phẩm</th>
             <th class="num">Đã bán</th>
+            @if (session.can('dashboard.revenue')) {
             <th class="num">Doanh thu</th>
+            }
           </tr>
         </thead>
         <tbody>
-          @for (product of summary()?.topProducts ?? []; track product.productId) {
+          @for (product of topProducts(); track product.productId) {
           <tr class="clickable" [routerLink]="['/admin/products', product.productId]">
             <td>
               <div class="cell-media">
@@ -159,17 +163,20 @@
               </div>
             </td>
             <td class="num">{{ product.units | admNum }}</td>
+            @if (session.can('dashboard.revenue')) {
             <td class="num">{{ product.revenue | admMoney }}</td>
+            }
           </tr>
           } @empty {
           <tr>
-            <td colspan="3" class="tertiary">Chưa có đơn hàng trong 30 ngày.</td>
+            <td [attr.colspan]="session.can('dashboard.revenue') ? 3 : 2" class="tertiary">
+              Chưa có đơn hàng trong 30 ngày.
+            </td>
           </tr>
           }
         </tbody>
       </table>
     </section>
-    }
   </div>
   }
 </div>

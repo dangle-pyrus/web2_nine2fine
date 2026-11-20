@@ -130,10 +130,10 @@ export class HttpAdminOrderDeskApi implements AdminOrderDeskApi {
   private readonly base = `${inject(API_CONFIG).baseUrl}/admin/orders`;
 
   list(query: DeskOrderQuery): Observable<DeskOrderPage> {
-    const { view, ...rest } = query;
+    const { view, late, ...rest } = query;
     return this.http
       .get<DeskOrderPage>(this.base, {
-        params: toParams({ ...rest, view: view === 'all' ? '' : view }),
+        params: toParams({ ...rest, view: view === 'all' ? '' : view, late: late ? '1' : '' }),
       })
       .pipe(failDesk());
   }
@@ -152,6 +152,12 @@ export class HttpAdminOrderDeskApi implements AdminOrderDeskApi {
 
   exportCsv(query: DeskExportQuery): Observable<{ blob: Blob; filename: string }> {
     const { view, codes, ...rest } = query;
+    // An empty `codes` would reach the server as "no restriction" and export every order.
+    if (codes && !codes.length) {
+      return throwError(
+        () => new AdminApiError('validation', 'Không có đơn nào trong phạm vi đã chọn để xuất.'),
+      );
+    }
     return this.http
       .get(`${this.base}/export`, {
         params: toParams({

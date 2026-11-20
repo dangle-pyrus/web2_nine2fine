@@ -310,7 +310,7 @@ test.describe('admin returns on the API (Slice 9)', () => {
     await expect(page.getByTestId('return-actions')).toHaveCount(0);
   });
 
-  test('AC-RET-35, 36: receive checks every line; a short quantity needs a note and a disposition', async ({
+  test('AC-RET-35, 36, ADM-RET-05/08: receive checks every line and splits restock / not restocked', async ({
     page,
   }) => {
     const fake = await setup(page, 'staff');
@@ -319,14 +319,18 @@ test.describe('admin returns on the API (Slice 9)', () => {
     await page.locator('[data-action="receive"]').click();
     const accepted = dialog(page).getByLabel('Số lượng đạt: Áo thun (Đen / M)');
     await expect(accepted).toHaveValue('1');
-    await dialog(page).getByLabel('Hướng xử lý: Áo thun (Đen / M)').selectOption('');
+    const restock = dialog(page).getByLabel('Nhập lại kho: Áo thun (Đen / M)');
+    // All accepted units go back into stock by default; more than the accepted count is refused.
+    await expect(restock).toHaveValue('1');
+    await restock.fill('2');
     await dialog(page).getByRole('button', { name: 'Xác nhận đã nhận hàng' }).click();
-    await expect(dialog(page).getByText('Chọn hướng xử lý cho')).toBeVisible();
-    await dialog(page).getByLabel('Hướng xử lý: Áo thun (Đen / M)').selectOption('writeoff');
+    await expect(dialog(page).getByText('Số nhập lại kho của')).toBeVisible();
+    await restock.fill('0');
+    await expect(dialog(page).getByTestId('writeoff-0')).toHaveText('1');
     await dialog(page).getByRole('button', { name: 'Xác nhận đã nhận hàng' }).click();
     await expect(page.getByTestId('return-badge')).toHaveText('Chờ hoàn tiền');
     expect(fake.calls.find((c) => c.path.endsWith('/receive'))?.body).toEqual({
-      lines: [{ variantId: V2, acceptedQuantity: 1, disposition: 'writeoff' }],
+      lines: [{ variantId: V2, acceptedQuantity: 1, disposition: 'writeoff', restockQuantity: 0 }],
     });
     // Staff: no refund button, the masked account and the admin-only line.
     await expect(page.locator('[data-action="refund"]')).toHaveCount(0);

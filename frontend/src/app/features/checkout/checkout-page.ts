@@ -215,22 +215,23 @@ export class CheckoutPage {
   readonly paymentChoices = computed<PaymentChoice[]>(() => {
     const options = this.quote()?.paymentMethods ?? [
       { method: 'cod', available: true },
-      { method: 'bank-transfer', available: this.isMock || this.cart.policy().bankTransferEnabled },
+      this.isMock || this.cart.policy().bankTransferEnabled
+        ? { method: 'bank-transfer', available: true }
+        : { method: 'bank-transfer', available: false, reason: 'not-enabled' },
     ];
     const hold = this.quote()?.policy.bankHoldMinutes ?? storeSettings().policy.paymentHoldMinutes;
-    return (options as PaymentOption[])
-      .filter((option) => option.available || option.reason !== 'not-enabled')
-      .map((option) => ({
-        value: option.method,
-        label:
-          option.method === 'cod' ? 'Thanh toán khi nhận hàng (COD)' : 'Chuyển khoản qua mã QR',
-        hint:
-          option.method === 'cod'
-            ? 'Trả tiền mặt hoặc chuyển khoản cho nhân viên giao hàng.'
-            : `Quét mã QR sau khi đặt đơn, hệ thống tự xác nhận khi nhận tiền. Đơn được giữ ${hold} phút.`,
-        disabled: !option.available,
-        reason: option.available || !option.reason ? '' : PAYMENT_REASONS[option.reason],
-      }));
+    // CHK-PAY-05: a method that cannot be used stays listed, locked, with its reason (also when
+    // the shop has not turned bank transfer on: "Chuyển khoản chưa khả dụng.").
+    return (options as PaymentOption[]).map((option) => ({
+      value: option.method,
+      label: option.method === 'cod' ? 'Thanh toán khi nhận hàng (COD)' : 'Chuyển khoản qua mã QR',
+      hint:
+        option.method === 'cod'
+          ? 'Trả tiền mặt hoặc chuyển khoản cho nhân viên giao hàng.'
+          : `Quét mã QR sau khi đặt đơn, hệ thống tự xác nhận khi nhận tiền. Đơn được giữ ${hold} phút.`,
+      disabled: !option.available,
+      reason: option.available || !option.reason ? '' : PAYMENT_REASONS[option.reason],
+    }));
   });
   /** No way to pay online (e.g. over the COD limit while transfers are off). */
   readonly paymentBlocked = computed(() => {

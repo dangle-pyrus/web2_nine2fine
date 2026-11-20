@@ -6,11 +6,13 @@ test('brand Home preserves layout and opens only local shopping routes', async (
   await page.goto('/');
   await expect(page.locator('h1')).toHaveText('From Nine to Fine.');
   await expect(page.locator('n2f-home-campaign')).toHaveCount(9);
-  await expect(page.locator('.hero-block + .service-strip + .reference-categories')).toBeAttached();
-  await expect(page.locator('.service-strip li')).toHaveCount(3);
+  // The service strip under the hero was taken off the home page.
+  await expect(page.locator('.hero-block + .reference-categories')).toBeAttached();
+  await expect(page.locator('.service-strip')).toHaveCount(0);
   await expect(page.locator('n2f-home-shop-rail n2f-product-card')).toHaveCount(8);
   await expect(page.locator('.category-grid li')).toHaveCount(4);
-  await expect(page.locator('n2f-home-product-rail article')).toHaveCount(12);
+  // 2026-11-20: the "Hàng mới về" row under "Sản phẩm mới" was removed (two rails of 4 left).
+  await expect(page.locator('n2f-home-product-rail article')).toHaveCount(8);
   await expect(page.locator('n2f-home-page a[href^="http"]')).toHaveCount(0);
   await expect(page.locator('.campaign-cta, .reference-credit')).toHaveCount(0);
   await expect(page.locator('n2f-home-page')).not.toContainText(
@@ -53,14 +55,10 @@ test('four categories lead to the matching nine2fine catalog and support browser
   }
 });
 
-test('editorial cards, moments and membership use working local destinations', async ({ page }) => {
+test('editorial cards and membership use working local destinations', async ({ page }) => {
   await page.goto('/');
   await page.locator('n2f-home-product-rail').first().getByRole('link').first().click();
-  await expect(page).toHaveURL(/\/shop\/outerwear$/);
-  await expect(page.locator('n2f-product-card').first()).toBeVisible();
-  await page.goBack();
-  await page.locator('.audience-nav').getByRole('link', { name: 'Hẹn tối' }).click();
-  await expect(page).toHaveURL(/\/shop-by-moment\/dinner$/);
+  await expect(page).toHaveURL(/\/shop\/tops$/);
   await expect(page.locator('n2f-product-card').first()).toBeVisible();
   await page.goBack();
   await page.locator('n2f-home-campaign').last().getByRole('link').click();

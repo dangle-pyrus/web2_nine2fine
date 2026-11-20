@@ -148,24 +148,54 @@ export function canBuyAgain(order: Order): boolean {
   );
 }
 
-/** Refund state: a refund counts as done once `refundedAt` is set or its expected date has passed. */
-export function refundState(
-  order: Order,
-  now = Date.now(),
-): { done: boolean; date: string } | null {
+/**
+ * ORD-06: the one rule for which buttons an order shows, shared by the history card and the
+ * detail page. Decision: "Đã nhận hàng" (`confirmReceived`) lives on the detail page only; the
+ * card offers "Theo dõi đơn hàng" (`track`) for orders in transit and links to that page.
+ * ORD-10: pass a ticking `now`, so a transfer whose hold ran out loses "Thanh toán" (and
+ * "Hủy đơn") while the screen stays open.
+ */
+export interface OrderActions {
+  pay: boolean;
+  cancel: boolean;
+  confirmReceived: boolean;
+  track: boolean;
+  buyAgain: boolean;
+}
+
+export function orderActions(order: Order, now = Date.now()): OrderActions {
+  const overdue = isPaymentOverdue(order, now);
+  return {
+    pay: canPay(order, now),
+    cancel: !overdue && canCancel(order, now),
+    confirmReceived: order.canConfirmReceived === true,
+    track:
+      order.status === 'shipping' ||
+      order.status === 'delivering' ||
+      order.status === 'delivery-failed',
+    buyAgain: canBuyAgain(order),
+  };
+}
+
+/**
+ * Refund state (ORD-CC-06): "done" only when the server confirmed it (`refundedAt` / `confirmed`),
+ * never because an expected date went by. `date` is the refund date, or the expected one, or empty.
+ */
+export function refundState(order: Order): { done: boolean; date: string } | null {
   const refund = order.refund;
   if (!refund) return null;
-  const done = !!refund.refundedAt || Date.parse(refund.expectedBy) <= now;
-  return { done, date: refund.refundedAt ?? refund.expectedBy };
+  const done = !!refund.refundedAt || !!refund.confirmed;
+  return { done, date: refund.refundedAt ?? (done ? '' : (refund.expectedBy ?? '')) };
 }
 
 function refundText(order: Order): string {
   const state = refundState(order);
   if (!state || !order.refund) return '';
   const amount = money.format(order.refund.amount);
-  return state.done
-    ? `Đã hoàn ${amount} ngày ${formatDate(state.date)}`
-    : `${amount} đang được hoàn, dự kiến trước ${formatDate(state.date)}`;
+  if (state.done) return state.date ? `Đã hoàn ${amount} ngày ${formatDate(state.date)}` : `Đã hoàn ${amount}`;
+  return state.date
+    ? `${amount} đang được hoàn, dự kiến trước ${formatDate(state.date)}`
+    : `${amount} đang được hoàn`;
 }
 
 function cancelText(order: Order): string {
@@ -372,10 +402,13 @@ export function orderProgress(order: Order): ProgressStep[] | null {
   });
 }
 
-export function orderHeadline(order: Order): { eyebrow: string; title: string; detail: string } {
+export function orderHeadline(
+  order: Order,
+  now = Date.now(),
+): { eyebrow: string; title: string; detail: string } {
   switch (order.status) {
     case 'pending-payment': {
-      const overdue = isPaymentOverdue(order);
+      const overdue = isPaymentOverdue(order, now);
       return {
         eyebrow: 'Đơn hàng của bạn',
         title: overdue ? 'Đã quá hạn thanh toán' : 'Đang chờ thanh toán',
@@ -495,32 +528,61 @@ export function orderHeadline(order: Order): { eyebrow: string; title: string; d
 export function orderTimeline(order: Order, now = Date.now()): OrderEvent[] {
   const events: OrderEvent[] = order.timeline?.length
     ? [...order.timeline]
-    : derivedEvents(order, now);
+    : derivedEvents(order);
   return events
     .filter((event) => Date.parse(event.at) <= now)
     .sort((a, b) => b.at.localeCompare(a.at));
 }
 
-function derivedEvents(order: Order, now: number): OrderEvent[] {
-  const events: OrderEvent[] = [{ at: order.placedAt, title: 'Đặt hàng thành công' }];
+function derivedEvents(order: Order): OrderEvent[] {
+  const events: OrderEvent[] = [
+    { at: order.placedAt, title: 'Đặt hàng thành công', actor: 'customer' },
+  ];
   if (order.paidAt) {
-    events.push({ at: order.paidAt, title: 'Đã nhận thanh toán', detail: order.payment.label });
+    events.push({
+      at: order.paidAt,
+      title: 'Đã nhận thanh toán',
+      detail: order.payment.label,
+      actor: 'system',
+    });
   }
   if (order.status === 'cancelled' && order.cancelledAt) {
-    events.push({ at: order.cancelledAt, title: cancelText(order) });
+    events.push({
+      at: order.cancelledAt,
+      title: cancelText(order),
+      actor:
+        order.cancelledBy === 'system'
+          ? 'system'
+          : order.cancelledBy === 'shop'
+            ? 'nine2fine'
+            : 'customer',
+    });
   }
   if (order.cancelRequest) {
-    events.push({ at: order.cancelRequest.requestedAt, title: 'Bạn đã gửi yêu cầu huỷ đơn' });
+    events.push({
+      at: order.cancelRequest.requestedAt,
+      title: 'Bạn đã gửi yêu cầu huỷ đơn',
+      actor: 'customer',
+    });
   }
   if (order.delivery?.deliveredAt) {
-    events.push({ at: order.delivery.deliveredAt, title: 'Giao hàng thành công' });
+    events.push({ at: order.delivery.deliveredAt, title: 'Giao hàng thành công', actor: 'nine2fine' });
   }
   if (order.returnRequest) {
-    events.push({ at: order.returnRequest.requestedAt, title: 'Đã gửi yêu cầu trả hàng' });
+    events.push({
+      at: order.returnRequest.requestedAt,
+      title: 'Đã gửi yêu cầu trả hàng',
+      actor: 'customer',
+    });
   }
-  const refund = refundState(order, now);
-  if (refund?.done) {
-    events.push({ at: refund.date, title: 'Đã hoàn tiền', detail: order.refund?.destination });
+  const refund = refundState(order);
+  if (refund?.done && refund.date) {
+    events.push({
+      at: refund.date,
+      title: 'Đã hoàn tiền',
+      detail: order.refund?.destination,
+      actor: 'nine2fine',
+    });
   }
   return events;
 }
@@ -550,7 +612,7 @@ export function paymentMethodLabel(order: Order): string {
   return parts[parts.length - 1].trim();
 }
 
-export function paymentStateLabel(order: Order): string {
+export function paymentStateLabel(order: Order, now = Date.now()): string {
   if (order.payment.paid) {
     const at = order.paidAt ?? (order.payment.method === 'card' ? order.placedAt : undefined);
     if (order.payment.method === 'cod') return 'Đã thanh toán khi nhận hàng';
@@ -558,5 +620,5 @@ export function paymentStateLabel(order: Order): string {
   }
   if (order.status === 'cancelled') return 'Không thu tiền';
   if (order.payment.method === 'cod') return 'Thanh toán khi nhận hàng';
-  return isPaymentOverdue(order) ? 'Quá hạn thanh toán' : 'Chưa thanh toán';
+  return isPaymentOverdue(order, now) ? 'Quá hạn thanh toán' : 'Chưa thanh toán';
 }

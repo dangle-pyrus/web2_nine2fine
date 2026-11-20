@@ -77,10 +77,16 @@ test.describe('admin insights on the API (Slice 8)', () => {
     await expect(page.locator('nav.sidebar a[href="/admin/settings"]')).toHaveCount(0);
     await expect(page.getByTestId('kpi-orders')).toBeVisible();
     await expect(page.getByTestId('todo-toConfirm')).toBeVisible();
-    for (const id of ['revenue', 'completedOrders', 'averageOrderValue', 'newCustomers'])
+    // DASH-07: no money anywhere for staff; best sellers by units only.
+    for (const id of ['netRevenue', 'averageOrderValue', 'returnRate'])
       await expect(page.getByTestId(`kpi-${id}`)).toHaveCount(0);
-    await expect(page.getByTestId('top-products')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '7 ngày' })).toHaveCount(0);
+    await expect(page.getByRole('group', { name: 'Chỉ số biểu đồ' })).toHaveCount(0);
+    await expect(page.getByTestId('dashboard-chart')).toHaveCount(0);
+    const top = page.getByTestId('top-products');
+    await expect(top).toBeVisible();
+    await expect(top).not.toContainText('Doanh thu');
+    await expect(page.getByTestId('recent-orders')).not.toContainText('Tổng tiền');
+    await expect(page.locator('body')).not.toContainText(/\d\s?₫/);
     for (const path of ['/admin/reports', '/admin/settings/store', '/admin/settings/audit']) {
       await page.goto(path);
       await expect(page.getByTestId('kpi-orders')).toBeVisible();
@@ -94,22 +100,28 @@ test.describe('admin insights on the API (Slice 8)', () => {
     page,
   }) => {
     const api = await setup(page);
-    await expect(page.getByTestId('kpi-revenue')).toContainText(money('1.200.000'));
-    await expect(page.getByTestId('kpi-revenue')).toContainText('so với cùng giờ');
-    await expect(page.getByTestId('kpi-revenue')).toContainText('▲ 10,0%');
-    await expect(page.getByTestId('updated-at')).toContainText(/Cập nhật lúc \d{2}:\d{2}/);
+    const period = page.getByTestId('dashboard-period');
+    // Today 1.200.000 against all of yesterday 1.000.000.
+    await expect(page.getByTestId('kpi-netRevenue')).toContainText(money('1.200.000'));
+    await expect(page.getByTestId('kpi-netRevenue')).toContainText('+20,0%');
+    await expect(page.getByTestId('kpi-orders')).toContainText('Đơn đặt trong kỳ');
+    await expect(period).toContainText('so với hôm qua');
+    // DASH-08: the update time in Vietnam time.
+    await expect(period).toContainText(/Cập nhật lúc .*\d{2}:\d{2}.*\(giờ Việt Nam\)/);
     await page.getByRole('button', { name: '7 ngày' }).click();
     await expect(page).toHaveURL(/range=7d/);
-    await expect(page.getByTestId('kpi-revenue')).toContainText(money('2.200.000'));
-    await expect(page.getByTestId('kpi-revenue')).toContainText('so với 7 ngày trước');
-    await expect(page.getByTestId('kpi-completedOrders')).toContainText('3');
+    // DASH-03/06: 7 days against the 7 days right before (O8 2.000.000).
+    await expect(page.getByTestId('kpi-netRevenue')).toContainText(money('2.200.000'));
+    await expect(page.getByTestId('kpi-netRevenue')).toContainText('+10,0%');
+    await expect(period).toContainText('7 ngày qua');
+    await expect(period).toContainText('so với 7 ngày trước đó');
     expect(api.find('GET', /\/dashboard$/).map((r) => r.url.searchParams.get('range'))).toEqual([
       'today',
       '7d',
     ]);
     await page.getByRole('button', { name: '30 ngày' }).click();
-    // "Sản phẩm nổi bật": the top three of the range, as picture cards.
-    const rows = page.getByTestId('top-products').locator('.featured-item');
+    // "Sản phẩm nổi bật": the API's top products by revenue for the range.
+    const rows = page.getByTestId('top-products').locator('.top-row');
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(0)).toContainText('Áo thun cotton');
     await expect(rows.nth(1)).toContainText('Áo sơ mi linen');
@@ -122,20 +134,18 @@ test.describe('admin insights on the API (Slice 8)', () => {
       toConfirm: '/admin/orders?view=to-confirm',
       pendingPayment: '/admin/orders?view=pending-payment',
       toFulfil: '/admin/orders?view=to-fulfil',
-      inTransit: '/admin/orders?view=in-transit',
       cancelRequests: '/admin/orders?view=cancel-requests',
+      // DASH-05: only the late ones among the orders in transit.
+      lateDelivery: '/admin/orders?view=in-transit&late=1',
       lowStock: '/admin/inventory?view=low',
       outOfStock: '/admin/inventory?view=out',
     };
     for (const [key, href] of Object.entries(expected))
       await expect(page.getByTestId(`todo-${key}`)).toHaveAttribute('href', href);
-    // Rows at 0 are hidden (refresh 2026-11-15); late parcels and cancel requests come first.
-    await expect(page.getByTestId('todo-returning')).toHaveCount(0);
-    await expect(page.getByTestId('todo').locator('a').first()).toHaveAttribute(
-      'data-testid',
-      'todo-lateDelivery',
-    );
-    await expect(page.getByTestId('todo-lowStock').locator('.count')).toHaveText('2');
+    // A tile at 0 stays, greyed out and not a link.
+    await expect(page.getByTestId('todo-returnRequested')).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByTestId('todo-returnRequested')).not.toHaveAttribute('href', /.+/);
+    await expect(page.getByTestId('todo-lowStock').locator('.tile-count')).toHaveText('2');
     await page.getByTestId('todo-toConfirm').click();
     await expect(page).toHaveURL(/\/admin\/orders\?view=to-confirm/);
   });
@@ -149,10 +159,12 @@ test.describe('admin insights on the API (Slice 8)', () => {
     await page.goto('/admin?range=7d');
     await expect(alert(page)).toContainText('Không kết nối được máy chủ');
     await expect(page).toHaveURL(/range=7d/);
+    // DASH-08: while the error is shown no figure is shown.
+    await expect(page.getByTestId('kpis')).toHaveCount(0);
     await page.getByRole('button', { name: 'Thử lại' }).click();
-    await expect(page.getByTestId('no-orders')).toHaveText('Chưa có đơn trong khoảng này.');
-    await expect(page.getByTestId('kpi-revenue')).toContainText(money('0'));
-    await expect(page.getByTestId('kpi-revenue')).toContainText('—');
+    await expect(page.getByTestId('recent-orders')).toContainText('Chưa có đơn trong khoảng này.');
+    await expect(page.getByTestId('kpi-netRevenue')).toContainText(money('0'));
+    await expect(page.getByTestId('kpi-netRevenue')).toContainText('—');
     await expect(page.locator('body')).not.toContainText(/NaN|Infinity/);
     await expect(page).toHaveURL(/range=7d/);
   });
@@ -171,7 +183,7 @@ test.describe('admin insights on the API (Slice 8)', () => {
     await page.getByRole('button', { name: 'Thử lại' }).click();
     await expect(alert(page)).toContainText('Chờ 12 giây');
     await page.getByRole('button', { name: 'Thử lại' }).click();
-    await expect(page.getByTestId('kpi-revenue')).toBeVisible();
+    await expect(page.getByTestId('kpi-netRevenue')).toBeVisible();
     // 401: the sentence is shown; the redirect to /admin/login itself is the interceptor's job
     // (admin-login.spec.ts), and the mock sign-in would bounce us back here anyway.
     api.failures.set('GET /dashboard', { status: 401, code: 'unauthenticated' });
@@ -510,7 +522,8 @@ test.describe('admin insights on the API (Slice 8)', () => {
     ).toBe('inventory');
     await page.locator('#aud-type').selectOption('');
     await page.getByRole('link', { name: '#N2F2611081801' }).click();
-    await expect(page).toHaveURL(/\/admin\/orders\/N2F2611081801/);
+    // The order opens in the drawer over the list (old `/admin/orders/<code>` links land on `?order=`).
+    await expect(page).toHaveURL(/\/admin\/orders(\/|\?order=)N2F2611081801/);
     await expect(page.getByRole('heading', { name: '#N2F2611081801' })).toBeVisible();
     // Empty range.
     await page.goto('/admin/settings/audit?from=2025-01-01&to=2025-01-10');

@@ -3,9 +3,9 @@ import { expect, Page, Route, test } from '@playwright/test';
 /**
  * Slice 10 (lát 10.3) storefront: home content from `GET /api/content/home`. `contentMode = http`
  * makes the e2e build read the home page from the API, answered here with a body shaped like
- * docs/api/openapi.yaml `HomeContentPublic`. AC-MOM-03 / AC-CMS-01, 05 FE parts: Moment cards show
- * the server's picture, lines and live count and open the filtered list, links with a query work,
- * a missing picture falls back, a failed read shows a retry instead of a blank page.
+ * docs/api/openapi.yaml `HomeContentPublic`. AC-CMS-01, 05 FE parts: links with a query work, a
+ * missing picture falls back, a failed read shows a retry instead of a blank page. "Shop by Moment"
+ * was taken off the home page (2026-11-20): the API may still send `moments`, the page ignores them.
  */
 type Json = Record<string, unknown>;
 
@@ -64,21 +64,15 @@ async function useContent(page: Page): Promise<void> {
 }
 
 test.describe('home content on the API (Slice 10)', () => {
-  test('AC-MOM-03: Moment cards come from the API, count included, and open the filtered list', async ({
+  test('2026-11-20: the home page has no "Shop by Moment" block, even when the API sends moments', async ({
     page,
   }) => {
     await useContent(page);
     await page.route('**/api/content/home', (route) => fulfil(route, 200, home()));
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Từ chín giờ đến tối' })).toBeVisible();
-    const cards = page.getByRole('region', { name: 'Shop by Moment' }).getByRole('link');
-    await expect(cards).toHaveCount(2);
-    await expect(cards.first()).toContainText('Chỉn chu mỗi ngày');
-    await expect(cards.first()).toContainText('12 sản phẩm');
-    await expect(page.getByRole('region', { name: 'Shop by Moment' })).not.toContainText('Event');
-    await cards.first().click();
-    await expect(page).toHaveURL(/\/shop\?moment=work$/);
-    await expect(page.locator('n2f-product-card').first()).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Shop by Moment' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Chỉn chu mỗi ngày/ })).toHaveCount(0);
   });
 
   test('AC-CMS-01: a link with a query keeps it (campaign, category)', async ({ page }) => {
@@ -98,37 +92,23 @@ test.describe('home content on the API (Slice 10)', () => {
     await useContent(page);
     const gone = 'up-0123456789abcdef0123456789abcdef.jpg';
     await page.route('**/api/media/**', (route) => route.fulfill({ status: 404, body: '' }));
+    // A category picture that no longer exists on the server.
     await page.route('**/api/content/home', (route) =>
       fulfil(
         route,
         200,
         home({
-          moments: [
-            {
-              moment: 'work',
-              label: 'Work',
-              lines: ['Đi làm'],
-              mediaId: gone,
-              href: '/shop?moment=work',
-              count: 3,
-            },
+          categories: [
+            { label: 'Áo', href: '/shop/tops', mediaId: gone },
+            { label: 'Đầm', href: '/shop?category=dresses', mediaId: 'editorial-home-hero' },
           ],
         }),
       ),
     );
     await page.goto('/');
-    const image = page.getByRole('region', { name: 'Shop by Moment' }).locator('img');
-    await expect(image).toHaveCount(1);
-    await expect(image).not.toHaveAttribute('src', new RegExp(`/api/media/${gone}`));
     await expect(page.getByRole('heading', { name: 'Từ chín giờ đến tối' })).toBeVisible();
-  });
-
-  test('BR-MOM-03: no Moment cards when none has products', async ({ page }) => {
-    await useContent(page);
-    await page.route('**/api/content/home', (route) => fulfil(route, 200, home({ moments: [] })));
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Từ chín giờ đến tối' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Shop by Moment' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Áo' }).first()).toBeVisible();
+    await expect(page.locator(`img[src*="/api/media/${gone}"]`)).toHaveCount(0);
   });
 
   test('a failed read shows a message and a retry, not a blank page', async ({ page }) => {

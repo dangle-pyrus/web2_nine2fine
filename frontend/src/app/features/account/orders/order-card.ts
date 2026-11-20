@@ -7,14 +7,8 @@ import { PricePipe } from '../../../shared/commerce/price.pipe';
 import { API_CONFIG } from '../../../core/api-config';
 import { Order } from '../../orders/order-models';
 import { canRequestReturn, returnsEnabled } from '../../orders/order-returns';
-import {
-  canBuyAgain,
-  canCancel,
-  cancelLabels,
-  canPay,
-  formatDateTime,
-  orderNote,
-} from '../../orders/order-status';
+import { cancelLabels, formatDateTime, orderActions, orderNote } from '../../orders/order-status';
+import { injectNow } from '../../../shared/ui/now';
 import { OrderStatusBadge } from '../../orders/order-status-badge';
 import { OrderItems } from '../../orders/order-items';
 
@@ -55,70 +49,42 @@ import { OrderItems } from '../../orders/order-items';
           >Chi tiết đơn<span class="sr-only"> #{{ current.id }}</span>
           <n2f-icon name="reiconChevronRight" size="14px"
         /></a>
+        <!-- ORD-06: same rule as the detail page (orderActions); "Đã nhận hàng" is there only. -->
+        @let can = actions();
         <div class="actions">
-          @switch (current.status) {
-            @case ('pending-payment') {
-              @if (payable()) {
-                @if (cancellable()) {
-                  <button
-                    type="button"
-                    class="pill outline"
-                    [disabled]="busy()"
-                    (click)="cancelRequested.emit(current)"
-                  >
-                    {{ busy() ? labels().busy : labels().idle }}
-                  </button>
-                }
-                <button type="button" class="pill" (click)="payRequested.emit(current)">
-                  Thanh toán ngay
-                </button>
-              }
-            }
-            @case ('processing') {
-              @if (cancellable()) {
-                <button
-                  type="button"
-                  class="pill outline"
-                  [disabled]="busy()"
-                  (click)="cancelRequested.emit(current)"
-                >
-                  {{ busy() ? labels().busy : labels().idle }}
-                </button>
-              }
-            }
-            @case ('shipping') {
-              <a class="pill" [routerLink]="['/account/orders', current.id]">Theo dõi đơn hàng</a>
-            }
-            @case ('delivering') {
-              <a class="pill" [routerLink]="['/account/orders', current.id]">Theo dõi đơn hàng</a>
-            }
-            @case ('completed') {
-              @if (returnable()) {
-                <a class="pill outline" [routerLink]="['/account/orders', current.id, 'return']"
-                  >Yêu cầu trả hàng<span class="sr-only"> #{{ current.id }}</span></a
-                >
-              }
-              <button
-                type="button"
-                class="pill"
-                [disabled]="busy()"
-                (click)="buyAgainRequested.emit(current)"
-              >
-                Mua lại
-              </button>
-            }
-            @default {
-              @if (rebuyable()) {
-                <button
-                  type="button"
-                  class="pill outline"
-                  [disabled]="busy()"
-                  (click)="buyAgainRequested.emit(current)"
-                >
-                  Mua lại
-                </button>
-              }
-            }
+          @if (can.cancel) {
+            <button
+              type="button"
+              class="pill outline"
+              [disabled]="busy()"
+              (click)="cancelRequested.emit(current)"
+            >
+              {{ busy() ? labels().busy : labels().idle }}
+            </button>
+          }
+          @if (can.pay) {
+            <button type="button" class="pill" (click)="payRequested.emit(current)">
+              Thanh toán ngay
+            </button>
+          }
+          @if (can.track) {
+            <a class="pill" [routerLink]="['/account/orders', current.id]">Theo dõi đơn hàng</a>
+          }
+          @if (returnable()) {
+            <a class="pill outline" [routerLink]="['/account/orders', current.id, 'return']"
+              >Yêu cầu trả hàng<span class="sr-only"> #{{ current.id }}</span></a
+            >
+          }
+          @if (can.buyAgain) {
+            <button
+              type="button"
+              class="pill"
+              [class.outline]="current.status !== 'completed'"
+              [disabled]="busy()"
+              (click)="buyAgainRequested.emit(current)"
+            >
+              Mua lại
+            </button>
           }
         </div>
       </footer>
@@ -285,17 +251,17 @@ export class OrderCard {
   readonly payRequested = output<Order>();
   readonly buyAgainRequested = output<Order>();
 
+  /** ORD-10: ticks while the card is on screen, so the countdown and the pay button stay current. */
+  private readonly now = injectNow();
   readonly placedAt = computed(() => formatDateTime(this.order().placedAt));
-  readonly payable = computed(() => canPay(this.order()));
-  readonly cancellable = computed(() => canCancel(this.order()));
+  readonly actions = computed(() => orderActions(this.order(), this.now()));
   readonly labels = computed(() => cancelLabels(this.order()));
-  readonly rebuyable = computed(() => canBuyAgain(this.order()));
   private readonly returnsOn = returnsEnabled(inject(API_CONFIG));
   /** Slice 9: only API orders carry the server's `canReturn`; the mock card keeps its earlier look. */
   readonly returnable = computed(
     () => this.returnsOn && this.order().canReturn === true && canRequestReturn(this.order()),
   );
-  readonly note = computed(() => orderNote(this.order()));
+  readonly note = computed(() => orderNote(this.order(), this.now()));
   /** Packing and transit notes carry a small icon; other tones are text only. */
   readonly noteIcon = computed(() => {
     switch (this.order().status) {

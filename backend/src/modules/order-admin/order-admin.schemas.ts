@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { now } from '../../lib/clock';
+import { addCalendarDays, vnDateISO } from '../../lib/vn-time';
 
 const TABS = ['all', 'pending-payment', 'to-confirm', 'to-fulfil', 'in-transit', 'cancel-requests', 'returning', 'completed', 'cancelled'] as const;
 export type AdminTab = (typeof TABS)[number];
@@ -65,6 +67,8 @@ export const listQuerySchema = z
       blankToUndef,
       z.coerce.number({ error: LIMIT_MSG }).int({ error: LIMIT_MSG }).min(1, { error: LIMIT_MSG }).max(50, { error: LIMIT_MSG }).default(20),
     ),
+    /** DASH-05 (2026-11-20): `late=1` chỉ đơn `to_receive` quá ngày giao dự kiến muộn nhất (`estimated_to` < hôm nay VN). */
+    late: z.preprocess(blankToUndef, z.enum(['1', 'true', '0', 'false'], { error: 'Tham số late không hợp lệ.' }).optional()).transform((v) => v === '1' || v === 'true'),
   })
   .superRefine(fromBeforeTo);
 
@@ -113,6 +117,16 @@ export const noteSchema = z.object({
 
 export const callAttemptSchema = z.object({ expectedStatus, note: optionalNote });
 
+const ETA_MSG = 'Ngày giao dự kiến phải từ hôm nay đến 60 ngày tới.';
+/** `YYYY-MM-DD` có thật, trong [hôm nay VN, hôm nay VN + 60 ngày]. */
+function validEta(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) return false;
+  const today = vnDateISO(now());
+  return v >= today && v <= addCalendarDays(today, 60);
+}
+
 const CARRIER_MSG = 'Đơn vị vận chuyển từ 2 đến 50 ký tự.';
 const TRACKING_MSG = 'Mã vận đơn từ 4 đến 40 ký tự, chỉ gồm chữ, số và dấu gạch ngang.';
 export const shipSchema = z.object({
@@ -126,6 +140,11 @@ export const shipSchema = z.object({
     .transform((v) => v.trim())
     .refine((v) => /^[A-Za-z0-9-]{4,40}$/.test(v), { error: TRACKING_MSG })
     .transform((v) => v.toUpperCase()),
+  /** ADM-ORD-04 (2026-11-20): ngày giao dự kiến `YYYY-MM-DD` (giờ VN), từ hôm nay đến 60 ngày tới. Vắng = giữ ngày đã tính lúc đặt. */
+  estimatedDeliveryDate: z
+    .string({ error: ETA_MSG })
+    .refine((v) => validEta(v), { error: ETA_MSG })
+    .optional(),
 });
 
 export const cancelSchema = z

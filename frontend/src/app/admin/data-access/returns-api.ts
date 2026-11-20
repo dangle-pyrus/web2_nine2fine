@@ -37,6 +37,8 @@ export interface AdminReturnLine {
   acceptedQuantity?: number;
   goodsAmount: number;
   disposition?: ReturnDisposition;
+  /** ADM-RET-05/08: accepted units put back into stock; the rest of the accepted units were not. */
+  restockQuantity?: number;
 }
 
 export interface AdminReturnPhoto {
@@ -135,15 +137,25 @@ export interface AdminReturnPage {
 export interface AdminReturnQuery {
   state: AdminReturnTab;
   q: string;
-  sort: 'requestedAt' | 'amount';
+  sort: AdminReturnSort;
   page: number;
   limit: number;
 }
+
+/** ADM-RET-01: newest first (default), oldest first (work the queue), amount high to low. */
+export type AdminReturnSort = 'requestedAt' | 'oldest' | 'amount';
+export const RETURN_SORTS: { value: AdminReturnSort; label: string }[] = [
+  { value: 'requestedAt', label: 'Mới nhất trước' },
+  { value: 'oldest', label: 'Cũ nhất trước' },
+  { value: 'amount', label: 'Số tiền giảm dần' },
+];
 
 export interface AdminReturnReceiveLine {
   variantId: string;
   acceptedQuantity: number;
   disposition?: ReturnDisposition;
+  /** ADM-RET-05/08: accepted units to put back into stock (0..acceptedQuantity). */
+  restockQuantity?: number;
 }
 
 export const RETURN_DEFAULT_LIMIT = 20;

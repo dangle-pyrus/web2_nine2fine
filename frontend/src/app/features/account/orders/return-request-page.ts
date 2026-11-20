@@ -3,10 +3,17 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   signal,
 } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormBuilder,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -46,12 +53,33 @@ import {
   canRequestReturn,
   estimateRefund,
   RETURN_REASONS,
+  returnBlockedReason,
   returnDeadline,
   returnReason,
 } from '../../orders/order-returns';
 
 const MAX_PHOTOS = MAX_RETURN_PHOTOS;
 const MAX_PHOTO_BYTES = MAX_RETURN_PHOTO_BYTES;
+/** RET-04: the formats the server accepts. */
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const DETAIL_MAX = 500;
+const DETAIL_MIN_SHOP_FAULT = 10;
+
+/** RET-04: shop fault 10–500 characters (trimmed), the shopper's own reasons optional, ≤ 500. */
+function detailValidator(control: AbstractControl): ValidationErrors | null {
+  const length = String(control.value ?? '').trim().length;
+  if (length > DETAIL_MAX) return { detail: true };
+  const reason = control.parent?.get('reason')?.value as ReturnReason | '' | undefined;
+  const shopFault = !!reason && returnReason(reason).sellerFault;
+  return shopFault && length < DETAIL_MIN_SHOP_FAULT ? { detail: true } : null;
+}
+
+/** RET-06: 6–19 digits once spaces are removed. */
+function accountNumberValidator(control: AbstractControl): ValidationErrors | null {
+  return /^\d{6,19}$/.test(String(control.value ?? '').replace(/\s/g, ''))
+    ? null
+    : { accountNumber: true };
+}
 
 /** A picked photo; it uploads right away and the request only sends finished IDs. */
 interface Photo {
@@ -88,9 +116,13 @@ interface Photo {
       </p>
     } @else if (order(); as current) {
       @if (!eligible(current)) {
-        <p class="lead">
-          Đơn này không còn trong thời hạn trả hàng {{ policy.returnDays }} ngày hoặc đã có yêu cầu
-          trả hàng. <a routerLink="/help">Liên hệ nine2fine</a> nếu bạn cần hỗ trợ.
+        <p class="lead" data-testid="return-blocked">
+          @if (blockedReason(current); as reason) {
+            {{ reason }}
+          } @else {
+            Đơn này chưa đủ điều kiện trả hàng hoặc đã quá thời hạn {{ policy.returnDays }} ngày.
+          }
+          <a routerLink="/help">Liên hệ nine2fine</a> nếu bạn cần hỗ trợ.
           <a [routerLink]="orderLink">Xem chi tiết đơn</a>
         </p>
       } @else {
@@ -180,10 +212,21 @@ interface Photo {
                   ? 'Ví dụ: Đặt size M nhưng nhận size L, tem ghi L.'
                   : 'Không bắt buộc. Ví dụ: Áo hơi rộng ở vai.'
               "
+              maxlength="500"
               [attr.aria-invalid]="invalid('detail')"
+              aria-describedby="return-detail-count"
             ></textarea>
+            <p class="hint count" id="return-detail-count">
+              {{ detailLength() }}/500 ký tự{{ sellerFault() ? ' (tối thiểu 10)' : '' }}
+            </p>
             @if (invalid('detail')) {
-              <p class="field-error">Mô tả ngắn vấn đề (từ 10 đến 500 ký tự).</p>
+              <p class="field-error">
+                {{
+                  sellerFault()
+                    ? 'Mô tả lỗi từ 10 đến 500 ký tự.'
+                    : 'Mô tả tối đa 500 ký tự.'
+                }}
+              </p>
             }
             @if (serverError('detail'); as text) {
               <p class="field-error" role="alert">{{ text }}</p>
@@ -194,7 +237,7 @@ interface Photo {
               }})
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 multiple
                 [disabled]="photos().length >= maxPhotos"
                 (change)="addPhotos($event)"
@@ -231,7 +274,7 @@ interface Photo {
               } @else {
                 Ảnh không bắt buộc.
               }
-              Tối đa {{ maxPhotos }} ảnh, mỗi ảnh dưới 5 MB.
+              Tối đa {{ maxPhotos }} ảnh JPEG, PNG hoặc WebP, mỗi ảnh tối đa 5 MB.
             </p>
             @if (photoError()) {
               <p class="field-error" role="alert">{{ photoError() }}</p>
@@ -300,18 +343,44 @@ interface Photo {
                 }
               </div>
             } @else {
-              <p class="hint">Tiền được hoàn về phương thức bạn đã dùng để thanh toán đơn này.</p>
+              <p class="hint">
+                Đơn đã thanh toán bằng chuyển khoản QR: tiền được hoàn về tài khoản đã thanh toán
+                đơn này, bạn không cần nhập tài khoản mới.
+              </p>
             }
           </fieldset>
 
-          <section class="estimate" aria-live="polite">
+          <section class="estimate" aria-live="polite" data-testid="return-estimate">
+            @let amount = refund();
+            @if (amount.goodsAmount) {
+              <dl class="breakdown">
+                <div>
+                  <dt>Tiền hàng trả lại</dt>
+                  <dd>{{ amount.goodsAmount | vnd }}</dd>
+                </div>
+                @if (amount.shippingRefund) {
+                  <div>
+                    <dt>Hoàn phí giao hàng ban đầu</dt>
+                    <dd>+{{ amount.shippingRefund | vnd }}</dd>
+                  </div>
+                }
+                @if (amount.returnShippingFee) {
+                  <div>
+                    <dt>Phí gửi trả (lý do của bạn)</dt>
+                    <dd>−{{ amount.returnShippingFee | vnd }}</dd>
+                  </div>
+                }
+              </dl>
+            }
             <div>
               <span>Dự kiến hoàn</span>
-              <strong>{{ refund().amount | vnd }}</strong>
+              <strong>{{ amount.amount | vnd }}</strong>
             </div>
             <p class="hint">
-              @if (refund().returnShippingFee) {
-                Đã trừ phí gửi trả {{ refund().returnShippingFee | vnd }}.
+              @if (!amount.goodsAmount) {
+                Chọn sản phẩm và lý do để xem số tiền dự kiến.
+              } @else if (sellerFault() && !amount.shippingRefund) {
+                Phí giao hàng ban đầu chỉ được hoàn khi trả lại toàn bộ đơn vì lỗi của nine2fine.
               }
               @if (httpMode) {
                 Số tiền dự kiến, chốt sau khi nine2fine kiểm hàng. Dự kiến hoàn trong
@@ -576,6 +645,23 @@ interface Photo {
     .estimate strong {
       font-size: 22px;
     }
+    .estimate .breakdown {
+      display: grid;
+      gap: 6px;
+      margin: 0 0 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .estimate .breakdown dt {
+      color: var(--muted);
+    }
+    .estimate .breakdown dd {
+      margin: 0;
+    }
+    .count {
+      text-align: right;
+    }
     .ack {
       display: flex;
       align-items: flex-start;
@@ -649,9 +735,10 @@ export class ReturnRequestPage {
   private readonly uploads = new Map<number, Subscription>();
   private photoKey = 0;
 
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly form = inject(FormBuilder).nonNullable.group({
     reason: ['' as ReturnReason | '', Validators.required],
-    detail: [''],
+    detail: ['', detailValidator],
     bank: [''],
     accountNumber: [''],
     accountName: [''],
@@ -665,14 +752,19 @@ export class ReturnRequestPage {
     const reason = this.reason();
     return !!reason && returnReason(reason).sellerFault;
   });
-  readonly refund = computed(() => {
+  readonly detailLength = toSignal(
+    this.form.controls.detail.valueChanges.pipe(map((value) => value.trim().length)),
+    { initialValue: 0 },
+  );
+  /** RET-07: from the order as stored (server estimate when it answered, else the same formula). */
+  readonly refund = computed((): ReturnAmount => {
     const order = this.order();
     const reason = this.reason() || 'changed-mind';
     const server = this.serverAmount();
     if (this.httpMode && server) return server;
     return order
       ? estimateRefund(order, this.lines(), reason)
-      : { amount: 0, returnShippingFee: 0 };
+      : { goodsAmount: 0, shippingRefund: 0, returnShippingFee: 0, amount: 0, final: false };
   });
 
   constructor() {
@@ -683,7 +775,7 @@ export class ReturnRequestPage {
           this.guest
             ? this.checkout.getOrder(id)
             : this.httpMode
-              ? this.ordersApi.get(id)
+              ? this.ordersApi.getMine(id)
               : this.api.getOrder(id),
         ),
         takeUntilDestroyed(),
@@ -707,12 +799,10 @@ export class ReturnRequestPage {
     if (this.httpMode) this.watchEstimate();
     // Any edit clears the server's complaint about that field.
     this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.clearServerErrors());
-    // Fault reasons need a description; the shopper's own reasons need the condition confirmed.
+    // RET-02/04: fault reasons need a description; the shopper's own reasons need the condition
+    // (tags on, unused, unwashed) confirmed.
     this.form.controls.reason.valueChanges.pipe(takeUntilDestroyed()).subscribe((reason) => {
       const fault = !!reason && returnReason(reason).sellerFault;
-      this.form.controls.detail.setValidators(
-        fault ? [Validators.required, Validators.minLength(10), Validators.pattern(/\S/)] : [],
-      );
       this.form.controls.condition.setValidators(fault ? [] : [Validators.requiredTrue]);
       this.form.controls.detail.updateValueAndValidity();
       this.form.controls.condition.updateValueAndValidity();
@@ -767,6 +857,11 @@ export class ReturnRequestPage {
     return canRequestReturn(order);
   }
 
+  /** RET-03: the request that stops a new one (in progress, rejected or refunded). */
+  blockedReason(order: Order): string {
+    return returnBlockedReason(order);
+  }
+
   deadline(order: Order): string {
     const iso = returnDeadline(order);
     return iso ? formatDate(iso) : '';
@@ -806,11 +901,18 @@ export class ReturnRequestPage {
     input.value = '';
     this.photoError.set('');
     const room = MAX_PHOTOS - this.photos().length;
-    const accepted = files.filter(
-      (file) => file.type.startsWith('image/') && file.size <= MAX_PHOTO_BYTES,
+    const wrongType = files.filter((file) => !PHOTO_TYPES.includes(file.type));
+    const tooBig = files.filter(
+      (file) => PHOTO_TYPES.includes(file.type) && file.size > MAX_PHOTO_BYTES,
     );
-    if (accepted.length < files.length) this.photoError.set('Chỉ nhận ảnh dưới 5 MB.');
-    if (accepted.length > room) this.photoError.set(`Tối đa ${MAX_PHOTOS} ảnh.`);
+    const accepted = files.filter(
+      (file) => PHOTO_TYPES.includes(file.type) && file.size <= MAX_PHOTO_BYTES,
+    );
+    const problems: string[] = [];
+    if (wrongType.length) problems.push('Chỉ nhận ảnh JPEG, PNG hoặc WebP.');
+    if (tooBig.length) problems.push('Mỗi ảnh tối đa 5 MB.');
+    if (accepted.length > room) problems.push(`Tối đa ${MAX_PHOTOS} ảnh.`);
+    this.photoError.set(problems.join(' '));
     for (const file of accepted.slice(0, room)) this.upload(file);
   }
 
@@ -868,6 +970,7 @@ export class ReturnRequestPage {
     if (needsPhoto) this.photoError.set('Vui lòng thêm ít nhất 1 ảnh sản phẩm.');
     if (this.form.invalid || !this.picked().size || needsPhoto) {
       this.error.set('Vui lòng kiểm tra các thông tin được đánh dấu.');
+      this.focusFirstError();
       return;
     }
     const value = this.form.getRawValue();
@@ -961,8 +1064,12 @@ export class ReturnRequestPage {
           else void this.router.navigate(['/account/orders', order.id]);
         },
         error: (error: unknown) => {
+          // RET-08: everything typed stays; field errors go next to their fields.
           if (error instanceof ReturnApiError) {
-            if (error.code === 'validation') this.serverErrors.set(error.fieldErrors);
+            if (error.code === 'validation') {
+              this.serverErrors.set(error.fieldErrors);
+              this.focusFirstError();
+            }
             if (error.code === 'idempotency-conflict') this.sendKey = null;
           }
           this.blocked.set(returnErrorBlocksOrder(error));
@@ -990,6 +1097,18 @@ export class ReturnRequestPage {
       : orderErrorMessage(error);
   }
 
+  /** Brings the first marked field (or field error) into view. */
+  private focusFirstError(): void {
+    setTimeout(() => {
+      const root = this.host.nativeElement;
+      const target =
+        root.querySelector<HTMLElement>('[aria-invalid="true"]') ??
+        root.querySelector<HTMLElement>('.field-error');
+      target?.scrollIntoView({ block: 'center' });
+      target?.focus?.();
+    });
+  }
+
   private lines(): ReturnLine[] {
     return [...this.picked()].map(([index, quantity]) => ({ index, quantity }));
   }
@@ -1000,7 +1119,7 @@ export class ReturnRequestPage {
       required ? [Validators.required, Validators.pattern(/\S{2,}/)] : [],
     );
     controls.accountNumber.setValidators(
-      required ? [Validators.required, Validators.pattern(/^\s*\d[\d\s]{4,22}\d\s*$/)] : [],
+      required ? [Validators.required, accountNumberValidator] : [],
     );
     controls.accountName.setValidators(
       required ? [Validators.required, Validators.pattern(/\S.{1,}/)] : [],

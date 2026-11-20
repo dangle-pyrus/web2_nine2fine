@@ -128,6 +128,10 @@ const apiError = (code: string, message = '', extra: Json = {}) => ({
 
 async function useReturns(page: Page): Promise<void> {
   await page.addInitScript(() => localStorage.setItem('n2f.e2e.returnsMode', 'http'));
+  // ORD-07: "Đơn hàng của tôi" opens an order only once it is found in the account's own list.
+  await page.route(/\/api\/orders\?/, (route) =>
+    fulfil(route, 200, { items: [order()], total: 1, page: 1, limit: 50, hasMore: false }),
+  );
 }
 
 async function signIn(page: Page, url: string): Promise<void> {
@@ -210,10 +214,7 @@ test.describe('storefront returns on the API (Slice 9)', () => {
     expect(uploads).toEqual([{ type: 'image/png', size: PNG.length }]);
     // The server amount replaces the local one.
     await expect(
-      page
-        .getByText('Dự kiến hoàn')
-        .locator('..')
-        .getByText(/400\.000\s?₫/),
+      page.getByTestId('return-estimate').locator('strong').getByText(/400\.000\s?₫/),
     ).toBeVisible();
     // COD: bank account is required.
     await page.getByLabel('Ngân hàng').fill('Vietcombank');

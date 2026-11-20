@@ -67,7 +67,7 @@ orderRouter.get(
   requireAuth('storefront'),
   wrap(async (req, res) => {
     const q = parseBody(listQuerySchema, { ...req.query });
-    noStore(res).json(await listMyOrders(req.auth!.user.user_id, q.page, q.limit));
+    noStore(res).json(await listMyOrders(req.auth!.user.user_id, q.page, q.limit, { status: q.status, q: q.q || undefined }));
   }),
 );
 

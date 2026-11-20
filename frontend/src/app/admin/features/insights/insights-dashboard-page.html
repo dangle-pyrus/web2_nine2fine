@@ -1,5 +1,12 @@
 <header class="dash-head">
-  <h1>{{ greeting() }}</h1>
+  <div>
+    <h1>{{ greeting() }}</h1>
+    <p class="dash-meta small tertiary" data-testid="dashboard-period" aria-live="polite">
+      @if (data()) { {{ currentName() }} · so với {{ compareName() }} @if (updatedAt()) { · Cập
+      nhật lúc {{ updatedAt() }} } } @else if (view.state().error) { Chưa có số liệu cho kỳ này }
+      @else { Đang tải số liệu {{ currentName() }}… }
+    </p>
+  </div>
   <div class="dash-actions">
     <div class="segmented" role="group" aria-label="Khoảng thời gian">
       @for (item of ranges; track item.value) {
@@ -37,10 +44,11 @@
   } @else {
   <div class="kpi-cards" [class.is-refreshing]="view.state().refreshing" data-testid="kpis">
     @for (card of kpis(); track card.key) {
-    <div class="kpi-card" [attr.data-testid]="'kpi-' + card.key">
+    <div class="kpi-card" [attr.data-testid]="'kpi-' + card.key" [title]="card.hint">
       <span class="kpi-icon" aria-hidden="true"><adm-icon [name]="card.icon" [size]="20" /></span>
       <div class="kpi-text">
         <p class="kpi-label">{{ card.label }}</p>
+        <p class="kpi-hint">{{ card.hint }}</p>
         <p class="kpi-value num">{{ card.text }}</p>
         @if (delta(card.kpi, card.inverted); as d) {
         <p class="delta" [attr.data-tone]="d.tone" [title]="'So với ' + compareName()">
@@ -66,44 +74,45 @@
       <section class="card" aria-labelledby="chart-title" data-testid="dashboard-chart">
         <header class="card-head">
           <div>
-            <h2 id="chart-title" class="card-title">
-              {{ chartMetric() === 'revenue' ? 'Doanh thu' : 'Đơn hàng' }}
-            </h2>
+            <h2 id="chart-title" class="card-title">{{ c.title }}</h2>
             <p class="chart-total num">{{ c.total }}</p>
             <p class="delta" [attr.data-tone]="c.delta.tone" [title]="'So với ' + compareName()">
               @if (c.delta.dir) {
               <adm-icon [name]="c.delta.icon" [size]="16" />
               }
+              <span>{{ compareName() }}:</span>
               <span class="num">{{ c.previous }}</span>
               <span class="num">({{ c.delta.text }})</span>
             </p>
           </div>
+          @if (isAdmin()) {
           <div class="segmented" role="group" aria-label="Chỉ số biểu đồ">
             <button
               type="button"
-              [class.is-active]="chartMetric() === 'revenue'"
-              [attr.aria-pressed]="chartMetric() === 'revenue'"
+              [class.is-active]="metric() === 'revenue'"
+              [attr.aria-pressed]="metric() === 'revenue'"
               (click)="chartMetric.set('revenue')"
             >
-              Doanh thu
+              Doanh thu thuần
             </button>
             <button
               type="button"
-              [class.is-active]="chartMetric() === 'orders'"
-              [attr.aria-pressed]="chartMetric() === 'orders'"
+              [class.is-active]="metric() === 'orders'"
+              [attr.aria-pressed]="metric() === 'orders'"
               (click)="chartMetric.set('orders')"
             >
-              Đơn hàng
+              Đơn đặt
             </button>
           </div>
+          }
         </header>
         <div class="legend small secondary">
-          <span><i class="line"></i>Kỳ này</span>
+          <span><i class="line"></i>{{ currentName() }}</span>
           <span><i class="line dashed"></i>{{ compareName() }}</span>
         </div>
         <adm-chart
           type="line"
-          [label]="(chartMetric() === 'revenue' ? 'Doanh thu' : 'Đơn hàng') + ' theo thời gian'"
+          [label]="c.title + ', so với ' + compareName()"
           [labels]="c.labels"
           [series]="c.series"
           [format]="c.format"
@@ -113,7 +122,7 @@
 
       <section class="card" aria-labelledby="recent-title">
         <header class="card-head">
-          <h2 id="recent-title" class="card-title">Đơn hàng gần đây</h2>
+          <h2 id="recent-title" class="card-title">Đơn đặt gần đây</h2>
           <a class="small link-quiet" routerLink="/admin/orders">Xem tất cả</a>
         </header>
         <div class="table-wrap">
@@ -123,7 +132,9 @@
                 <th>Mã đơn</th>
                 <th>Nền tảng</th>
                 <th>Khách</th>
+                @if (isAdmin()) {
                 <th class="num">Tổng tiền</th>
+                }
                 <th>Trạng thái</th>
               </tr>
             </thead>
@@ -150,12 +161,16 @@
                   />
                 </td>
                 <td>{{ order.customerName }}</td>
-                <td class="num">{{ order.total | admMoney }}</td>
+                @if (isAdmin()) {
+                <td class="num">{{ order.total ?? 0 | admMoney }}</td>
+                }
                 <td><adm-badge [spec]="order.badge" /></td>
               </tr>
               } @empty {
               <tr>
-                <td colspan="5" class="tertiary">Chưa có đơn trong khoảng này.</td>
+                <td [attr.colspan]="isAdmin() ? 5 : 4" class="tertiary">
+                  {{ data() ? 'Chưa có đơn trong khoảng này.' : 'Đang tải…' }}
+                </td>
               </tr>
               }
             </tbody>
@@ -206,11 +221,15 @@
         }
       </section>
 
-      @if (isAdmin()) {
+      @if (showTopProducts()) {
       <section class="card" aria-labelledby="top-title">
         <header class="card-head">
-          <h2 id="top-title" class="card-title">Sản phẩm nổi bật</h2>
-          <span class="small tertiary">So với {{ compareName() }}</span>
+          <h2 id="top-title" class="card-title">
+            {{ isAdmin() ? 'Sản phẩm nổi bật' : 'Sản phẩm bán chạy' }}
+          </h2>
+          <span class="small tertiary">{{
+            isAdmin() ? 'So với ' + compareName() : 'Theo số lượng đã bán'
+          }}</span>
         </header>
         <table class="table top" data-testid="top-products">
           <thead>
@@ -218,7 +237,9 @@
               <th>Hạng</th>
               <th>Sản phẩm</th>
               <th class="num">Đã bán</th>
+              @if (isAdmin()) {
               <th class="num">Doanh thu</th>
+              }
             </tr>
           </thead>
           <tbody>
@@ -226,6 +247,7 @@
             <tr class="top-row">
               <td>
                 <span class="rank num" [class.is-podium]="row.rank <= 3">#{{ row.rank }}</span>
+                @if (isAdmin()) {
                 <span class="move small" [attr.data-dir]="row.move.dir" [title]="row.move.title">
                   @if (row.move.dir === 'up' || row.move.dir === 'down') {
                   <adm-icon
@@ -235,6 +257,7 @@
                   }
                   <span class="num">{{ row.move.text }}</span>
                 </span>
+                }
               </td>
               <td>
                 <div class="cell-media">
@@ -249,21 +272,25 @@
                     } @else {
                     <span class="cell-title">{{ row.name }}</span>
                     }
-                    <span class="small tertiary">{{ row.category.name }}</span>
+                    <span class="small tertiary">{{ row.category?.name }}</span>
                   </div>
                 </div>
               </td>
               <td class="num">{{ row.units | admNum }}</td>
+              @if (isAdmin()) {
               <td class="num">
                 {{ row.revenue | admMoney }}
                 <span class="share" [title]="'Tỉ trọng doanh thu'"
                   ><span class="share-bar" [style.width.%]="row.share * 100"></span
                 ></span>
               </td>
+              }
             </tr>
             } @empty {
             <tr>
-              <td colspan="4" class="tertiary">Chưa có đơn trong khoảng này.</td>
+              <td [attr.colspan]="isAdmin() ? 4 : 3" class="tertiary">
+                {{ data() ? 'Chưa có đơn trong khoảng này.' : 'Đang tải…' }}
+              </td>
             </tr>
             }
           </tbody>

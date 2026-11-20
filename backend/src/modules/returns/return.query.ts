@@ -118,13 +118,18 @@ export interface ReturnSummaryRow {
 
 export async function listReturns(
   db: Db,
-  f: { state?: string; q?: string; sort: 'requestedAt' | 'amount'; page: number; limit: number },
+  f: { state?: string; q?: string; sort: 'requestedAt' | 'oldest' | 'amount'; page: number; limit: number },
 ): Promise<{ rows: ReturnSummaryRow[]; total: number }> {
   const conds: Prisma.Sql[] = [];
   if (f.q) conds.push(searchSql(f.q));
   if (f.state) conds.push(STATE_SQL[f.state]);
   const where = conds.length ? Prisma.sql`WHERE ${Prisma.join(conds, ' AND ')}` : Prisma.empty;
-  const order = f.sort === 'amount' ? Prisma.sql`r."amount" DESC, r."requested_at" DESC, r."return_id" DESC` : Prisma.sql`r."requested_at" DESC, r."return_id" DESC`;
+  const order =
+    f.sort === 'amount'
+      ? Prisma.sql`r."amount" DESC, r."requested_at" DESC, r."return_id" DESC`
+      : f.sort === 'oldest'
+        ? Prisma.sql`r."requested_at" ASC, r."return_id" ASC`
+        : Prisma.sql`r."requested_at" DESC, r."return_id" DESC`;
   const [rows, [cnt]] = await Promise.all([
     db.$queryRaw<ReturnSummaryRow[]>(Prisma.sql`
       SELECT r."return_id"::text AS "return_id", o."code", r."requested_at", o."recipient_name", r."reason", r."fault", r."state", r."requested_via" AS "source", r."amount",

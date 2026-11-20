@@ -154,9 +154,15 @@ const HISTORY_LABELS: Record<string, string> = {
                 <span class="cell-title">{{ line.name }}</span>
                 <p class="small secondary">{{ line.color }} / {{ line.size }} × {{ line.quantity }}</p>
                 @if (line.acceptedQuantity !== undefined) {
-                  <p class="small secondary">
-                    Đạt {{ line.acceptedQuantity }}@if (line.disposition) { ·
-                    {{ line.disposition === 'restock' ? 'Nhập lại kho' : 'Hỏng, không nhập' }} }
+                  <p class="small secondary" data-testid="return-line-result">
+                    Đạt {{ line.acceptedQuantity }}
+                    @if (line.acceptedQuantity > 0) {
+                      @let restocked =
+                        line.restockQuantity ??
+                        (line.disposition === 'restock' ? line.acceptedQuantity : 0);
+                      · Nhập lại kho {{ restocked }} · Không nhập kho
+                      {{ line.acceptedQuantity - restocked }}
+                    }
                   </p>
                 }
               </div>
