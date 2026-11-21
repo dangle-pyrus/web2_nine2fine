@@ -16,17 +16,14 @@ would be refused with 403 from 127.0.0.1). `/api` is proxied to the backend on h
 (`proxy.conf.json`), which must be running. To use a different port: `npm run start:local -- --port 4201`
 (and add that origin to the backend `CORS_ALLOWED_ORIGINS`).
 
-Playwright tests run on mock data without a backend: `npm test` starts its own server with
-`npm run start:e2e` (configuration `e2e`).
+The Playwright suite (`tests/`, `playwright.config.ts`, the `e2e` build configuration and its `*.e2e.ts` adapters) and
+`document/` were moved to `../nine2fine-archive/2026-11-21/frontend/` when the code was closed (2026-11-21).
 
 ```sh
 npm run build
 npm run lint
 npm run format:check
-npm test
 ```
-
-Playwright defaults to the installed Microsoft Edge on Windows, Chromium elsewhere. Set `PLAYWRIGHT_CHANNEL` to override. Install Chromium with `npx playwright install chromium` on machines without a browser. Tests start a dev server on port 4200 if one is not already running. Screenshots and failure traces are written to `test-results/`.
 
 ## Implemented Slice
 
@@ -65,7 +62,7 @@ The existing HTTP adapters express a proposed contract, not a verified backend i
 
 ## Assets and Icons
 
-Original sources stay in `asset/` and `svg/`. Angular copies only the explicitly selected assets in `angular.json`; it does not publish the entire unDraw library. Product fixture media IDs are resolved through the manifest. For replacement photography, add a media entry with a local path, dimensions, alt text and provenance, then assign its ID to a fixture. Set `temporary: false` to remove placeholder treatment.
+Original sources stay in `asset/` (the unused unDraw sources in `svg/` were moved to `../nine2fine-archive/2026-11-21/frontend/svg/`). Angular copies only the explicitly selected assets in `angular.json`; it does not publish the entire unDraw library. Product fixture media IDs are resolved through the manifest. For replacement photography, add a media entry with a local path, dimensions, alt text and provenance, then assign its ID to a fixture. Set `temporary: false` to remove placeholder treatment.
 
 UI icons use `@ng-icons/core` and `@ng-icons/reicon`, registered individually in `app.config.ts`. `reicon-angular@1.0.1` was inspected but removed because the published package lacked generated components and a usable entrypoint. This is still the requested Reicon icon set, not a replacement icon family.
 

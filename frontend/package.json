@@ -4,13 +4,11 @@
   "private": true,
   "scripts": {
     "start": "ng serve --host 127.0.0.1",
-    "start:e2e": "ng serve --configuration e2e --host 127.0.0.1",
     "start:local": "ng serve --host localhost --port 4200",
     "share": "ng serve --configuration share --host 127.0.0.1 --port 4300",
     "build": "ng build",
-    "test": "playwright test",
     "lint": "eslint src",
-    "format": "prettier --write src *.json *.mjs document/*.md README.md",
+    "format": "prettier --write src *.json *.mjs README.md",
     "format:check": "prettier --check src *.json *.mjs README.md"
   },
   "dependencies": {

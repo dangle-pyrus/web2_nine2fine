@@ -14,7 +14,7 @@ Website thương mại điện tử cho thương hiệu thời trang nine2fine (
 | npm | đi kèm Node 24 |
 | PostgreSQL | 13 trở lên, chạy cục bộ (cổng mặc định 5432) |
 
-Không cần tài khoản Supabase: dự án chạy hoàn toàn trên PostgreSQL cục bộ, ảnh lưu ra đĩa.
+Không cần tài khoản Supabase: dự án chạy trên PostgreSQL. Ảnh admin tải lên nên lưu trên Cloudinary (xem mục "Lưu trữ ảnh"); thiếu Cloudinary thì vẫn chạy được với ảnh ghi ra đĩa máy mình.
 
 ## Chạy nhanh bằng Docker (khuyến nghị)
 
@@ -85,14 +85,27 @@ Mở `backend/.env` và điền giá trị (file `.env` không được commit).
 
 Các biến còn lại (SMTP, ngân hàng/SePay, lưu ảnh) có chú thích ngay trong `.env.example`.
 
+### Lưu trữ ảnh
+
+| Loại ảnh | Lưu ở đâu | DB giữ gì |
+| --- | --- | --- |
+| Ảnh mẫu, minh hoạ có sẵn (`frontend/public/assets`) | File tĩnh đi kèm mã nguồn (git) | id trong `media-manifest.ts` |
+| Ảnh sản phẩm, banner trang chủ admin tải lên | Cloudinary (`MEDIA_STORAGE=cloudinary`) | id `up-…` + kích thước (`media_assets`); `/api/media/{id}` chuyển hướng tới CDN |
+| Ảnh minh chứng trả hàng (riêng tư) | PostgreSQL, bytea (`RETURN_PHOTO_STORAGE=db`, mặc định) | cả byte ảnh (`return_photo_blobs`), chỉ xem qua route có kiểm quyền |
+| QR chuyển khoản | Không lưu, tạo URL SePay mỗi lần | |
+
+Bật Cloudinary: tạo tài khoản miễn phí, chép chuỗi `CLOUDINARY_URL` ở Dashboard vào `backend/.env`, đặt `MEDIA_STORAGE=cloudinary` (cả nhóm dùng chung một chuỗi để thấy cùng ảnh). Dữ liệu sản phẩm thật (88 sản phẩm, ảnh đã nằm trên Cloudinary) nằm ở `backend/prisma/seed-data/zara-products.json`; nhập bằng `npm run seed:zara` trong `backend/` (chạy lại an toàn, không đổi tồn kho / trạng thái; 31 sản phẩm thiếu giá vào trạng thái Nháp). File Excel đổi thì sinh lại JSON bằng `python -I scripts/zara-xlsx-to-json.py <file.xlsx> .env`.
+
+Đã có ảnh cũ trên đĩa thì chạy một lần `npm run media:migrate -- --dry-run` để xem, rồi `npm run media:migrate` để chuyển (id ảnh giữ nguyên).
+
 Áp migration, sinh Prisma Client và nạp dữ liệu:
 
 ```bash
 npx prisma migrate deploy   # tạo toàn bộ bảng
 npx prisma generate         # nếu lỗi EPERM trên Windows: tắt backend đang chạy rồi chạy lại
 npm run seed                # tạo 3 tài khoản admin / staff / member từ biến SEED_*
-npm run seed:catalog        # danh mục + sản phẩm + biến thể + bảng size
 npm run seed:checkout       # tham số checkout, voucher, địa giới VN (34 tỉnh, ~3.300 phường/xã), ngày nghỉ
+npm run seed:zara           # 8 danh mục + 88 sản phẩm thật (ảnh Cloudinary) + bảng size
 npm run seed:home           # nội dung trang chủ mặc định
 ```
 
@@ -149,24 +162,14 @@ Không có mật khẩu mặc định trong mã nguồn. Sau `npm run seed`, đ�
 
 `npm run seed:demo` thêm khách mẫu với email `@demo.nine2fine.local` (chỉ để có số liệu cho báo cáo).
 
-## Kiểm thử
+## Kiểm tra trước khi nộp
 
-Backend (cần DB test riêng `n2f_test`; test từ chối chạy nếu trỏ vào DB khác, xem `N2F_TEST_DB_URL` trong `.env.example`):
-
-```bash
-cd backend
-npm run typecheck
-npm test
-```
-
-Frontend (Playwright chạy trên dữ liệu mock, không cần backend):
+Bộ test tự động (Vitest cho backend, Playwright cho frontend) đã chuyển ra `../nine2fine-archive/2026-11-21/` khi đóng code
+(2026-11-21); muốn chạy lại thì chép về theo hướng dẫn trong README của thư mục đó. Kiểm tra còn lại:
 
 ```bash
-cd frontend
-npx playwright install chromium   # lần đầu, nếu máy chưa có trình duyệt
-npm run lint
-npm run build
-npm test
+cd backend && npm run typecheck && npm run build
+cd frontend && npm run lint && npm run build
 ```
 
 ## Build production

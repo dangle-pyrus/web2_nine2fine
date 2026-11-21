@@ -19,7 +19,6 @@
               { "input": "src/app/admin/styles/admin.scss", "bundleName": "admin", "inject": false }
             ],
             "assets": [
-              { "glob": "logo*.svg", "input": "asset", "output": "assets/brand" },
               {
                 "glob": "{add_to_cart 1,delivery_address 1,discount 1}.svg",
                 "input": "asset",
@@ -41,33 +40,7 @@
               ],
               "outputHashing": "all"
             },
-            "development": { "optimization": false, "sourceMap": true },
-            "e2e": {
-              "optimization": false,
-              "sourceMap": true,
-              "fileReplacements": [
-                {
-                  "replace": "src/app/core/api-config.ts",
-                  "with": "src/app/core/api-config.e2e.ts"
-                },
-                {
-                  "replace": "src/app/core/storefront-adapters.ts",
-                  "with": "src/app/core/storefront-adapters.e2e.ts"
-                },
-                {
-                  "replace": "src/app/admin/admin-order-adapters.ts",
-                  "with": "src/app/admin/admin-order-adapters.e2e.ts"
-                },
-                {
-                  "replace": "src/app/admin/admin-catalog-adapters.ts",
-                  "with": "src/app/admin/admin-catalog-adapters.e2e.ts"
-                },
-                {
-                  "replace": "src/app/admin/admin-users-adapters.ts",
-                  "with": "src/app/admin/admin-users-adapters.e2e.ts"
-                }
-              ]
-            }
+            "development": { "optimization": false, "sourceMap": true }
           },
           "defaultConfiguration": "production"
         },
@@ -77,7 +50,6 @@
           "configurations": {
             "production": { "buildTarget": "nine2fine:build:production" },
             "development": { "buildTarget": "nine2fine:build:development" },
-            "e2e": { "buildTarget": "nine2fine:build:e2e" },
             "share": {
               "buildTarget": "nine2fine:build:production",
               "allowedHosts": [".ngrok-free.app", ".ngrok-free.dev", ".ngrok.app", ".ngrok.dev"],

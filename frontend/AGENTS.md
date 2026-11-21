@@ -1,11 +1,11 @@
 # Project Context
 
-Read `document/nine2fine_MASTER_PLAN.md`, especially sections 0 and 56-59, before implementing a feature. Inspect the actual code and latest ledger; do not infer completion from the roadmap.
+The master plan (`document/nine2fine_MASTER_PLAN.md`) and the Playwright suite were archived in `../nine2fine-archive/2026-11-21/frontend/` (2026-11-21); read them there if needed. Inspect the actual code and latest ledger; do not infer completion from the roadmap.
 
 - Angular 22 standalone frontend, strict TypeScript, SCSS, Signals/RxJS and typed mock/HTTP interfaces.
 - Preserve user changes and original assets. Do not re-scaffold the app.
 - Reicon is integrated through `@ng-icons/core` + `@ng-icons/reicon`; the inspected `reicon-angular@1.0.1` publication was unusable.
-- unDraw sources in `svg/` are optional illustrations. Publish only selected files through `angular.json`.
+- unDraw sources (`svg/`), Uniqlo reference crawl (`reference/`, `scripts/reference/`), Pexels tooling (`scripts/pexels/`) and Figma exports (`.open-figma-mcp/`) were moved to `../nine2fine-archive/2026-11-21/frontend/` (2026-11-21). The selected copies live in `asset/` and `public/assets/`.
 - Pexels API is not configured. Use the media manifest for temporary assets and never put secrets in client code or logs.
 - Figma is read through the local `open-figma-mcp` plugin (Figma Desktop must run the plugin); exports must be written inside the workspace (`.open-figma-mcp/exports/`). Tokens and onboarding frames are audited; other frames are not. Do not claim pixel parity. Preserve auth/account visual design.
 - Keep work scoped to a feature or cohesive system. Update the master-plan ledger with files changed, actual verification results, limitations and next work.

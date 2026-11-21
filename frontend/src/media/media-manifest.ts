@@ -29,7 +29,8 @@ interface PexelsEntry {
 }
 
 /**
- * Temporary editorial photography curated from Pexels by scripts/pexels/fetch_media.py
+ * Temporary editorial photography curated from Pexels by scripts/pexels/fetch_media.py (archived 2026-11-21 in
+ * ../nine2fine-archive/2026-11-21/frontend/scripts/pexels/)
  * (provenance in pexels-media.json). Replace with brand photography by editing the JSON/script;
  * components only reference the media IDs below.
  */
@@ -72,39 +73,7 @@ export const MEDIA: Record<string, MediaAsset> = {
     temporary: true,
     source: 'undraw',
   },
-  // Temporary PDP gallery shots (unDraw); each slot keeps a meaningful label until photography exists.
-  'gallery-model': {
-    src: '/assets/illustrations/fashion_photoshoot.svg',
-    alt: 'Ảnh người mẫu đang cập nhật',
-    width: 400,
-    height: 500,
-    temporary: true,
-    source: 'undraw',
-  },
-  'gallery-styling': {
-    src: '/assets/illustrations/walk_in_the_city.svg',
-    alt: 'Ảnh phối đồ đang cập nhật',
-    width: 400,
-    height: 500,
-    temporary: true,
-    source: 'undraw',
-  },
-  'gallery-detail': {
-    src: '/assets/illustrations/product_photography.svg',
-    alt: 'Ảnh chi tiết chất liệu đang cập nhật',
-    width: 400,
-    height: 500,
-    temporary: true,
-    source: 'undraw',
-  },
-  'empty-cart': {
-    src: '/assets/illustrations/empty_cart.svg',
-    alt: '',
-    width: 320,
-    height: 240,
-    temporary: false,
-    source: 'undraw',
-  },
+
   // Account empty states use the user's brand-coloured illustrations from asset/ (Figma 193:2522).
   'empty-address': {
     src: '/assets/account/delivery_address%201.svg',

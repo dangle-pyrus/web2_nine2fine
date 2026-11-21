@@ -9,14 +9,14 @@
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
     "seed": "prisma db seed",
-    "seed:catalog": "tsx prisma/seed-catalog.ts",
     "seed:checkout": "tsx prisma/seed-checkout.ts",
     "seed:home": "tsx prisma/seed-home-content.ts",
+    "seed:zara": "tsx prisma/seed-zara.ts",
     "seed:demo": "tsx scripts/seed-demo-analytics.ts",
     "seed:demo:remove": "tsx scripts/seed-demo-analytics.ts --remove",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "media:migrate": "tsx scripts/media-migrate.ts"
   },
   "keywords": [],
   "author": "",

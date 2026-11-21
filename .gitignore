@@ -24,16 +24,11 @@ backend/.media*/
 test-results/
 playwright-report/
 
-# File chuyển / tạm của quy trình làm việc cục bộ
+# File chuyển / tạm của quy trình làm việc cục bộ (bản cũ đã chuyển ra ../nine2fine-archive/2026-11-21/)
 .n2f-tmp/
 .slice5-transfer/
 .xfer/
 scratchpad_dummy
-
-# Bản sao logo nằm lẻ ở gốc repo (bản chính nằm ở frontend/public/assets/brand/)
-/lazada-logo.svg
-/shopee-logo.svg
-/tiktokshop-logo.svg
 
 # Thư mục riêng của máy: Claude, IDE, hệ điều hành
 .claude/settings.local.json
