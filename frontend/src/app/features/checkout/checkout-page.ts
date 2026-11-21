@@ -162,15 +162,15 @@ export class CheckoutPage {
     invoiceEmail: [Validators.required, Validators.maxLength(100), Validators.email],
   } as const;
 
-  /** Two code boxes: a goods discount and a free-shipping code (BR-VOU-01). */
+  /**
+   * One code box (2026-11-21): the server tells the kind of a code, so a goods discount and a free-shipping code
+   * (BR-VOU-01, one of each) are typed in the same box; each applied code shows as its own chip.
+   * `shipping` only keeps the error slot of a free-shipping code dropped by a later quote.
+   */
   readonly voucherInputs = {
     discount: this.builder.control(''),
     shipping: this.builder.control(''),
   };
-  readonly voucherSlots = [
-    { slot: 'discount', label: 'Mã giảm giá', button: 'Áp dụng mã giảm giá' },
-    { slot: 'shipping', label: 'Mã miễn phí giao hàng', button: 'Áp dụng mã miễn phí giao hàng' },
-  ] as const;
   /** Applied codes by kind: only these go out with the quote and the order. */
   readonly appliedCodes = signal<Record<VoucherKind, string | null>>({
     discount: null,
@@ -433,12 +433,21 @@ export class CheckoutPage {
   shippingChip(): VoucherApplied | undefined {
     return this.quote()?.vouchers.find((voucher) => voucher.kind === 'free-shipping');
   }
+  /** Applied codes in display order: goods discount first, then free shipping. */
+  appliedChips(): VoucherApplied[] {
+    return [this.discountChip(), this.shippingChip()].filter((chip) => !!chip);
+  }
+  /** The one error line under the box (either slot). */
+  voucherError(): string {
+    const errors = this.voucherErrors();
+    return errors.discount || errors.shipping;
+  }
 
   applyVoucher(slot: 'discount' | 'shipping' = 'discount', code?: string): void {
     const input = this.voucherInputs[slot];
     const normalized = (code ?? input.value).trim().toUpperCase();
     if (code !== undefined) input.setValue(normalized);
-    this.voucherErrors.update((errors) => ({ ...errors, [slot]: '' }));
+    this.voucherErrors.set({ discount: '', shipping: '' }); // one box, one error line
     if (!normalized || this.voucherChecking() || this.voucherLock()) return;
     this.voucherChecking.set(true);
     const request = this.quoteRequest();

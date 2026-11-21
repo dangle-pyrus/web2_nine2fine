@@ -338,45 +338,41 @@
         }
 
         <div class="voucher" [class.dim]="quoting()" aria-live="polite">
-          @for (item of voucherSlots; track item.slot) {
+          @for (chip of appliedChips(); track chip.kind) {
+          <p class="voucher-applied">
+            <span><strong>{{ chip.code }}</strong> · {{ chip.label }}</span>@if (chip.kind ===
+            'discount') {<span class="minus">−{{ chip.amount | vnd }}</span> } @else {<span
+              >Miễn phí giao hàng</span
+            >}
+            <button type="button" class="link" (click)="removeVoucher(chip.kind)">Gỡ mã</button>
+          </p>
+          } @if (appliedChips().length < 2) {
           <div class="voucher-box">
-            @if (item.slot === 'discount' ? discountChip() : shippingChip(); as chip) {
-            <p class="voucher-applied">
-              <span><strong>{{ chip.code }}</strong> · {{ chip.label }}</span>@if (chip.kind ===
-              'discount') {<span class="minus">−{{ chip.amount | vnd }}</span> } @else {<span
-                >Miễn phí giao hàng</span
-              >}
-              <button type="button" class="link" (click)="removeVoucher(chip.kind)">Gỡ mã</button>
-            </p>
-            } @else {
-            <label [for]="'voucher-' + item.slot">{{ item.label }}</label>
+            <label for="voucher-code">Mã giảm giá</label>
             <div class="voucher-row">
               <input
-                [id]="'voucher-' + item.slot"
-                [formControl]="voucherInputs[item.slot]"
+                id="voucher-code"
+                [formControl]="voucherInputs.discount"
                 autocomplete="off"
                 maxlength="40"
                 [attr.disabled]="voucherLock() ? true : null"
-                (keydown.enter)="$event.preventDefault(); applyVoucher(item.slot)"
-                [attr.aria-invalid]="voucherErrors()[item.slot] ? 'true' : null"
-                [attr.aria-describedby]="voucherErrors()[item.slot] ? 'voucher-error-' + item.slot : null"
+                (keydown.enter)="$event.preventDefault(); applyVoucher('discount')"
+                [attr.aria-invalid]="voucherError() ? 'true' : null"
+                [attr.aria-describedby]="voucherError() ? 'voucher-error' : null"
               />
               <button
                 type="button"
                 class="pill outline"
-                [attr.aria-label]="item.button"
+                aria-label="Áp dụng mã giảm giá"
                 [disabled]="voucherChecking() || !!voucherLock()"
-                (click)="applyVoucher(item.slot)"
+                (click)="applyVoucher('discount')"
               >
                 {{ voucherChecking() ? '…' : 'Áp dụng' }}
               </button>
             </div>
-            } @if (voucherErrors()[item.slot]) {
-            <p class="field-error" [id]="'voucher-error-' + item.slot" role="alert">
-              {{ voucherErrors()[item.slot] }}
-            </p>
-            }
           </div>
+          } @if (voucherError()) {
+          <p class="field-error" id="voucher-error" role="alert">{{ voucherError() }}</p>
           } @if (voucherLock()) {
           <p class="field-error" role="alert">{{ voucherLock() }}</p>
           } @if (memberVouchers().length) {
