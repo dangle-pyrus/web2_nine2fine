@@ -8,7 +8,14 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, of, switchMap, takeWhile, timer } from 'rxjs';
+import { catchError, filter, finalize, of, switchMap, takeWhile, timer } from 'rxjs';
+import { OverlayService } from '../../shared/ui/overlay.service';
+import { ORDERS_API } from '../account/data-access/orders-api';
+import {
+  CancelRequestDialog,
+  CancelRequestDialogData,
+  CancelRequestResult,
+} from '../account/orders/cancel-request-dialog';
 import { AuthSession } from '../auth/auth-session';
 import { PricePipe } from '../../shared/commerce/price.pipe';
 import { IconComponent } from '../../shared/ui/icon.component';
@@ -192,10 +199,22 @@ const POLL_MS = 3000;
               </aside>
             }
 
-            <div class="actions">
+            @if (cancelError(); as message) {
+              <p class="va-note warn" role="alert">{{ message }}</p>
+            }
+            <div class="actions between">
               <a class="text-link" [routerLink]="orderLink()" [queryParams]="orderQuery()"
                 >Xem chi tiết đơn hàng</a
               >
+              <button
+                type="button"
+                class="button"
+                data-testid="payment-cancel"
+                [disabled]="cancelling()"
+                (click)="cancelOrder()"
+              >
+                {{ cancelling() ? 'Đang hủy đơn…' : 'Hủy đơn hàng' }}
+              </button>
             </div>
           }
           @case ('paid') {
@@ -221,11 +240,21 @@ const POLL_MS = 3000;
             <div class="result">
               <span class="badge fail"><n2f-icon name="reiconXCircle" size="40px" /></span>
               <p class="eyebrow">Đơn hàng đã hủy</p>
-              <h1>Hết thời gian thanh toán</h1>
-              <p class="lead">
-                Sau 30 phút chưa nhận được thanh toán nên đơn <strong>#{{ pay.orderId }}</strong> đã
-                tự động hủy. Nếu bạn đã chuyển tiền, chúng tôi sẽ hoàn lại trong 1–3 ngày làm việc.
-              </p>
+              @if (cancelledByUser()) {
+                <h1>Bạn đã hủy đơn hàng</h1>
+                <p class="lead">
+                  Đơn <strong>#{{ pay.orderId }}</strong> đã được hủy theo yêu cầu của bạn, sản phẩm
+                  được hoàn lại kho. Nếu bạn đã lỡ chuyển tiền, chúng tôi sẽ hoàn lại trong 1–3 ngày
+                  làm việc.
+                </p>
+              } @else {
+                <h1>Hết thời gian thanh toán</h1>
+                <p class="lead">
+                  Sau 30 phút chưa nhận được thanh toán nên đơn <strong>#{{ pay.orderId }}</strong>
+                  đã tự động hủy. Nếu bạn đã chuyển tiền, chúng tôi sẽ hoàn lại trong 1–3 ngày làm
+                  việc.
+                </p>
+              }
               <div class="actions">
                 <a class="button dark" routerLink="/shop">Tiếp tục mua sắm</a>
               </div>
@@ -404,6 +433,10 @@ const POLL_MS = 3000;
     .actions {
       margin-top: 28px;
     }
+    .actions.between {
+      align-items: center;
+      justify-content: space-between;
+    }
     .text-link {
       font-size: 14px;
       text-decoration: underline;
@@ -474,6 +507,8 @@ export class PaymentPage {
   private readonly auth = inject(AuthSession);
   private readonly destroyRef = inject(DestroyRef);
   private readonly cart = inject(CartState);
+  private readonly overlay = inject(OverlayService);
+  private readonly orders = inject(ORDERS_API);
   private readonly isMock = inject(API_CONFIG).checkoutMode === 'mock';
   readonly simulator = inject(PAYMENT_SIMULATOR, { optional: true });
   readonly orderId = inject(ActivatedRoute).snapshot.paramMap.get('orderId') ?? '';
@@ -555,6 +590,48 @@ export class PaymentPage {
   }
 
   readonly simulating = signal(false);
+  readonly cancelling = signal(false);
+  readonly cancelledByUser = signal(false);
+  readonly cancelError = signal('');
+
+  /** The shopper changed their mind: confirm, cancel the unpaid order and show the result here. */
+  cancelOrder(): void {
+    if (this.cancelling()) return;
+    this.cancelError.set('');
+    const data: CancelRequestDialogData = {
+      orderId: this.orderId,
+      mode: 'cancel',
+      message: `Đơn #${this.orderId} sẽ được hủy và không thể khôi phục. Nếu bạn đã chuyển tiền, đừng hủy: đơn sẽ tự xác nhận khi chúng tôi nhận được tiền.`,
+    };
+    this.overlay
+      .open(CancelRequestDialog, 'Hủy đơn hàng?', 'modal', data)
+      .closed.pipe(
+        filter((result): result is CancelRequestResult => !!result),
+        switchMap((result) => {
+          this.cancelling.set(true);
+          // Members cancel through their account orders, guests through the order-lookup view.
+          const choice = result.choice ?? undefined;
+          const request = this.auth.signedIn()
+            ? this.orders.cancel(this.orderId, choice)
+            : this.api.cancel(this.orderId, choice);
+          return request.pipe(finalize(() => this.cancelling.set(false)));
+        }),
+        switchMap(() => this.api.paymentSession(this.orderId)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (pay) => {
+          this.cancelledByUser.set(pay.status === 'expired');
+          this.session.set(pay);
+        },
+        error: (error: unknown) =>
+          this.cancelError.set(
+            error instanceof CheckoutError && error.code === 'not-cancellable'
+              ? 'Đơn hàng đã được thanh toán hoặc đã đổi trạng thái nên không thể hủy. Vui lòng tải lại trang.'
+              : 'Chưa hủy được đơn hàng. Vui lòng thử lại.',
+          ),
+      });
+  }
 
   /** HTTP demo mode: the server runs the same reconciliation as a real SePay webhook. */
   simulateServer(action: SimulateAction): void {

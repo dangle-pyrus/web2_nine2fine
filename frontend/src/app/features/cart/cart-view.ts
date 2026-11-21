@@ -119,7 +119,7 @@ import { getMedia } from '../../../media/media-manifest';
                     [indeterminate]="!allPicked() && picked().size > 0"
                     (change)="toggleAll()"
                   />
-                  <span>Chọn tất cả ({{ pickable().length }})</span>
+                  <span>Chọn tất cả ({{ cart.lines().length }})</span>
                 </label>
                 <button
                   type="button"
@@ -145,7 +145,6 @@ import { getMedia } from '../../../media/media-manifest';
                       type="checkbox"
                       class="line-check"
                       [checked]="picked().has(line.variantId)"
-                      [disabled]="!isActive(line)"
                       [attr.aria-label]="'Chọn ' + line.name + ' ' + line.color + ' ' + line.size"
                       (change)="togglePick(line.variantId)"
                     />
@@ -198,7 +197,8 @@ import { getMedia } from '../../../media/media-manifest';
                     }
                     <div class="line-controls">
                       <div class="quantity">
-                        @if (line.saleStatus === 'UNAVAILABLE') {
+                        @if (line.saleStatus === 'UNAVAILABLE' || line.saleStatus === 'SOLD_OUT') {
+                          <!-- Sold out / discontinued: quantity cannot change, but the line can always be removed. -->
                           <button
                             type="button"
                             class="icon-button"
@@ -230,7 +230,7 @@ import { getMedia } from '../../../media/media-manifest';
                             <n2f-icon name="reiconMinus" size="14px" />
                           </button>
                         }
-                        @if (line.saleStatus !== 'UNAVAILABLE') {
+                        @if (isActive(line)) {
                           <span [attr.aria-label]="'Số lượng ' + line.quantity">{{
                             line.quantity
                           }}</span
@@ -1014,10 +1014,11 @@ export class CartView {
   /** Selection mode (checklist button): pick lines to remove or to buy now. */
   readonly selecting = signal(false);
   readonly picked = signal<ReadonlySet<string>>(new Set());
-  /** Lines that can be bought: sold-out and discontinued ones stay visible but cannot be picked. */
+  /** Lines that can be bought: sold-out and discontinued ones stay visible but are not bought. */
   readonly pickable = computed(() => this.cart.lines().filter((line) => this.isActive(line)));
+  /** Every line can be picked for removal (sold-out ones too); checkout still skips inactive ones. */
   readonly allPicked = computed(
-    () => this.pickable().length > 0 && this.picked().size === this.pickable().length,
+    () => this.cart.lines().length > 0 && this.picked().size === this.cart.lines().length,
   );
   /** In selection mode the summary (and checkout) covers only the picked lines. */
   readonly summaryLines = computed(() =>
@@ -1138,7 +1139,7 @@ export class CartView {
 
   toggleAll(): void {
     this.picked.set(
-      this.allPicked() ? new Set() : new Set(this.pickable().map((line) => line.variantId)),
+      this.allPicked() ? new Set() : new Set(this.cart.lines().map((line) => line.variantId)),
     );
   }
 

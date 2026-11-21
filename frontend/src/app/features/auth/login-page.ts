@@ -20,6 +20,7 @@ import {
   AuthMessage,
   authMessage,
   CODE_PATTERN,
+  emailErrorMessage,
   emailValidator,
   OTP_DIGITS,
   OTP_TTL_MINUTES,
@@ -79,7 +80,9 @@ const HEADINGS: Record<LoginStep, string> = {
               <label for="login-email">Email<span class="req" aria-hidden="true">*</span></label>
             </div>
             @if (emailInvalid()) {
-              <p class="field-error" id="login-email-error">Nhập địa chỉ email hợp lệ.</p>
+              <p class="field-error" id="login-email-error">
+                {{ emailMessage() }}
+              </p>
             }
             <p class="legal">
               Bằng việc tiếp tục, tôi đồng ý với
@@ -197,6 +200,10 @@ export class LoginPage {
     if (state?.notice) this.notice.set(state.notice);
   }
 
+  emailMessage(): string {
+    return emailErrorMessage(this.emailForm.controls.email.errors);
+  }
+
   emailInvalid(): boolean {
     const control = this.emailForm.controls.email;
     return control.invalid && control.touched;
@@ -218,6 +225,7 @@ export class LoginPage {
     const email = this.emailForm.controls.email.value.trim();
     this.run(this.api.lookupEmail(email), ({ registered }) => {
       this.flow.email.set(email);
+      this.flow.freshCode = true;
       if (registered) this.goTo('code');
       else void this.router.navigateByUrl('/auth/register');
     });

@@ -19,6 +19,7 @@ import { demoVerificationCode } from '../../../core/storefront-adapters';
 import { AUTH_API, AuthError, VerificationPurpose } from '../data-access/auth-api';
 import { AuthMessage, authMessage, cleanCode, CODE_MESSAGE, OTP_DIGITS } from '../auth-messages';
 import { AuthMessageText } from './auth-message';
+import { AuthFlowState } from '../auth-session';
 
 /**
  * 6-digit email code (valid 5 minutes) with resend cooldown; after 5 wrong codes the server locks
@@ -124,6 +125,7 @@ export class VerificationCodeField implements OnInit {
 
   private readonly box = viewChild.required<ElementRef<HTMLInputElement>>('input');
   private readonly api = inject(AUTH_API);
+  private readonly flow = inject(AuthFlowState);
   private readonly destroyRef = inject(DestroyRef);
   private countdown?: ReturnType<typeof setInterval>;
   private lockTimer?: ReturnType<typeof setInterval>;
@@ -146,7 +148,11 @@ export class VerificationCodeField implements OnInit {
   }
 
   ngOnInit(): void {
-    this.send();
+    // Right after the email was entered (or entered again after "Chỉnh sửa Email") ask for a
+    // brand-new code, which also cancels the previous one; otherwise keep the running cooldown.
+    const fresh = this.flow.freshCode;
+    this.flow.freshCode = false;
+    this.send(fresh);
   }
 
   /** Shows a server verdict under the field; a `code-locked` answer also starts the lock countdown. */
@@ -195,12 +201,12 @@ export class VerificationCodeField implements OnInit {
     return `${this.fieldId()}-hint${error}`;
   }
 
-  send(): void {
+  send(fresh = false): void {
     if (this.sending() || this.secondsLeft() > 0 || this.lockLeft() > 0) return;
     this.sending.set(true);
     this.serverError.set(null);
     this.api
-      .requestCode(this.email(), this.purpose())
+      .requestCode(this.email(), this.purpose(), fresh)
       .pipe(
         finalize(() => this.sending.set(false)),
         takeUntilDestroyed(this.destroyRef),

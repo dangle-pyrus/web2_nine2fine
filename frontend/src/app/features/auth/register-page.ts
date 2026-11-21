@@ -20,7 +20,7 @@ import { Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AUTH_API, AuthError } from './data-access/auth-api';
 import { AuthFlowState, AuthSession, redirectWhenSignedIn } from './auth-session';
-import { AuthMessage, authMessage, CODE_PATTERN } from './auth-messages';
+import { AuthMessage, authMessage, CODE_PATTERN, matches, passwordPolicy } from './auth-messages';
 import {
   BirthDateParts,
   checkBirthDate,
@@ -30,9 +30,11 @@ import {
 } from './auth-validation';
 import { AuthMessageText } from './ui/auth-message';
 import { VerificationCodeField } from './ui/verification-code-field';
+import { PasswordField } from './ui/password-field';
 
 type NameKey = 'firstName' | 'lastName';
-type FieldKey = NameKey | 'birthDate' | 'acceptedTerms';
+type FieldKey = NameKey | 'birthDate' | 'acceptedTerms' | 'password';
+type RegisterStep = 'code' | 'details';
 
 const NAME_MESSAGES: Record<NameKey, Record<string, string>> = {
   firstName: {
@@ -51,7 +53,13 @@ const BIRTH_MESSAGES = {
   underage: 'Bạn cần đủ 13 tuổi để tạo tài khoản.',
 };
 const TERMS_MESSAGE = 'Bạn cần đồng ý để tạo tài khoản.';
-const SERVER_FIELDS: readonly string[] = ['firstName', 'lastName', 'birthDate', 'acceptedTerms'];
+const SERVER_FIELDS: readonly string[] = [
+  'firstName',
+  'lastName',
+  'birthDate',
+  'acceptedTerms',
+  'password',
+];
 
 function nameValidator(control: AbstractControl<string>): ValidationErrors | null {
   const problem = nameProblem(control.value);
@@ -65,28 +73,48 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
     : null;
 }
 
-/** Figma frame 43:1058, reached when the login email has no account yet. */
+/**
+ * Figma frame 43:1058, reached when the login email has no account yet. Two separate steps:
+ * 1) verify the email code, 2) enter the profile + password and accept the policies.
+ */
 @Component({
   selector: 'n2f-register-page',
-  imports: [ReactiveFormsModule, RouterLink, AuthMessageText, VerificationCodeField],
+  imports: [ReactiveFormsModule, RouterLink, AuthMessageText, VerificationCodeField, PasswordField],
   template: `
-    @if (flow.email()) {
-      <h1 #heading tabindex="-1">
-        Giờ hãy thực hiện một bước cuối để trở thành thành viên nine2fine.
-      </h1>
+    @if (flow.email() && step() === 'code') {
+      <h1 #heading tabindex="-1">Xác thực email để bắt đầu tạo tài khoản nine2fine.</h1>
       <p class="lead">Chúng tôi đã gửi mã xác thực đến</p>
       <p class="email-row">
         <strong>{{ flow.email() }}</strong
         ><a class="link" routerLink="/auth/login">Chỉnh sửa Email</a>
       </p>
-      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <form [formGroup]="codeForm" (ngSubmit)="verifyCode()" novalidate>
         <n2f-verification-code-field
           #codeField
           fieldId="register-code"
           purpose="register"
           [email]="flow.email()"
-          [control]="form.controls.code"
+          [control]="codeForm.controls.code"
         />
+        @if (error(); as problem) {
+          <p class="form-error" role="alert"><n2f-auth-message [message]="problem" /></p>
+        }
+        <div class="actions">
+          <button class="pill" type="submit" [disabled]="busy() || codeField?.locked()">
+            {{ busy() ? 'Đang xác thực…' : 'Tiếp tục' }}
+          </button>
+        </div>
+      </form>
+    } @else if (flow.email() && step() === 'details') {
+      <h1 #heading tabindex="-1">
+        Giờ hãy thực hiện một bước cuối để trở thành thành viên nine2fine.
+      </h1>
+      <p class="lead">Email đã được xác thực</p>
+      <p class="email-row">
+        <strong>{{ flow.email() }}</strong
+        ><a class="link" routerLink="/auth/login">Chỉnh sửa Email</a>
+      </p>
+      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <div class="name-row">
           @for (field of nameFields; track field.key) {
             <div>
@@ -115,7 +143,7 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
           }
         </div>
         <fieldset formGroupName="birthDate" aria-describedby="birth-date-hint">
-          <legend>Ngày sinh</legend>
+          <legend>Ngày sinh <span class="optional">(không bắt buộc)</span></legend>
           <div class="date-row">
             @for (part of dateParts; track part.key) {
               <div class="field">
@@ -143,6 +171,22 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
             Nhận ưu đãi thành viên khi đến ngày sinh nhật của bạn
           </p>
         </fieldset>
+        <n2f-password-field
+          fieldId="register-password"
+          label="Mật khẩu"
+          autocomplete="new-password"
+          [showRules]="true"
+          [email]="flow.email()"
+          [serverError]="serverErrors().password ?? null"
+          [control]="form.controls.password"
+        />
+        <n2f-password-field
+          fieldId="register-confirm-password"
+          label="Nhập lại mật khẩu"
+          autocomplete="new-password"
+          errorText="Mật khẩu nhập lại chưa khớp."
+          [control]="form.controls.confirmPassword"
+        />
         <label class="check">
           <input type="checkbox" formControlName="marketingOptIn" />
           <span
@@ -177,7 +221,7 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
           <p class="form-error" role="alert"><n2f-auth-message [message]="problem" /></p>
         }
         <div class="actions">
-          <button class="pill" type="submit" [disabled]="busy() || codeField?.locked()">
+          <button class="pill" type="submit" [disabled]="busy()">
             {{ busy() ? 'Đang tạo tài khoản…' : 'Tạo tài khoản' }}
           </button>
         </div>
@@ -203,6 +247,10 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
     legend {
       padding: 0;
       font-size: max(15px, calc(22 * var(--u)));
+    }
+    .optional {
+      font-size: 0.8em;
+      opacity: 0.7;
     }
     .date-row .field {
       margin-top: calc(14 * var(--u));
@@ -232,6 +280,9 @@ function birthDateValidator(group: AbstractControl<BirthDateParts>): ValidationE
 })
 export class RegisterPage {
   readonly flow = inject(AuthFlowState);
+  readonly step = signal<RegisterStep>('code');
+  /** One-time ticket from step 1; step 2 sends it instead of the code. */
+  private registrationToken = '';
   readonly busy = signal(false);
   readonly error = signal<AuthMessage | null>(null);
   /** Verdicts the server gave for a field after the client check passed. */
@@ -255,8 +306,14 @@ export class RegisterPage {
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   protected readonly codeField = viewChild<VerificationCodeField>('codeField');
   private readonly builder = inject(FormBuilder).nonNullable;
-  readonly form = this.builder.group({
+  readonly codeForm = this.builder.group({
     code: ['', [Validators.required, Validators.pattern(CODE_PATTERN)]],
+  });
+  private readonly password = this.builder.control('', [
+    Validators.required,
+    passwordPolicy(() => this.flow.email()),
+  ]);
+  readonly form = this.builder.group({
     firstName: ['', [Validators.required, nameValidator]],
     lastName: ['', [Validators.required, nameValidator]],
     birthDate: this.builder.group(
@@ -264,6 +321,8 @@ export class RegisterPage {
       { validators: birthDateValidator },
     ),
     marketingOptIn: [false],
+    password: this.password,
+    confirmPassword: ['', [Validators.required, matches(() => this.password.value)]],
     acceptedTerms: [false, Validators.requiredTrue],
   });
 
@@ -274,6 +333,53 @@ export class RegisterPage {
     else afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
     // A new value makes an earlier server verdict about a field obsolete.
     this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.serverErrors.set({}));
+    this.password.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.form.controls.confirmPassword.updateValueAndValidity());
+  }
+
+  /** Step 1: check the code; on success move on to the profile step. */
+  verifyCode(): void {
+    this.codeForm.markAllAsTouched();
+    if (this.busy()) return;
+    if (this.codeForm.invalid) return this.codeField()?.focus();
+    this.busy.set(true);
+    this.error.set(null);
+    this.api
+      .verifyRegistration(this.flow.email(), this.codeForm.controls.code.value)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ registrationToken }) => {
+          this.busy.set(false);
+          this.registrationToken = registrationToken;
+          this.goTo('details');
+        },
+        error: (error: unknown) => {
+          this.busy.set(false);
+          this.showCodeFailure(error);
+        },
+      });
+  }
+
+  private goTo(step: RegisterStep): void {
+    this.step.set(step);
+    afterNextRender(() => this.heading()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  private showCodeFailure(error: unknown): void {
+    const message = authMessage(error);
+    const failure = error instanceof AuthError ? error : null;
+    const code = this.codeField();
+    const aboutCode =
+      failure?.code === 'invalid-code' ||
+      failure?.code === 'code-locked' ||
+      failure?.field === 'code';
+    if (code && aboutCode) {
+      code.fail(message, error);
+      code.focus();
+    } else {
+      this.error.set(message);
+    }
   }
 
   /** Message under a field: the client check first, then what the server said about it. */
@@ -296,6 +402,8 @@ export class RegisterPage {
         const control = this.form.controls.acceptedTerms;
         return control.invalid && control.touched ? TERMS_MESSAGE : server;
       }
+      case 'password':
+        return server;
     }
   }
 
@@ -310,7 +418,8 @@ export class RegisterPage {
     this.api
       .register({
         email: this.flow.email(),
-        code: value.code,
+        registrationToken: this.registrationToken,
+        password: value.password,
         firstName: normalizeName(value.firstName),
         lastName: normalizeName(value.lastName),
         birthDate: birth.kind === 'ok' ? birth.iso : null,
@@ -339,12 +448,12 @@ export class RegisterPage {
     const message = authMessage(error);
     const failure = error instanceof AuthError ? error : null;
     const field = failure?.field;
-    const code = this.codeField();
-    const aboutCode =
-      failure?.code === 'invalid-code' || failure?.code === 'code-locked' || field === 'code';
-    if (code && aboutCode) {
-      code.fail(message, error);
-      code.focus();
+    if (field === 'registrationToken' || field === 'code' || failure?.code === 'invalid-code') {
+      // The ticket expired (30 minutes) or was used: verify the email again with a new code.
+      this.registrationToken = '';
+      this.codeForm.reset();
+      this.goTo('code');
+      this.error.set(message);
     } else if (field && SERVER_FIELDS.includes(field)) {
       this.serverErrors.set({ [field]: message.text });
       this.focusField(field as FieldKey);
@@ -354,10 +463,15 @@ export class RegisterPage {
   }
 
   private focusFirstProblem(): void {
-    if (this.form.controls.code.invalid) return this.codeField()?.focus();
-    for (const key of ['firstName', 'lastName', 'birthDate', 'acceptedTerms'] as const) {
+    for (const key of ['firstName', 'lastName', 'birthDate'] as const) {
       if (this.fieldError(key)) return this.focusField(key);
     }
+    if (this.form.controls.password.invalid) return this.focusField('password');
+    if (this.form.controls.confirmPassword.invalid) {
+      this.host.nativeElement.querySelector<HTMLElement>('#register-confirm-password')?.focus();
+      return;
+    }
+    if (this.fieldError('acceptedTerms')) this.focusField('acceptedTerms');
   }
 
   private focusField(key: FieldKey): void {

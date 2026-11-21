@@ -106,6 +106,12 @@ export class AuthFlowState {
   readonly returnUrl = signal<string | null>(null);
   /** Set by a page that is about to navigate away after signing in, so no second redirect runs. */
   completing = false;
+  /**
+   * Set when the shopper has just entered (or re-entered after "Chỉnh sửa Email") the email: the
+   * next code field asks the server for a brand-new code at once, which cancels the old one.
+   * Switching between code and password sign-in does not set it.
+   */
+  freshCode = false;
 
   setReturnUrl(candidate: string | null): void {
     this.returnUrl.set(sanitizeReturnUrl(candidate));

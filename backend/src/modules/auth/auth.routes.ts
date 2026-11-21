@@ -7,6 +7,7 @@ authRouter.post('/lookup', c.lookup);
 authRouter.post('/codes', c.requestCode);
 authRouter.post('/login/code', c.loginWithCode);
 authRouter.post('/login/password', c.loginWithPassword('storefront'));
+authRouter.post('/register/verify', c.registerVerify);
 authRouter.post('/register', c.register);
 authRouter.post('/password/reset', c.resetPassword);
 authRouter.get('/me', c.me);

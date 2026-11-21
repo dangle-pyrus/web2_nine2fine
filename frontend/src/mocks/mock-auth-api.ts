@@ -8,6 +8,7 @@ import {
   CodeDispatch,
   EmailLookup,
   RegisterRequest,
+  RegistrationTicket,
   ResetPasswordRequest,
   VerificationPurpose,
 } from '../app/features/auth/data-access/auth-api';
@@ -65,6 +66,8 @@ export class MockAuthApi implements AuthApi {
   private readonly codeLocks = new Map<string, number>();
   private readonly passwordFailures = new Map<string, { count: number; at: number }>();
   private readonly passwordLocks = new Map<string, number>();
+  /** Sign-up tickets from step 1: token -> email. */
+  private readonly tickets = new Map<string, string>();
 
   constructor() {
     this.current =
@@ -79,7 +82,11 @@ export class MockAuthApi implements AuthApi {
     return respond({ registered: this.accounts.has(address) });
   }
 
-  requestCode(email: string, purpose: VerificationPurpose): Observable<CodeDispatch> {
+  requestCode(
+    email: string,
+    purpose: VerificationPurpose,
+    fresh = false,
+  ): Observable<CodeDispatch> {
     const address = normalize(email);
     if (!validEmail(address)) return failWith('validation', { field: 'email' });
     const locked = this.remaining(this.codeLocks, address);
@@ -87,7 +94,8 @@ export class MockAuthApi implements AuthApi {
     const key = `${address}|${purpose}`;
     const now = Date.now();
     const cooldown = (this.lastSent.get(key) ?? 0) + RESEND_COOLDOWN - now;
-    if (cooldown > 0) return respond({ resendAfterSeconds: Math.ceil(cooldown / SECOND) });
+    if (cooldown > 0 && !fresh)
+      return respond({ resendAfterSeconds: Math.ceil(cooldown / SECOND) });
     const recent = (this.sends.get(key) ?? []).filter((time) => now - time < SEND_WINDOW);
     if (recent.length >= MAX_SENDS) {
       return failWith('rate-limited', {
@@ -141,10 +149,29 @@ export class MockAuthApi implements AuthApi {
     return respond(this.startSession(account));
   }
 
+  verifyRegistration(email: string, code: string): Observable<RegistrationTicket> {
+    const address = normalize(email);
+    const problem = this.checkEmailAndCode(address, code);
+    if (problem) return problem;
+    const verdict = this.verifyCode(address, 'register', code);
+    if (verdict) return verdict;
+    if (this.accounts.has(address) || address === MOCK_RACE_EMAIL) {
+      return failWith('email-registered');
+    }
+    const registrationToken = `mock-ticket-${address}-${Date.now()}`;
+    this.tickets.set(registrationToken, address);
+    return respond({ registrationToken });
+  }
+
   register(request: RegisterRequest): Observable<AuthUser> {
     const address = normalize(request.email);
-    const problem = this.checkEmailAndCode(address, request.code);
-    if (problem) return problem;
+    if (!validEmail(address)) return failWith('validation', { field: 'email' });
+    if (this.tickets.get(request.registrationToken) !== address) {
+      return failWith('validation', { field: 'registrationToken' });
+    }
+    if (!PASSWORD_RULES.every((rule) => rule.test(request.password, address))) {
+      return failWith('validation', { field: 'password' });
+    }
     // Format checks come before the code is spent (BR-AUTH-10..12).
     const firstName = normalizeName(request.firstName);
     const lastName = normalizeName(request.lastName);
@@ -158,8 +185,7 @@ export class MockAuthApi implements AuthApi {
       if (birth.kind === 'underage') return failWith('underage', { field: 'birthDate' });
     }
     if (request.acceptedTerms !== true) return failWith('validation', { field: 'acceptedTerms' });
-    const verdict = this.verifyCode(address, 'register', request.code);
-    if (verdict) return verdict;
+    this.tickets.delete(request.registrationToken);
     if (this.accounts.has(address) || address === MOCK_RACE_EMAIL) {
       return failWith('email-registered');
     }
@@ -168,7 +194,7 @@ export class MockAuthApi implements AuthApi {
       email: address,
       firstName,
       lastName,
-      password: null,
+      password: request.password,
       birthDate: request.birthDate,
       phone: null,
     };

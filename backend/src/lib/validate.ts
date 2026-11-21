@@ -27,10 +27,20 @@ export const phoneField = z
   .refine((v) => /^0(3|5|7|8|9)[0-9]{8}$/.test(v), { error: PHONE_MSG });
 
 const EMAIL_MSG = 'Nhập địa chỉ email hợp lệ.';
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_ACCENT_MSG = 'Email không được chứa chữ có dấu hoặc ký tự đặc biệt.';
+/**
+ * Email chuẩn (chỉ ASCII): phần trước @ gồm chữ, số, . _ % + - (không bắt đầu / kết thúc bằng dấu chấm,
+ * không có hai dấu chấm liền nhau); tên miền gồm các nhãn chữ / số / gạch ngang (không bắt đầu / kết thúc
+ * bằng gạch ngang, không rỗng nên chặn `a@.gmail.com`), đuôi tối thiểu 2 chữ cái.
+ */
+export const EMAIL_RE =
+  /^(?!\.)(?!.*\.\.)[a-z0-9._%+-]{1,64}(?<!\.)@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+/** Có ký tự ngoài ASCII in được (chữ có dấu, emoji…). */
+export const hasNonAscii = (v: string): boolean => /[^!-~]/.test(v);
 export const emailField = z
   .string({ error: EMAIL_MSG })
   .transform((v) => v.trim().toLowerCase())
+  .refine((v) => !hasNonAscii(v), { error: EMAIL_ACCENT_MSG })
   .refine((v) => v.length >= 6 && v.length <= 100 && EMAIL_RE.test(v), { error: EMAIL_MSG });
 
 /** `items` -> "items"; còn lại nối đường dẫn bỏ chỉ số mảng (vd. `contact.phone`). */

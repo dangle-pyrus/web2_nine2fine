@@ -7,6 +7,7 @@ import {
   parseLoginPassword,
   parseLookup,
   parseRegister,
+  parseRegisterVerify,
   parseReset,
 } from './auth.schemas';
 import * as service from './auth.service';
@@ -23,8 +24,8 @@ export async function lookup(req: Request, res: Response): Promise<void> {
 }
 
 export async function requestCode(req: Request, res: Response): Promise<void> {
-  const { email, purpose } = parseCodes(req.body);
-  res.json(await service.requestCode(email, purpose, client(req).ip));
+  const { email, purpose, fresh } = parseCodes(req.body);
+  res.json(await service.requestCode(email, purpose, client(req).ip, fresh));
 }
 
 export async function loginWithCode(req: Request, res: Response): Promise<void> {
@@ -42,6 +43,13 @@ export const loginWithPassword =
     setSessionCookie(res, audience, session);
     res.json(user);
   };
+
+/** Bước 1 đăng ký: xác thực OTP, trả vé cho bước nhập thông tin. */
+export async function registerVerify(req: Request, res: Response): Promise<void> {
+  const { email, code } = parseRegisterVerify(req.body);
+  res.set('Cache-Control', 'no-store');
+  res.json(await service.verifyRegistration(email, code, client(req).ip));
+}
 
 export async function register(req: Request, res: Response): Promise<void> {
   const input = parseRegister(req.body);

@@ -3,7 +3,7 @@ import { OTP_POLICY } from '../../config/assumptions';
 import prisma from '../../config/prisma';
 import { getConfig } from '../../config/env';
 import { addMs, HOUR, MINUTE, now, secondsUntil } from '../../lib/clock';
-import { hashPassword, verifyPassword, verifyPasswordDummy } from '../../lib/crypto';
+import { generateSessionToken, hashOtp, hashPassword, verifyPassword, verifyPasswordDummy } from '../../lib/crypto';
 import { Errors } from '../../lib/errors';
 import { runInBackground, sendMailInBackground } from '../../mail/mailer';
 import { accountDisabledMail, alreadyRegisteredMail, codeMail, passwordChangedMail } from '../../mail/templates';
@@ -49,13 +49,18 @@ export async function requestCode(
   email: string,
   purpose: CodePurpose,
   ip: string,
+  fresh = false,
 ): Promise<{ resendAfterSeconds: number }> {
+  // Đang khoá vì nhập sai mã 5 lần: không gửi mã mới (kể cả khi nhập lại email).
   const lockSec = await codeLockSeconds(email);
   if (lockSec > 0) throw Errors.codeLocked(lockSec);
 
   // (a) Chờ 60 giây: không tạo mã mới, mã cũ còn hiệu lực, trả số giây còn lại.
-  const cooldownSec = await getLockSeconds(keys.codeSendCooldown(email, purpose));
-  if (cooldownSec > 0) return { resendAfterSeconds: Math.min(cooldownSec, RESEND_SECONDS) };
+  // Ngoại lệ: vừa nhập (lại) email (`fresh`) thì phát mã mới ngay, mã cũ bị vô hiệu, vẫn tính hạn mức (b), (c).
+  if (!fresh) {
+    const cooldownSec = await getLockSeconds(keys.codeSendCooldown(email, purpose));
+    if (cooldownSec > 0) return { resendAfterSeconds: Math.min(cooldownSec, RESEND_SECONDS) };
+  }
 
   // (c) 10 lần / giờ / IP, (b) 5 lần / 30 phút / email / mục đích (OTP_POLICY).
   const byIp = await hitWindow(keys.codeSendIp(ip), OTP_POLICY.sendPerIpMax, OTP_POLICY.sendPerIpWindowMs);
@@ -138,15 +143,60 @@ export async function loginWithPassword(email: string, password: string, audienc
 
 export interface RegisterInput {
   email: string;
-  code: string;
+  code?: string;
+  registrationToken?: string;
+  password?: string;
   firstName: string;
   lastName: string;
   birthDate: string | null;
   marketingOptIn: boolean;
 }
 
+/** Vé đăng ký sau khi xác thực OTP: đủ thời gian điền thông tin ở bước 2. */
+const REGISTRATION_TICKET_MS = 30 * MINUTE;
+const TICKET_PURPOSE = 'register-ticket';
+
+/**
+ * Bước 1 của đăng ký 2 bước: kiểm và tiêu mã OTP, trả vé dùng 1 lần cho bước nhập thông tin.
+ * Email đã có tài khoản -> invalid-code (không lộ, giống AC-AUTH-38).
+ */
+export async function verifyRegistration(email: string, code: string, ip: string): Promise<{ registrationToken: string }> {
+  await verifyAndConsumeCode(email, 'register', code, ip);
+  if (await prisma.user.findUnique({ where: { email }, select: { user_id: true } })) throw Errors.emailRegistered();
+  const token = generateSessionToken();
+  const t = now();
+  await prisma.authActionToken.create({
+    data: {
+      email,
+      user_id: null,
+      purpose: 'register',
+      tokenHash: hashOtp(email, TICKET_PURPOSE, token),
+      expiresAt: addMs(t, REGISTRATION_TICKET_MS),
+    },
+  });
+  return { registrationToken: token };
+}
+
+async function consumeRegistrationTicket(email: string, token: string): Promise<void> {
+  const t = now();
+  const consumed = await prisma.authActionToken.updateMany({
+    where: {
+      email,
+      purpose: 'register',
+      tokenHash: hashOtp(email, TICKET_PURPOSE, token),
+      used_at: null,
+      invalidated_at: null,
+      expiresAt: { gt: t },
+    },
+    data: { used_at: t },
+  });
+  if (consumed.count !== 1) throw Errors.validation('Phiên đăng ký đã hết hạn. Vui lòng xác thực email lại.', 'registrationToken');
+}
+
 export async function register(input: RegisterInput, client: ClientInfo) {
-  await verifyAndConsumeCode(input.email, 'register', input.code, client.ip);
+  if (input.registrationToken) await consumeRegistrationTicket(input.email, input.registrationToken);
+  else await verifyAndConsumeCode(input.email, 'register', input.code ?? '', client.ip);
+  const passwordHash = input.password ? await hashPassword(input.password) : null;
   const t = now();
   let birth: Date | null = null;
   if (input.birthDate) {
@@ -164,6 +214,7 @@ export async function register(input: RegisterInput, client: ClientInfo) {
           firstName: input.firstName,
           lastName: input.lastName,
           dateOfBirth: birth,
+          passwordHash,
           role: 'member',
           isActive: true,
           marketingOptIn: input.marketingOptIn,

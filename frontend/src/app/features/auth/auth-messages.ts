@@ -35,6 +35,8 @@ const FIELD_MESSAGES: Record<string, string> = {
   birthDate: 'Ngày sinh chưa hợp lệ.',
   acceptedTerms: 'Bạn cần đồng ý để tạo tài khoản.',
   newPassword: 'Mật khẩu chưa đạt yêu cầu. Xem các điều kiện bên dưới.',
+  password: 'Mật khẩu chưa đạt yêu cầu. Xem các điều kiện bên dưới.',
+  registrationToken: 'Phiên đăng ký đã hết hạn. Vui lòng xác thực email lại.',
 };
 
 /**
@@ -83,16 +85,37 @@ export function cleanCode(raw: string): string {
   return raw.replace(/\D/g, '').slice(0, OTP_DIGITS);
 }
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/**
+ * Same rule as the backend `EMAIL_RE` (backend/src/lib/validate.ts): ASCII only; the local part is
+ * letters, digits and `. _ % + -` (no leading, trailing or doubled dot); every domain label is
+ * non-empty (so `a@.gmail.com` fails) and the ending has at least 2 letters.
+ */
+const EMAIL_PATTERN =
+  /^(?!\.)(?!.*\.\.)[a-z0-9._%+-]{1,64}(?<!\.)@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+/** Accented letters, emoji or other non-ASCII characters. */
+const NON_ASCII = /[^!-~]/;
 
-/** AC-AUTH-02: judged after trimming; 6 to 254 characters, one `@`, a dot in the domain. */
+export const EMAIL_MESSAGE = 'Nhập địa chỉ email hợp lệ.';
+export const EMAIL_ACCENT_MESSAGE = 'Email không được chứa chữ có dấu hoặc ký tự đặc biệt.';
+
+/** AC-AUTH-02: judged after trimming; 6 to 254 characters and the pattern above. */
 export function validEmail(raw: string): boolean {
   const email = raw.trim();
-  return email.length >= 6 && email.length <= 254 && EMAIL_PATTERN.test(email);
+  return (
+    email.length >= 6 && email.length <= 254 && !NON_ASCII.test(email) && EMAIL_PATTERN.test(email)
+  );
 }
 
+/** `{ emailAccent }` for accented / non-ASCII input, `{ email }` for any other bad address. */
 export function emailValidator(control: AbstractControl<string>): ValidationErrors | null {
-  return validEmail(control.value) ? null : { email: true };
+  const email = (control.value ?? '').trim();
+  if (NON_ASCII.test(email)) return { emailAccent: true };
+  return validEmail(email) ? null : { email: true };
+}
+
+/** Message for the errors `emailValidator` returns. */
+export function emailErrorMessage(errors: ValidationErrors | null): string {
+  return errors?.['emailAccent'] ? EMAIL_ACCENT_MESSAGE : EMAIL_MESSAGE;
 }
 
 export interface PasswordRule {

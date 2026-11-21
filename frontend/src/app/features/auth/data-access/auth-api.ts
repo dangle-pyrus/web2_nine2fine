@@ -24,9 +24,15 @@ export interface CodeDispatch {
   resendAfterSeconds: number;
 }
 
+export interface RegistrationTicket {
+  /** One-time ticket from step 1 (code verified); valid 30 minutes for step 2. */
+  registrationToken: string;
+}
+
 export interface RegisterRequest {
   email: string;
-  code: string;
+  registrationToken: string;
+  password: string;
   firstName: string;
   lastName: string;
   /** ISO date (YYYY-MM-DD) when the shopper provided one. */
@@ -59,9 +65,17 @@ export class AuthError extends Error {
 /** Session cookies are owned by the backend; the client only receives the public profile. */
 export interface AuthApi {
   lookupEmail(email: string): Observable<EmailLookup>;
-  requestCode(email: string, purpose: VerificationPurpose): Observable<CodeDispatch>;
+  /** `fresh`: the email was just entered (again), so the server sends a new code at once and the
+   * old one stops working; it still counts toward the send limits. */
+  requestCode(
+    email: string,
+    purpose: VerificationPurpose,
+    fresh?: boolean,
+  ): Observable<CodeDispatch>;
   loginWithCode(email: string, code: string): Observable<AuthUser>;
   loginWithPassword(email: string, password: string): Observable<AuthUser>;
+  /** Sign-up step 1: checks the email code and returns the ticket for step 2. */
+  verifyRegistration(email: string, code: string): Observable<RegistrationTicket>;
   register(request: RegisterRequest): Observable<AuthUser>;
   resetPassword(request: ResetPasswordRequest): Observable<void>;
   /** Current session; `null` for a guest (never an error). */
@@ -85,14 +99,21 @@ export class HttpAuthApi implements AuthApi {
   lookupEmail(email: string): Observable<EmailLookup> {
     return this.post<EmailLookup>('lookup', { email });
   }
-  requestCode(email: string, purpose: VerificationPurpose): Observable<CodeDispatch> {
-    return this.post<CodeDispatch>('codes', { email, purpose });
+  requestCode(
+    email: string,
+    purpose: VerificationPurpose,
+    fresh = false,
+  ): Observable<CodeDispatch> {
+    return this.post<CodeDispatch>('codes', fresh ? { email, purpose, fresh } : { email, purpose });
   }
   loginWithCode(email: string, code: string): Observable<AuthUser> {
     return this.post<AuthUser>('login/code', { email, code });
   }
   loginWithPassword(email: string, password: string): Observable<AuthUser> {
     return this.post<AuthUser>('login/password', { email, password });
+  }
+  verifyRegistration(email: string, code: string): Observable<RegistrationTicket> {
+    return this.post<RegistrationTicket>('register/verify', { email, code });
   }
   register(request: RegisterRequest): Observable<AuthUser> {
     return this.post<AuthUser>('register', request);
