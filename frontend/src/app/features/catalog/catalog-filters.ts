@@ -9,17 +9,20 @@ import {
 } from '@angular/core';
 import { API_CONFIG } from '../../core/api-config';
 import { CatalogQuery, GENDERS, PRODUCT_COLORS } from './models/product';
+import { CATALOG_API } from './data-access/catalog-api';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { catchError, of } from 'rxjs';
 import { IconComponent } from '../../shared/ui/icon.component';
 
-const COLORS = PRODUCT_COLORS;
-
 /**
- * Price slider bounds. The API only filters by an upper bound (`maxPrice`), so the slider has one
- * thumb; dragging it to the far right means "every price" (`maxPrice` 0, no filter).
+ * Price slider bounds come from the live catalog (`facets`, cheapest .. dearest product, rounded to the step);
+ * these are only the fallback. The API filters by an upper bound (`maxPrice`), so the slider has one thumb;
+ * dragging it to the far right means "every price" (`maxPrice` 0, no filter).
  */
 const PRICE_MIN = 200000;
 const PRICE_MAX = 2000000;
-const PRICE_STEP = 50000;
+const PRICE_STEP = 100000;
+const SIZES = ['S', 'M', 'L', 'XL'];
 const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
 
 /**
@@ -72,7 +75,7 @@ const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' 
       <fieldset>
         <legend class="sr-only">Kích cỡ</legend>
         <div class="size-options">
-          @for (size of ['S', 'M', 'L', 'XL']; track size) {
+          @for (size of sizes(); track size) {
             <button
               type="button"
               [class.selected]="query().size === size"
@@ -97,7 +100,7 @@ const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' 
       <fieldset>
         <legend class="sr-only">Màu sắc</legend>
         <div class="color-options">
-          @for (color of colors; track color.name) {
+          @for (color of colors(); track color.name) {
             <button
               type="button"
               class="color-choice"
@@ -127,8 +130,8 @@ const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' 
           id="price-range"
           class="price-range"
           type="range"
-          [min]="priceMin"
-          [max]="priceMax"
+          [min]="priceMinValue()"
+          [max]="priceMaxValue()"
           [step]="priceStep"
           [value]="sliderValue()"
           [style.--fill]="sliderFill()"
@@ -137,8 +140,8 @@ const VND = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' 
           (change)="commitPrice(+$any($event.target).value)"
         />
         <div class="price-bounds" aria-hidden="true">
-          <span>{{ formatPrice(priceMin) }}</span>
-          <span>{{ formatPrice(priceMax) }}+</span>
+          <span>{{ formatPrice(priceMinValue()) }}</span>
+          <span>{{ formatPrice(priceMaxValue()) }}</span>
         </div>
       </fieldset>
     </details>
@@ -370,25 +373,43 @@ export class CatalogFilters {
   /** "Đang giảm giá" exists once `promotionsMode` is http (`sale=true`, BR-PROMO-07). */
   readonly saleFilter = inject(API_CONFIG).promotionsMode === 'http';
   readonly genders = GENDERS;
-  readonly colors = COLORS;
-  readonly priceMin = PRICE_MIN;
-  readonly priceMax = PRICE_MAX;
+  /** Colours, sizes and price range that exist in the catalog; fixed lists until (or if) the facets load. */
+  private readonly facets = toSignal(
+    inject(CATALOG_API)
+      .facets()
+      .pipe(catchError(() => of(null))),
+    { initialValue: null },
+  );
+  readonly colors = computed(() => this.facets()?.colors ?? [...PRODUCT_COLORS]);
+  readonly sizes = computed(() => (this.facets()?.sizes.length ? this.facets()!.sizes : SIZES));
   readonly priceStep = PRICE_STEP;
+  readonly priceMinValue = computed(() => {
+    const min = this.facets()?.priceMin;
+    return min ? Math.floor(min / PRICE_STEP) * PRICE_STEP : PRICE_MIN;
+  });
+  readonly priceMaxValue = computed(() => {
+    const max = this.facets()?.priceMax;
+    return max
+      ? Math.max(Math.ceil(max / PRICE_STEP) * PRICE_STEP, this.priceMinValue() + PRICE_STEP)
+      : PRICE_MAX;
+  });
   /** Value while the thumb is being dragged; the filter is applied only on release. */
   readonly draftPrice = signal<number | null>(null);
   readonly sliderValue = computed(() => {
     const draft = this.draftPrice();
     if (draft !== null) return draft;
     const max = this.query().maxPrice;
-    return max ? Math.min(Math.max(max, PRICE_MIN), PRICE_MAX) : PRICE_MAX;
+    const [lo, hi] = [this.priceMinValue(), this.priceMaxValue()];
+    return max ? Math.min(Math.max(max, lo), hi) : hi;
   });
   readonly sliderFill = computed(
-    () => `${((this.sliderValue() - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 100}%`,
+    () =>
+      `${((this.sliderValue() - this.priceMinValue()) / (this.priceMaxValue() - this.priceMinValue())) * 100}%`,
   );
   readonly priceLabel = computed(() => {
     const draft = this.draftPrice();
     const value = draft ?? this.query().maxPrice;
-    if (!value || value >= PRICE_MAX) return 'Tất cả mức giá';
+    if (!value || value >= this.priceMaxValue()) return 'Tất cả mức giá';
     return `Đến ${VND.format(value)}`;
   });
 
@@ -398,7 +419,7 @@ export class CatalogFilters {
 
   commitPrice(value: number): void {
     this.draftPrice.set(null);
-    this.filtersChanged.emit({ key: 'maxPrice', value: value >= PRICE_MAX ? 0 : value });
+    this.filtersChanged.emit({ key: 'maxPrice', value: value >= this.priceMaxValue() ? 0 : value });
   }
 
   readonly activeCount = computed(() => {

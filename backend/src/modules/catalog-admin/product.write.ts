@@ -117,7 +117,7 @@ async function resolveImages(
   images: Array<{ id: string; alt?: string; color?: string }>,
   colorNames: string[],
 ): Promise<FinalImage[]> {
-  if (images.length > CATALOG_ASSUMPTIONS.image.maxPerProduct) throw Errors.validation('Tối đa 12 ảnh.', 'images');
+  if (images.length > CATALOG_ASSUMPTIONS.image.maxPerProduct) throw Errors.validation(`Tối đa ${CATALOG_ASSUMPTIONS.image.maxPerProduct} ảnh.`, 'images');
   const seen = new Set<string>();
   for (const im of images) {
     if (seen.has(im.id)) throw Errors.validation('Ảnh bị lặp trong danh sách.', 'images');

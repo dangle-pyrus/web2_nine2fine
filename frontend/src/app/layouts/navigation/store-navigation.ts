@@ -20,10 +20,15 @@ export type NavMenu = TopNavItem & MenuContent;
  * so a photo means the same thing everywhere; replace through the media manifest.
  */
 const CATEGORY_MEDIA: Record<Category, string> = {
-  tops: 'editorial-home-hero-mobile',
-  bottoms: 'editorial-new-drop',
-  dresses: 'editorial-moment-event',
-  outerwear: 'editorial-story-0900',
+  // Cover photo of the first product in each category (Cloudinary, served through /api/media).
+  dresses: 'up-3dcc5bba9712814c2946ec8ab4ad09d1.jpg',
+  blazers: 'up-4393d1ee131ddb8b4060696c4799167a.jpg',
+  outerwear: 'up-c559a374bf00aca3ca25a617d7b78c1f.jpg',
+  shirts: 'up-735da53ef83e9b628f14dbb5703a1335.jpg',
+  trousers: 'up-f22af49e1c9b49a563dc20ceb6698731.jpg',
+  knitwear: 'up-02014b58856a835e993746eb3b8a4fc2.jpg',
+  tshirts: 'up-467483b16ca0314d0fdf5f1532d10539.jpg',
+  skirts: 'up-ac70e2fa3d95c5708061d6920a159b6d.jpg',
 };
 const MOMENT_MEDIA: Record<Moment, string> = {
   work: 'editorial-moment-work',
@@ -67,8 +72,17 @@ function momentLinks(path?: string): NavLink[] {
   }));
 }
 
-/** Gender menus only list categories that exist in that assortment (mock catalog: no menswear dresses). */
-const MENSWEAR: readonly Category[] = ['tops', 'bottoms', 'outerwear'];
+/** Gender menus only list categories that exist in that assortment (real catalog, 2026-11-21). */
+const MENSWEAR: readonly Category[] = ['shirts', 'tshirts', 'blazers', 'outerwear', 'trousers'];
+const WOMENSWEAR: readonly Category[] = [
+  'shirts',
+  'knitwear',
+  'blazers',
+  'outerwear',
+  'dresses',
+  'trousers',
+  'skirts',
+];
 
 const MENU_CONTENT: Record<TopNavItem['id'], MenuContent> = {
   new: {
@@ -120,7 +134,7 @@ const MENU_CONTENT: Record<TopNavItem['id'], MenuContent> = {
       // Temporary photos are womenswear except moment-work, so Nam links keep the feature photo.
       {
         title: 'Danh mục',
-        links: withoutMedia(categoryLinks('/shop/nam', MENSWEAR, { bottoms: 'Quần' })),
+        links: withoutMedia(categoryLinks('/shop/nam', MENSWEAR)),
       },
       { title: 'Theo khoảnh khắc', links: withoutMedia(momentLinks('/shop/nam')) },
     ],
@@ -141,7 +155,7 @@ const MENU_CONTENT: Record<TopNavItem['id'], MenuContent> = {
           { label: 'Tất cả đồ Nữ', path: '/shop/nu' },
         ],
       },
-      { title: 'Danh mục', links: categoryLinks('/shop/nu') },
+      { title: 'Danh mục', links: categoryLinks('/shop/nu', WOMENSWEAR) },
       { title: 'Theo khoảnh khắc', links: momentLinks('/shop/nu') },
     ],
     feature: {

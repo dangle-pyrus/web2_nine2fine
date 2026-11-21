@@ -1,7 +1,7 @@
 import { getConfig } from '../../config/env';
 import { Errors } from '../errors';
+import { DbPrivateStorage } from './private-db';
 import { LocalPrivateStorage } from './private-local';
-import { SupabasePrivateStorage } from './private-supabase';
 import type { PrivateImageStorage } from './private-types';
 
 export type { PrivateImageStorage } from './private-types';
@@ -16,19 +16,15 @@ export function setPrivateImageStorage(s: PrivateImageStorage | undefined): void
   cached = undefined;
 }
 
-/** Driver theo `MEDIA_STORAGE`. Production + `local`, hoặc `supabase` thiếu biến -> `unavailable` (không ghi sai chỗ). */
+/**
+ * Theo `RETURN_PHOTO_STORAGE`: `db` (mặc định, PostgreSQL, dùng được cả production) hoặc `local` (đĩa; production -> `unavailable`).
+ */
 export function getPrivateImageStorage(): PrivateImageStorage {
   if (override) return override;
   if (cached) return cached;
-  const { media, isProduction, returns } = getConfig();
-  if (media.storage === 'supabase') {
-    if (!media.supabase) throw Errors.unavailable();
-    cached = new SupabasePrivateStorage({
-      url: media.supabase.url,
-      serviceRoleKey: media.supabase.serviceRoleKey,
-      bucket: returns.photoBucket,
-      publicBucket: returns.publicBucket,
-    });
+  const { isProduction, returns } = getConfig();
+  if (returns.photoStorage === 'db') {
+    cached = new DbPrivateStorage();
   } else {
     if (isProduction) throw Errors.unavailable();
     cached = new LocalPrivateStorage(returns.photoLocalDir);
@@ -38,10 +34,8 @@ export function getPrivateImageStorage(): PrivateImageStorage {
 
 /** Cảnh báo lúc khởi động (server.ts). */
 export function returnStorageWarning(): string | null {
-  const { media, isProduction, returns } = getConfig();
-  if (media.storage === 'supabase' && !media.supabase) return 'MEDIA_STORAGE=supabase nhưng thiếu SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY: tải ảnh trả hàng sẽ báo không khả dụng.';
-  if (isProduction && media.storage === 'local') return 'NODE_ENV=production nhưng MEDIA_STORAGE=local: tải ảnh trả hàng sẽ báo không khả dụng.';
-  if (media.storage === 'supabase' && returns.photoBucket === returns.publicBucket) return 'SUPABASE_RETURN_BUCKET trùng bucket công khai: ảnh trả hàng bị khoá (không khả dụng).';
+  const { isProduction, returns } = getConfig();
+  if (isProduction && returns.photoStorage === 'local') return 'NODE_ENV=production nhưng RETURN_PHOTO_STORAGE=local: tải ảnh trả hàng sẽ báo không khả dụng (dùng db).';
   return null;
 }
 

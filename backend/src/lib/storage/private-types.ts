@@ -3,7 +3,7 @@
  * qua endpoint có kiểm quyền. Khoá `rp-<32 hex>.<ext>` KHÔNG khớp `MEDIA_ID_RE` nên `/api/media/*` không bao giờ phục vụ được.
  */
 export interface PrivateImageStorage {
-  readonly name: 'local' | 'supabase' | 'memory';
+  readonly name: 'local' | 'db' | 'memory';
   put(key: string, data: Buffer, contentType: string): Promise<void>;
   read(key: string): Promise<{ data: Buffer; contentType: string } | null>;
 }

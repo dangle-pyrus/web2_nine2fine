@@ -54,7 +54,7 @@ export const variantInputSchema = z.object(
       .transform((v) => v.trim().toUpperCase())
       .refine((v) => /^[A-Z0-9-]{3,64}$/.test(v), { error: 'SKU từ 3 đến 64 ký tự gồm chữ, số và dấu gạch ngang.' }),
     color: colorSchema,
-    size: z.enum(VAR.sizes as [string, ...string[]], { error: 'Size chỉ gồm S, M, L, XL.' }),
+    size: z.enum(VAR.sizes as [string, ...string[]], { error: 'Size không hợp lệ.' }),
     inventory: z
       .number({ error: 'Tồn ban đầu là số nguyên từ 0 đến 100.000.' })
       .int({ error: 'Tồn ban đầu là số nguyên từ 0 đến 100.000.' })
@@ -130,7 +130,7 @@ const productShape = {
   fitSummary: optionalText(500, 'Mô tả dáng tối đa 500 ký tự.'),
   images: z
     .array(imageInputSchema, { error: 'Ảnh không hợp lệ.' })
-    .max(IMG.maxPerProduct, { error: 'Tối đa 12 ảnh.' })
+    .max(IMG.maxPerProduct, { error: `Tối đa ${IMG.maxPerProduct} ảnh.` })
     .optional(),
   variants: z
     .array(variantInputSchema, { error: 'Biến thể không hợp lệ.' })

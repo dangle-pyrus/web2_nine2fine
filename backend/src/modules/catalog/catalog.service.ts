@@ -1,3 +1,5 @@
+import { COLOR_FAMILIES, COLOR_FAMILY_HEX, colorFamilyOf, parseColorFamily } from '../../lib/color-family';
+import { CATALOG_ASSUMPTIONS } from '../../config/assumptions';
 import { Prisma } from '@prisma/client';
 import prisma from '../../config/prisma';
 import { now as clockNow } from '../../lib/clock';
@@ -56,6 +58,17 @@ function compareRows(sort: SortKey, now: Date): (a: SortRow, b: SortRow) => numb
 const findFull = (where: Prisma.ProductWhereInput) =>
   prisma.product.findMany({ where, include: { variants: { orderBy: { sortOrder: 'asc' } } } });
 
+/**
+ * Lọc màu: tên NHÓM màu (Đen, Xanh dương, ...) -> mọi tên màu biến thể thuộc nhóm (lib/color-family);
+ * tên khác -> khớp đúng tên màu như trước (không phân biệt hoa thường).
+ */
+async function colorCond(color: string): Promise<Prisma.ProductVariantWhereInput> {
+  const family = parseColorFamily(color);
+  if (!family) return { colorName: { equals: color, mode: 'insensitive' } };
+  const names = await prisma.productVariant.findMany({ distinct: ['colorName'], select: { colorName: true } });
+  return { colorName: { in: names.map((n) => n.colorName).filter((n) => colorFamilyOf(n) === family) } };
+}
+
 export async function listProducts(q: ListQuery, at: Date = clockNow()): Promise<ProductPageDto> {
   const gender = q.gender ? GENDERS.find((g) => g === q.gender) : undefined;
   const moment = q.moment ? MOMENTS.find((m) => m === q.moment) : undefined;
@@ -70,7 +83,7 @@ export async function listProducts(q: ListQuery, at: Date = clockNow()): Promise
 
   const variantCond: Prisma.ProductVariantWhereInput = {
     ...(q.size ? { size: q.size } : {}),
-    ...(q.color ? { colorName: { equals: q.color, mode: 'insensitive' } } : {}),
+    ...(q.color ? await colorCond(q.color) : {}),
     ...(q.available ? { inventoryQty: { gt: 0 } } : {}),
   };
 
@@ -175,4 +188,41 @@ export async function getSizeChart(categorySlug: string): Promise<unknown> {
   const row = await prisma.sizeChart.findUnique({ where: { categoryId: id } });
   if (!row) throw Errors.notFound();
   return toSizeChartDto(row);
+}
+
+export interface CatalogFacetsDto {
+  /** Giá niêm yết thấp / cao nhất của sản phẩm đang bán (đồng); 0 khi chưa có sản phẩm. */
+  priceMin: number;
+  priceMax: number;
+  /** Nhóm màu có ít nhất một biến thể của sản phẩm đang bán, theo thứ tự cố định. */
+  colors: { name: string; hex: string }[];
+  /** Size có ở sản phẩm đang bán, theo thứ tự may mặc. */
+  sizes: string[];
+}
+
+let facetsCache: { at: number; value: CatalogFacetsDto } | undefined;
+const FACETS_TTL_MS = 60_000;
+
+/** Chỉ cho test: bỏ cache facets. */
+export function clearFacetsCache(): void {
+  facetsCache = undefined;
+}
+
+/** 2026-11-21: bộ lọc storefront theo dữ liệu thật (khoảng giá min–max, nhóm màu, size đang có). */
+export async function getCatalogFacets(): Promise<CatalogFacetsDto> {
+  if (facetsCache && Date.now() - facetsCache.at < FACETS_TTL_MS) return facetsCache.value;
+  const [agg, variants] = await Promise.all([
+    prisma.product.aggregate({ where: { status: 'ACTIVE' }, _min: { price: true }, _max: { price: true } }),
+    prisma.productVariant.findMany({ where: { product: { status: 'ACTIVE' } }, distinct: ['colorName', 'size'], select: { colorName: true, size: true } }),
+  ]);
+  const families = new Set(variants.map((v) => colorFamilyOf(v.colorName)).filter((f) => f !== null));
+  const sizes = new Set(variants.map((v) => v.size));
+  const value: CatalogFacetsDto = {
+    priceMin: agg._min.price ? Number(agg._min.price) : 0,
+    priceMax: agg._max.price ? Number(agg._max.price) : 0,
+    colors: COLOR_FAMILIES.filter((f) => families.has(f)).map((name) => ({ name, hex: COLOR_FAMILY_HEX[name] })),
+    sizes: CATALOG_ASSUMPTIONS.variant.sizes.filter((s) => sizes.has(s)),
+  };
+  facetsCache = { at: Date.now(), value };
+  return value;
 }

@@ -21,7 +21,7 @@ const inventoryFilter = {
   color: z.preprocess(single, z.string().transform(cleanText).optional()),
   size: z.preprocess(
     (v) => (single(v) === '' ? undefined : single(v)),
-    z.enum(VAR.sizes as [string, ...string[]], { error: 'Size chỉ gồm S, M, L, XL.' }).optional(),
+    z.enum(VAR.sizes as [string, ...string[]], { error: 'Size không hợp lệ.' }).optional(),
   ),
 };
 

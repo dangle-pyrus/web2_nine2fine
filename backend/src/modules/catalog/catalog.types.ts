@@ -47,6 +47,8 @@ export interface ProductDto {
   mediaId: string;
   gallery: string[];
   colorMedia?: Record<string, string>;
+  /** 2026-11-21: ảnh gallery -> tên màu (từ `image_meta`), để trang sản phẩm chỉ hiện ảnh của màu đang chọn. Bỏ khi không có. */
+  galleryColors?: Record<string, string>;
   variants: ProductVariantDto[];
   badge?: string;
   description: string;

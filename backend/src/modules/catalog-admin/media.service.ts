@@ -63,10 +63,12 @@ export type ResolvedMedia = { kind: 'bytes'; data: Buffer; contentType: string }
 /** GET /media/:id: chỉ ảnh đã tải lên (có dòng media_assets). Không có -> not-found. */
 export async function resolveMedia(id: string): Promise<ResolvedMedia> {
   if (!MEDIA_ID_RE.test(id)) throw Errors.notFound();
-  const row = await prisma.mediaAsset.findUnique({ where: { mediaId: id }, select: { mediaId: true, contentType: true } });
+  const row = await prisma.mediaAsset.findUnique({ where: { mediaId: id }, select: { mediaId: true, contentType: true, sourceUrl: true } });
   if (!row) throw Errors.notFound();
+  // Ảnh nhập sẵn trên Cloudinary: chuyển hướng tới link gốc, thêm f_auto,q_auto (WebP/AVIF + nén) và c_limit,w_1200 (ảnh gốc 1920 px, thu về tối đa 1200 px).
+  if (row.sourceUrl) return { kind: 'redirect', url: row.sourceUrl.replace('/image/upload/', '/image/upload/f_auto,q_auto,c_limit,w_1200/') };
   const storage = getImageStorage();
-  if (storage.name === 'supabase') return { kind: 'redirect', url: storage.publicUrl(id) };
+  if (storage.name !== 'local') return { kind: 'redirect', url: storage.publicUrl(id) }; // CDN (cloudinarybase)
   const file = await storage.read(id);
   if (!file) throw Errors.notFound();
   return { kind: 'bytes', data: file.data, contentType: row.contentType };

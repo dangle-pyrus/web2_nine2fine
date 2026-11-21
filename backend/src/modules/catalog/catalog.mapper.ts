@@ -30,6 +30,8 @@ export function toProductDto(p: ProductWithVariants, categorySlug: string, ctx: 
   );
   const rating = ctx.ratings?.get(p.product_id);
   const colorMedia = (p.colorMedia ?? {}) as Record<string, string>;
+  const meta = (p.imageMeta ?? {}) as Record<string, { color?: string } | undefined>;
+  const galleryColors = Object.fromEntries(p.galleryMediaIds.flatMap((id) => (meta[id]?.color ? [[id, meta[id]!.color!]] : [])));
   const variants: ProductVariantDto[] = [...p.variants]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((v) => ({
@@ -53,6 +55,7 @@ export function toProductDto(p: ProductWithVariants, categorySlug: string, ctx: 
     mediaId: p.coverMediaId,
     gallery: p.galleryMediaIds,
     ...(Object.keys(colorMedia).length > 0 ? { colorMedia } : {}),
+    ...(Object.keys(galleryColors).length > 0 ? { galleryColors } : {}),
     variants,
     ...(p.badge ? { badge: p.badge } : {}),
     description: p.description,

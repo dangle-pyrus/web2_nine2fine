@@ -9,6 +9,7 @@ import {
   ReviewEligibility,
   ReviewInput,
   StockStatus,
+  PRODUCT_COLORS,
 } from '../app/features/catalog/models/product';
 import { AuthSession } from '../app/features/auth/auth-session';
 import { PRODUCTS } from './products';
@@ -195,6 +196,20 @@ export class MockCatalogApi implements CatalogApi {
       .flatMap((order) => order.items)
       .find((item) => item.productSlug === slug);
     return line ? { status: 'eligible', sizeBought: line.size } : { status: 'not-purchased' };
+  }
+
+  facets() {
+    return defer(() => {
+      const prices = RATED_PRODUCTS.map((product) => product.price);
+      const colors = new Set(RATED_PRODUCTS.flatMap((p) => p.variants.map((v) => v.color.name)));
+      const sizes = new Set(RATED_PRODUCTS.flatMap((p) => p.variants.map((v) => v.size)));
+      return of({
+        priceMin: Math.min(...prices),
+        priceMax: Math.max(...prices),
+        colors: PRODUCT_COLORS.filter((color) => colors.has(color.name)).map((c) => ({ ...c })),
+        sizes: ['S', 'M', 'L', 'XL'].filter((size) => sizes.has(size)),
+      });
+    }).pipe(delay(60));
   }
 
   sizeChart(category: Category) {

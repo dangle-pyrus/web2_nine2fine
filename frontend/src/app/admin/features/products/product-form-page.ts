@@ -37,12 +37,32 @@ import {
   type SaleScheduleResult,
 } from './sale-schedule-dialog';
 
-/** Sizes in garment order (6.3: never alphabetical). */
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-/** The API knows four sizes (BR-INV-19) and at most 8 colours, 12 images, 32 variants. */
-const API_SIZES = ['S', 'M', 'L', 'XL'];
+/** Sizes in garment order (6.3: never alphabetical): letters, free size, then numeric sizes. */
+const SIZES = [
+  'XS',
+  'S',
+  'M',
+  'L',
+  'XL',
+  'XXL',
+  'FREESIZE',
+  '34',
+  '36',
+  '38',
+  '40',
+  '42',
+  '44',
+  '46',
+  '48',
+  '50',
+  '52',
+  '54',
+  '56',
+];
+/** Same list as the API (BR-INV-19, widened 2026-11-21); at most 8 colours, 120 images, 32 variants. */
+const API_SIZES = SIZES;
 const MAX_COLORS = 8;
-const MAX_IMAGES = 12;
+const MAX_IMAGES = 120;
 const MAX_VARIANTS = 32;
 const PRESET_COLORS = [
   { name: 'Đen', hex: '#242323' },

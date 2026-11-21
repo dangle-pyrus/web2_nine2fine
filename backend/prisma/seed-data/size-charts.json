@@ -1,0 +1,334 @@
+[
+  {
+    "category": "tops",
+    "data": {
+      "bodyColumns": [
+        "Ngực",
+        "Eo",
+        "Vai"
+      ],
+      "garmentColumns": [
+        "Rộng ngực",
+        "Dài áo",
+        "Dài tay"
+      ],
+      "body": [
+        {
+          "size": "S",
+          "values": {
+            "Ngực": "82–86",
+            "Eo": "64–68",
+            "Vai": "37"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Ngực": "86–90",
+            "Eo": "68–72",
+            "Vai": "38.5"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Ngực": "90–96",
+            "Eo": "72–78",
+            "Vai": "40"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Ngực": "96–102",
+            "Eo": "78–84",
+            "Vai": "41.5"
+          }
+        }
+      ],
+      "garment": [
+        {
+          "size": "S",
+          "values": {
+            "Rộng ngực": "96",
+            "Dài áo": "64",
+            "Dài tay": "58"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Rộng ngực": "100",
+            "Dài áo": "66",
+            "Dài tay": "59"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Rộng ngực": "106",
+            "Dài áo": "68",
+            "Dài tay": "60"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Rộng ngực": "112",
+            "Dài áo": "70",
+            "Dài tay": "61"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "category": "outerwear",
+    "data": {
+      "bodyColumns": [
+        "Ngực",
+        "Eo",
+        "Vai"
+      ],
+      "garmentColumns": [
+        "Rộng ngực",
+        "Dài áo",
+        "Rộng vai"
+      ],
+      "body": [
+        {
+          "size": "S",
+          "values": {
+            "Ngực": "82–86",
+            "Eo": "64–68",
+            "Vai": "37"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Ngực": "86–90",
+            "Eo": "68–72",
+            "Vai": "38.5"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Ngực": "90–96",
+            "Eo": "72–78",
+            "Vai": "40"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Ngực": "96–102",
+            "Eo": "78–84",
+            "Vai": "41.5"
+          }
+        }
+      ],
+      "garment": [
+        {
+          "size": "S",
+          "values": {
+            "Rộng ngực": "100",
+            "Dài áo": "70",
+            "Rộng vai": "39"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Rộng ngực": "104",
+            "Dài áo": "72",
+            "Rộng vai": "40.5"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Rộng ngực": "110",
+            "Dài áo": "74",
+            "Rộng vai": "42"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Rộng ngực": "116",
+            "Dài áo": "76",
+            "Rộng vai": "43.5"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "category": "dresses",
+    "data": {
+      "bodyColumns": [
+        "Ngực",
+        "Eo",
+        "Mông"
+      ],
+      "garmentColumns": [
+        "Rộng ngực",
+        "Rộng eo",
+        "Dài váy"
+      ],
+      "body": [
+        {
+          "size": "S",
+          "values": {
+            "Ngực": "82–86",
+            "Eo": "64–68",
+            "Mông": "88–92"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Ngực": "86–90",
+            "Eo": "68–72",
+            "Mông": "92–96"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Ngực": "90–96",
+            "Eo": "72–78",
+            "Mông": "96–102"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Ngực": "96–102",
+            "Eo": "78–84",
+            "Mông": "102–108"
+          }
+        }
+      ],
+      "garment": [
+        {
+          "size": "S",
+          "values": {
+            "Rộng ngực": "86",
+            "Rộng eo": "70",
+            "Dài váy": "112"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Rộng ngực": "90",
+            "Rộng eo": "74",
+            "Dài váy": "114"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Rộng ngực": "96",
+            "Rộng eo": "80",
+            "Dài váy": "116"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Rộng ngực": "102",
+            "Rộng eo": "86",
+            "Dài váy": "118"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "category": "bottoms",
+    "data": {
+      "bodyColumns": [
+        "Eo",
+        "Mông",
+        "Dài chân trong"
+      ],
+      "garmentColumns": [
+        "Vòng eo",
+        "Vòng mông",
+        "Dài"
+      ],
+      "body": [
+        {
+          "size": "S",
+          "values": {
+            "Eo": "64–68",
+            "Mông": "88–92",
+            "Dài chân trong": "74"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Eo": "68–72",
+            "Mông": "92–96",
+            "Dài chân trong": "75"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Eo": "72–78",
+            "Mông": "96–102",
+            "Dài chân trong": "76"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Eo": "78–84",
+            "Mông": "102–108",
+            "Dài chân trong": "77"
+          }
+        }
+      ],
+      "garment": [
+        {
+          "size": "S",
+          "values": {
+            "Vòng eo": "68",
+            "Vòng mông": "96",
+            "Dài": "98"
+          }
+        },
+        {
+          "size": "M",
+          "values": {
+            "Vòng eo": "72",
+            "Vòng mông": "100",
+            "Dài": "99"
+          }
+        },
+        {
+          "size": "L",
+          "values": {
+            "Vòng eo": "78",
+            "Vòng mông": "106",
+            "Dài": "100"
+          }
+        },
+        {
+          "size": "XL",
+          "values": {
+            "Vòng eo": "84",
+            "Vòng mông": "112",
+            "Dài": "101"
+          }
+        }
+      ]
+    }
+  }
+]

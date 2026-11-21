@@ -1,14 +1,29 @@
 {
   "categories": [
     {
-      "label": "Áo",
-      "href": "/shop/tops",
+      "label": "Áo sơ mi",
+      "href": "/shop/shirts",
       "mediaId": "uniqlo-category-05"
     },
     {
-      "label": "Quần & chân váy",
-      "href": "/shop/bottoms",
-      "mediaId": "uniqlo-category-02"
+      "label": "Áo thun",
+      "href": "/shop/tshirts",
+      "mediaId": "uniqlo-category-03"
+    },
+    {
+      "label": "Áo len",
+      "href": "/shop/knitwear",
+      "mediaId": "uniqlo-category-04"
+    },
+    {
+      "label": "Áo blazer",
+      "href": "/shop/blazers",
+      "mediaId": "uniqlo-category-06"
+    },
+    {
+      "label": "Áo khoác",
+      "href": "/shop/outerwear",
+      "mediaId": "uniqlo-category-01"
     },
     {
       "label": "Đầm",
@@ -16,9 +31,14 @@
       "mediaId": "uniqlo-category-07"
     },
     {
-      "label": "Áo khoác",
-      "href": "/shop/outerwear",
-      "mediaId": "uniqlo-category-01"
+      "label": "Quần",
+      "href": "/shop/trousers",
+      "mediaId": "uniqlo-category-02"
+    },
+    {
+      "label": "Chân váy",
+      "href": "/shop/skirts",
+      "mediaId": "uniqlo-category-08"
     }
   ],
   "moments": [
@@ -109,13 +129,13 @@
         {
           "title": "Quần mặc cả tuần",
           "caption": "Xem quần & chân váy",
-          "href": "/shop/bottoms",
+          "href": "/shop/trousers",
           "mediaId": "uniqlo-product-1-2-65"
         },
         {
           "title": "Sơ mi cho họp sáng",
           "caption": "Xem áo sơ mi",
-          "href": "/shop/tops",
+          "href": "/shop/shirts",
           "mediaId": "uniqlo-product-1-3-00"
         },
         {
@@ -132,7 +152,7 @@
       "eyebrow": "Tủ đồ mỗi ngày",
       "title": "Mở tủ là có đồ để mặc.",
       "description": "Vài món nền trung tính,\nphối kiểu nào cũng đẹp.",
-      "href": "/shop/bottoms",
+      "href": "/shop/trousers",
       "mediaId": "uniqlo-campaign-03",
       "mobileMediaId": "uniqlo-campaign-03-mobile"
     },
@@ -144,7 +164,7 @@
         {
           "title": "Áo sáng màu cho ngày xám",
           "caption": "Xem áo sáng màu",
-          "href": "/shop/tops",
+          "href": "/shop/shirts",
           "mediaId": "uniqlo-product-2-1-41"
         },
         {
@@ -162,7 +182,7 @@
         {
           "title": "Sơ mi xanh cho sáng thứ Hai",
           "caption": "Xem áo sơ mi",
-          "href": "/shop/tops",
+          "href": "/shop/shirts",
           "mediaId": "uniqlo-product-2-4-57"
         }
       ]
@@ -215,7 +235,7 @@
         {
           "title": "Áo màu tươi cho ngày nghỉ",
           "caption": "Xem áo",
-          "href": "/shop/tops",
+          "href": "/shop/shirts",
           "mediaId": "uniqlo-product-3-1-19"
         },
         {
@@ -227,13 +247,13 @@
         {
           "title": "Gam xám, vẫn có điểm nhấn",
           "caption": "Xem quần",
-          "href": "/shop/bottoms",
+          "href": "/shop/trousers",
           "mediaId": "uniqlo-product-3-3-03"
         },
         {
           "title": "Suông, trầm, dễ chịu",
           "caption": "Xem quần suông",
-          "href": "/shop/bottoms",
+          "href": "/shop/trousers",
           "mediaId": "uniqlo-product-3-4-39"
         }
       ]

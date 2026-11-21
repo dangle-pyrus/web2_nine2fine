@@ -9,7 +9,7 @@ dotenv.config();
  * Seed idempotent nội dung trang chủ mặc định (BR-CMS-01, D7): chèn dòng duy nhất `home_content` (content_id = 1) từ
  * `prisma/seed-data/home-content.json` CHỈ khi chưa có dòng nào (`skipDuplicates`); KHÔNG BAO GIỜ đè bản admin đã sửa.
  * Chạy: `npm run seed:home`. Không bắt buộc: thiếu dòng thì `GET /content/home` dùng chính bản mặc định này trong mã.
- * Tạo lại JSON từ fixture FE: `npx tsx scripts/export-home-seed.ts`.
+ * (Script sinh JSON từ fixture FE `export-home-seed.ts` đã chuyển ra archive 2026-11-21; JSON giờ sửa tay.)
  */
 export async function seedHomeContent(prisma: PrismaClient): Promise<{ inserted: boolean }> {
   const data = JSON.parse(readFileSync(resolve(__dirname, 'seed-data/home-content.json'), 'utf8')) as object;

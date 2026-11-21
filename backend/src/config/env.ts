@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CloudinaryConfig, parseCloudinaryUrl } from '../lib/storage/cloudinary';
 
 /**
  * Cấu hình tập trung, kiểm bằng zod. KHÔNG nạp dotenv ở đây (server.ts / seed.ts làm việc đó).
@@ -39,12 +40,14 @@ const schema = z
     BANK_ACCOUNT_NAME: opt(z.string()),
     SEPAY_WEBHOOK_KEY: opt(z.string().min(16)),
     PAYMENT_SIMULATOR: z.preprocess(emptyToUndefined, boolStr.default(false)),
-    MEDIA_STORAGE: z.preprocess(emptyToUndefined, z.enum(['local', 'supabase']).default('local')),
+    MEDIA_STORAGE: z.preprocess(emptyToUndefined, z.enum(['local', 'cloudinary']).default('local')),
     MEDIA_LOCAL_DIR: opt(z.string()),
-    SUPABASE_URL: opt(z.string()),
-    SUPABASE_SERVICE_ROLE_KEY: opt(z.string()),
-    SUPABASE_STORAGE_BUCKET: z.preprocess(emptyToUndefined, z.string().default('product-images')),
-    SUPABASE_RETURN_BUCKET: z.preprocess(emptyToUndefined, z.string().default('return-photos')),
+    CLOUDINARY_URL: opt(z.string()),
+    CLOUDINARY_CLOUD_NAME: opt(z.string()),
+    CLOUDINARY_API_KEY: opt(z.string()),
+    CLOUDINARY_API_SECRET: opt(z.string()),
+    CLOUDINARY_FOLDER: z.preprocess(emptyToUndefined, z.string().default('nine2fine')),
+    RETURN_PHOTO_STORAGE: z.preprocess(emptyToUndefined, z.enum(['db', 'local']).default('db')),
     RETURN_PHOTO_LOCAL_DIR: opt(z.string()),
     RETURN_ACCOUNT_KEY: opt(z.string()),
   })
@@ -94,19 +97,18 @@ export interface AppConfig {
    * "Giả lập đã nhận tiền" trên trang QR -> cùng luồng đối soát như webhook SePay. Thiếu BANK_* thì dùng tài khoản demo.
    */
   paymentSimulator: boolean;
-  /** Slice 6: nơi lưu ảnh tải lên. `supabase` chỉ dùng được khi đủ url + service role key. */
+  /** Nơi lưu ảnh tải lên: `cloudinary` (dùng chung, deploy) hoặc `local` (đĩa máy mình, chỉ dev). Driver Supabase cũ đã chuyển ra archive (2026-11-21). */
   media: {
-    storage: 'local' | 'supabase';
+    storage: 'local' | 'cloudinary';
     localDir?: string;
-    supabase: { url: string; serviceRoleKey: string; bucket: string } | null;
+    /** Từ `CLOUDINARY_URL`, hoặc bộ ba `CLOUDINARY_CLOUD_NAME` / `_API_KEY` / `_API_SECRET`; null khi thiếu / sai mẫu (MEDIA_STORAGE=cloudinary khi đó báo không khả dụng). */
+    cloudinary: CloudinaryConfig | null;
   };
   /** Slice 9: kho ảnh trả hàng RIÊNG TƯ + khoá mã hoá số tài khoản nhận hoàn (32 byte, base64). */
   returns: {
+    /** Nơi giữ byte ảnh trả hàng: `db` (bytea trong PostgreSQL, mặc định) hoặc `local` (đĩa). */
+    photoStorage: 'db' | 'local';
     photoLocalDir?: string;
-    /** Bucket riêng tư (mặc định `return-photos`). */
-    photoBucket: string;
-    /** Bucket công khai của ảnh sản phẩm: driver riêng tư từ chối nếu trùng. */
-    publicBucket: string;
     accountKey: Buffer | null;
   };
 }
@@ -169,15 +171,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     media: {
       storage: e.MEDIA_STORAGE,
       localDir: e.MEDIA_LOCAL_DIR,
-      supabase:
-        e.SUPABASE_URL && e.SUPABASE_SERVICE_ROLE_KEY
-          ? { url: e.SUPABASE_URL.replace(/\/$/, ''), serviceRoleKey: e.SUPABASE_SERVICE_ROLE_KEY, bucket: e.SUPABASE_STORAGE_BUCKET }
-          : null,
+      cloudinary:
+        parseCloudinaryUrl(e.CLOUDINARY_URL, e.CLOUDINARY_FOLDER) ??
+        (e.CLOUDINARY_CLOUD_NAME && e.CLOUDINARY_API_KEY && e.CLOUDINARY_API_SECRET
+          ? { cloudName: e.CLOUDINARY_CLOUD_NAME.trim(), apiKey: e.CLOUDINARY_API_KEY.trim(), apiSecret: e.CLOUDINARY_API_SECRET.trim(), folder: e.CLOUDINARY_FOLDER.replace(/^\/+|\/+$/g, '') }
+          : null),
     },
     returns: {
+      photoStorage: e.RETURN_PHOTO_STORAGE,
       photoLocalDir: e.RETURN_PHOTO_LOCAL_DIR,
-      photoBucket: e.SUPABASE_RETURN_BUCKET,
-      publicBucket: e.SUPABASE_STORAGE_BUCKET,
       accountKey: parseAccountKey(e.RETURN_ACCOUNT_KEY),
     },
   };

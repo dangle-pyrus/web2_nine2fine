@@ -107,7 +107,8 @@ export const CATALOG_ASSUMPTIONS = {
     maxBytes: 5 * 1024 * 1024,
     minShort: 600,
     maxLong: 6000,
-    maxPerProduct: 12,
+    /** 2026-11-21: nới 12 -> 120 cho dữ liệu thật (mỗi màu một bộ ảnh, có sản phẩm 7 màu x ~16 ảnh). */
+    maxPerProduct: 120,
     mimes: ['image/jpeg', 'image/png', 'image/webp'] as readonly string[],
   },
   /** S6-Q6: tồn kho. */
@@ -123,7 +124,8 @@ export const CATALOG_ASSUMPTIONS = {
   /** BR-CAT-19 / M-1: /api/media có bộ đếm riêng (cao hơn catalog) để duyệt trang nhiều ảnh không làm 429 catalog. */
   mediaRateLimit: { max: 600, windowMs: 60_000 },
   /** BR-INV-19 / 21. */
-  variant: { maxVariants: 32, maxColors: 8, sizes: ['S', 'M', 'L', 'XL'] as readonly string[] },
+  /** 2026-11-21: size theo thứ tự may mặc (chữ, FREESIZE, size số 34–56) cho dữ liệu sản phẩm thật. Đổi cần migration cho CHECK `chk_variants_size`. */
+  variant: { maxVariants: 32, maxColors: 8, sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'FREESIZE', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52', '54', '56'] as readonly string[] },
 } as const;
 
 export type CatalogPermission = 'catalog.read' | 'stock.adjust' | 'products.write' | 'media.upload' | 'stock.thresholds' | 'promotions.write';

@@ -5,6 +5,7 @@ import { API_CONFIG } from '../../../core/api-config';
 import { readApiError } from '../../../core/api-error';
 import {
   Category,
+  CatalogFacets,
   CatalogQuery,
   Product,
   ProductPage,
@@ -17,6 +18,8 @@ export interface CatalogApi {
   list(query: CatalogQuery): Observable<ProductPage>;
   get(slug: string): Observable<Product | undefined>;
   sizeChart(category: Category): Observable<SizeChart>;
+  /** Price range, colour families and sizes present in the live catalog (filter sidebar). */
+  facets(): Observable<CatalogFacets>;
   /** Emails the shopper once this variant is back in stock. */
   notifyBackInStock(variantId: string, email: string): Observable<void>;
 }
@@ -46,6 +49,10 @@ export class HttpCatalogApi implements CatalogApi {
 
   sizeChart(category: Category): Observable<SizeChart> {
     return this.http.get<SizeChart>(`${this.baseUrl}/size-charts/${category}`);
+  }
+
+  facets(): Observable<CatalogFacets> {
+    return this.http.get<CatalogFacets>(`${this.baseUrl}/catalog/facets`);
   }
 
   notifyBackInStock(): Observable<void> {

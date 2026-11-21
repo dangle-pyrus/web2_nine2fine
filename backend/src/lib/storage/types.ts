@@ -1,9 +1,9 @@
 /** Lớp lưu trữ ảnh tải lên (plan mục 9, S6-Q1). Thêm nơi lưu mới = thêm một file implement giao diện này. */
 export interface ImageStorage {
-  readonly name: 'local' | 'supabase';
+  readonly name: 'local' | 'cloudinary';
   /** `key` = media_id (đã kiểm mẫu). Không ghi đè (tên ngẫu nhiên). */
   put(key: string, data: Buffer, contentType: string): Promise<void>;
-  /** URL công khai: tuyệt đối (supabase) hoặc `/api/media/{key}` (local). */
+  /** URL công khai: tuyệt đối (cloudinary) hoặc `/api/media/{key}` (local). */
   publicUrl(key: string): string;
   /** Chỉ driver `local` cần (GET /media phục vụ byte). Driver khác trả null. */
   read(key: string): Promise<{ data: Buffer; contentType: string } | null>;

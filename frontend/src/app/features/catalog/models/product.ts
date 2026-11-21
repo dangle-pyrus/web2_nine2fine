@@ -1,5 +1,6 @@
 export type Moment = 'work' | 'dinner' | 'event' | 'weekend';
-export type Category = 'tops' | 'bottoms' | 'dresses' | 'outerwear';
+/** Category slug from the API (`categories.slug`). The storefront list is `CATEGORIES`; mocks may still use legacy slugs. */
+export type Category = string;
 /** Figma header navigation shops by Nam / Nữ; unisex pieces list both. */
 export type Gender = 'nam' | 'nu';
 export type SortOrder = 'featured' | 'newest' | 'price-asc' | 'price-desc' | 'bestselling';
@@ -47,6 +48,8 @@ export interface Product {
   badge?: string;
   /** Optional cover per colour name; cards fall back to the main cover when a colour has none. */
   colorMedia?: Partial<Record<string, string>>;
+  /** Gallery image id -> colour name; the PDP shows only the chosen colour's images when it has some. */
+  galleryColors?: Partial<Record<string, string>>;
   /** Review summary for listing cards; omitted when the product has no reviews. */
   rating?: { average: number; count: number };
   description: string;
@@ -160,6 +163,14 @@ export interface CatalogQuery {
   sale?: boolean;
 }
 
+/** Filter bounds from the live catalog (`GET /catalog/facets`, 2026-11-21). */
+export interface CatalogFacets {
+  priceMin: number;
+  priceMax: number;
+  colors: { name: string; hex: string }[];
+  sizes: string[];
+}
+
 export interface ProductPage {
   items: Product[];
   /** Products matching every filter, independent of the page. */
@@ -185,18 +196,33 @@ export const DEFAULT_QUERY: CatalogQuery = {
 };
 
 /** Colours the catalog filter offers. */
+/**
+ * Colour families for the filter (2026-11-21). Products carry ~40 colour names ("Xanh navy", "Trắng ngọc trai"...);
+ * the API maps a family name to every colour in it (backend `lib/color-family.ts`, same names).
+ */
 export const PRODUCT_COLORS = [
-  { name: 'Đen', hex: '#242323' },
-  { name: 'Trắng', hex: '#f5f4f0' },
-  { name: 'Xám', hex: '#96958f' },
-  { name: 'Đỏ', hex: '#a91e2c' },
+  { name: 'Đen', hex: '#1a1a1a' },
+  { name: 'Trắng', hex: '#f7f5ef' },
+  { name: 'Be', hex: '#d8c3a5' },
+  { name: 'Xám', hex: '#8a8a8a' },
+  { name: 'Nâu', hex: '#6f4e37' },
+  { name: 'Xanh dương', hex: '#2e4a7d' },
+  { name: 'Xanh lá', hex: '#7fb8a4' },
+  { name: 'Đỏ', hex: '#8e2a33' },
+  { name: 'Tím', hex: '#b79fcb' },
+  { name: 'Vàng', hex: '#e2bd48' },
 ] as const;
 
+/** The 8 categories of the real catalog (backend `prisma/seed-zara.ts` `ZARA_CATEGORIES`, same slugs and order). */
 export const CATEGORIES = [
-  { value: 'tops', label: 'Áo' },
-  { value: 'bottoms', label: 'Quần & chân váy' },
-  { value: 'dresses', label: 'Đầm' },
+  { value: 'shirts', label: 'Áo sơ mi' },
+  { value: 'tshirts', label: 'Áo thun' },
+  { value: 'knitwear', label: 'Áo len' },
+  { value: 'blazers', label: 'Áo blazer' },
   { value: 'outerwear', label: 'Áo khoác' },
+  { value: 'dresses', label: 'Đầm' },
+  { value: 'trousers', label: 'Quần' },
+  { value: 'skirts', label: 'Chân váy' },
 ] as const;
 
 export const GENDERS = [

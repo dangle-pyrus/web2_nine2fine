@@ -123,9 +123,13 @@ export class ProductPage {
   readonly sizeField = viewChild<ElementRef<HTMLElement>>('sizes');
   readonly addButton = viewChild<ElementRef<HTMLElement>>('addButton');
 
-  readonly gallery = computed(() =>
-    (this.product()?.gallery ?? ['catalog-placeholder']).map((id) => getMedia(id)),
-  );
+  readonly gallery = computed(() => {
+    const product = this.product();
+    const all = product?.gallery ?? ['catalog-placeholder'];
+    const colors = product?.galleryColors;
+    const ofColor = colors ? all.filter((id) => colors[id] === this.color()) : [];
+    return (ofColor.length ? ofColor : all).map((id) => getMedia(id));
+  });
   readonly colors = computed(() => [
     ...new Map(this.product()?.variants.map((v) => [v.color.name, v.color]) ?? []).values(),
   ]);

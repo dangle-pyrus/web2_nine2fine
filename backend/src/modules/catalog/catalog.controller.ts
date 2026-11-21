@@ -39,3 +39,7 @@ export const sizeChart = wrap(async (req, res) => {
   const chart = await service.getSizeChart(category);
   res.set('Cache-Control', SIZE_CHART).json(chart);
 });
+
+export const facets = wrap(async (_req, res) => {
+  res.set('Cache-Control', SIZE_CHART).json(await service.getCatalogFacets());
+});

@@ -713,6 +713,8 @@ model MediaAsset {
   byteSize    Int      @map("byte_size")
   width       Int
   height      Int
+  /// Link gốc trên Cloudinary của ảnh nhập sẵn (null = ảnh tải lên qua admin, URL suy từ driver).
+  sourceUrl   String?  @map("source_url") @db.VarChar(500)
   createdById String?  @map("created_by") @db.Uuid
   createdAt   DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(6)
   createdBy   User?    @relation("MediaAssetCreator", fields: [createdById], references: [user_id], onDelete: SetNull)
@@ -838,6 +840,16 @@ model ReturnPhoto {
   @@index([returnId], map: "idx_return_photos_return")
   @@index([grantHash], map: "idx_return_photos_grant")
   @@map("return_photos")
+}
+
+/// Byte ảnh trả hàng khi `RETURN_PHOTO_STORAGE=db` (mặc định). Chỉ máy chủ đọc, qua route có kiểm quyền (photo.service).
+model ReturnPhotoBlob {
+  storageKey  String   @id @map("storage_key") @db.VarChar(40)
+  contentType String   @map("content_type") @db.VarChar(20)
+  data        Bytes
+  createdAt   DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(6)
+
+  @@map("return_photo_blobs")
 }
 
 /// Tiền chuyển khoản nhà cung cấp đối soát (SePay) báo về qua webhook (BR-CHK-21). Idempotent theo (provider, provider_tx_id).

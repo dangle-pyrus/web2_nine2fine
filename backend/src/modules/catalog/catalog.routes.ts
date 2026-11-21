@@ -13,7 +13,8 @@ function methodGate(req: Request, _res: Response, next: NextFunction): void {
 
 export const catalogRouter = Router();
 
-catalogRouter.use(['/products', '/size-charts'], catalogRateLimit, methodGate);
+catalogRouter.use(['/products', '/size-charts', '/catalog'], catalogRateLimit, methodGate);
+catalogRouter.get('/catalog/facets', controller.facets);
 catalogRouter.get('/size-charts/:category', controller.sizeChart);
 catalogRouter.get('/products/:productId/reviews', controller.reviews);
 catalogRouter.get('/products/:slug', controller.detail);

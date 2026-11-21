@@ -1,7 +1,7 @@
 import { getConfig } from '../../config/env';
 import { Errors } from '../errors';
+import { CloudinaryImageStorage } from './cloudinary';
 import { LocalImageStorage } from './local';
-import { SupabaseImageStorage } from './supabase';
 import type { ImageStorage } from './types';
 
 export type { ImageStorage } from './types';
@@ -16,14 +16,17 @@ export function setImageStorage(s: ImageStorage | undefined): void {
   cached = undefined;
 }
 
-/** Driver theo `MEDIA_STORAGE`. `supabase` thiếu biến, hoặc production mà vẫn `local` -> `unavailable` (không ghi sai chỗ). */
+/**
+ * Driver theo `MEDIA_STORAGE`. `cloudinary` thiếu biến, hoặc production mà vẫn `local` -> `unavailable`
+ * (không ghi vào đĩa tạm của máy chủ triển khai rồi mất sau lần deploy sau).
+ */
 export function getImageStorage(): ImageStorage {
   if (override) return override;
   if (cached) return cached;
   const { media, isProduction } = getConfig();
-  if (media.storage === 'supabase') {
-    if (!media.supabase) throw Errors.unavailable();
-    cached = new SupabaseImageStorage(media.supabase);
+  if (media.storage === 'cloudinary') {
+    if (!media.cloudinary) throw Errors.unavailable();
+    cached = new CloudinaryImageStorage(media.cloudinary);
   } else {
     if (isProduction) throw Errors.unavailable();
     cached = new LocalImageStorage(media.localDir);
@@ -34,7 +37,7 @@ export function getImageStorage(): ImageStorage {
 /** Cảnh báo lúc khởi động (server.ts). Trả thông điệp hoặc null. */
 export function mediaStorageWarning(): string | null {
   const { media, isProduction } = getConfig();
-  if (media.storage === 'supabase' && !media.supabase) return 'MEDIA_STORAGE=supabase nhưng thiếu SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY: tải ảnh sẽ báo không khả dụng.';
+  if (media.storage === 'cloudinary' && !media.cloudinary) return 'MEDIA_STORAGE=cloudinary nhưng thiếu / sai CLOUDINARY_URL (cloudinary://<api_key>:<api_secret>@<cloud_name>): tải ảnh sẽ báo không khả dụng.';
   if (isProduction && media.storage === 'local') return 'NODE_ENV=production nhưng MEDIA_STORAGE=local: tải ảnh sẽ báo không khả dụng.';
   return null;
 }
